@@ -155,6 +155,105 @@ async def test_bookmark_set_creates_a_named_bookmark(app, render):
         assert bookmark.target_ids == [target.id]
 
 
+async def test_space_marks_the_cursor_commit_shown_with_a_checkmark(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        target = log_view.selected_commit
+
+        await pilot.press("space")
+        await pilot.pause()
+        render(app, "after-mark")
+
+        assert log_view.selection == [target]
+
+
+async def test_space_again_unmarks_the_commit(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        cursor_commit = log_view.selected_commit
+
+        await pilot.press("space")
+        await pilot.press("space")
+        await pilot.pause()
+        render(app, "after-toggle-off")
+
+        # With nothing marked, selection() falls back to the cursor commit --
+        # same as if space had never been pressed.
+        assert log_view.selection == [cursor_commit]
+
+
+async def test_escape_clears_all_marks(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        await pilot.press("space")
+        await pilot.press("down")
+        await pilot.press("space")
+        await pilot.pause()
+        assert len(log_view.selection) == 2
+
+        await pilot.press("escape")
+        await pilot.pause()
+        render(app, "after-clear-marks")
+
+        assert len(log_view.selection) == 1
+
+
+async def test_marking_two_commits_and_pressing_n_creates_a_merge_commit(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        await pilot.press("space")
+        first = log_view.selected_commit
+        await pilot.press("down")
+        await pilot.press("space")
+        second = log_view.selected_commit
+        await pilot.pause()
+        render(app, "two-marked")
+
+        await pilot.press("n")
+        await pilot.pause()
+        render(app, "after-merge")
+
+        assert log_view.row_count == before + 1
+        new_wc = app.state.repo.resolve_single(app.state.settings, "@")
+        assert set(new_wc.parent_ids) == {first.id, second.id}
+        # Creating the merge commit clears the marks that fed it.
+        assert log_view.selection == [log_view.selected_commit]
+
+
+async def test_marking_two_commits_and_abandoning_removes_both(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        await pilot.press("down")  # off the working copy, onto A
+        await pilot.press("space")
+        first = log_view.selected_commit
+        await pilot.press("down")
+        await pilot.press("space")
+        second = log_view.selected_commit
+        await pilot.pause()
+
+        await pilot.press("a")
+        await pilot.pause()
+        render(app, "confirm-multi-abandon")
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-multi-abandon")
+
+        assert log_view.row_count == before - 2
+        remaining_ids = {c.id for c in log_view._commits}
+        assert first.id not in remaining_ids
+        assert second.id not in remaining_ids
+
+
 async def test_abandon_requires_confirmation(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()

@@ -6,6 +6,7 @@ commit summary per row.
 from rich.text import Text
 from textual.binding import Binding
 from textual.widgets import DataTable
+from textual.widgets.data_table import RowKey
 from textual.message import Message
 
 import pyjj
@@ -21,10 +22,15 @@ class LogView(DataTable):
     # `h`/left to close it, but pyjjui's log and preview panes are both
     # always on screen side by side, so here `l`/`h` instead move focus
     # between them (see Preview's matching `h` binding back the other way).
+    # `space`/`escape` for marking, also jjui's own convention: mark the
+    # commit under the cursor for a bulk operation (abandon, merge-commit
+    # creation via `n`), or clear the whole marked set.
     BINDINGS = [
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
         Binding("l", "focus_preview", "Preview", show=False),
+        Binding("space", "toggle_mark", "Mark", show=False),
+        Binding("escape", "clear_marks", "Clear marks", show=False),
     ]
 
     class CommitSelected(Message):
@@ -34,9 +40,24 @@ class LogView(DataTable):
             self.commit = commit
             super().__init__()
 
+    class FocusPreview(Message):
+        """Posted on `l` to ask the app to move focus to Preview -- LogView
+        can't reach a sibling widget directly (Textual's "attributes down,
+        messages up": siblings coordinate through their parent, not by
+        querying each other), so the App handles this the same way it
+        already bridges `CommitSelected` to `Preview.show_commit()`.
+        """
+
     def __init__(self, **kwargs: object) -> None:
         super().__init__(cursor_type="row", show_header=False, zebra_stripes=False, **kwargs)
         self._commits: list[pyjj.Commit] = []
+        self._row_keys: list[RowKey] = []
+        self._marked: set[pyjj.CommitId] = set()
+        # Cached from the last update_nodes() call so toggling a mark can
+        # redraw without re-querying jj -- rendering is pure given these.
+        self._rows: list[GraphRow] = []
+        self._wc_commit_id: pyjj.CommitId | None = None
+        self._bookmarks_by_commit: dict[pyjj.CommitId, list[str]] = {}
 
     def on_mount(self) -> None:
         self.add_column("graph", key="graph")
@@ -55,26 +76,62 @@ class LogView(DataTable):
             else None
         )
 
-        bookmarks_by_commit: dict[pyjj.CommitId, list[str]] = {}
+        self._rows = layout(nodes)
+        self._wc_commit_id = wc_commit_id
+        self._bookmarks_by_commit = {}
         for bookmark in bookmarks:
             for target_id in bookmark.target_ids:
-                bookmarks_by_commit.setdefault(target_id, []).append(bookmark.name)
+                self._bookmarks_by_commit.setdefault(target_id, []).append(bookmark.name)
 
-        rows = layout(nodes)
-        self.clear()
-        self._commits = [row.node.commit for row in rows]
-        for row in rows:
-            is_wc = wc_commit_id is not None and row.node.commit.id == wc_commit_id
-            names = bookmarks_by_commit.get(row.node.commit.id, [])
-            self.add_row(_render_glyphs(row, is_wc), _render_summary(row.node.commit, is_wc, names))
+        current_ids = {row.node.commit.id for row in self._rows}
+        self._marked &= current_ids  # drop marks on commits this refresh rewrote/abandoned away
 
-        if not rows:
-            return
         restored = next(
-            (i for i, c in enumerate(self._commits) if c.change_id == previous_change_id), 0
+            (i for i, row in enumerate(self._rows) if row.node.commit.change_id == previous_change_id),
+            0,
         )
-        self.move_cursor(row=restored)
-        self.post_message(self.CommitSelected(self._commits[restored]))
+        self._redraw(cursor_row=restored)
+
+    def _redraw(self, cursor_row: int) -> None:
+        """Rebuild every row from the cached graph/bookmarks/marks state --
+        no jj I/O, just re-rendering. Used both by update_nodes() (fresh
+        data) and by mark toggling (same data, different marks).
+        """
+        self.clear()
+        self._commits = [row.node.commit for row in self._rows]
+        self._row_keys = []
+        for row in self._rows:
+            commit_id = row.node.commit.id
+            is_wc = self._wc_commit_id is not None and commit_id == self._wc_commit_id
+            is_marked = commit_id in self._marked
+            names = self._bookmarks_by_commit.get(commit_id, [])
+            row_key = self.add_row(
+                _render_glyphs(row, is_wc),
+                _render_summary(row.node.commit, is_wc, is_marked, names),
+            )
+            self._row_keys.append(row_key)
+
+        if not self._rows:
+            return
+        self.move_cursor(row=cursor_row)
+        self.post_message(self.CommitSelected(self._commits[cursor_row]))
+
+    def _update_row_mark(self, index: int) -> None:
+        """Repaint just one row's summary cell after its mark state
+        changed -- action_toggle_mark/action_clear_marks touch at most a
+        handful of rows, so a full clear()+rebuild (_redraw) would be
+        needless work; DataTable.update_cell exists for exactly this.
+        """
+        row = self._rows[index]
+        commit_id = row.node.commit.id
+        is_wc = self._wc_commit_id is not None and commit_id == self._wc_commit_id
+        is_marked = commit_id in self._marked
+        names = self._bookmarks_by_commit.get(commit_id, [])
+        self.update_cell(
+            self._row_keys[index],
+            "commit",
+            _render_summary(row.node.commit, is_wc, is_marked, names),
+        )
 
     @property
     def selected_commit(self) -> pyjj.Commit | None:
@@ -82,15 +139,44 @@ class LogView(DataTable):
             return self._commits[self.cursor_row]
         return None
 
+    @property
+    def selection(self) -> list[pyjj.Commit]:
+        """The marked commits, in the log's display order, or -- if nothing
+        is marked -- just the commit under the cursor. This is what bulk
+        actions (abandon, new-commit-as-merge) should read instead of
+        `selected_commit` directly, so marking is opt-in: an action with
+        nothing marked behaves exactly as it did before marking existed.
+        """
+        if self._marked:
+            return [c for c in self._commits if c.id in self._marked]
+        commit = self.selected_commit
+        return [commit] if commit is not None else []
+
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.cursor_row is None or not (0 <= event.cursor_row < len(self._commits)):
             return
         self.post_message(self.CommitSelected(self._commits[event.cursor_row]))
 
     def action_focus_preview(self) -> None:
-        from .preview import Preview  # local import: avoids a Preview<->LogView import cycle
+        self.post_message(self.FocusPreview())
 
-        self.screen.query_one(Preview).focus()
+    def action_toggle_mark(self) -> None:
+        commit = self.selected_commit
+        if commit is None:
+            return
+        if commit.id in self._marked:
+            self._marked.discard(commit.id)
+        else:
+            self._marked.add(commit.id)
+        self._update_row_mark(self.cursor_row)
+
+    def action_clear_marks(self) -> None:
+        if not self._marked:
+            return
+        marked_indexes = [i for i, row in enumerate(self._rows) if row.node.commit.id in self._marked]
+        self._marked.clear()
+        for index in marked_indexes:
+            self._update_row_mark(index)
 
 
 def _render_glyphs(row: GraphRow, is_wc: bool) -> Text:
@@ -109,10 +195,14 @@ def _render_glyphs(row: GraphRow, is_wc: bool) -> Text:
     return text
 
 
-def _render_summary(commit: pyjj.Commit, is_wc: bool, bookmark_names: list[str]) -> Text:
+def _render_summary(
+    commit: pyjj.Commit, is_wc: bool, is_marked: bool, bookmark_names: list[str]
+) -> Text:
+    text = Text()
+    text.append("✓ " if is_marked else "  ", style="bold yellow")
     change_id = commit.change_id.hex()[:8]
     first_line = commit.description.splitlines()[0] if commit.description else None
-    text = Text(f"{change_id} ", style="cyan")
+    text.append(f"{change_id} ", style="cyan")
     if bookmark_names:
         text.append(" ".join(sorted(bookmark_names)) + " ", style="bold green")
     text.append(

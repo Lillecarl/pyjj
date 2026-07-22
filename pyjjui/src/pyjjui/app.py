@@ -105,11 +105,22 @@ class PyjjuiApp(App[None]):
     def on_log_view_commit_selected(self, event: LogView.CommitSelected) -> None:
         self.query_one(Preview).show_commit(event.commit, self.state.repo)
 
+    def on_log_view_focus_preview(self, event: LogView.FocusPreview) -> None:
+        self.query_one(Preview).focus()
+
+    def on_preview_focus_log(self, event: Preview.FocusLog) -> None:
+        self.query_one(LogView).focus()
+
     async def action_new_child(self) -> None:
-        commit = self.query_one(LogView).selected_commit
-        if commit is None:
+        """`n` -- new commit on top of the cursor commit, or a merge commit
+        if 2+ commits are marked (LogView.selection covers both).
+        """
+        log_view = self.query_one(LogView)
+        parents = log_view.selection
+        if not parents:
             return
-        if await self._run_mutation(mutations.new_child, commit):
+        if await self._run_mutation(mutations.new_child, parents):
+            log_view.action_clear_marks()
             await self.action_refresh_log()
 
     async def action_edit(self) -> None:
@@ -134,15 +145,19 @@ class PyjjuiApp(App[None]):
 
     @work
     async def action_abandon(self) -> None:
-        commit = self.query_one(LogView).selected_commit
-        if commit is None:
+        log_view = self.query_one(LogView)
+        commits = log_view.selection
+        if not commits:
             return
-        confirmed = await self.push_screen_wait(
-            ConfirmScreen(f"Abandon {commit.change_id.hex()[:8]}?")
-        )
+        if len(commits) > 1:
+            prompt = f"Abandon {len(commits)} commits?"
+        else:
+            prompt = f"Abandon {commits[0].change_id.hex()[:8]}?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
         if not confirmed:
             return
-        if await self._run_mutation(mutations.abandon, commit):
+        if await self._run_mutation(mutations.abandon, commits):
+            log_view.action_clear_marks()
             await self.action_refresh_log()
 
     async def action_undo(self) -> None:

@@ -7,11 +7,22 @@ def test_new_child_creates_and_checks_out_a_child(workspace, settings, seeded_re
     repo = seeded_repo
     parent = repo.resolve_single(settings, "@")
 
-    new_repo = mutations.new_child(workspace, repo, settings, parent)
+    new_repo = mutations.new_child(workspace, repo, settings, [parent])
 
     wc = new_repo.resolve_single(settings, "@")
     assert wc.id != parent.id
     assert wc.parent_ids == [parent.id]
+
+
+def test_new_child_with_two_parents_creates_a_merge_commit(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+
+    new_repo = mutations.new_child(workspace, repo, settings, [a, b])
+
+    wc = new_repo.resolve_single(settings, "@")
+    assert set(wc.parent_ids) == {a.id, b.id}
 
 
 def test_edit_checks_out_an_existing_commit(workspace, settings, seeded_repo):
@@ -48,9 +59,19 @@ def test_abandon_removes_the_commit(workspace, settings, seeded_repo):
     repo = seeded_repo
     a = repo.resolve_single(settings, "description(exact:'A')")
 
-    new_repo = mutations.abandon(workspace, repo, settings, a)
+    new_repo = mutations.abandon(workspace, repo, settings, [a])
 
     assert new_repo.revset(settings, "description(exact:'A')") == []
+
+
+def test_abandon_removes_multiple_commits_in_one_operation(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+
+    new_repo = mutations.abandon(workspace, repo, settings, [a, b])
+
+    assert new_repo.revset(settings, "description(exact:'A') | description(exact:'B')") == []
 
 
 def test_set_bookmark_points_it_at_the_given_commit(workspace, settings, seeded_repo):
@@ -77,7 +98,7 @@ def test_set_bookmark_does_not_move_the_working_copy(workspace, settings, seeded
 def test_undo_reverts_the_last_operation(workspace, settings, seeded_repo):
     repo = seeded_repo
     a = repo.resolve_single(settings, "description(exact:'A')")
-    repo = mutations.abandon(workspace, repo, settings, a)
+    repo = mutations.abandon(workspace, repo, settings, [a])
     assert repo.revset(settings, "description(exact:'A')") == []
 
     repo = mutations.undo(workspace, repo, settings)
@@ -88,7 +109,7 @@ def test_undo_reverts_the_last_operation(workspace, settings, seeded_repo):
 def test_redo_reapplies_the_undone_operation(workspace, settings, seeded_repo):
     repo = seeded_repo
     a = repo.resolve_single(settings, "description(exact:'A')")
-    repo = mutations.abandon(workspace, repo, settings, a)
+    repo = mutations.abandon(workspace, repo, settings, [a])
     repo = mutations.undo(workspace, repo, settings)
     assert len(repo.revset(settings, "description(exact:'A')")) == 1
 

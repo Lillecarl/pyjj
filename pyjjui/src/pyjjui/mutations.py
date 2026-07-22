@@ -26,15 +26,19 @@ def new_child(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
     settings: pyjj.UserSettings,
-    parent: pyjj.Commit,
+    parents: list[pyjj.Commit],
 ) -> pyjj.ReadonlyRepo:
-    """`jj new <parent>` equivalent: create and check out a new child commit."""
+    """`jj new <parent>...` equivalent: create and check out a new child
+    commit. Two or more parents makes it a merge commit -- LogView.selection
+    is how the UI feeds multiple marked commits in here at once.
+    """
     tx = repo.start_transaction(settings)
-    builder = tx.new_commit(settings, [parent.id])
+    builder = tx.new_commit(settings, [p.id for p in parents])
     child = builder.write(repo)
     tx.edit(workspace.workspace_name, child)
     tx.rebase_descendants()
-    new_repo = tx.commit("new empty commit")
+    message = "new merge commit" if len(parents) > 1 else "new empty commit"
+    new_repo = tx.commit(message)
     _sync_working_copy(workspace, new_repo, settings)
     return new_repo
 
@@ -79,13 +83,20 @@ def abandon(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
     settings: pyjj.UserSettings,
-    commit: pyjj.Commit,
+    commits: list[pyjj.Commit],
 ) -> pyjj.ReadonlyRepo:
-    """`jj abandon <commit>` equivalent."""
+    """`jj abandon <commit>...` equivalent -- one transaction for the whole
+    batch, not one per commit, so it's a single undo-able operation.
+    """
     tx = repo.start_transaction(settings)
-    tx.abandon_commit(commit)
+    for commit in commits:
+        tx.abandon_commit(commit)
     tx.rebase_descendants()
-    new_repo = tx.commit(f"abandon commit {commit.change_id.hex()[:8]}")
+    if len(commits) > 1:
+        message = f"abandon {len(commits)} commits"
+    else:
+        message = f"abandon commit {commits[0].change_id.hex()[:8]}"
+    new_repo = tx.commit(message)
     _sync_working_copy(workspace, new_repo, settings)
     return new_repo
 

@@ -36,7 +36,25 @@ free that we don't.
   `$border-blurred` theme tokens (the same convention Textual's own
   `Input`/`DataTable` use for focus, not a hardcoded color pair) --
   respects whatever theme is active instead of assuming dark-mode accent
-  colors.
+  colors. Focus never crosses siblings directly: `LogView`/`Preview` each
+  post a `FocusPreview`/`FocusLog` message on `l`/`h` instead of doing
+  `self.screen.query_one(...)` on each other, and `PyjjuiApp` handles both
+  (`on_log_view_focus_preview`/`on_preview_focus_log`) -- the same
+  "attributes down, messages up" pattern `CommitSelected` already used.
+- **Marking commits for bulk operations**: `space` toggles a mark on the
+  cursor commit (shown as a `"✓ "` prefix in the summary column), `escape`
+  clears all marks. `LogView.selection` is what actions should read
+  instead of `selected_commit` directly -- it returns the marked commits in
+  display order, or falls back to just the cursor commit if nothing is
+  marked, so marking is opt-in and every existing single-commit action
+  keeps working unchanged. `action_new_child` (`n`) uses this to build a
+  merge commit when 2+ commits are marked; `action_abandon` (`a`) uses it
+  to abandon the whole marked set in one transaction (see
+  `mutations.new_child`/`mutations.abandon`, both take `list[pyjj.Commit]`
+  for this reason). Toggling a mark repaints only the affected row via
+  `DataTable.update_cell` (`LogView._update_row_mark`), not a full
+  `clear()`+rebuild -- `_redraw()` stays reserved for `update_nodes()`,
+  where the underlying data (not just marks) actually changed.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and

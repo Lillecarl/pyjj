@@ -4,6 +4,7 @@ from rich.console import Group
 from rich.text import Text
 from textual.binding import Binding
 from textual.containers import VerticalScroll
+from textual.message import Message
 from textual.widgets import Static
 
 import pyjj
@@ -23,6 +24,11 @@ class Preview(VerticalScroll):
         Binding("k", "scroll_up", show=False),
         Binding("h", "focus_log", "Log", show=False),
     ]
+
+    class FocusLog(Message):
+        """Posted on `h` -- see LogView.FocusPreview for why this goes
+        through the App instead of querying LogView directly.
+        """
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -46,6 +52,4 @@ class Preview(VerticalScroll):
         self._body.update(Group(header, Text(), render_commit_diff(commit, parent)))
 
     def action_focus_log(self) -> None:
-        from .log_view import LogView  # local import: avoids a LogView<->Preview import cycle
-
-        self.screen.query_one(LogView).focus()
+        self.post_message(self.FocusLog())
