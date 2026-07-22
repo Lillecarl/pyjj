@@ -709,9 +709,10 @@ nix-shell -A shells.default         # fast Rust loop for pyjj-bindings
 nix-shell -A shells.pyjjui          # pyjjui editable-install dev loop
 ```
 
-`flake.nix` still exists and works normally for real flake consumers (CI,
-`nix flake check`, `nix flake lock`) — it just imports `default.nix` per
-system rather than duplicating its logic, so the two never drift.
+`flake.nix` still exists, but only to pin inputs and produce `flake.lock`
+for `nix/compat.nix` (flake-compatish) to read directly — it declares no
+packages/devShells outputs of its own, so there's nothing to fan out across
+systems and nothing to drift from `default.nix`.
 
 Each project directory (`pyjj-bindings/`, `pyjj/`, `pyjj-cli/`, `pyjjui/`)
 *is* its own Nix `src`, full stop — no shared-tree exclude-filter to keep

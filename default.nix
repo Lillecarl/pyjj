@@ -16,9 +16,10 @@
     nix-shell -A shells.default   # fast Rust loop for pyjj-bindings
     nix-shell -A shells.pyjjui    # editable-install Python dev loop
 
-  flake.nix wraps this same file per-system for real `nix flake` consumers
-  (CI, `nix flake check`, `nix flake lock`) -- this file is the single
-  source of truth for what gets built; flake.nix just re-exposes it.
+  flake.nix exists only to pin inputs and produce flake.lock for
+  nix/compat.nix to read directly -- it has no packages/devShells outputs of
+  its own (no `nix build .#foo` / `nix develop .#foo` here). This file is the
+  single source of truth for what gets built.
 */
 let
   flake = import ./nix/compat.nix;

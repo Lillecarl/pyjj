@@ -1,11 +1,10 @@
 # Handoff: pyjj extraction from ~/Code/jj
 
-Status as of this handoff: **the migration works end-to-end and is fully
-verified, but nothing is committed yet** (this is still an empty jj/git repo
-with everything sitting in the working copy — `jj status` shows it all as
-`A`). Read `AGENTS.md` first for the actual project docs (binding-surface
-coverage, architecture, testing conventions); this file is just "what
-happened and what's left," not a replacement for it.
+Status as of this handoff: **the migration works end-to-end, is fully
+verified, and is now committed** as the initial commit of this repo. Read
+`AGENTS.md` first for the actual project docs (binding-surface coverage,
+architecture, testing conventions); this file is just "what happened and
+what's left," not a replacement for it.
 
 ## Why this repo exists
 
@@ -104,10 +103,10 @@ release with revset-alias changes.
 
 ## Not yet done / open decisions
 
-1. **Nothing is committed.** Both this repo and the corresponding changes
-   in `~/Code/jj` (flake-compat integration, `nix/pyproject.nix`, etc.) are
-   sitting as uncommitted working-copy state. Review and commit when ready
-   — normal `jj describe` + `jj new`, no special handling needed.
+1. **This repo is now committed.** The corresponding changes in `~/Code/jj`
+   (flake-compat integration, `nix/pyproject.nix`, etc.) are still sitting
+   as uncommitted working-copy state there — review and commit separately
+   when ready.
 2. **`~/Code/jj` still has copies of `pyjj-bindings/`, `pyjj/`,
    `pyjj-cli/`, `pyjjui/`**, plus `flake.nix`/`default.nix` there still
    reference and build them. This was flagged to the user and not yet

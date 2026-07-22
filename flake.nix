@@ -2,7 +2,6 @@
   description = "Python bindings, CLI, and TUI for Jujutsu VCS";
 
   inputs = {
-    flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     # For packaging pyjj/pyjj-cli/pyjjui (dependencies/build-system/entry
@@ -20,27 +19,10 @@
     flake-compatish.url = "github:lillecarl/flake-compatish";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-    pyproject-nix,
-    flake-compatish,
-  }:
-    flake-utils.lib.eachSystem nixpkgs.lib.systems.flakeExposed (system: let
-      pkgs = import nixpkgs {inherit system;};
-      outputs = import ./default.nix {
-        inputs = {inherit nixpkgs pyproject-nix;};
-        inherit system pkgs;
-      };
-    in {
-      formatter = pkgs.alejandra;
-      packages = {
-        inherit (outputs) pyjj-bindings pyjj pyjj-cli pyjjui;
-        default = outputs.pyjjui;
-      };
-      devShells = {
-        inherit (outputs.shells) default pyjjui;
-      };
-    });
+  # This flake exists only to pin inputs and produce flake.lock for
+  # nix/compat.nix (flake-compatish) to read directly -- it is never built or
+  # developed against via `nix build .#foo` / `nix develop .#foo`, so there
+  # are no per-system outputs to fan out here. See default.nix and
+  # AGENTS.md's "Reproducible builds" section for the real entry points.
+  outputs = { ... }: { };
 }
