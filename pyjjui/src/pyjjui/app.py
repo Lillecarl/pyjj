@@ -39,6 +39,7 @@ class PyjjuiApp(App[None]):
         Binding("e", "edit", "Edit"),
         Binding("d", "describe", "Describe"),
         Binding("a", "abandon", "Abandon"),
+        Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
         Binding("r", "set_revset", "Revset"),
@@ -63,11 +64,35 @@ class PyjjuiApp(App[None]):
     async def on_mount(self) -> None:
         await self.action_refresh_log()
 
-    async def action_refresh_log(self) -> None:
-        nodes = await self.state.refresh()
+    async def action_refresh_log(self) -> bool:
+        """Reload the repo and redraw the log. Returns whether it succeeded --
+        callers that need to undo a state change on failure (e.g.
+        `action_set_revset` reverting to the last-good revset) check this;
+        others just fire-and-forget it.
+        """
+        try:
+            nodes = await self.state.refresh()
+        except pyjj.JjError as exc:
+            self.notify(str(exc), title="Refresh failed", severity="error", timeout=8)
+            return False
         wc_commit = self.state.repo.resolve_single(self.state.settings, "@")
-        self.query_one(LogView).update_nodes(nodes, wc_commit.id)
+        bookmarks = self.state.repo.bookmarks()
+        self.query_one(LogView).update_nodes(nodes, wc_commit.id, bookmarks)
         self.sub_title = self.state.revset
+        return True
+
+    async def _run_mutation(self, fn: object, *args: object) -> bool:
+        """Run a mutation, notifying and swallowing failure instead of
+        crashing the whole app -- jj operations fail for user-reachable
+        reasons (nothing to undo, describing an immutable commit, etc.),
+        not just programming errors, so this boundary needs to survive them.
+        """
+        try:
+            await self.state.run_mutation(fn, *args)
+        except pyjj.JjError as exc:
+            self.notify(str(exc), title="Action failed", severity="error", timeout=8)
+            return False
+        return True
 
     def on_log_view_commit_selected(self, event: LogView.CommitSelected) -> None:
         self.query_one(Preview).show_commit(event.commit, self.state.repo)
@@ -76,15 +101,15 @@ class PyjjuiApp(App[None]):
         commit = self.query_one(LogView).selected_commit
         if commit is None:
             return
-        await self.state.run_mutation(mutations.new_child, commit)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.new_child, commit):
+            await self.action_refresh_log()
 
     async def action_edit(self) -> None:
         commit = self.query_one(LogView).selected_commit
         if commit is None:
             return
-        await self.state.run_mutation(mutations.edit, commit)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.edit, commit):
+            await self.action_refresh_log()
 
     @work
     async def action_describe(self) -> None:
@@ -96,8 +121,8 @@ class PyjjuiApp(App[None]):
         )
         if text is None:
             return
-        await self.state.run_mutation(mutations.describe, commit, text)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.describe, commit, text):
+            await self.action_refresh_log()
 
     @work
     async def action_abandon(self) -> None:
@@ -109,16 +134,16 @@ class PyjjuiApp(App[None]):
         )
         if not confirmed:
             return
-        await self.state.run_mutation(mutations.abandon, commit)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.abandon, commit):
+            await self.action_refresh_log()
 
     async def action_undo(self) -> None:
-        await self.state.run_mutation(mutations.undo)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.undo):
+            await self.action_refresh_log()
 
     async def action_redo(self) -> None:
-        await self.state.run_mutation(mutations.redo)
-        await self.action_refresh_log()
+        if await self._run_mutation(mutations.redo):
+            await self.action_refresh_log()
 
     @work
     async def action_set_revset(self) -> None:
@@ -127,5 +152,18 @@ class PyjjuiApp(App[None]):
         )
         if revset is None:
             return
+        previous_revset = self.state.revset
         self.state.revset = revset
-        await self.action_refresh_log()
+        if not await self.action_refresh_log():
+            self.state.revset = previous_revset
+
+    @work
+    async def action_bookmark_set(self) -> None:
+        commit = self.query_one(LogView).selected_commit
+        if commit is None:
+            return
+        name = await self.push_screen_wait(TextInputScreen("Bookmark name:"))
+        if not name:
+            return
+        if await self._run_mutation(mutations.set_bookmark, commit, name):
+            await self.action_refresh_log()

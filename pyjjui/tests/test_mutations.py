@@ -53,6 +53,27 @@ def test_abandon_removes_the_commit(workspace, settings, seeded_repo):
     assert new_repo.revset(settings, "description(exact:'A')") == []
 
 
+def test_set_bookmark_points_it_at_the_given_commit(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    b = repo.resolve_single(settings, "description(exact:'B')")
+
+    new_repo = mutations.set_bookmark(workspace, repo, settings, b, "release")
+
+    bookmark = new_repo.get_bookmark("release")
+    assert bookmark is not None
+    assert bookmark.target_ids == [b.id]
+
+
+def test_set_bookmark_does_not_move_the_working_copy(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    wc = repo.resolve_single(settings, "@")
+    a = repo.resolve_single(settings, "description(exact:'A')")
+
+    new_repo = mutations.set_bookmark(workspace, repo, settings, a, "release")
+
+    assert new_repo.resolve_single(settings, "@").id == wc.id
+
+
 def test_undo_reverts_the_last_operation(workspace, settings, seeded_repo):
     repo = seeded_repo
     a = repo.resolve_single(settings, "description(exact:'A')")

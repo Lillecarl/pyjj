@@ -31,7 +31,10 @@ class LogView(DataTable):
         self.add_column("commit", key="commit")
 
     def update_nodes(
-        self, nodes: list[pyjj.GraphNode], wc_commit_id: pyjj.CommitId | None
+        self,
+        nodes: list[pyjj.GraphNode],
+        wc_commit_id: pyjj.CommitId | None,
+        bookmarks: list[pyjj.Bookmark],
     ) -> None:
         """Recompute lane layout and redraw every row from scratch."""
         previous_change_id = (
@@ -40,12 +43,18 @@ class LogView(DataTable):
             else None
         )
 
+        bookmarks_by_commit: dict[pyjj.CommitId, list[str]] = {}
+        for bookmark in bookmarks:
+            for target_id in bookmark.target_ids:
+                bookmarks_by_commit.setdefault(target_id, []).append(bookmark.name)
+
         rows = layout(nodes)
         self.clear()
         self._commits = [row.node.commit for row in rows]
         for row in rows:
             is_wc = wc_commit_id is not None and row.node.commit.id == wc_commit_id
-            self.add_row(_render_glyphs(row, is_wc), _render_summary(row.node.commit, is_wc))
+            names = bookmarks_by_commit.get(row.node.commit.id, [])
+            self.add_row(_render_glyphs(row, is_wc), _render_summary(row.node.commit, is_wc, names))
 
         if not rows:
             return
@@ -83,10 +92,12 @@ def _render_glyphs(row: GraphRow, is_wc: bool) -> Text:
     return text
 
 
-def _render_summary(commit: pyjj.Commit, is_wc: bool) -> Text:
+def _render_summary(commit: pyjj.Commit, is_wc: bool, bookmark_names: list[str]) -> Text:
     change_id = commit.change_id.hex()[:8]
     first_line = commit.description.splitlines()[0] if commit.description else None
     text = Text(f"{change_id} ", style="cyan")
+    if bookmark_names:
+        text.append(" ".join(sorted(bookmark_names)) + " ", style="bold green")
     text.append(
         first_line or "(no description set)",
         style="bold" if is_wc else ("dim italic" if first_line is None else ""),

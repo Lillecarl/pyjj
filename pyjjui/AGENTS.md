@@ -18,11 +18,25 @@ free that we don't.
   and re-evaluates `log_graph()`. `run_mutation()` is the one sanctioned way
   to touch a `Transaction`.
 - `src/pyjjui/mutations.py` — one sync function per mutating action
-  (`new_child`, `edit`, `describe`, `abandon`, `undo`, `redo`), each shaped
-  `(workspace, repo, settings, ...) -> ReadonlyRepo` for `run_mutation()`.
+  (`new_child`, `edit`, `describe`, `abandon`, `set_bookmark`, `undo`,
+  `redo`), each shaped `(workspace, repo, settings, ...) -> ReadonlyRepo`
+  for `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
   `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering.
-- `src/pyjjui/widgets/` — Textual widgets (`log_view.py`, `preview.py`).
+- `src/pyjjui/widgets/` — Textual widgets (`log_view.py` -- also renders
+  each commit's local bookmarks from `ReadonlyRepo.bookmarks()`,
+  `preview.py`).
+- **Error handling boundary**: `app.py`'s `action_refresh_log()` and
+  `_run_mutation()` are the only places that catch `pyjj.JjError` (the
+  common base for revset-parse errors, transaction errors, etc.) and
+  surface it via `self.notify(..., severity="error")` instead of letting
+  it propagate and crash the whole app. Every action that can fail for a
+  user-reachable reason (bad revset syntax, describing something that
+  can't be rewritten, nothing to undo) must route through one of these two
+  -- don't call `state.refresh()`/`state.run_mutation()` directly from a
+  new action and skip the try/except, or a bad revset typed into the UI
+  takes the whole app down with it (this actually happened before these
+  existed).
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.

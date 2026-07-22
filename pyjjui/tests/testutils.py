@@ -25,7 +25,9 @@ def write_config(path):
 
 def seed_repo(workspace, settings):
     """Two described commits (`A` then `B`, `B` checked out) on top of the
-    fresh workspace's initial empty working-copy commit. Author/committer
+    fresh workspace's initial empty working-copy commit, with bookmark
+    `main` left behind on `A` (not the tip) -- a bookmark not pointing at
+    the working copy is the common case worth covering. Author/committer
     timestamps are pinned everywhere (not just `debug.randomness-seed`'s
     change-ids) so commit ids -- shown in full in the preview pane -- are
     stable too: a commit id is a content hash that includes its timestamp,
@@ -53,6 +55,7 @@ def seed_repo(workspace, settings):
     builder.set_committer(FIXED_SIGNATURE)
     a = builder.write(repo)
     tx.edit(workspace.workspace_name, a)
+    tx.set_bookmark("main", a.id)
     tx.rebase_descendants()
     repo = tx.commit("new A")
     workspace.check_out(repo, a)

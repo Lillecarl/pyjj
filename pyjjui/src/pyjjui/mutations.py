@@ -90,6 +90,22 @@ def abandon(
     return new_repo
 
 
+def set_bookmark(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    commit: pyjj.Commit,
+    name: str,
+) -> pyjj.ReadonlyRepo:
+    """`jj bookmark set <name> -r <commit>` equivalent: point a (possibly
+    new) local bookmark at `commit`. No working-copy sync needed -- this
+    never touches the wc commit or registers a rewrite.
+    """
+    tx = repo.start_transaction(settings)
+    tx.set_bookmark(name, commit.id)
+    return tx.commit(f"set bookmark {name} to {commit.change_id.hex()[:8]}")
+
+
 def undo(
     workspace: pyjj.Workspace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings
 ) -> pyjj.ReadonlyRepo:
