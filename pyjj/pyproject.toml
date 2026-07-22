@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyjj"
+description = "Pythonic API for Jujutsu VCS, built on pyjj-bindings"
+requires-python = ">=3.9"
+version = "0.43.0"
+license = { text = "Apache-2.0" }
+dependencies = ["pyjj-bindings"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

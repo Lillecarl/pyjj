@@ -1,0 +1,10 @@
+/target
+/pyjj-bindings/target
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+/result
+/result-*
+.venv/
+snapshot_report.html
