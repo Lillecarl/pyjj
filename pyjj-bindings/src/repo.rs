@@ -860,6 +860,31 @@ impl PyTransaction {
         })
     }
 
+    /// `jj rebase` equivalent covering every destination mode (`-r`/`-s`,
+    /// `-d`/`-A`/`-B`) in one call. See `pyjj_bindings.rewrite.move_commits`
+    /// docs for exactly what each argument means and the mutual-exclusion
+    /// rule between `target_commit_ids`/`target_root_ids`. Already rebases
+    /// the target's descendants -- call `rebase_descendants()` afterward
+    /// only for other pending rewrites in this transaction, same as
+    /// everywhere else in this API.
+    fn move_commits(
+        &self,
+        target_commit_ids: Vec<PyCommitId>,
+        target_root_ids: Vec<PyCommitId>,
+        new_parent_ids: Vec<PyCommitId>,
+        new_child_ids: Vec<PyCommitId>,
+    ) -> PyResult<crate::rewrite::PyMoveCommitsStats> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::move_commits(
+                mut_repo,
+                target_commit_ids,
+                target_root_ids,
+                new_parent_ids,
+                new_child_ids,
+            )
+        })
+    }
+
     /// `jj op restore <target_op>` equivalent. `what` defaults to
     /// restoring everything (`["repo", "remote_tracking"]`); pass a subset
     /// to restore only part of the view. Does not commit -- call

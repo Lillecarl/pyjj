@@ -2,6 +2,8 @@
 
 from pyjjui import mutations
 
+from . import testutils
+
 
 def test_new_child_creates_and_checks_out_a_child(workspace, settings, seeded_repo):
     repo = seeded_repo
@@ -72,6 +74,78 @@ def test_abandon_removes_multiple_commits_in_one_operation(workspace, settings, 
     new_repo = mutations.abandon(workspace, repo, settings, [a, b])
 
     assert new_repo.revset(settings, "description(exact:'A') | description(exact:'B')") == []
+
+
+def test_rebase_onto_reparents_the_source_commit(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    # C branches off the same parent as A (root), independent of A/B.
+    root = repo.get_commit(a.parent_ids[0])
+    repo, c = testutils.new_child(workspace, repo, settings, root, "C")
+    b = repo.get_commit(b.id)
+
+    new_repo = mutations.rebase(
+        workspace, repo, settings, [c], b, mode="onto", include_descendants=False
+    )
+
+    rebased_c = new_repo.revset(settings, "description(exact:'C')")[0]
+    assert rebased_c.parent_ids == [b.id]
+
+
+def test_rebase_after_splices_in_as_a_new_child(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    root = repo.get_commit(a.parent_ids[0])
+    repo, c = testutils.new_child(workspace, repo, settings, root, "C")
+    a = repo.get_commit(a.id)
+
+    new_repo = mutations.rebase(
+        workspace, repo, settings, [c], a, mode="after", include_descendants=False
+    )
+
+    rebased_c = new_repo.revset(settings, "description(exact:'C')")[0]
+    rebased_b = new_repo.revset(settings, "description(exact:'B')")[0]
+    assert rebased_c.parent_ids == [a.id]
+    assert rebased_b.parent_ids == [rebased_c.id]
+
+
+def test_rebase_before_splices_in_as_a_new_parent(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    root = repo.get_commit(a.parent_ids[0])
+    repo, c = testutils.new_child(workspace, repo, settings, root, "C")
+    a = repo.get_commit(a.id)
+
+    new_repo = mutations.rebase(
+        workspace, repo, settings, [c], a, mode="before", include_descendants=False
+    )
+
+    rebased_c = new_repo.revset(settings, "description(exact:'C')")[0]
+    rebased_a = new_repo.revset(settings, "description(exact:'A')")[0]
+    assert rebased_c.parent_ids == [root.id]
+    assert rebased_a.parent_ids == [rebased_c.id]
+
+
+def test_rebase_include_descendants_moves_the_whole_branch(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    root = repo.get_commit(a.parent_ids[0])
+    repo, c = testutils.new_child(workspace, repo, settings, root, "C")
+    repo, c_child = testutils.new_child(workspace, repo, settings, c, "C child")
+    b = repo.get_commit(b.id)
+    c = repo.get_commit(c.id)
+
+    new_repo = mutations.rebase(
+        workspace, repo, settings, [c], b, mode="onto", include_descendants=True
+    )
+
+    rebased_c = new_repo.revset(settings, "description(exact:'C')")[0]
+    rebased_c_child = new_repo.revset(settings, "description(exact:'C child')")[0]
+    assert rebased_c.parent_ids == [b.id]
+    assert rebased_c_child.parent_ids == [rebased_c.id]
 
 
 def test_set_bookmark_points_it_at_the_given_commit(workspace, settings, seeded_repo):

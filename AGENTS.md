@@ -258,16 +258,31 @@ Current state:
   commit's data isn't deleted from the backend and stays resolvable by
   direct id — it's just no longer an ancestor of any visible head, matching
   real jj's "hidden, not deleted" semantics.
-- **Rebase**: `Transaction.rebase(commit, new_parents) -> Commit` is `jj
-  rebase -r <rev> -d <dest>` for a *single* commit — wraps
-  `jj_lib::rewrite::rebase_commit` directly (already written; no
-  `CommitBuilder` step, unlike `set_executable`). `commit`'s own descendants
-  aren't moved along automatically; call `rebase_descendants()` afterward
-  for that (the common case, equivalent to `jj rebase -s <rev> -d <dest>`).
-  No `-b`/`--insert-after`/`--insert-before`/`--skip-emptied` — this is
-  deliberately the same "simpler primitive" scope as `duplicate`, not the
-  full `move_commits`/`compute_move_commits` machinery the CLI's `jj
-  rebase` uses for multi-revision subtree moves.
+- **Rebase**: two levels of primitive, matching the two things `jj rebase`
+  itself can do.
+  - `Transaction.rebase(commit, new_parents) -> Commit` is `jj rebase -r
+    <rev> -d <dest>` for a *single* commit — wraps
+    `jj_lib::rewrite::rebase_commit` directly (already written; no
+    `CommitBuilder` step, unlike `set_executable`). `commit`'s own
+    descendants aren't moved along automatically; call
+    `rebase_descendants()` afterward for that.
+  - `Transaction.move_commits(target_commit_ids, target_root_ids,
+    new_parent_ids, new_child_ids) -> MoveCommitsStats` wraps the full
+    `jj_lib::rewrite::move_commits`/`compute_move_commits` machinery the
+    CLI's own `jj rebase` composes every one of its modes from
+    (`cli/src/commands/rebase.rs`) — covers `-r`/`-s` (via exactly one of
+    `target_commit_ids`/`target_root_ids` being non-empty; the other must
+    be empty, checked and rejected with `JjError` otherwise) and
+    `-d`/`-A`/`-B` (via `new_parent_ids`/`new_child_ids` — empty
+    `new_child_ids` is a plain `-d`; non-empty splices the moved commits in
+    as parents of those children too, `-A`/`-B`). Binds
+    `RebaseOptions::default()` only (same defaults `jj rebase` uses without
+    `--skip-emptied`) — no exposed way to change `EmptyBehavior` or
+    `simplify_ancestor_merge` yet. Computing which ids `-A`/`-B` imply
+    (children-of-destination, or destination's-own-original-parents) is
+    the caller's job (see `pyjjui/src/pyjjui/mutations.py`'s `rebase()`),
+    not this binding's — same split as `cli_util::compute_commit_location`
+    vs `move_commits` itself in the real CLI.
 - **Annotate (blame)**: `Commit.annotate(repo, path) -> list[AnnotationLine]`
   is `jj file annotate <path>` — wraps `jj_lib::annotate::FileAnnotator`,
   searching the whole repo as the domain (matching the CLI's own current

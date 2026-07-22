@@ -140,6 +140,16 @@ class LogView(DataTable):
         return None
 
     @property
+    def marked_commits(self) -> list[pyjj.Commit]:
+        """Just the marked commits, display order, empty if none -- unlike
+        `selection`, which falls back to the cursor commit. Rebase needs
+        that distinction: the cursor picks the *destination*, so it can't
+        also stand in for an empty source set the way it does for
+        abandon/new-child.
+        """
+        return [c for c in self._commits if c.id in self._marked]
+
+    @property
     def selection(self) -> list[pyjj.Commit]:
         """The marked commits, in the log's display order, or -- if nothing
         is marked -- just the commit under the cursor. This is what bulk

@@ -10,6 +10,7 @@ import pyjj
 
 from . import mutations
 from .screens.confirm import ConfirmScreen
+from .screens.rebase import RebaseScreen
 from .screens.text_input import TextInputScreen
 from .state import AppState
 from .widgets.log_view import LogView
@@ -47,6 +48,7 @@ class PyjjuiApp(App[None]):
         Binding("e", "edit", "Edit"),
         Binding("d", "describe", "Describe"),
         Binding("a", "abandon", "Abandon"),
+        Binding("m", "rebase", "Rebase"),
         Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
@@ -157,6 +159,35 @@ class PyjjuiApp(App[None]):
         if not confirmed:
             return
         if await self._run_mutation(mutations.abandon, commits):
+            log_view.action_clear_marks()
+            await self.action_refresh_log()
+
+    @work
+    async def action_rebase(self) -> None:
+        """`m` -- rebase the marked commits (`space`) onto/around the
+        cursor commit. Marks stay the *source* here (never falling back to
+        the cursor the way `LogView.selection` does for abandon/new-child)
+        because the cursor is needed free, to pick the destination.
+        """
+        log_view = self.query_one(LogView)
+        sources = log_view.marked_commits
+        if not sources:
+            self.notify(
+                "Mark commits to rebase first (space), then move the cursor"
+                " to the destination and press m",
+                title="Nothing marked",
+                severity="warning",
+            )
+            return
+        destination = log_view.selected_commit
+        if destination is None:
+            return
+        plan = await self.push_screen_wait(RebaseScreen(sources, destination))
+        if plan is None:
+            return
+        if await self._run_mutation(
+            mutations.rebase, sources, destination, plan.mode, plan.include_descendants
+        ):
             log_view.action_clear_marks()
             await self.action_refresh_log()
 

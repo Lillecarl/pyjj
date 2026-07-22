@@ -18,9 +18,9 @@ free that we don't.
   and re-evaluates `log_graph()`. `run_mutation()` is the one sanctioned way
   to touch a `Transaction`.
 - `src/pyjjui/mutations.py` — one sync function per mutating action
-  (`new_child`, `edit`, `describe`, `abandon`, `set_bookmark`, `undo`,
-  `redo`), each shaped `(workspace, repo, settings, ...) -> ReadonlyRepo`
-  for `run_mutation()`.
+  (`new_child`, `edit`, `describe`, `abandon`, `rebase`, `set_bookmark`,
+  `undo`, `redo`), each shaped `(workspace, repo, settings, ...) ->
+  ReadonlyRepo` for `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
   `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering.
 - `src/pyjjui/widgets/` — Textual widgets (`log_view.py` -- also renders
@@ -55,6 +55,21 @@ free that we don't.
   `DataTable.update_cell` (`LogView._update_row_mark`), not a full
   `clear()`+rebuild -- `_redraw()` stays reserved for `update_nodes()`,
   where the underlying data (not just marks) actually changed.
+- **Rebase, all destination modes**: `m` opens `screens/rebase.py`'s
+  `RebaseScreen` with `LogView.marked_commits` (must be non-empty -- marks
+  are the *source*, never falling back to the cursor commit the way
+  `selection` does) as the source set and the cursor commit as the
+  destination. The modal picks `mutations.rebase()`'s `mode` ("onto" /
+  "after" / "before" -- `-d`/`-A`/`-B`) and whether to pull the source's
+  descendants along too (`include_descendants`, `-s` vs the default `-r`;
+  only meaningful with exactly one marked commit). `mutations.rebase()`
+  itself only computes which ids `-A`/`-B` imply
+  (`children(destination)`/`destination.parent_ids`) before delegating the
+  actual graph surgery to `Transaction.move_commits` -- see root
+  `AGENTS.md`'s "Rebase" section for why that logic isn't reimplemented in
+  Python. Combining `-A` and `-B` together (splicing between two distinct
+  boundary commits, not just one) isn't exposed in the modal yet, though
+  the binding underneath already supports it.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and

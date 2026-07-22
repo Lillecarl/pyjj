@@ -42,6 +42,7 @@ use ids::{PyChangeId, PyCommitId, PyFileId, PySignature, PyTimestamp, PyTreeId};
 use operation::PyOperation;
 use oplog::PyOpAbandonStats;
 use repo::{PyCommitBuilder, PyTransaction};
+use rewrite::PyMoveCommitsStats;
 use settings::PyUserSettings;
 use tag::PyTag;
 use tree::PyDiffEntry;
@@ -99,6 +100,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOpAbandonStats>()?;
     m.add_class::<PyGraphEdge>()?;
     m.add_class::<PyGraphNode>()?;
+    m.add_class::<PyMoveCommitsStats>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
 
     Ok(())

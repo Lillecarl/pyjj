@@ -5,6 +5,12 @@ from textual.widgets import Input
 from pyjjui.widgets.log_view import LogView
 from pyjjui.widgets.preview import Preview
 
+from . import testutils
+
+
+def _row_of(log_view: LogView, change_id) -> int:
+    return next(i for i, commit in enumerate(log_view._commits) if commit.change_id == change_id)
+
 
 async def test_log_view_shows_the_seeded_commits(app, render):
     async with app.run_test() as pilot:
@@ -252,6 +258,70 @@ async def test_marking_two_commits_and_abandoning_removes_both(app, render):
         remaining_ids = {c.id for c in log_view._commits}
         assert first.id not in remaining_ids
         assert second.id not in remaining_ids
+
+
+async def test_rebase_without_marks_shows_a_warning_instead_of_a_modal(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        await pilot.press("m")
+        await pilot.pause()
+        render(app, "no-marks-warning")
+
+        assert len(app.screen_stack) == 1  # no modal pushed
+        assert len(app._notifications) >= 1
+
+
+async def test_rebase_onto_reparents_the_marked_commit(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        root = app.state.repo.get_commit(a.parent_ids[0])
+        new_repo, c = testutils.new_child(
+            app.state.workspace, app.state.repo, app.state.settings, root, "C"
+        )
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        log_view.move_cursor(row=_row_of(log_view, c.change_id))
+        await pilot.press("space")
+        log_view.move_cursor(row=_row_of(log_view, b.change_id))
+        await pilot.pause()
+        render(app, "marked-c-cursor-on-b")
+
+        await pilot.press("m")
+        await pilot.pause()
+        render(app, "rebase-modal")
+        await pilot.click("#onto")
+        await pilot.pause()
+        render(app, "after-rebase-onto")
+
+        rebased_c = app.state.repo.revset(app.state.settings, "description(exact:'C')")[0]
+        assert rebased_c.parent_ids == [b.id]
+        assert log_view.selection == [log_view.selected_commit]  # marks cleared
+
+
+async def test_rebase_modal_cancel_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        await pilot.press("space")  # mark the working copy commit
+        await pilot.press("down")
+        await pilot.pause()
+
+        await pilot.press("m")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        render(app, "after-cancel")
+
+        assert log_view.row_count == before
 
 
 async def test_abandon_requires_confirmation(app, render):

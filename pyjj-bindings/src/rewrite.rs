@@ -12,7 +12,7 @@ use jj_lib::merged_tree_builder::MergedTreeBuilder;
 use jj_lib::object_id::ObjectId as _;
 use jj_lib::repo::MutableRepo;
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
-use jj_lib::rewrite::{self, CommitWithSelection};
+use jj_lib::rewrite::{self, CommitWithSelection, MoveCommitsLocation, MoveCommitsTarget, RebaseOptions};
 
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err};
@@ -365,5 +365,81 @@ pub fn rebase(
     Ok(PyCommit {
         inner: new_commit,
         _repo: None,
+    })
+}
+
+/// Result of `Transaction.move_commits()`: counts mirroring `jj rebase`'s
+/// own post-rebase summary line.
+#[pyclass(name = "MoveCommitsStats", frozen, get_all)]
+pub struct PyMoveCommitsStats {
+    /// Number of commits in the target set that were themselves rebased.
+    num_rebased_targets: u32,
+    /// Number of descendant commits (outside the target set) rebased as a
+    /// consequence.
+    num_rebased_descendants: u32,
+    /// Number of commits skipped because they were already in place.
+    num_skipped_rebases: u32,
+    /// Number of commits abandoned for having become empty (only possible
+    /// with a non-default `EmptyBehavior`; always `0` here since this binds
+    /// `RebaseOptions::default()`, same as `jj rebase` without `--skip-emptied`).
+    num_abandoned_empty: u32,
+}
+
+/// `jj rebase` equivalent covering every one of its destination modes in one
+/// call, via `jj_lib::rewrite::move_commits` -- the same unified primitive
+/// the `jj` CLI itself composes `-r`/`-s`/`-b` and `-d`/`-A`/`-B` from
+/// (`cli/src/commands/rebase.rs`), so none of that graph-surgery logic (nor
+/// its edge cases -- cycles, divergent merges, `simplify_ancestor_merge`)
+/// is reimplemented here.
+///
+/// Exactly one of `target_commit_ids` (specific revisions, `jj rebase -r`
+/// -- must be in reverse topological order if there's more than one) /
+/// `target_root_ids` (roots whose descendants are pulled along too, `jj
+/// rebase -s`/`-b`) must be non-empty; the other must be empty.
+///
+/// `new_parent_ids`/`new_child_ids` give the target's new location:
+/// `new_child_ids` empty means a plain `-d <new_parent_ids>` rebase;
+/// non-empty `new_child_ids` splices the moved commits in as parents of
+/// those children too (`-A`/`-B`) -- computing the right ids for each
+/// insert-after/insert-before/both combination (mirroring
+/// `cli_util::compute_commit_location`) is the caller's job, not this
+/// binding's; this only performs the move once a destination is chosen.
+///
+/// Already rebases the target's descendants internally -- but still call
+/// `rebase_descendants()` before `commit()` for anything else pending in
+/// this transaction, same rule as every other rewrite here.
+pub fn move_commits(
+    mut_repo: &mut MutableRepo,
+    target_commit_ids: Vec<PyCommitId>,
+    target_root_ids: Vec<PyCommitId>,
+    new_parent_ids: Vec<PyCommitId>,
+    new_child_ids: Vec<PyCommitId>,
+) -> PyResult<PyMoveCommitsStats> {
+    if target_commit_ids.is_empty() == target_root_ids.is_empty() {
+        return Err(JjError::new_err(
+            "move_commits: exactly one of target_commit_ids/target_root_ids must be non-empty",
+        ));
+    }
+    let target = if !target_commit_ids.is_empty() {
+        MoveCommitsTarget::Commits(target_commit_ids.into_iter().map(|id| id.0).collect())
+    } else {
+        MoveCommitsTarget::Roots(target_root_ids.into_iter().map(|id| id.0).collect())
+    };
+    let loc = MoveCommitsLocation {
+        new_parent_ids: new_parent_ids.into_iter().map(|id| id.0).collect(),
+        new_child_ids: new_child_ids.into_iter().map(|id| id.0).collect(),
+        target,
+    };
+    let stats = pollster::block_on(rewrite::move_commits(
+        mut_repo,
+        &loc,
+        &RebaseOptions::default(),
+    ))
+    .map_err(map_backend_err)?;
+    Ok(PyMoveCommitsStats {
+        num_rebased_targets: stats.num_rebased_targets,
+        num_rebased_descendants: stats.num_rebased_descendants,
+        num_skipped_rebases: stats.num_skipped_rebases,
+        num_abandoned_empty: stats.num_abandoned_empty,
     })
 }

@@ -101,6 +101,65 @@ def abandon(
     return new_repo
 
 
+def rebase(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    sources: list[pyjj.Commit],
+    destination: pyjj.Commit,
+    mode: str,
+    include_descendants: bool,
+) -> pyjj.ReadonlyRepo:
+    """`jj rebase` equivalent covering every destination mode in one
+    function: `mode="onto"` is `-d <destination>`, `"after"` is `-A
+    <destination>` (splices in as a child of destination, taking over its
+    current children), `"before"` is `-B <destination>` (splices in as a
+    parent of destination, taking over its current parents).
+    `include_descendants` selects `-s <sources[0]>` (source and everything
+    below it) over the default `-r <sources...>` (just the named commits,
+    reparenting their children onto the commits' own original parents) --
+    only meaningful with exactly one source commit, same as `jj rebase -s`
+    taking one source revision.
+
+    Delegates the actual graph surgery to `Transaction.move_commits`
+    (`jj_lib::rewrite::move_commits`), computing only which commits
+    `-A`/`-B` implies as `new_child_ids` -- see `pyjj-bindings/src/rewrite.rs`'s
+    `move_commits` docs for why that graph-surgery logic itself isn't
+    reimplemented here.
+    """
+    tx = repo.start_transaction(settings)
+
+    if include_descendants:
+        target_commit_ids, target_root_ids = [], [sources[0].id]
+    else:
+        target_commit_ids, target_root_ids = [c.id for c in sources], []
+
+    if mode == "onto":
+        new_parent_ids, new_child_ids = [destination.id], []
+    elif mode == "after":
+        children = repo.revset(settings, f"children({destination.id.hex()})")
+        new_parent_ids, new_child_ids = [destination.id], [c.id for c in children]
+    elif mode == "before":
+        new_parent_ids, new_child_ids = list(destination.parent_ids), [destination.id]
+    else:
+        raise ValueError(f"unknown rebase mode: {mode!r}")
+
+    tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
+    tx.rebase_descendants()
+
+    if len(sources) > 1:
+        subject = f"{len(sources)} commits"
+    else:
+        subject = f"commit {sources[0].change_id.hex()[:8]}"
+        if include_descendants:
+            subject += " and descendants"
+    message = f"rebase {subject} {mode} {destination.change_id.hex()[:8]}"
+
+    new_repo = tx.commit(message)
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
 def set_bookmark(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
