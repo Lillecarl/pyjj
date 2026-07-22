@@ -109,6 +109,15 @@ def main() -> int:
         " bigger terminals mean bigger PNGs for no more signal)",
     )
     parser.add_argument("--scenario", choices=sorted(_SCENARIOS), default="seeded")
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=0.25,
+        help="cairosvg raster scale (default 0.25): these renders are for checking layout"
+        " -- panels, borders, row highlights, footer key-hint colors -- not for reading text,"
+        " so text can blur without losing the thing actually being reviewed. Pass --scale 1"
+        " for a crisp/legible render when you do need to read specific text.",
+    )
     args = parser.parse_args()
 
     width_str, _, height_str = args.size.lower().partition("x")
@@ -129,7 +138,7 @@ def main() -> int:
     if out.suffix == ".png":
         import cairosvg
 
-        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out))
+        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out), scale=args.scale)
     else:
         out.write_text(svg)
 

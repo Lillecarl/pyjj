@@ -61,10 +61,16 @@ def render(request):
     already in the test body are for). Call it anywhere inside `async with
     app.run_test() as pilot:` -- `export_screenshot()` requires the app to
     actually be running.
+
+    Rasterized small (`scale=0.25` by default) -- these renders are for
+    checking layout (panels, borders, row highlights, footer key-hint
+    colors), not for reading text, so blurring the text away costs nothing
+    that was actually being checked. Pass `scale=1` for a crisp render when
+    a test genuinely needs to eyeball specific text.
     """
     calls = {"n": 0}
 
-    def _render(app: PyjjuiApp, label: str = "") -> Path:
+    def _render(app: PyjjuiApp, label: str = "", scale: float = 0.25) -> Path:
         import cairosvg
 
         calls["n"] += 1
@@ -72,7 +78,7 @@ def render(request):
         suffix = f"-{label}" if label else ""
         out = _DEV_SCREENSHOTS_DIR / f"{request.node.name}-{calls['n']}{suffix}.png"
         svg = app.export_screenshot()
-        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out))
+        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out), scale=scale)
         return out
 
     return _render
