@@ -3,12 +3,16 @@ in testutils.py (shared with pyjjui/tools/screenshot.py); fixtures here are
 thin pytest wrappers around it.
 """
 
+from pathlib import Path
+
 import pytest
 
 import pyjj
 from pyjjui.app import PyjjuiApp
 
 from . import testutils
+
+_DEV_SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / ".dev" / "screenshots"
 
 
 @pytest.fixture
@@ -44,3 +48,31 @@ def seeded_repo(workspace, settings):
 @pytest.fixture
 def app(workspace, settings, seeded_repo):
     return PyjjuiApp(workspace=workspace, settings=settings, revset="all()")
+
+
+@pytest.fixture
+def render(request):
+    """`render(app, "label")` dumps a PNG of a running app's current screen
+    into `pyjjui/.dev/screenshots/` (gitignored), named after the calling
+    test so renders from a `pytest` run of interaction tests double as visual
+    feedback while developing -- no separate script invocation, no
+    interactive terminal. Purely a side-channel for a human/Claude to look
+    at; never asserted against (that's what snapshot tests and the assertions
+    already in the test body are for). Call it anywhere inside `async with
+    app.run_test() as pilot:` -- `export_screenshot()` requires the app to
+    actually be running.
+    """
+    calls = {"n": 0}
+
+    def _render(app: PyjjuiApp, label: str = "") -> Path:
+        import cairosvg
+
+        calls["n"] += 1
+        _DEV_SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        suffix = f"-{label}" if label else ""
+        out = _DEV_SCREENSHOTS_DIR / f"{request.node.name}-{calls['n']}{suffix}.png"
+        svg = app.export_screenshot()
+        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out))
+        return out
+
+    return _render

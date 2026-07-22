@@ -18,6 +18,11 @@ from .widgets.preview import Preview
 
 class PyjjuiApp(App[None]):
     TITLE = "pyjjui"
+    # Textual's default ctrl+p command palette isn't wired to anything here
+    # (no custom Provider) and its footer entry crowds out the real
+    # keybindings at 80 columns, garbling the footer -- found via the
+    # `render` test fixture, not a real terminal.
+    ENABLE_COMMAND_PALETTE = False
 
     CSS = """
     Horizontal > LogView {

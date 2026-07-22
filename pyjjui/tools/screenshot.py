@@ -10,19 +10,28 @@ cairosvg (backed by cairo, same engine librsvg uses) renders it correctly --
 confirmed empirically, not assumed.
 
 Usage (from the pyjjui devShell -- `nix develop .#pyjjui`):
-    python pyjjui/tools/screenshot.py --out /tmp/log.png
-    python pyjjui/tools/screenshot.py --out /tmp/merge.png --scenario merge
-    python pyjjui/tools/screenshot.py --out /tmp/modal.svg --press d
+    python pyjjui/tools/screenshot.py
+    python pyjjui/tools/screenshot.py --scenario merge
+    python pyjjui/tools/screenshot.py --press d
+    python pyjjui/tools/screenshot.py --out /tmp/log.png   # explicit path, opts out of the dev dir
+
+With no `--out`, writes a PNG named after the scenario/keys/timestamp into
+`pyjjui/.dev/screenshots/` (gitignored) instead of overwriting a fixed file --
+meant to be run over and over while iterating so nothing from the previous
+render gets clobbered before it's been looked at.
 """
 
 import argparse
 import os
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pyjj
 from textual._doc import take_svg_screenshot
+
+_DEV_SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / ".dev" / "screenshots"
 
 # testutils.py lives in pyjjui/tests/, not under pyjjui/src/pyjjui/ -- it's
 # deliberately test-only code, not shipped as part of the installed
@@ -84,29 +93,47 @@ _SCENARIOS = {
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path, default=Path("screenshot.svg"), help="Output path (.svg or .png)")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output path (.svg or .png); defaults to an auto-named file under pyjjui/.dev/screenshots/",
+    )
     parser.add_argument("--press", action="append", default=[], help="Key(s) to press before capturing; repeatable")
     parser.add_argument("--revset", default="all()")
-    parser.add_argument("--size", default="100x30", help="WIDTHxHEIGHT in terminal cells")
+    parser.add_argument(
+        "--size",
+        default="80x24",
+        help="WIDTHxHEIGHT in terminal cells (default matches Pilot.run_test()'s own"
+        " default -- keep it that small unless a scenario genuinely needs more width/height;"
+        " bigger terminals mean bigger PNGs for no more signal)",
+    )
     parser.add_argument("--scenario", choices=sorted(_SCENARIOS), default="seeded")
     args = parser.parse_args()
 
     width_str, _, height_str = args.size.lower().partition("x")
     terminal_size = (int(width_str), int(height_str))
 
+    out = args.out
+    if out is None:
+        keys = "_".join(args.press) or "noop"
+        stamp = datetime.now().strftime("%H%M%S%f")
+        _DEV_SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        out = _DEV_SCREENSHOTS_DIR / f"{args.scenario}-{keys}-{stamp}.png"
+
     with tempfile.TemporaryDirectory() as tmp:
         workspace, settings = _SCENARIOS[args.scenario](Path(tmp))
         app = PyjjuiApp(workspace=workspace, settings=settings, revset=args.revset)
         svg = take_svg_screenshot(app=app, press=args.press, terminal_size=terminal_size)
 
-    if args.out.suffix == ".png":
+    if out.suffix == ".png":
         import cairosvg
 
-        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(args.out))
+        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out))
     else:
-        args.out.write_text(svg)
+        out.write_text(svg)
 
-    print(f"Wrote {args.out}")
+    print(f"Wrote {out}")
     return 0
 
 

@@ -3,27 +3,30 @@
 from pyjjui.widgets.log_view import LogView
 
 
-async def test_log_view_shows_the_seeded_commits(app):
+async def test_log_view_shows_the_seeded_commits(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
+        render(app)
         log_view = app.query_one(LogView)
         descriptions = {c.description for c in log_view._commits}
         assert {"A", "B"} <= descriptions
 
 
-async def test_new_child_creates_a_commit_and_it_appears_after_refresh(app):
+async def test_new_child_creates_a_commit_and_it_appears_after_refresh(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
         log_view = app.query_one(LogView)
         before = log_view.row_count
+        render(app, "before")
 
         await pilot.press("n")
         await pilot.pause()
+        render(app, "after")
 
         assert log_view.row_count == before + 1
 
 
-async def test_undo_after_a_mutation_restores_prior_state(app):
+async def test_undo_after_a_mutation_restores_prior_state(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
         log_view = app.query_one(LogView)
@@ -35,21 +38,23 @@ async def test_undo_after_a_mutation_restores_prior_state(app):
 
         await pilot.press("u")
         await pilot.pause()
+        render(app, "after-undo")
         assert log_view.row_count == before
 
 
-async def test_navigation_keeps_a_valid_selection(app):
+async def test_navigation_keeps_a_valid_selection(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
         log_view = app.query_one(LogView)
 
         await pilot.press("down")
         await pilot.pause()
+        render(app, "after-down")
 
         assert log_view.selected_commit is not None
 
 
-async def test_abandon_requires_confirmation(app):
+async def test_abandon_requires_confirmation(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
         log_view = app.query_one(LogView)
@@ -57,6 +62,7 @@ async def test_abandon_requires_confirmation(app):
 
         await pilot.press("a")
         await pilot.pause()
+        render(app, "confirm-modal")
         # A confirmation modal should now be on the screen stack; cancel it.
         await pilot.press("escape")
         await pilot.pause()

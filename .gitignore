@@ -8,3 +8,4 @@ __pycache__/
 /result-*
 .venv/
 snapshot_report.html
+.dev/
