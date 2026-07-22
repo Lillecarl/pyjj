@@ -196,8 +196,23 @@ def _render_glyphs(row: GraphRow, is_wc: bool) -> Text:
         lanes.add(edge.to_column)
     width = max(lanes) + 1
     chars = [" "] * width
-    for lane in lanes:
-        chars[lane] = "│"  # │
+
+    for edge in row.edges:
+        lo, hi = sorted((edge.from_column, edge.to_column))
+        if lo == hi:
+            chars[lo] = "│"
+            continue
+        for col in range(lo + 1, hi):
+            chars[col] = "─"
+        if edge.from_column == row.column:
+            # This row's own edge, departing toward a lane it'll occupy in
+            # later (lower) rows -- a fork opening up below this node.
+            chars[edge.to_column] = "╮" if edge.to_column > edge.from_column else "╭"
+        else:
+            # A lane from an earlier (higher) row converging into this
+            # node -- a branch closing back up above this node.
+            chars[edge.from_column] = "╯" if edge.from_column > edge.to_column else "╰"
+
     chars[row.column] = "@" if is_wc else "○"  # ○
     text = Text("".join(chars))
     if is_wc:

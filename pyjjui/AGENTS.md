@@ -22,7 +22,18 @@ free that we don't.
   `duplicate`, `set_bookmark`, `undo`, `redo`), each shaped `(workspace,
   repo, settings, ...) -> ReadonlyRepo` for `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
-  `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering.
+  `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering. Lanes track
+  `(commit_id, edge_type)`, not just an id: when a second (or later) lane
+  reaches the same ancestor another lane already claimed, its edge is
+  redirected to converge into that ancestor's own column and the lane is
+  retired -- without this, a fork's second branch just ran on forever as a
+  disconnected same-column "pass" line that never visually reconnected
+  (`n` on an ancestor commit looked like it created a straight line, no
+  tree, even though the underlying commit graph *was* correctly forked).
+  `log_view.py`'s `_render_glyphs` draws these convergences as `╮`/`╭`
+  (forking away from this row, downward) or `╯`/`╰` (an earlier row's lane
+  closing back into this one) plus `─` fill between the two columns, not
+  just parallel `│` bars.
 - `src/pyjjui/widgets/` — Textual widgets (`log_view.py` -- also renders
   each commit's local bookmarks from `ReadonlyRepo.bookmarks()`,
   `preview.py`).

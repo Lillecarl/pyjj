@@ -57,6 +57,30 @@ def test_merge_commit_allocates_a_second_lane(workspace, settings):
     assert {by_desc["A"].column, by_desc["B"].column} == {0, 1}
 
 
+def test_a_fork_reconnects_into_the_shared_ancestors_row(workspace, settings):
+    """Root forks into two children (A, B) that share it as their only
+    parent -- the dangling second lane must converge back into root's row
+    as a diagonal edge, not run on forever as an unrelated straight "pass"
+    line (the bug: `n` on an ancestor visually looked like an unconnected
+    parallel line instead of a branching tree).
+    """
+    repo = workspace.load_at_head()
+    root = repo.resolve_single(settings, "@")
+    repo, a = _new_child(repo, settings, workspace, root, "A")
+    repo, b = _new_child(repo, settings, workspace, root, "B")
+
+    nodes = repo.log_graph(settings, f"{root.id.hex()} | {a.id.hex()} | {b.id.hex()}")
+    rows = layout(nodes)
+    by_desc = {row.node.commit.description: row for row in rows}
+
+    root_row = by_desc[""]
+    # One lane converges into root's own column; no lane is left dangling
+    # as a same-column "pass" edge that never resolves.
+    converging = [e for e in root_row.edges if e.from_column != e.to_column]
+    assert len(converging) == 1
+    assert converging[0].to_column == root_row.column
+
+
 def test_every_row_has_a_valid_column_within_its_width(workspace, settings):
     repo = workspace.load_at_head()
     root = repo.resolve_single(settings, "@")
