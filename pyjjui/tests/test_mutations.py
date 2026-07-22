@@ -1,5 +1,8 @@
 """Tests for mutations.py's sync (workspace, repo, settings, ...) -> ReadonlyRepo functions."""
 
+import pytest
+
+import pyjj
 from pyjjui import mutations
 
 from . import testutils
@@ -146,6 +149,88 @@ def test_rebase_include_descendants_moves_the_whole_branch(workspace, settings, 
     rebased_c_child = new_repo.revset(settings, "description(exact:'C child')")[0]
     assert rebased_c.parent_ids == [b.id]
     assert rebased_c_child.parent_ids == [rebased_c.id]
+
+
+def test_squash_moves_source_into_its_parent(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    root = repo.get_commit(a.parent_ids[0])
+
+    new_repo = mutations.squash(workspace, repo, settings, a, False)
+
+    assert a.id not in {c.id for c in new_repo.revset(settings, "all()")}
+    rebased_b = new_repo.revset(settings, f"{b.change_id.reverse_hex()}")[0]
+    assert rebased_b.parent_ids == [
+        new_repo.revset(settings, f"{root.change_id.reverse_hex()}")[0].id
+    ]
+
+
+def test_squash_keeps_destination_message_when_present(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    root = repo.get_commit(repo.resolve_single(settings, "description(exact:'A')").parent_ids[0])
+    repo, p = testutils.new_child(workspace, repo, settings, root, "P")
+    repo, p_child = testutils.new_child(workspace, repo, settings, p, "P child")
+    p = repo.get_commit(p.id)
+
+    new_repo = mutations.squash(workspace, repo, settings, p_child, False)
+
+    squashed = new_repo.revset(settings, f"{p.change_id.reverse_hex()}")[0]
+    assert squashed.description == "P"
+
+
+def test_squash_falls_back_to_source_message_when_destination_has_none(
+    workspace, settings, seeded_repo
+):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    root = repo.get_commit(a.parent_ids[0])
+
+    new_repo = mutations.squash(workspace, repo, settings, a, False)
+
+    squashed = new_repo.revset(settings, f"{root.change_id.reverse_hex()}")[0]
+    assert squashed.description == "A"
+
+
+def test_squash_rejects_a_merge_commit_source(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    root = repo.get_commit(a.parent_ids[0])
+    repo, c = testutils.new_child(workspace, repo, settings, root, "C")
+
+    tx = repo.start_transaction(settings)
+    builder = tx.new_commit(settings, [b.id, c.id])
+    builder.set_description("merge")
+    merge_commit = builder.write(repo)
+    tx.edit(workspace.workspace_name, merge_commit)
+    tx.rebase_descendants()
+    repo = tx.commit("merge")
+
+    with pytest.raises(pyjj.JjError):
+        mutations.squash(workspace, repo, settings, merge_commit, False)
+
+
+def test_duplicate_creates_a_copy_onto_the_same_parent(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+
+    new_repo = mutations.duplicate(workspace, repo, settings, [a])
+
+    duplicates = new_repo.revset(settings, "description(exact:'A')")
+    assert len(duplicates) == 2
+    assert {c.parent_ids[0] for c in duplicates} == {a.parent_ids[0]}
+    assert len({c.change_id for c in duplicates}) == 2
+
+
+def test_duplicate_does_not_move_the_working_copy(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    wc = repo.resolve_single(settings, "@")
+    a = repo.resolve_single(settings, "description(exact:'A')")
+
+    new_repo = mutations.duplicate(workspace, repo, settings, [a])
+
+    assert new_repo.resolve_single(settings, "@").id == wc.id
 
 
 def test_set_bookmark_points_it_at_the_given_commit(workspace, settings, seeded_repo):

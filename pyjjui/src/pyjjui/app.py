@@ -49,6 +49,8 @@ class PyjjuiApp(App[None]):
         Binding("d", "describe", "Describe"),
         Binding("a", "abandon", "Abandon"),
         Binding("m", "rebase", "Rebase"),
+        Binding("s", "squash", "Squash"),
+        Binding("y", "duplicate", "Duplicate"),
         Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
@@ -188,6 +190,29 @@ class PyjjuiApp(App[None]):
         if await self._run_mutation(
             mutations.rebase, sources, destination, plan.mode, plan.include_descendants
         ):
+            log_view.action_clear_marks()
+            await self.action_refresh_log()
+
+    async def action_squash(self) -> None:
+        """`s` -- squash the cursor commit into its own parent. Always the
+        cursor commit, never `LogView.selection`: squash is inherently one
+        source into one destination.
+        """
+        commit = self.query_one(LogView).selected_commit
+        if commit is None:
+            return
+        if await self._run_mutation(mutations.squash, commit, False):
+            await self.action_refresh_log()
+
+    async def action_duplicate(self) -> None:
+        """`y` -- duplicate the marked commits (or just the cursor commit)
+        onto their own original parents.
+        """
+        log_view = self.query_one(LogView)
+        commits = log_view.selection
+        if not commits:
+            return
+        if await self._run_mutation(mutations.duplicate, commits):
             log_view.action_clear_marks()
             await self.action_refresh_log()
 

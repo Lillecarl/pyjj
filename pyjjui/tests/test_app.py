@@ -338,3 +338,68 @@ async def test_abandon_requires_confirmation(app, render):
         await pilot.pause()
 
         assert log_view.row_count == before
+
+
+async def test_s_squashes_the_cursor_commit_into_its_parent(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        # Squashing @ itself would spawn a fresh empty child in its place
+        # (net row count unchanged) -- move the cursor onto A instead.
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+        render(app, "after-squash")
+
+        assert log_view.row_count == before - 1
+        # A's own commit disappears -- checking by description would false-
+        # positive, since the squashed-into destination inherits A's message
+        # (destination had none of its own).
+        visible_ids = {c.id for c in app.state.repo.revset(app.state.settings, "all()")}
+        assert a.id not in visible_ids
+
+
+async def test_y_duplicates_the_cursor_commit(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("y")
+        await pilot.pause()
+        render(app, "after-duplicate")
+
+        assert log_view.row_count == before + 1
+        duplicates = app.state.repo.revset(app.state.settings, "description(exact:'A')")
+        assert len(duplicates) == 2
+
+
+async def test_y_duplicates_all_marked_commits(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.press("space")
+        log_view.move_cursor(row=_row_of(log_view, b.change_id))
+        await pilot.press("space")
+        await pilot.pause()
+
+        await pilot.press("y")
+        await pilot.pause()
+        render(app, "after-duplicate-multi")
+
+        assert log_view.row_count == before + 2
+        assert log_view.selection == [log_view.selected_commit]  # marks cleared

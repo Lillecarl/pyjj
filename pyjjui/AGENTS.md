@@ -18,9 +18,9 @@ free that we don't.
   and re-evaluates `log_graph()`. `run_mutation()` is the one sanctioned way
   to touch a `Transaction`.
 - `src/pyjjui/mutations.py` — one sync function per mutating action
-  (`new_child`, `edit`, `describe`, `abandon`, `rebase`, `set_bookmark`,
-  `undo`, `redo`), each shaped `(workspace, repo, settings, ...) ->
-  ReadonlyRepo` for `run_mutation()`.
+  (`new_child`, `edit`, `describe`, `abandon`, `rebase`, `squash`,
+  `duplicate`, `set_bookmark`, `undo`, `redo`), each shaped `(workspace,
+  repo, settings, ...) -> ReadonlyRepo` for `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
   `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering.
 - `src/pyjjui/widgets/` — Textual widgets (`log_view.py` -- also renders
@@ -70,6 +70,19 @@ free that we don't.
   Python. Combining `-A` and `-B` together (splicing between two distinct
   boundary commits, not just one) isn't exposed in the modal yet, though
   the binding underneath already supports it.
+- **Squash and duplicate**: `s` squashes the cursor commit into its own
+  parent (plain `jj squash`, no explicit destination -- always the cursor
+  commit, never `LogView.selection`, since squash is inherently one source
+  into one destination). `mutations.squash()` stands in for `jj squash`'s
+  editor-based message-combining step: keeps the destination's message if
+  it already has one, otherwise falls back to the source's. Raises
+  `pyjj.JjError` for a merge-commit source (needs an explicit destination
+  plain `jj squash` doesn't infer either -- not supported here yet). `y`
+  duplicates `LogView.selection` (marked commits, or just the cursor
+  commit) onto their own original parents via `Transaction.duplicate()` --
+  originals untouched, no working-copy/bookmark changes, so no
+  `rebase_descendants()`/`_sync_working_copy()` needed in
+  `mutations.duplicate()`.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and

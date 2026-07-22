@@ -160,6 +160,60 @@ def rebase(
     return new_repo
 
 
+def squash(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    source: pyjj.Commit,
+    use_destination_message: bool,
+) -> pyjj.ReadonlyRepo:
+    """`jj squash` equivalent: moves `source` into its own single parent,
+    always -- squash is inherently one source into one destination, so
+    unlike `new_child`/`abandon`/`rebase` this never takes a list. Raises
+    for a merge-commit source since plain `jj squash` does not infer a
+    destination among several parents either.
+    """
+    if len(source.parent_ids) != 1:
+        raise pyjj.JjError(
+            "squash needs an explicit destination for a merge commit (not supported here yet)"
+        )
+    destination = repo.get_commit(source.parent_ids[0])
+    tx = repo.start_transaction(settings)
+    builder = tx.squash(source, destination)
+    if builder is None:
+        return repo
+    if use_destination_message:
+        message = destination.description
+    else:
+        message = destination.description or source.description
+    builder.set_description(message)
+    builder.write(repo)
+    tx.rebase_descendants()
+    commit_message = f"squash {source.change_id.hex()[:8]} into {destination.change_id.hex()[:8]}"
+    new_repo = tx.commit(commit_message)
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
+def duplicate(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    commits: list[pyjj.Commit],
+) -> pyjj.ReadonlyRepo:
+    """`jj duplicate` equivalent: copies onto each commit's own original
+    parents, leaving the originals (and the working copy) untouched --
+    no `rebase_descendants()`/`_sync_working_copy()` needed.
+    """
+    tx = repo.start_transaction(settings)
+    tx.duplicate(commits)
+    if len(commits) > 1:
+        message = f"duplicate {len(commits)} commits"
+    else:
+        message = f"duplicate commit {commits[0].change_id.hex()[:8]}"
+    return tx.commit(message)
+
+
 def set_bookmark(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
