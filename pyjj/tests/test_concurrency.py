@@ -1,14 +1,16 @@
 """Concurrency/locking tests, mirroring the themes of jj's own
 test_concurrent_operations.rs/test_bad_locking.rs -- but scoped to what
 pyjj actually exposes: (1) genuine multi-thread pressure on a single
-Workspace via its asyncio `_async` methods (the Mutex<Workspace> fix),
-and (2) jj_lib's own divergent-operation handling when two Transactions
-are started from the same base ReadonlyRepo (no process-level locking
-involved here -- just two live Transaction objects in one process).
+Workspace via its anyio-backed `_async` methods (the Mutex<Workspace>
+fix), and (2) jj_lib's own divergent-operation handling when two
+Transactions are started from the same base ReadonlyRepo (no
+process-level locking involved here -- just two live Transaction objects
+in one process).
 """
 
-import asyncio
 from pathlib import Path
+
+import anyio
 
 import pyjj
 
@@ -60,17 +62,17 @@ def test_divergent_operations_reconcile_without_raising(workspace, repo, setting
     assert merged_wc_id in {c1.id.hex(), c2.id.hex()}
 
 
-def test_concurrent_snapshot_async_calls_serialize_safely(workspace, repo, settings):
+async def test_concurrent_snapshot_async_calls_serialize_safely(workspace, repo, settings):
     root = Path(workspace.workspace_root)
+    results = []
 
     async def write_and_snapshot(i):
         (root / f"f{i}.txt").write_text(f"{i}\n")
-        return await workspace.snapshot_async(settings)
+        results.append(await workspace.snapshot_async(settings))
 
-    async def run():
-        return await asyncio.gather(*(write_and_snapshot(i) for i in range(8)))
-
-    results = asyncio.run(run())
+    async with anyio.create_task_group() as tg:
+        for i in range(8):
+            tg.start_soon(write_and_snapshot, i)
     assert len(results) == 8
 
     final_repo = workspace.load_at_head()

@@ -757,7 +757,7 @@ design choice:
   (`pyjj/pyjj/_async.py`), `snapshot_async`, `check_out_async`,
   `update_stale_async`, `set_sparse_patterns_async`, `add_workspace_async`,
   `forget_workspaces_async`, `rename_workspace_async`, `load_at_head_async`,
-  `clone_git_async` wrap the sync methods in `asyncio.to_thread` —
+  `clone_git_async` wrap the sync methods in `anyio.to_thread.run_sync` —
   genuinely non-blocking, confirmed via a heartbeat-concurrency test
   (`pyjj/tests/test_asyncio.py`), since the GIL really is released while
   the worker thread runs.
@@ -766,7 +766,7 @@ design choice:
   `MutableRepo`/`Transaction` isn't even `Send` (holds a `Box<dyn
   MutableIndex>`, and that trait doesn't declare `Send` — confirmed via a
   throwaway `assert_send::<T>()` compile check, since deleted). There's no
-  safe way to move it to a worker thread at all: `asyncio.to_thread` would
+  safe way to move it to a worker thread at all: `to_thread.run_sync` would
   crash with a hard `unsendable` panic (`assertion left == right failed:
   ... is unsendable, but sent to another thread`) the instant it touched a
   Transaction from any thread but the one that created it — confirmed
