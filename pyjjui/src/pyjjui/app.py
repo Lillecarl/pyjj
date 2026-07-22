@@ -30,7 +30,15 @@ class PyjjuiApp(App[None]):
     }
     Horizontal > Preview {
         width: 40%;
-        border-left: solid $accent;
+        /* $border/$border-blurred + the background-tint: same focus
+           convention Textual's own Input/DataTable use, not one invented
+           here -- respects whatever theme (dark/light/custom) is active
+           instead of a hardcoded color pair. */
+        border-left: solid $border-blurred;
+    }
+    Horizontal > Preview:focus {
+        border-left: solid $border;
+        background-tint: $foreground 5%;
     }
     """
 

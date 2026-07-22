@@ -4,6 +4,7 @@ commit summary per row.
 """
 
 from rich.text import Text
+from textual.binding import Binding
 from textual.widgets import DataTable
 from textual.message import Message
 
@@ -14,6 +15,17 @@ from ..graph_layout import GraphRow, layout
 
 class LogView(DataTable):
     """Shows the current revset's commits as a graph, one row per commit."""
+
+    # `j`/`k` alongside the DataTable's own up/down: jjui convention, adapted
+    # -- jjui uses `l`/right to open a separate revision-details panel and
+    # `h`/left to close it, but pyjjui's log and preview panes are both
+    # always on screen side by side, so here `l`/`h` instead move focus
+    # between them (see Preview's matching `h` binding back the other way).
+    BINDINGS = [
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
+        Binding("l", "focus_preview", "Preview", show=False),
+    ]
 
     class CommitSelected(Message):
         """Posted when the highlighted row changes to a new commit."""
@@ -74,6 +86,11 @@ class LogView(DataTable):
         if event.cursor_row is None or not (0 <= event.cursor_row < len(self._commits)):
             return
         self.post_message(self.CommitSelected(self._commits[event.cursor_row]))
+
+    def action_focus_preview(self) -> None:
+        from .preview import Preview  # local import: avoids a Preview<->LogView import cycle
+
+        self.screen.query_one(Preview).focus()
 
 
 def _render_glyphs(row: GraphRow, is_wc: bool) -> Text:

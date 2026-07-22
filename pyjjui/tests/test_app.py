@@ -3,6 +3,7 @@
 from textual.widgets import Input
 
 from pyjjui.widgets.log_view import LogView
+from pyjjui.widgets.preview import Preview
 
 
 async def test_log_view_shows_the_seeded_commits(app, render):
@@ -54,6 +55,62 @@ async def test_navigation_keeps_a_valid_selection(app, render):
         render(app, "after-down")
 
         assert log_view.selected_commit is not None
+
+
+async def test_jk_move_the_log_selection_same_as_arrows(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        await pilot.press("j")
+        await pilot.pause()
+        after_j = log_view.selected_commit
+        render(app, "after-j")
+        assert after_j is not None
+
+        await pilot.press("k")
+        await pilot.pause()
+        render(app, "after-k")
+
+        assert log_view.selected_commit == log_view._commits[0]
+        assert after_j == log_view._commits[1]
+
+
+async def test_l_and_h_move_focus_between_log_and_preview(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        preview = app.query_one(Preview)
+        assert log_view.has_focus
+
+        await pilot.press("l")
+        await pilot.pause()
+        render(app, "focus-preview")
+        assert preview.has_focus
+
+        await pilot.press("h")
+        await pilot.pause()
+        render(app, "focus-log")
+        assert log_view.has_focus
+
+
+async def test_jk_scroll_the_preview_pane_once_focused(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        preview = app.query_one(Preview)
+
+        await pilot.press("l")
+        await pilot.pause()
+        assert preview.has_focus
+
+        # Nothing to assert about scroll *position* with this little content
+        # in the seeded demo repo -- this is really about `j`/`k` reaching
+        # Preview's scroll actions at all (and not, say, leaking through to
+        # LogView) without raising.
+        await pilot.press("j")
+        await pilot.press("k")
+        await pilot.pause()
+        render(app, "after-jk-scroll")
 
 
 async def test_invalid_revset_shows_an_error_instead_of_crashing(app, render):

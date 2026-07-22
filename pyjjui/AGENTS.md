@@ -26,6 +26,17 @@ free that we don't.
 - `src/pyjjui/widgets/` — Textual widgets (`log_view.py` -- also renders
   each commit's local bookmarks from `ReadonlyRepo.bookmarks()`,
   `preview.py`).
+- **Keybindings, hjkl included**: `j`/`k` move the log selection (same as
+  down/up) and scroll the preview pane once it has focus. `l`/`h` move
+  focus log->preview / preview->log -- adapted from `~/Code/jjui`'s
+  convention (which uses the same keys to open/close a separate
+  revision-details panel) to pyjjui's own layout, where both panes are
+  always visible side by side rather than toggled. Preview's focus state
+  is shown via `border-left` switching between the `$border`/
+  `$border-blurred` theme tokens (the same convention Textual's own
+  `Input`/`DataTable` use for focus, not a hardcoded color pair) --
+  respects whatever theme is active instead of assuming dark-mode accent
+  colors.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and
