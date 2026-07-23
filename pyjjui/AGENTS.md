@@ -19,8 +19,9 @@ free that we don't.
   to touch a `Transaction`.
 - `src/pyjjui/mutations.py` — one sync function per mutating action
   (`new_child`, `edit`, `describe`, `abandon`, `rebase`, `squash`,
-  `duplicate`, `set_bookmark`, `undo`, `redo`), each shaped `(workspace,
-  repo, settings, ...) -> ReadonlyRepo` for `run_mutation()`.
+  `duplicate`, `set_bookmark`, `undo`, `redo`, `restore_operation`), each
+  shaped `(workspace, repo, settings, ...) -> ReadonlyRepo` for
+  `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
   `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering. Lanes track
   `(commit_id, edge_type)`, not just an id: when a second (or later) lane
@@ -94,6 +95,19 @@ free that we don't.
   originals untouched, no working-copy/bookmark changes, so no
   `rebase_descendants()`/`_sync_working_copy()` needed in
   `mutations.duplicate()`.
+- **Operation log browsing**: `o` opens `screens/oplog.py`'s `OpLogScreen`
+  over `ReadonlyRepo.operation_log()` (newest first, same order as `jj op
+  log`) -- a `DataTable` of every past operation's end time and
+  description. Enter (or a row click, `DataTable`'s own `RowSelected`)
+  dismisses with that `Operation`; `app.py` then confirms via the same
+  `ConfirmScreen` `abandon` uses before calling
+  `mutations.restore_operation()`. Distinct from the single-step `u`/`U`
+  undo/redo bindings: this can jump straight to *any* past operation, not
+  just one step back/forward, mirroring `jj op restore` rather than `jj
+  undo`. `mutations.restore_operation()` always restores both the repo and
+  remote-tracking portions of the target view (`Transaction
+  .restore_operation()`'s `what` parameter exists for a partial restore,
+  but the screen has no UI for choosing a subset -- not needed yet).
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and

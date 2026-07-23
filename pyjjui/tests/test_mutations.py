@@ -233,6 +233,30 @@ def test_duplicate_does_not_move_the_working_copy(workspace, settings, seeded_re
     assert new_repo.resolve_single(settings, "@").id == wc.id
 
 
+def test_restore_operation_reverts_to_a_past_view(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    op_before_abandon = repo.operation
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    repo = mutations.abandon(workspace, repo, settings, [a])
+    assert repo.revset(settings, "description(exact:'A')") == []
+
+    new_repo = mutations.restore_operation(workspace, repo, settings, op_before_abandon)
+
+    assert len(new_repo.revset(settings, "description(exact:'A')")) == 1
+
+
+def test_restore_operation_syncs_the_working_copy(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    repo = mutations.edit(workspace, repo, settings, a)  # @ = A
+    op_at_a = repo.operation
+    repo, _b_child = testutils.new_child(workspace, repo, settings, a, "B child")  # @ moves on
+
+    new_repo = mutations.restore_operation(workspace, repo, settings, op_at_a)
+
+    assert new_repo.resolve_single(settings, "@").id == a.id
+
+
 def test_set_bookmark_points_it_at_the_given_commit(workspace, settings, seeded_repo):
     repo = seeded_repo
     b = repo.resolve_single(settings, "description(exact:'B')")

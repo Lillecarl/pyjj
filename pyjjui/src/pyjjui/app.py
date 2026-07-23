@@ -10,6 +10,7 @@ import pyjj
 
 from . import mutations
 from .screens.confirm import ConfirmScreen
+from .screens.oplog import OpLogScreen
 from .screens.rebase import RebaseScreen
 from .screens.text_input import TextInputScreen
 from .state import AppState
@@ -54,6 +55,7 @@ class PyjjuiApp(App[None]):
         Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
+        Binding("o", "op_log", "Op Log"),
         Binding("r", "set_revset", "Revset"),
         Binding("R", "refresh_log", "Refresh"),
         Binding("q", "quit", "Quit"),
@@ -222,6 +224,22 @@ class PyjjuiApp(App[None]):
 
     async def action_redo(self) -> None:
         if await self._run_mutation(mutations.redo):
+            await self.action_refresh_log()
+
+    @work
+    async def action_op_log(self) -> None:
+        """`o` -- browse the operation log and restore to any past
+        operation, not just one undo/redo step back/forward.
+        """
+        operations = self.state.repo.operation_log()
+        target_op = await self.push_screen_wait(OpLogScreen(operations))
+        if target_op is None:
+            return
+        prompt = f"Restore to operation {target_op.id[:8]} ({target_op.description or 'no description'})?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
+            return
+        if await self._run_mutation(mutations.restore_operation, target_op):
             await self.action_refresh_log()
 
     @work

@@ -1,6 +1,6 @@
 """Interaction tests for `PyjjuiApp`, driven via Textual's Pilot."""
 
-from textual.widgets import Input
+from textual.widgets import DataTable, Input
 
 from pyjjui.widgets.log_view import LogView
 from pyjjui.widgets.preview import Preview
@@ -403,3 +403,50 @@ async def test_y_duplicates_all_marked_commits(app, render):
 
         assert log_view.row_count == before + 2
         assert log_view.selection == [log_view.selected_commit]  # marks cleared
+
+
+async def test_o_restores_to_a_past_operation(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.press("space")
+        await pilot.press("a")
+        await pilot.pause()
+        await pilot.click("#confirm")
+        await pilot.pause()
+        assert log_view.row_count == before - 1
+
+        await pilot.press("o")
+        await pilot.pause()
+        render(app, "oplog-modal")
+        table = app.screen.query_one(DataTable)
+        table.move_cursor(row=1)  # the operation right before the abandon
+        await pilot.press("enter")
+        await pilot.pause()
+        render(app, "restore-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-restore")
+
+        assert log_view.row_count == before
+        assert len(app.state.repo.revset(app.state.settings, "description(exact:'A')")) == 1
+
+
+async def test_o_cancel_from_the_oplog_screen_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        await pilot.press("o")
+        await pilot.pause()
+        render(app, "oplog-modal-for-cancel")
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before

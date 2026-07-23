@@ -214,6 +214,25 @@ def duplicate(
     return tx.commit(message)
 
 
+def restore_operation(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    target_op: pyjj.Operation,
+) -> pyjj.ReadonlyRepo:
+    """`jj op restore <target_op>` equivalent: makes the repo's view
+    (bookmarks, heads, working copy, remote-tracking state) exactly
+    `target_op`'s -- both portions, unlike `Transaction.restore_operation`'s
+    `what` parameter which the op-log screen doesn't expose a way to
+    split.
+    """
+    tx = repo.start_transaction(settings)
+    tx.restore_operation(target_op)
+    new_repo = tx.commit(f"restore to operation {target_op.id[:8]}")
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
 def set_bookmark(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
