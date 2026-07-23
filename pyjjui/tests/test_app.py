@@ -1062,3 +1062,39 @@ async def test_space_marks_multiple_files_and_r_restores_them_in_one_transaction
         # marks are cleared after a successful restore
         assert table.get_cell_at(Coordinate(0, 0)) == ""
         assert table.get_cell_at(Coordinate(1, 0)) == ""
+
+
+async def test_f_from_oplog_browses_that_operations_files(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("hello\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        await pilot.press("o")
+        await pilot.pause()
+        op_table = app.screen.query_one(DataTable)
+        op_table.move_cursor(row=0)  # most recent operation -- the snapshot above
+
+        await pilot.press("f")
+        await pilot.pause()
+        render(app, "oplog-files-modal")
+
+        assert len(app.screen_stack) == 3  # main, oplog, files
+        file_table = app.screen.query_one(DataTable)
+        assert file_table.row_count == 1
+        content = app.screen.query_one(ContentPane)
+        assert "hello" in _pane_text(content)
+
+        await pilot.press("escape")  # close FilesScreen, back to the op log
+        await pilot.pause()
+        assert len(app.screen_stack) == 2
+        assert app.screen.query_one(DataTable) is op_table
+
+        await pilot.press("escape")  # close OpLogScreen
+        await pilot.pause()
+        assert len(app.screen_stack) == 1

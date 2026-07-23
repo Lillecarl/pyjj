@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from rich.console import Group
 from rich.text import Text
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -24,6 +25,7 @@ from textual.widgets.data_table import RowKey
 import pyjj
 
 from ..render.diff import render_commit_diff
+from .files import FilesScreen
 
 
 class _OpTable(DataTable):
@@ -100,6 +102,7 @@ class OpLogScreen(ModalScreen[pyjj.Operation | None]):
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
         Binding("space", "toggle_mark", "Mark as diff base", show=False),
+        Binding("f", "files", "Files", show=False),
     ]
 
     def __init__(
@@ -119,7 +122,7 @@ class OpLogScreen(ModalScreen[pyjj.Operation | None]):
         with Vertical():
             yield Label(
                 "Operation log -- enter to restore, space to mark a diff"
-                " base, escape to cancel"
+                " base, f to browse files, escape to cancel"
             )
             with Horizontal():
                 table = _OpTable(cursor_type="row", show_header=False)
@@ -160,6 +163,21 @@ class OpLogScreen(ModalScreen[pyjj.Operation | None]):
         if self._marked_index is not None:
             table.update_cell(self._row_keys[self._marked_index], "mark", "✓")
         self._show_diff(row)
+
+    @work
+    async def action_files(self) -> None:
+        """`f` -- browse the highlighted operation's working-copy tree in
+        the same `FilesScreen` the main log's `f` binding opens. Diffing/
+        restoring inside it always compares against/writes into the
+        *live* working copy (`FilesScreen` reads `self.app.state` for
+        that), regardless of which historic operation it was opened from
+        here.
+        """
+        if not self._operations:
+            return
+        op = self._operations[self.query_one(_OpTable).cursor_row]
+        commit = self._repo.load_at_operation(op).resolve_single(self._settings, "@")
+        await self.app.push_screen_wait(FilesScreen(commit))
 
     def _show_diff(self, index: int) -> None:
         op = self._operations[index]

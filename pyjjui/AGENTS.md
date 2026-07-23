@@ -209,6 +209,20 @@ free that we don't.
     `Preview`), reused as-is since it only needs two `Commit`s regardless
     of whether they're parent/child or two unrelated operations' working
     copies.
+  - **`f` -- browse that operation's files**: pushes the same
+    `FilesScreen` the main log's `f` binding opens (`screens/oplog.py`
+    imports it directly -- no cycle, since `files.py` doesn't import
+    `oplog.py`), over the highlighted row's working-copy commit
+    (`ReadonlyRepo.load_at_operation(op).resolve_single(settings, "@")`,
+    the same resolve `_show_diff()` already does). One nuance:
+    `self.app.push_screen_wait(...)`, not `self.push_screen_wait(...)` --
+    `push_screen_wait` is an `App` method, not a `Screen` one, so pushing
+    a screen *from* a screen (rather than from an `App` action) has to
+    go through `self.app` explicitly. `FilesScreen` itself needed no
+    changes: its diff/restore logic already reads `self.app.state` for
+    "the live working copy", which is correct regardless of whether it
+    was opened from the main log or from an arbitrary historic operation
+    here.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and
