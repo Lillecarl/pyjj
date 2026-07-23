@@ -19,8 +19,9 @@ free that we don't.
   to touch a `Transaction`.
 - `src/pyjjui/mutations.py` — one sync function per mutating action
   (`new_child`, `edit`, `describe`, `abandon`, `rebase`, `squash`,
-  `duplicate`, `set_bookmark`, `undo`, `redo`, `restore_operation`), each
-  shaped `(workspace, repo, settings, ...) -> ReadonlyRepo` for
+  `duplicate`, `split`, `set_bookmark`, `undo`, `redo`,
+  `restore_operation`), each shaped `(workspace, repo, settings, ...) ->
+  ReadonlyRepo` for
   `run_mutation()`.
 - `src/pyjjui/graph_layout.py` — pure-Python lane/column assignment over
   `list[GraphNode]`, feeding `widgets/log_view.py`'s rendering. Lanes track
@@ -95,6 +96,22 @@ free that we don't.
   originals untouched, no working-copy/bookmark changes, so no
   `rebase_descendants()`/`_sync_working_copy()` needed in
   `mutations.duplicate()`.
+- **Split**: `x` opens `screens/split.py`'s `SplitScreen` over the cursor
+  commit's changed paths (`Commit.diff()` against its single parent --
+  same merge-commit restriction `squash` has, since there is no single
+  parent tree to diff against otherwise; `app.py` warns instead of
+  opening the modal). A `SelectionList` (checkbox list, `space` toggles,
+  `j`/`k` added alongside its own up/down) picks which paths go into the
+  first commit; `mutations.split()` wraps the existing
+  `Transaction.split_selected()`/`split_remainder()` pair (already in
+  pyjj-bindings/pyjj from earlier work, no Rust changes needed) --
+  `split_selected` keeps the target's own change id for the first
+  (selected-paths) commit, `split_remainder` gives the second (everything
+  else) a fresh change id as the first's child. Both halves keep the
+  target's original description; editing each one's message separately
+  isn't exposed here yet, the same gap `squash` has for merge-commit
+  sources. If the target was the working copy, `@` moves to the second
+  commit afterward -- matching plain `jj split`'s own behavior.
 - **Operation log browsing**: `o` opens `screens/oplog.py`'s `OpLogScreen`
   over `ReadonlyRepo.operation_log()` (newest first, same order as `jj op
   log`) -- a two-pane modal, `_OpTable` (a `DataTable` of every past

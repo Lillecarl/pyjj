@@ -1,5 +1,7 @@
 """Tests for mutations.py's sync (workspace, repo, settings, ...) -> ReadonlyRepo functions."""
 
+from pathlib import Path
+
 import pytest
 
 import pyjj
@@ -231,6 +233,69 @@ def test_duplicate_does_not_move_the_working_copy(workspace, settings, seeded_re
     new_repo = mutations.duplicate(workspace, repo, settings, [a])
 
     assert new_repo.resolve_single(settings, "@").id == wc.id
+
+
+def _write_files(workspace, settings, files):
+    """Writes real file content on disk and snapshots it into the working-
+    copy commit -- split needs an actual tree diff, unlike the rest of
+    this suite's description-only seeded commits.
+    """
+    root = Path(workspace.workspace_root)
+    for name, content in files.items():
+        (root / name).write_text(content)
+    repo, _stats = workspace.snapshot(settings)
+    return repo, repo.resolve_single(settings, "@")
+
+
+
+def test_split_selected_paths_form_the_first_commit(workspace, settings, seeded_repo):
+    repo, target = _write_files(workspace, settings, {"a.txt": "a\n", "b.txt": "b\n"})
+
+    new_repo = mutations.split(workspace, repo, settings, target, ["a.txt"])
+
+    first = new_repo.resolve_single(settings, target.change_id.reverse_hex())
+    assert first.file_exists("a.txt")
+    assert not first.file_exists("b.txt")
+
+
+def test_split_remainder_is_a_child_with_the_rest_and_a_fresh_change_id(
+    workspace, settings, seeded_repo
+):
+    repo, target = _write_files(workspace, settings, {"a.txt": "a\n", "b.txt": "b\n"})
+
+    new_repo = mutations.split(workspace, repo, settings, target, ["a.txt"])
+
+    first = new_repo.resolve_single(settings, target.change_id.reverse_hex())
+    second = new_repo.resolve_single(settings, "@")
+    assert second.parent_ids == [first.id]
+    assert second.file_exists("a.txt")
+    assert second.file_exists("b.txt")
+    assert second.change_id != target.change_id
+
+
+def test_split_moves_the_working_copy_to_the_second_commit(workspace, settings, seeded_repo):
+    repo, target = _write_files(workspace, settings, {"a.txt": "a\n", "b.txt": "b\n"})
+
+    new_repo = mutations.split(workspace, repo, settings, target, ["a.txt"])
+
+    second = new_repo.resolve_single(settings, "@")
+    assert second.id != target.id
+    assert second.file_exists("b.txt")
+
+
+def test_split_rebases_descendants_onto_the_second_commit(workspace, settings, seeded_repo):
+    repo, target = _write_files(workspace, settings, {"a.txt": "a\n", "b.txt": "b\n"})
+    repo, child = testutils.new_child(workspace, repo, settings, target, "child")
+
+    new_repo = mutations.split(workspace, repo, settings, target, ["a.txt"])
+
+    first = new_repo.resolve_single(settings, target.change_id.reverse_hex())
+    rebased_child = new_repo.revset(settings, "description(exact:'child')")[0]
+    # Rebased onto the remainder (second half), not the split-out first half.
+    assert rebased_child.parent_ids != [first.id]
+    second = new_repo.get_commit(rebased_child.parent_ids[0])
+    assert second.file_exists("a.txt")
+    assert second.file_exists("b.txt")
 
 
 def test_restore_operation_reverts_to_a_past_view(workspace, settings, seeded_repo):

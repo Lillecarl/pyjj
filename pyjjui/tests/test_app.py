@@ -1,7 +1,9 @@
 """Interaction tests for `PyjjuiApp`, driven via Textual's Pilot."""
 
+from pathlib import Path
+
 from textual.coordinate import Coordinate
-from textual.widgets import DataTable, Input
+from textual.widgets import DataTable, Input, SelectionList
 
 from pyjjui.screens.oplog import DiffPane
 from pyjjui.widgets.log_view import LogView
@@ -503,3 +505,94 @@ async def test_oplog_space_marks_a_diff_base_without_crashing(app, render):
         await pilot.press("space")  # toggling the already-marked row clears it
         await pilot.pause()
         assert table.get_cell_at(Coordinate(0, 0)) == ""
+
+
+async def test_x_splits_the_cursor_commit_by_selected_paths(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("a\n")
+        (root / "b.txt").write_text("b\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        target = app.state.repo.resolve_single(app.state.settings, "@")
+        log_view.move_cursor(row=_row_of(log_view, target.change_id))
+        await pilot.pause()
+
+        await pilot.press("x")
+        await pilot.pause()
+        render(app, "split-modal")
+        selection_list = app.screen.query_one(SelectionList)
+        selection_list.highlighted = 0
+        await pilot.press("space")  # select a.txt for the first commit
+        await pilot.pause()
+        render(app, "split-modal-selected")
+        await pilot.click("#split")
+        await pilot.pause()
+        render(app, "after-split")
+
+        assert log_view.row_count == before + 1
+        first = app.state.repo.resolve_single(app.state.settings, target.change_id.reverse_hex())
+        second = app.state.repo.resolve_single(app.state.settings, "@")
+        assert first.file_exists("a.txt")
+        assert not first.file_exists("b.txt")
+        assert second.parent_ids == [first.id]
+        assert second.file_exists("a.txt")
+        assert second.file_exists("b.txt")
+
+
+async def test_x_without_a_single_parent_shows_a_warning(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        tx = app.state.repo.start_transaction(app.state.settings)
+        builder = tx.new_commit(app.state.settings, [a.id, b.id])
+        builder.set_description("merge")
+        merge_commit = builder.write(app.state.repo)
+        tx.edit(app.state.workspace.workspace_name, merge_commit)
+        tx.rebase_descendants()
+        app.state.repo = tx.commit("merge")
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        log_view.move_cursor(row=_row_of(log_view, merge_commit.change_id))
+        await pilot.press("x")
+        await pilot.pause()
+        render(app, "split-merge-warning")
+
+        assert len(app.screen_stack) == 1  # no modal pushed
+        assert len(app._notifications) >= 1
+
+
+async def test_x_cancel_from_the_split_screen_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("a\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        target = app.state.repo.resolve_single(app.state.settings, "@")
+        log_view.move_cursor(row=_row_of(log_view, target.change_id))
+        await pilot.press("x")
+        await pilot.pause()
+        render(app, "split-modal-for-cancel")
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before

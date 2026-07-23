@@ -12,6 +12,7 @@ from . import mutations
 from .screens.confirm import ConfirmScreen
 from .screens.oplog import OpLogScreen
 from .screens.rebase import RebaseScreen
+from .screens.split import SplitScreen
 from .screens.text_input import TextInputScreen
 from .state import AppState
 from .widgets.log_view import LogView
@@ -52,6 +53,7 @@ class PyjjuiApp(App[None]):
         Binding("m", "rebase", "Rebase"),
         Binding("s", "squash", "Squash"),
         Binding("y", "duplicate", "Duplicate"),
+        Binding("x", "split", "Split"),
         Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
@@ -216,6 +218,45 @@ class PyjjuiApp(App[None]):
             return
         if await self._run_mutation(mutations.duplicate, commits):
             log_view.action_clear_marks()
+            await self.action_refresh_log()
+
+    @work
+    async def action_split(self) -> None:
+        """`x` -- split the cursor commit: pick which changed paths go
+        into the first (split-out) commit, everything else becomes a
+        second commit as its child.
+        """
+        commit = self.query_one(LogView).selected_commit
+        if commit is None:
+            return
+        if len(commit.parent_ids) != 1:
+            self.notify(
+                "Split needs a single-parent commit (not supported for"
+                " merge commits yet)",
+                title="Cannot split",
+                severity="warning",
+            )
+            return
+        parent = self.state.repo.get_commit(commit.parent_ids[0])
+        changed_paths = sorted({entry.path for entry in commit.diff(parent)})
+        if not changed_paths:
+            self.notify(
+                "Nothing to split -- this commit has no changes",
+                title="Cannot split",
+                severity="warning",
+            )
+            return
+        paths = await self.push_screen_wait(SplitScreen(changed_paths))
+        if paths is None:
+            return
+        if not paths:
+            self.notify(
+                "Select at least one path for the first commit",
+                title="Nothing selected",
+                severity="warning",
+            )
+            return
+        if await self._run_mutation(mutations.split, commit, paths):
             await self.action_refresh_log()
 
     async def action_undo(self) -> None:

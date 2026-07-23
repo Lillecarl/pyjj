@@ -214,6 +214,39 @@ def duplicate(
     return tx.commit(message)
 
 
+def split(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    target: pyjj.Commit,
+    paths: list[str],
+) -> pyjj.ReadonlyRepo:
+    """`jj split <paths>...` equivalent: `paths` (and everything under any
+    of them) goes into a first commit keeping `target`'s original change
+    id; everything else becomes a second commit, a child of the first with
+    a fresh change id. Both halves keep `target`'s own description --
+    editing each one's message separately isn't exposed here yet, the same
+    gap `mutations.squash()` has for merge-commit sources.
+    """
+    was_wc = target.id == repo.resolve_single(settings, "@").id
+    tx = repo.start_transaction(settings)
+
+    first_builder = tx.split_selected(target, paths)
+    first_builder.set_description(target.description)
+    first = first_builder.write(repo)
+
+    second_builder = tx.split_remainder(target, first)
+    second_builder.set_description(target.description)
+    second = second_builder.write(repo)
+
+    if was_wc:
+        tx.set_wc_commit(workspace.workspace_name, second.id)
+    tx.rebase_descendants()
+    new_repo = tx.commit(f"split commit {target.change_id.hex()[:8]}")
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
 def restore_operation(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
