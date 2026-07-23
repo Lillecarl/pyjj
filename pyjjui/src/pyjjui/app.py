@@ -148,6 +148,10 @@ class PyjjuiApp(App[None]):
         )
         if text is None:
             return
+        prompt = f"Describe commit {commit.change_id.hex()[:8]} as {text.splitlines()[0] if text else '(no description)'!r}?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
+            return
         if await self._run_mutation(mutations.describe, commit, text):
             await self.action_refresh_log()
 
@@ -191,12 +195,23 @@ class PyjjuiApp(App[None]):
         plan = await self.push_screen_wait(RebaseScreen(sources, destination))
         if plan is None:
             return
+        if len(sources) > 1:
+            subject = f"{len(sources)} commits"
+        else:
+            subject = f"commit {sources[0].change_id.hex()[:8]}"
+            if plan.include_descendants:
+                subject += " and descendants"
+        prompt = f"Rebase {subject} {plan.mode} {destination.change_id.hex()[:8]}?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
+            return
         if await self._run_mutation(
             mutations.rebase, sources, destination, plan.mode, plan.include_descendants
         ):
             log_view.action_clear_marks()
             await self.action_refresh_log()
 
+    @work
     async def action_squash(self) -> None:
         """`s` -- squash the cursor commit into its own parent. Always the
         cursor commit, never `LogView.selection`: squash is inherently one
@@ -204,6 +219,19 @@ class PyjjuiApp(App[None]):
         """
         commit = self.query_one(LogView).selected_commit
         if commit is None:
+            return
+        if len(commit.parent_ids) != 1:
+            self.notify(
+                "Squash needs an explicit destination for a merge commit"
+                " (not supported here yet)",
+                title="Cannot squash",
+                severity="warning",
+            )
+            return
+        parent = self.state.repo.get_commit(commit.parent_ids[0])
+        prompt = f"Squash {commit.change_id.hex()[:8]} into its parent {parent.change_id.hex()[:8]}?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
             return
         if await self._run_mutation(mutations.squash, commit, False):
             await self.action_refresh_log()
@@ -255,6 +283,13 @@ class PyjjuiApp(App[None]):
                 title="Nothing selected",
                 severity="warning",
             )
+            return
+        prompt = (
+            f"Split commit {commit.change_id.hex()[:8]} into two commits"
+            f" ({len(paths)} of {len(changed_paths)} paths in the first)?"
+        )
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
             return
         if await self._run_mutation(mutations.split, commit, paths):
             await self.action_refresh_log()

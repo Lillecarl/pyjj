@@ -302,6 +302,9 @@ async def test_rebase_onto_reparents_the_marked_commit(app, render):
         render(app, "rebase-modal")
         await pilot.click("#onto")
         await pilot.pause()
+        render(app, "rebase-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
         render(app, "after-rebase-onto")
 
         rebased_c = app.state.repo.revset(app.state.settings, "description(exact:'C')")[0]
@@ -357,6 +360,9 @@ async def test_s_squashes_the_cursor_commit_into_its_parent(app, render):
         await pilot.pause()
 
         await pilot.press("s")
+        await pilot.pause()
+        render(app, "squash-confirm")
+        await pilot.click("#confirm")
         await pilot.pause()
         render(app, "after-squash")
 
@@ -535,6 +541,9 @@ async def test_x_splits_the_cursor_commit_by_selected_paths(app, render):
         render(app, "split-modal-selected")
         await pilot.click("#split")
         await pilot.pause()
+        render(app, "split-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
         render(app, "after-split")
 
         assert log_view.row_count == before + 1
@@ -596,3 +605,136 @@ async def test_x_cancel_from_the_split_screen_leaves_history_unchanged(app, rend
 
         assert len(app.screen_stack) == 1
         assert log_view.row_count == before
+
+
+async def test_x_cancel_at_the_split_confirm_step_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("a\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        target = app.state.repo.resolve_single(app.state.settings, "@")
+        log_view.move_cursor(row=_row_of(log_view, target.change_id))
+        await pilot.press("x")
+        await pilot.pause()
+        selection_list = app.screen.query_one(SelectionList)
+        selection_list.highlighted = 0
+        await pilot.press("space")
+        await pilot.click("#split")
+        await pilot.pause()
+        render(app, "split-confirm-for-cancel")
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before
+        assert app.state.repo.resolve_single(app.state.settings, "@").id == target.id
+
+
+async def test_d_describes_the_cursor_commit_after_confirmation(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        await pilot.press("down")  # move onto A, away from the working copy
+        await pilot.pause()
+        target = log_view.selected_commit
+
+        await pilot.press("d")
+        await pilot.pause()
+        app.screen.query_one(Input).value = "A renamed"
+        await pilot.press("enter")
+        await pilot.pause()
+        render(app, "describe-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-describe")
+
+        renamed = app.state.repo.resolve_single(app.state.settings, "description(exact:'A renamed')")
+        assert renamed.change_id == target.change_id
+
+
+async def test_d_cancel_at_confirm_leaves_description_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        await pilot.press("down")
+        await pilot.pause()
+        target = log_view.selected_commit
+
+        await pilot.press("d")
+        await pilot.pause()
+        app.screen.query_one(Input).value = "A renamed"
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert app.state.repo.revset(app.state.settings, "description(exact:'A renamed')") == []
+        unchanged = app.state.repo.get_commit(target.id)
+        assert unchanged.description == target.description
+
+
+async def test_s_cancel_at_confirm_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+        render(app, "squash-confirm-for-cancel")
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before
+        assert len(app.state.repo.revset(app.state.settings, "description(exact:'A')")) == 1
+
+
+async def test_m_cancel_at_confirm_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        root = app.state.repo.get_commit(a.parent_ids[0])
+        new_repo, c = testutils.new_child(
+            app.state.workspace, app.state.repo, app.state.settings, root, "C"
+        )
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+        before = log_view.row_count
+
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        log_view.move_cursor(row=_row_of(log_view, c.change_id))
+        await pilot.press("space")
+        log_view.move_cursor(row=_row_of(log_view, b.change_id))
+        await pilot.pause()
+
+        await pilot.press("m")
+        await pilot.pause()
+        await pilot.click("#onto")
+        await pilot.pause()
+        render(app, "rebase-confirm-for-cancel")
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before
+        rebased_c = app.state.repo.revset(app.state.settings, "description(exact:'C')")[0]
+        assert rebased_c.parent_ids == [root.id]
