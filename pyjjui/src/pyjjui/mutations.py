@@ -247,26 +247,32 @@ def split(
     return new_repo
 
 
-def restore_file(
+def restore_files(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,
     settings: pyjj.UserSettings,
     from_commit: pyjj.Commit,
-    path: str,
+    paths: list[str],
 ) -> pyjj.ReadonlyRepo:
-    """`jj restore --from <from_commit> <path>` equivalent: overwrites
-    `path` in the working copy with its content from `from_commit`,
-    leaving `from_commit` untouched. `into_commit` is always the current
-    `@` -- the file browser this backs only ever restores into the
-    working copy, never an arbitrary destination.
+    """`jj restore --from <from_commit> <paths>...` equivalent: overwrites
+    `paths` in the working copy with their content from `from_commit`,
+    leaving `from_commit` untouched -- one transaction for the whole
+    batch, not one per path, so it's a single undo-able operation.
+    `into_commit` is always the current `@` -- the file browser this
+    backs only ever restores into the working copy, never an arbitrary
+    destination.
     """
     into_commit = repo.resolve_single(settings, "@")
     tx = repo.start_transaction(settings)
-    builder = tx.restore(from_commit, into_commit, paths=[path])
+    builder = tx.restore(from_commit, into_commit, paths=paths)
     new_commit = builder.write(repo)
     tx.set_wc_commit(workspace.workspace_name, new_commit.id)
     tx.rebase_descendants()
-    new_repo = tx.commit(f"restore {path} from {from_commit.change_id.hex()[:8]}")
+    if len(paths) > 1:
+        message = f"restore {len(paths)} files from {from_commit.change_id.hex()[:8]}"
+    else:
+        message = f"restore {paths[0]} from {from_commit.change_id.hex()[:8]}"
+    new_repo = tx.commit(message)
     _sync_working_copy(workspace, new_repo, settings)
     return new_repo
 

@@ -76,6 +76,17 @@ def render_file_diff(after: pyjj.Commit, before: pyjj.Commit, path: str) -> Grou
     return Group(_render_byte_diff(before_bytes, after_bytes))
 
 
+def render_files_diff(after: pyjj.Commit, before: pyjj.Commit, paths: list[str]) -> Group:
+    """`render_file_diff` for several paths at once, each under its own
+    path header -- the file browser's bulk-restore confirm preview.
+    """
+    blocks: list[Text | Group] = []
+    for path in paths:
+        blocks.append(Text(path, style="bold yellow"))
+        blocks.append(render_file_diff(after, before, path))
+    return Group(*blocks)
+
+
 def _render_byte_diff(before: bytes, after: bytes) -> Text:
     body = Text()
     for hunk in pyjj.diff_hunks(before, after):

@@ -1,10 +1,12 @@
 """Modal file browser for one commit's tree -- lists every path via
 `Commit.list_files()` beside a pane for whichever one is highlighted,
 either its raw content or (`d`) its diff against the current working
-copy. `r` restores the highlighted file from this commit into the
-working copy (`mutations.restore_file()`), gated by the same
-confirm/"don't ask again" machinery as every other mutation -- the one
-mutating action in here, everything else is look-around.
+copy. `space` marks any number of paths (same convention as `LogView`'s
+marking); `r` restores the marked paths -- or, if none are marked, just
+the highlighted one -- from this commit into the working copy
+(`mutations.restore_files()`), gated by the same confirm/"don't ask
+again" machinery as every other mutation, one transaction for the whole
+batch. The one mutating action in here, everything else is look-around.
 """
 
 from rich.console import Group, RenderableType
@@ -19,7 +21,7 @@ from textual.widgets import DataTable, Footer, Label, Static
 import pyjj
 
 from .. import mutations
-from ..render.diff import render_file_diff
+from ..render.diff import render_file_diff, render_files_diff
 
 # Binary/very large files aren't worth dumping into the pane.
 _MAX_PREVIEW_BYTES = 512 * 1024
@@ -103,6 +105,7 @@ class FilesScreen(ModalScreen[None]):
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
+        Binding("space", "toggle_mark", "Mark", show=False),
         Binding("d", "toggle_diff", "Diff vs working copy"),
         Binding("r", "restore_file", "Restore into working copy"),
     ]
@@ -113,12 +116,14 @@ class FilesScreen(ModalScreen[None]):
         self._paths = sorted(commit.list_files())
         self._diff_mode = False
         self._current_index = 0
+        self._marked: set[str] = set()
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(f"Files in {self._commit.change_id.hex()[:8]}")
             with Horizontal():
                 table = _FileTable(cursor_type="row", show_header=False)
+                table.add_column("mark", key="mark")
                 table.add_column("path", key="path")
                 yield table
                 yield ContentPane()
@@ -127,7 +132,7 @@ class FilesScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         table = self.query_one(_FileTable)
         for path in self._paths:
-            table.add_row(path, key=path)
+            table.add_row("", path, key=path)
         if self._paths:
             table.move_cursor(row=0)
             self._show_at(0)
@@ -146,11 +151,32 @@ class FilesScreen(ModalScreen[None]):
         self._diff_mode = not self._diff_mode
         self._show_at(self._current_index)
 
+    def action_toggle_mark(self) -> None:
+        if not self._paths:
+            return
+        path = self._paths[self._current_index]
+        if path in self._marked:
+            self._marked.discard(path)
+            mark = ""
+        else:
+            self._marked.add(path)
+            mark = "✓"
+        self.query_one(_FileTable).update_cell(path, "mark", mark)
+
+    def _selected_paths(self) -> list[str]:
+        """The marked paths, in list order, or -- if nothing is marked --
+        just the highlighted one. Same "marked, or fall back to the
+        cursor" convention as `LogView.selection`.
+        """
+        if self._marked:
+            return [p for p in self._paths if p in self._marked]
+        return [self._paths[self._current_index]]
+
     @work
     async def action_restore_file(self) -> None:
         if not self._paths:
             return
-        path = self._paths[self._current_index]
+        paths = self._selected_paths()
         app = self.app
         wc_commit = app.state.repo.resolve_single(app.state.settings, "@")
         if self._commit.id == wc_commit.id:
@@ -160,15 +186,26 @@ class FilesScreen(ModalScreen[None]):
                 severity="warning",
             )
             return
-        prompt = (
-            f"Restore {path!r} from {self._commit.change_id.hex()[:8]} into"
-            " the working copy?"
-        )
-        detail = render_file_diff(self._commit, wc_commit, path)
+        if len(paths) > 1:
+            prompt = (
+                f"Restore {len(paths)} files from"
+                f" {self._commit.change_id.hex()[:8]} into the working copy?"
+            )
+            detail = render_files_diff(self._commit, wc_commit, paths)
+        else:
+            prompt = (
+                f"Restore {paths[0]!r} from {self._commit.change_id.hex()[:8]}"
+                " into the working copy?"
+            )
+            detail = render_file_diff(self._commit, wc_commit, paths[0])
         if not await app._confirm("restore_file", prompt, detail=detail):
             return
-        if await app._run_mutation(mutations.restore_file, self._commit, path):
+        if await app._run_mutation(mutations.restore_files, self._commit, paths):
             await app.action_refresh_log()
+            table = self.query_one(_FileTable)
+            for path in paths:
+                self._marked.discard(path)
+                table.update_cell(path, "mark", "")
             self._show_at(self._current_index)
 
     def _show_at(self, index: int) -> None:

@@ -373,7 +373,7 @@ def test_restore_file_overwrites_the_working_copy_path_from_another_commit(
     repo = mutations.new_child(workspace, repo, settings, [historic])
     repo, wc = _write_files(workspace, settings, {"a.txt": "new\n"})
 
-    new_repo = mutations.restore_file(workspace, repo, settings, historic, "a.txt")
+    new_repo = mutations.restore_files(workspace, repo, settings, historic, ["a.txt"])
 
     new_wc = new_repo.resolve_single(settings, "@")
     assert new_wc.read_file("a.txt") == b"old\n"

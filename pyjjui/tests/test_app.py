@@ -1001,3 +1001,64 @@ async def test_r_on_the_working_copy_itself_just_notifies(app, render):
 
         assert len(app.screen_stack) == 2  # no confirm modal was pushed
         assert len(app._notifications) >= 1
+
+
+async def test_space_marks_multiple_files_and_r_restores_them_in_one_transaction(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("old-a\n")
+        (root / "b.txt").write_text("old-b\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+        historic = app.state.repo.resolve_single(app.state.settings, "@")
+
+        await pilot.press("n")  # new child -- working copy moves off `historic`
+        await pilot.pause()
+
+        (root / "a.txt").write_text("new-a\n")
+        (root / "b.txt").write_text("new-b\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        log_view.move_cursor(row=_row_of(log_view, historic.change_id))
+        await pilot.pause()
+
+        await pilot.press("f")
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        assert table.row_count == 2  # a.txt, b.txt
+
+        await pilot.press("space")
+        await pilot.pause()
+        assert table.get_cell_at(Coordinate(0, 0)) == "✓"
+
+        await pilot.press("j")
+        await pilot.press("space")
+        await pilot.pause()
+        render(app, "files-two-marked")
+        assert table.get_cell_at(Coordinate(1, 0)) == "✓"
+
+        before_ops = len(app.state.repo.operation_log())
+
+        await pilot.press("r")
+        await pilot.pause()
+        render(app, "restore-two-files-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-restore-two-files")
+
+        new_wc = app.state.repo.resolve_single(app.state.settings, "@")
+        assert new_wc.read_file("a.txt") == b"old-a\n"
+        assert new_wc.read_file("b.txt") == b"old-b\n"
+        # one transaction for the whole batch, not one per file
+        assert len(app.state.repo.operation_log()) == before_ops + 1
+        # marks are cleared after a successful restore
+        assert table.get_cell_at(Coordinate(0, 0)) == ""
+        assert table.get_cell_at(Coordinate(1, 0)) == ""
