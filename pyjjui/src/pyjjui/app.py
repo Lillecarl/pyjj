@@ -110,6 +110,22 @@ class PyjjuiApp(App[None]):
             return False
         return True
 
+    async def _confirm(self, action: str, prompt: str) -> bool:
+        """The shared "are you sure" gate for every mutation that touches
+        an existing commit. `action` is the persisted/session skip key
+        (see `AppState.should_confirm()`/`remember_skip()`) -- skips the
+        modal entirely once the user has checked either "don't ask
+        again" box for this action, this session or ever.
+        """
+        if not self.state.should_confirm(action):
+            return True
+        result = await self.push_screen_wait(ConfirmScreen(prompt, remember_key=action))
+        if not result.confirmed:
+            return False
+        if result.remember:
+            self.state.remember_skip(action, result.remember)
+        return True
+
     def on_log_view_commit_selected(self, event: LogView.CommitSelected) -> None:
         self.query_one(Preview).show_commit(event.commit, self.state.repo)
 
@@ -149,8 +165,7 @@ class PyjjuiApp(App[None]):
         if text is None:
             return
         prompt = f"Describe commit {commit.change_id.hex()[:8]} as {text.splitlines()[0] if text else '(no description)'!r}?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("describe", prompt):
             return
         if await self._run_mutation(mutations.describe, commit, text):
             await self.action_refresh_log()
@@ -165,8 +180,7 @@ class PyjjuiApp(App[None]):
             prompt = f"Abandon {len(commits)} commits?"
         else:
             prompt = f"Abandon {commits[0].change_id.hex()[:8]}?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("abandon", prompt):
             return
         if await self._run_mutation(mutations.abandon, commits):
             log_view.action_clear_marks()
@@ -202,8 +216,7 @@ class PyjjuiApp(App[None]):
             if plan.include_descendants:
                 subject += " and descendants"
         prompt = f"Rebase {subject} {plan.mode} {destination.change_id.hex()[:8]}?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("rebase", prompt):
             return
         if await self._run_mutation(
             mutations.rebase, sources, destination, plan.mode, plan.include_descendants
@@ -230,8 +243,7 @@ class PyjjuiApp(App[None]):
             return
         parent = self.state.repo.get_commit(commit.parent_ids[0])
         prompt = f"Squash {commit.change_id.hex()[:8]} into its parent {parent.change_id.hex()[:8]}?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("squash", prompt):
             return
         if await self._run_mutation(mutations.squash, commit, False):
             await self.action_refresh_log()
@@ -249,8 +261,7 @@ class PyjjuiApp(App[None]):
             prompt = f"Duplicate {len(commits)} commits?"
         else:
             prompt = f"Duplicate {commits[0].change_id.hex()[:8]}?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("duplicate", prompt):
             return
         if await self._run_mutation(mutations.duplicate, commits):
             log_view.action_clear_marks()
@@ -296,8 +307,7 @@ class PyjjuiApp(App[None]):
             f"Split commit {commit.change_id.hex()[:8]} into two commits"
             f" ({len(paths)} of {len(changed_paths)} paths in the first)?"
         )
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        if not await self._confirm("split", prompt):
             return
         if await self._run_mutation(mutations.split, commit, paths):
             await self.action_refresh_log()
@@ -322,8 +332,12 @@ class PyjjuiApp(App[None]):
         if target_op is None:
             return
         prompt = f"Restore to operation {target_op.id[:8]} ({target_op.description or 'no description'})?"
-        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
-        if not confirmed:
+        # Deliberately not routed through _confirm()/"don't ask again" --
+        # restoring to an arbitrary past operation is rare and the
+        # highest-blast-radius action here (can silently move bookmarks/
+        # heads/wc back), so it always asks.
+        result = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not result.confirmed:
             return
         if await self._run_mutation(mutations.restore_operation, target_op):
             await self.action_refresh_log()

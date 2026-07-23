@@ -15,6 +15,17 @@ from . import testutils
 _DEV_SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / ".dev" / "screenshots"
 
 
+@pytest.fixture(autouse=True)
+def pyjjui_config_dir(tmp_path_factory, monkeypatch):
+    """Isolates the confirmation "don't ask again ever" preference file
+    (see `pyjjui.config`) from whatever real `~/.config/pyjjui` exists on
+    the machine running the tests -- same isolation `settings()` gives
+    jj's own config, just for pyjjui's own tiny preferences file.
+    """
+    config_dir = tmp_path_factory.mktemp("pyjjui_config")
+    monkeypatch.setenv("PYJJUI_CONFIG_DIR", str(config_dir))
+
+
 @pytest.fixture
 def settings(tmp_path_factory, monkeypatch):
     """Deterministic settings, isolated from whatever real jj config exists

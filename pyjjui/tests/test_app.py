@@ -3,8 +3,9 @@
 from pathlib import Path
 
 from textual.coordinate import Coordinate
-from textual.widgets import DataTable, Input, SelectionList
+from textual.widgets import Checkbox, DataTable, Input, SelectionList
 
+from pyjjui import config
 from pyjjui.screens.oplog import DiffPane
 from pyjjui.widgets.log_view import LogView
 from pyjjui.widgets.preview import Preview
@@ -764,4 +765,101 @@ async def test_y_cancel_at_confirm_leaves_history_unchanged(app, render):
 
         assert len(app.screen_stack) == 1
         assert log_view.row_count == before
+
+
+async def test_confirm_screen_remember_checkboxes_are_mutually_exclusive(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+        session_cb = app.screen.query_one("#remember-session", Checkbox)
+        ever_cb = app.screen.query_one("#remember-ever", Checkbox)
+
+        session_cb.value = True
+        await pilot.pause()
+        assert session_cb.value is True
+        assert ever_cb.value is False
+
+        ever_cb.value = True
+        await pilot.pause()
+        render(app, "both-checked-then-mutually-exclusive")
+        assert ever_cb.value is True
+        assert session_cb.value is False
+
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+
+async def test_squash_dont_ask_again_this_session_skips_future_squash_confirms(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        root_change_id = app.state.repo.get_commit(a.parent_ids[0]).change_id
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+        app.screen.query_one("#remember-session", Checkbox).value = True
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-first-squash-with-remember-session")
+
+        # A fresh, non-working-copy target for the second squash -- squashing
+        # @ itself spawns a replacement empty child instead of shrinking the
+        # row count, which would muddy what this test is actually checking.
+        # root's own commit id changed (A got squashed into it), so re-
+        # resolve it by change id rather than reusing the pre-squash Commit.
+        # testutils.new_child() always checks out the commit it creates, so
+        # a second child ("D") is built on top of "C" to push @ off of "C"
+        # before squashing it.
+        root = app.state.repo.resolve_single(app.state.settings, root_change_id.reverse_hex())
+        new_repo, c = testutils.new_child(
+            app.state.workspace, app.state.repo, app.state.settings, root, "C"
+        )
+        new_repo, _d = testutils.new_child(
+            app.state.workspace, new_repo, app.state.settings, c, "D"
+        )
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+        before = log_view.row_count
+        log_view.move_cursor(row=_row_of(log_view, c.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")  # no modal this time
+        await pilot.pause()
+        render(app, "after-second-squash-no-modal")
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before - 1
+        # Session-only: never written to the persisted config file.
+        assert config.load_skipped_confirmations() == set()
+
+
+async def test_squash_dont_ask_again_ever_persists_the_skip(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+        app.screen.query_one("#remember-ever", Checkbox).value = True
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-squash-with-remember-ever")
+
+        assert config.load_skipped_confirmations() == {"squash"}
+        assert not app.state.should_confirm("squash")
         assert len(app.state.repo.revset(app.state.settings, "description(exact:'A')")) == 1

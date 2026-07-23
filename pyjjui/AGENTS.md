@@ -179,6 +179,34 @@ free that we don't.
   same shape in all three. `new_child`/`edit`/`set_bookmark` don't get
   one: neither creates, rewrites, nor discards an existing commit (a
   brand-new commit, a plain checkout, or a bookmark move).
+- **"Don't ask again" for confirmations**: `ConfirmScreen` (`screens/confirm.py`)
+  dismisses with a `ConfirmResult(confirmed, remember)` instead of a bare
+  `bool`. When constructed with `remember_key=<action>` (every confirmable
+  action except op-log's `restore_operation`, see below) it renders two
+  mutually-exclusive `Checkbox`es -- "this session" / "ever" -- and
+  `remember` comes back as `"session"`, `"ever"`, or `None`. `app.py`'s
+  `_confirm(action, prompt)` is the single gate every confirmable action
+  calls instead of pushing `ConfirmScreen` directly: it short-circuits to
+  `True` if `AppState.should_confirm(action)` is already `False`, otherwise
+  shows the modal and calls `state.remember_skip(action, result.remember)`
+  when a box was checked. Skip state is tracked per action-name string
+  (`"describe"`, `"squash"`, `"split"`, `"rebase"`, `"duplicate"`,
+  `"abandon"`) -- deliberately not one global toggle, so skipping squash
+  confirmations doesn't silently also skip rebase ones.
+  `AppState._skipped_confirmations` is a `set[str]`, seeded at startup from
+  `pyjjui.config.load_skipped_confirmations()`; `"session"` only adds to
+  that in-memory set, `"ever"` also calls
+  `pyjjui.config.persist_skip_confirmation(action)`, writing to a small
+  JSON file (`$XDG_CONFIG_HOME/pyjjui/confirmations.json`, override via
+  `PYJJUI_CONFIG_DIR` -- what `conftest.py`'s autouse `pyjjui_config_dir`
+  fixture points at a tmp dir for test isolation) -- deliberately a
+  pyjjui-only preferences file, not a `jj` config value, since it's UI
+  state no other jj frontend would ever read. Op-log's `restore_operation`
+  confirm is the one deliberate exception: it always pushes a bare
+  `ConfirmScreen(prompt)` (no `remember_key`, bypassing `_confirm()`
+  entirely) since restoring to an arbitrary past operation is rare and the
+  highest-blast-radius action here (can silently move bookmarks/heads/wc
+  backward) -- it should never be silenceable.
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.
