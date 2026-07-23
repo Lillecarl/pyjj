@@ -9,3 +9,4 @@ __pycache__/
 .venv/
 snapshot_report.html
 .dev/
+.direnv
