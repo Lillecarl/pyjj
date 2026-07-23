@@ -232,7 +232,9 @@ class PyjjuiApp(App[None]):
         operation, not just one undo/redo step back/forward.
         """
         operations = self.state.repo.operation_log()
-        target_op = await self.push_screen_wait(OpLogScreen(operations))
+        target_op = await self.push_screen_wait(
+            OpLogScreen(self.state.repo, self.state.settings, operations)
+        )
         if target_op is None:
             return
         prompt = f"Restore to operation {target_op.id[:8]} ({target_op.description or 'no description'})?"

@@ -97,17 +97,38 @@ free that we don't.
   `mutations.duplicate()`.
 - **Operation log browsing**: `o` opens `screens/oplog.py`'s `OpLogScreen`
   over `ReadonlyRepo.operation_log()` (newest first, same order as `jj op
-  log`) -- a `DataTable` of every past operation's end time and
-  description. Enter (or a row click, `DataTable`'s own `RowSelected`)
-  dismisses with that `Operation`; `app.py` then confirms via the same
-  `ConfirmScreen` `abandon` uses before calling
-  `mutations.restore_operation()`. Distinct from the single-step `u`/`U`
-  undo/redo bindings: this can jump straight to *any* past operation, not
-  just one step back/forward, mirroring `jj op restore` rather than `jj
-  undo`. `mutations.restore_operation()` always restores both the repo and
-  remote-tracking portions of the target view (`Transaction
-  .restore_operation()`'s `what` parameter exists for a partial restore,
-  but the screen has no UI for choosing a subset -- not needed yet).
+  log`) -- a two-pane modal, `_OpTable` (a `DataTable` of every past
+  operation's end time and description) beside a `DiffPane`, the same
+  `LogView`/`Preview` side-by-side shape the main screen uses. Enter (or a
+  row click, `DataTable`'s own `RowSelected`) dismisses with that
+  `Operation`; `app.py` then confirms via the same `ConfirmScreen`
+  `abandon` uses before calling `mutations.restore_operation()`. Distinct
+  from the single-step `u`/`U` undo/redo bindings: this can jump straight
+  to *any* past operation, not just one step back/forward, mirroring `jj
+  op restore` rather than `jj undo`. `mutations.restore_operation()`
+  always restores both the repo and remote-tracking portions of the
+  target view (`Transaction.restore_operation()`'s `what` parameter
+  exists for a partial restore, but the screen has no UI for choosing a
+  subset -- not needed yet).
+  - **hjkl**: `_OpTable` binds `j`/`k` to cursor down/up (`DataTable` only
+    binds arrow keys itself) and `l` to focus `DiffPane`; `DiffPane` binds
+    `j`/`k` to scroll and `h` back to the table -- same convention as
+    `LogView`/`Preview`, but resolved with direct `self.screen.query_one()`
+    calls instead of the `FocusPreview`/`FocusLog` message pair, since
+    both widgets live only inside this one screen (no cross-`App` reuse
+    to decouple, unlike the main screen's pair).
+  - **Diffing between two points in history, not just restoring to one**:
+    highlighting a row shows the diff between that operation's working-
+    copy tree and a base -- `space` marks any row as that base (checkmark
+    in the `mark` column, moving to a newly-marked row un-marks the old
+    one); with nothing marked the base is the *current* repo state (what
+    was loaded when `o` was pressed), answering "what changed since now"
+    directly. Both sides are computed via `ReadonlyRepo.load_at_operation
+    (op).resolve_single(settings, "@")` -- the working-copy commit as of
+    that operation -- then `render_commit_diff()` (already used by
+    `Preview`), reused as-is since it only needs two `Commit`s regardless
+    of whether they're parent/child or two unrelated operations' working
+    copies.
 - **Error handling boundary**: `app.py`'s `action_refresh_log()` and
   `_run_mutation()` are the only places that catch `pyjj.JjError` (the
   common base for revset-parse errors, transaction errors, etc.) and

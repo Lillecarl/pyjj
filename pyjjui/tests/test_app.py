@@ -1,7 +1,9 @@
 """Interaction tests for `PyjjuiApp`, driven via Textual's Pilot."""
 
+from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Input
 
+from pyjjui.screens.oplog import DiffPane
 from pyjjui.widgets.log_view import LogView
 from pyjjui.widgets.preview import Preview
 
@@ -450,3 +452,54 @@ async def test_o_cancel_from_the_oplog_screen_leaves_history_unchanged(app, rend
 
         assert len(app.screen_stack) == 1
         assert log_view.row_count == before
+
+
+async def test_oplog_hjkl_navigates_the_table_and_switches_focus_to_the_diff_pane(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        await pilot.press("o")
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        await pilot.press("j")
+        await pilot.pause()
+        assert table.cursor_row == 1
+        await pilot.press("k")
+        await pilot.pause()
+        assert table.cursor_row == 0
+
+        await pilot.press("l")
+        await pilot.pause()
+        render(app, "oplog-diff-focused")
+        assert app.screen.query_one(DiffPane).has_focus
+
+        await pilot.press("h")
+        await pilot.pause()
+        assert table.has_focus
+
+
+async def test_oplog_space_marks_a_diff_base_without_crashing(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        await pilot.press("o")
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        await pilot.press("space")
+        await pilot.pause()
+        render(app, "oplog-marked")
+        assert table.get_cell_at(Coordinate(0, 0)) == "✓"
+
+        await pilot.press("down")
+        await pilot.pause()
+        render(app, "oplog-marked-diff")
+        # Marking row 1 moves the mark, clearing row 0's checkmark.
+        assert table.get_cell_at(Coordinate(0, 0)) == "✓"
+
+        await pilot.press("up")
+        await pilot.pause()
+        await pilot.press("space")  # toggling the already-marked row clears it
+        await pilot.pause()
+        assert table.get_cell_at(Coordinate(0, 0)) == ""
