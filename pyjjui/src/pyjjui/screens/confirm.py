@@ -5,10 +5,11 @@ touches an existing commit (see `AppState.should_confirm()`/`app.py`'s
 
 from dataclasses import dataclass
 
+from rich.console import RenderableType
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Label
+from textual.widgets import Button, Checkbox, Label, Static
 
 
 @dataclass
@@ -47,18 +48,33 @@ class ConfirmScreen(ModalScreen[ConfirmResult]):
         align: right middle;
         padding-top: 1;
     }
+    ConfirmScreen #detail {
+        height: 15;
+        border: round $border-blurred;
+        padding: 0 1;
+        margin-top: 1;
+    }
     """
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, message: str, remember_key: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        remember_key: str | None = None,
+        detail: RenderableType | None = None,
+    ) -> None:
         super().__init__()
         self._message = message
         self._remember_key = remember_key
+        self._detail = detail
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(self._message)
+            if self._detail is not None:
+                with VerticalScroll(id="detail"):
+                    yield Static(self._detail)
             if self._remember_key is not None:
                 yield Checkbox("Don't ask again this session", id="remember-session")
                 yield Checkbox("Don't ask again ever", id="remember-ever")

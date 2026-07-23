@@ -126,7 +126,12 @@ free that we don't.
   always restores both the repo and remote-tracking portions of the
   target view (`Transaction.restore_operation()`'s `what` parameter
   exists for a partial restore, but the screen has no UI for choosing a
-  subset -- not needed yet).
+  subset -- not needed yet). Its confirm prompt isn't just text: `app.py`
+  computes the working-copy diff between the *current* live repo and the
+  target operation (`render_commit_diff(target_wc, current)`, the same
+  renderer `DiffPane`/`Preview` use) and passes it as `ConfirmScreen`'s
+  `detail`, so what a restore would actually change is visible right
+  before confirming it -- not just the operation's id/description.
   - **hjkl**: `_OpTable` binds `j`/`k` to cursor down/up (`DataTable` only
     binds arrow keys itself) and `l` to focus `DiffPane`; `DiffPane` binds
     `j`/`k` to scroll and `h` back to the table -- same convention as
@@ -206,7 +211,11 @@ free that we don't.
   `ConfirmScreen(prompt)` (no `remember_key`, bypassing `_confirm()`
   entirely) since restoring to an arbitrary past operation is rare and the
   highest-blast-radius action here (can silently move bookmarks/heads/wc
-  backward) -- it should never be silenceable.
+  backward) -- it should never be silenceable. `ConfirmScreen` itself
+  gained an optional `detail: RenderableType | None` param (rendered in a
+  bordered, scrollable `VerticalScroll#detail` below the message) purely
+  to support this -- see the op-log bullet above for the one caller that
+  uses it.
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.

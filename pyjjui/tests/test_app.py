@@ -445,6 +445,7 @@ async def test_o_restores_to_a_past_operation(app, render):
         await pilot.press("enter")
         await pilot.pause()
         render(app, "restore-confirm")
+        assert app.screen.query_one("#detail") is not None  # diff preview, not just the bare prompt
         await pilot.click("#confirm")
         await pilot.pause()
         render(app, "after-restore")

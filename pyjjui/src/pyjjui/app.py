@@ -9,6 +9,7 @@ from textual.widgets import Footer, Header
 import pyjj
 
 from . import mutations
+from .render.diff import render_commit_diff
 from .screens.confirm import ConfirmScreen
 from .screens.oplog import OpLogScreen
 from .screens.rebase import RebaseScreen
@@ -332,11 +333,16 @@ class PyjjuiApp(App[None]):
         if target_op is None:
             return
         prompt = f"Restore to operation {target_op.id[:8]} ({target_op.description or 'no description'})?"
+        current = self.state.repo.resolve_single(self.state.settings, "@")
+        target_wc = self.state.repo.load_at_operation(target_op).resolve_single(
+            self.state.settings, "@"
+        )
+        detail = render_commit_diff(target_wc, current)
         # Deliberately not routed through _confirm()/"don't ask again" --
         # restoring to an arbitrary past operation is rare and the
         # highest-blast-radius action here (can silently move bookmarks/
         # heads/wc back), so it always asks.
-        result = await self.push_screen_wait(ConfirmScreen(prompt))
+        result = await self.push_screen_wait(ConfirmScreen(prompt, detail=detail))
         if not result.confirmed:
             return
         if await self._run_mutation(mutations.restore_operation, target_op):
