@@ -1,5 +1,6 @@
 """The Textual `App` tying state, widgets, and keybindings together."""
 
+from rich.console import RenderableType
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -111,16 +112,22 @@ class PyjjuiApp(App[None]):
             return False
         return True
 
-    async def _confirm(self, action: str, prompt: str) -> bool:
+    async def _confirm(
+        self, action: str, prompt: str, detail: RenderableType | None = None
+    ) -> bool:
         """The shared "are you sure" gate for every mutation that touches
         an existing commit. `action` is the persisted/session skip key
         (see `AppState.should_confirm()`/`remember_skip()`) -- skips the
         modal entirely once the user has checked either "don't ask
-        again" box for this action, this session or ever.
+        again" box for this action, this session or ever. `detail` is an
+        optional renderable (e.g. a diff) shown below the prompt -- see
+        `action_squash` for the one caller that passes it.
         """
         if not self.state.should_confirm(action):
             return True
-        result = await self.push_screen_wait(ConfirmScreen(prompt, remember_key=action))
+        result = await self.push_screen_wait(
+            ConfirmScreen(prompt, remember_key=action, detail=detail)
+        )
         if not result.confirmed:
             return False
         if result.remember:
@@ -244,7 +251,8 @@ class PyjjuiApp(App[None]):
             return
         parent = self.state.repo.get_commit(commit.parent_ids[0])
         prompt = f"Squash {commit.change_id.hex()[:8]} into its parent {parent.change_id.hex()[:8]}?"
-        if not await self._confirm("squash", prompt):
+        detail = render_commit_diff(commit, parent)
+        if not await self._confirm("squash", prompt, detail=detail):
             return
         if await self._run_mutation(mutations.squash, commit, False):
             await self.action_refresh_log()

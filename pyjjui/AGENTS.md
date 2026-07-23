@@ -90,7 +90,11 @@ free that we don't.
   editor-based message-combining step: keeps the destination's message if
   it already has one, otherwise falls back to the source's. Raises
   `pyjj.JjError` for a merge-commit source (needs an explicit destination
-  plain `jj squash` doesn't infer either -- not supported here yet). `y`
+  plain `jj squash` doesn't infer either -- not supported here yet). Its
+  confirm prompt passes the source-vs-parent diff as `ConfirmScreen`'s
+  `detail` (see the "don't ask again" bullet below for what that is) --
+  showing exactly what's about to be absorbed into the parent, not just
+  the two change ids. `y`
   duplicates `LogView.selection` (marked commits, or just the cursor
   commit) onto their own original parents via `Transaction.duplicate()` --
   originals untouched, no working-copy/bookmark changes, so no

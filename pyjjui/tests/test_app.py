@@ -363,6 +363,7 @@ async def test_s_squashes_the_cursor_commit_into_its_parent(app, render):
         await pilot.press("s")
         await pilot.pause()
         render(app, "squash-confirm")
+        assert app.screen.query_one("#detail") is not None  # diff preview, not just the bare prompt
         await pilot.click("#confirm")
         await pilot.pause()
         render(app, "after-squash")

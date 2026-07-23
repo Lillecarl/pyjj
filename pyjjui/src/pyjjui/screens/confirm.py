@@ -49,7 +49,8 @@ class ConfirmScreen(ModalScreen[ConfirmResult]):
         padding-top: 1;
     }
     ConfirmScreen #detail {
-        height: 15;
+        height: auto;
+        max-height: 15;
         border: round $border-blurred;
         padding: 0 1;
         margin-top: 1;
