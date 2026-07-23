@@ -386,6 +386,9 @@ async def test_y_duplicates_the_cursor_commit(app, render):
 
         await pilot.press("y")
         await pilot.pause()
+        render(app, "duplicate-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
         render(app, "after-duplicate")
 
         assert log_view.row_count == before + 1
@@ -408,6 +411,9 @@ async def test_y_duplicates_all_marked_commits(app, render):
         await pilot.pause()
 
         await pilot.press("y")
+        await pilot.pause()
+        render(app, "duplicate-multi-confirm")
+        await pilot.click("#confirm")
         await pilot.pause()
         render(app, "after-duplicate-multi")
 
@@ -738,3 +744,24 @@ async def test_m_cancel_at_confirm_leaves_history_unchanged(app, render):
         assert log_view.row_count == before
         rebased_c = app.state.repo.revset(app.state.settings, "description(exact:'C')")[0]
         assert rebased_c.parent_ids == [root.id]
+
+
+async def test_y_cancel_at_confirm_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        a = app.state.repo.resolve_single(app.state.settings, "description(exact:'A')")
+        log_view.move_cursor(row=_row_of(log_view, a.change_id))
+        await pilot.pause()
+
+        await pilot.press("y")
+        await pilot.pause()
+        render(app, "duplicate-confirm-for-cancel")
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert log_view.row_count == before
+        assert len(app.state.repo.revset(app.state.settings, "description(exact:'A')")) == 1

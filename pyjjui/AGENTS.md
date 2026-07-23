@@ -158,23 +158,27 @@ free that we don't.
   takes the whole app down with it (this actually happened before these
   existed).
 - **Confirmation before every history-rewriting mutation**: `describe`,
-  `squash`, `split`, and `rebase` (alongside `abandon` and the op-log
-  `restore_operation`, which already had one) each push a `ConfirmScreen`
-  naming exactly what's about to happen -- the affected change id(s),
-  and for `describe`/`squash`/`split`/`rebase` specifically, a preview of
-  the actual effect (`describe`'s new first line, `squash`'s destination,
-  `split`'s path count, `rebase`'s mode and destination) -- right before
-  the `_run_mutation()` call, even when the action already went through
-  a parameter-picking modal first (`rebase`'s mode picker, `split`'s path
-  picker). The two are deliberately separate steps, not one merged
-  dialog: the first modal answers "how", the `ConfirmScreen` answers "are
-  you sure", and skipping the second because the first already required
-  a click was explicitly rejected -- every mutation that rewrites or
-  discards an *existing* commit gets the same final gate, regardless of
-  whatever picker preceded it. `new_child`, `edit`, `duplicate`, and
-  `set_bookmark` don't get one: none of them rewrites or discards a
-  commit that already existed (new commits, or a duplicate that leaves
-  the original untouched, or a bookmark move).
+  `squash`, `split`, `rebase`, and `duplicate` (alongside `abandon` and
+  the op-log `restore_operation`, which already had one) each push a
+  `ConfirmScreen` naming exactly what's about to happen -- the affected
+  change id(s), and for `describe`/`squash`/`split`/`rebase`
+  specifically, a preview of the actual effect (`describe`'s new first
+  line, `squash`'s destination, `split`'s path count, `rebase`'s mode and
+  destination) -- right before the `_run_mutation()` call, even when the
+  action already went through a parameter-picking modal first
+  (`rebase`'s mode picker, `split`'s path picker). The two are
+  deliberately separate steps, not one merged dialog: the first modal
+  answers "how", the `ConfirmScreen` answers "are you sure", and skipping
+  the second because the first already required a click was explicitly
+  rejected -- every mutation that touches an *existing* commit (rewrite,
+  discard, or copy) gets the same final gate, regardless of whatever
+  picker preceded it. Bulk actions (`abandon`/`rebase`/`duplicate` acting
+  on 2+ marked commits) still get exactly **one** `ConfirmScreen` for the
+  whole batch (`f"... {len(commits)} commits?"`), never one per commit --
+  the prompt-building `if len(commits) > 1: ... else: ...` branch is the
+  same shape in all three. `new_child`/`edit`/`set_bookmark` don't get
+  one: neither creates, rewrites, nor discards an existing commit (a
+  brand-new commit, a plain checkout, or a bookmark move).
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.

@@ -236,6 +236,7 @@ class PyjjuiApp(App[None]):
         if await self._run_mutation(mutations.squash, commit, False):
             await self.action_refresh_log()
 
+    @work
     async def action_duplicate(self) -> None:
         """`y` -- duplicate the marked commits (or just the cursor commit)
         onto their own original parents.
@@ -243,6 +244,13 @@ class PyjjuiApp(App[None]):
         log_view = self.query_one(LogView)
         commits = log_view.selection
         if not commits:
+            return
+        if len(commits) > 1:
+            prompt = f"Duplicate {len(commits)} commits?"
+        else:
+            prompt = f"Duplicate {commits[0].change_id.hex()[:8]}?"
+        confirmed = await self.push_screen_wait(ConfirmScreen(prompt))
+        if not confirmed:
             return
         if await self._run_mutation(mutations.duplicate, commits):
             log_view.action_clear_marks()
