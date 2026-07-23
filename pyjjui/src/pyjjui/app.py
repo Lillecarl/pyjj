@@ -12,6 +12,7 @@ import pyjj
 from . import mutations
 from .render.diff import render_commit_diff
 from .screens.confirm import ConfirmScreen
+from .screens.files import FilesScreen
 from .screens.oplog import OpLogScreen
 from .screens.rebase import RebaseScreen
 from .screens.split import SplitScreen
@@ -56,6 +57,7 @@ class PyjjuiApp(App[None]):
         Binding("s", "squash", "Squash"),
         Binding("y", "duplicate", "Duplicate"),
         Binding("x", "split", "Split"),
+        Binding("f", "files", "Files"),
         Binding("b", "bookmark_set", "Bookmark"),
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
@@ -320,6 +322,16 @@ class PyjjuiApp(App[None]):
             return
         if await self._run_mutation(mutations.split, commit, paths):
             await self.action_refresh_log()
+
+    @work
+    async def action_files(self) -> None:
+        """`f` -- browse the cursor commit's file tree, read-only (no
+        confirm needed: nothing here mutates anything).
+        """
+        commit = self.query_one(LogView).selected_commit
+        if commit is None:
+            return
+        await self.push_screen_wait(FilesScreen(commit))
 
     async def action_undo(self) -> None:
         if await self._run_mutation(mutations.undo):

@@ -6,6 +6,7 @@ from textual.coordinate import Coordinate
 from textual.widgets import Checkbox, DataTable, Input, SelectionList
 
 from pyjjui import config
+from pyjjui.screens.files import ContentPane
 from pyjjui.screens.oplog import DiffPane
 from pyjjui.widgets.log_view import LogView
 from pyjjui.widgets.preview import Preview
@@ -15,6 +16,15 @@ from . import testutils
 
 def _row_of(log_view: LogView, change_id) -> int:
     return next(i for i, commit in enumerate(log_view._commits) if commit.change_id == change_id)
+
+
+def _pane_text(pane) -> str:
+    """Reads back a `Static`-backed pane's rendered lines -- there's no
+    public way to get plain text out of a mounted `Static` short of
+    rendering it line by line the way the compositor would.
+    """
+    body = pane._body
+    return "\n".join(body.render_line(y).text for y in range(body.size.height))
 
 
 async def test_log_view_shows_the_seeded_commits(app, render):
@@ -865,3 +875,48 @@ async def test_squash_dont_ask_again_ever_persists_the_skip(app, render):
         assert config.load_skipped_confirmations() == {"squash"}
         assert not app.state.should_confirm("squash")
         assert len(app.state.repo.revset(app.state.settings, "description(exact:'A')")) == 1
+
+
+async def test_f_browses_the_cursor_commit_files(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("hello\n")
+        (root / "b.txt").write_text("world\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        target = app.state.repo.resolve_single(app.state.settings, "@")
+        log_view.move_cursor(row=_row_of(log_view, target.change_id))
+        await pilot.pause()
+
+        await pilot.press("f")
+        await pilot.pause()
+        render(app, "files-modal")
+
+        table = app.screen.query_one(DataTable)
+        assert table.row_count == 2
+        content = app.screen.query_one(ContentPane)
+        assert "hello" in _pane_text(content)
+
+        await pilot.press("j")
+        await pilot.pause()
+        assert table.cursor_row == 1
+        assert "world" in _pane_text(content)
+
+        await pilot.press("l")
+        await pilot.pause()
+        render(app, "files-content-focused")
+        assert content.has_focus
+
+        await pilot.press("h")
+        await pilot.pause()
+        assert table.has_focus
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1

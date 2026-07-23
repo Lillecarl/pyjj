@@ -116,6 +116,20 @@ free that we don't.
   isn't exposed here yet, the same gap `squash` has for merge-commit
   sources. If the target was the working copy, `@` moves to the second
   commit afterward -- matching plain `jj split`'s own behavior.
+- **File browser**: `f` opens `screens/files.py`'s `FilesScreen` over the
+  cursor commit's full tree, listed via `Commit.list_files()` (a flat,
+  sorted, repo-relative path list -- no directory-tree nesting, since
+  these repos aren't big enough yet to need it). Same two-pane shape as
+  `OpLogScreen`: `_FileTable` (a `DataTable`) beside a `ContentPane`
+  showing whichever path is highlighted, read via `Commit.read_file()` and
+  decoded as UTF-8 (`errors="replace"`, so a binary file just shows
+  replacement characters rather than crashing the read -- files over
+  512KiB skip the read entirely and show a placeholder instead, same
+  threshold `render/diff.py` uses for the same reason). Same hjkl
+  convention as `_OpTable`/`DiffPane` (`j`/`k` in the table, `l`/`h` to
+  move focus into/out of the content pane). Always dismisses with `None`
+  -- read-only, nothing to confirm or pick, so it doesn't route through
+  `_confirm()` at all.
 - **Operation log browsing**: `o` opens `screens/oplog.py`'s `OpLogScreen`
   over `ReadonlyRepo.operation_log()` (newest first, same order as `jj op
   log`) -- a two-pane modal, `_OpTable` (a `DataTable` of every past
