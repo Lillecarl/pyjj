@@ -247,6 +247,30 @@ def split(
     return new_repo
 
 
+def restore_file(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    from_commit: pyjj.Commit,
+    path: str,
+) -> pyjj.ReadonlyRepo:
+    """`jj restore --from <from_commit> <path>` equivalent: overwrites
+    `path` in the working copy with its content from `from_commit`,
+    leaving `from_commit` untouched. `into_commit` is always the current
+    `@` -- the file browser this backs only ever restores into the
+    working copy, never an arbitrary destination.
+    """
+    into_commit = repo.resolve_single(settings, "@")
+    tx = repo.start_transaction(settings)
+    builder = tx.restore(from_commit, into_commit, paths=[path])
+    new_commit = builder.write(repo)
+    tx.set_wc_commit(workspace.workspace_name, new_commit.id)
+    tx.rebase_descendants()
+    new_repo = tx.commit(f"restore {path} from {from_commit.change_id.hex()[:8]}")
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
 def restore_operation(
     workspace: pyjj.Workspace,
     repo: pyjj.ReadonlyRepo,

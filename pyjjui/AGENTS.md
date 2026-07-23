@@ -127,9 +127,39 @@ free that we don't.
   512KiB skip the read entirely and show a placeholder instead, same
   threshold `render/diff.py` uses for the same reason). Same hjkl
   convention as `_OpTable`/`DiffPane` (`j`/`k` in the table, `l`/`h` to
-  move focus into/out of the content pane). Always dismisses with `None`
-  -- read-only, nothing to confirm or pick, so it doesn't route through
-  `_confirm()` at all.
+  move focus into/out of the content pane). Unlike the other modals, it
+  composes its own `Footer()` -- with two real actions living here
+  (`d`/`r`, below) alongside `escape`, a plain instructional `Label`
+  wasn't enough to keep them discoverable, the same reasoning the main
+  screen's `Footer` already serves.
+  - **`d` -- diff vs working copy**: toggles `ContentPane` between raw
+    content and `render/diff.py`'s new `render_file_diff(after, before,
+    path)` (a `render_commit_diff` sibling scoped to one path between two
+    *arbitrary* commits, not necessarily parent/child) comparing the
+    browsed commit's version of the highlighted path against the
+    *current* working copy's -- "what would change if I restored this
+    now", not a diff against the browsed commit's own parent.
+  - **`r` -- restore into the working copy**: `jj restore --from
+    <browsed-commit> <path>` equivalent (`mutations.restore_file()`,
+    wrapping the existing `Transaction.restore()` binding -- already in
+    pyjj-bindings/pyjj, no Rust changes needed). Always restores into `@`
+    specifically (never an arbitrary destination) -- rewrites the
+    working-copy commit in place via `CommitBuilder`, same
+    `tx.set_wc_commit()` + `tx.rebase_descendants()` shape
+    `mutations.describe()` uses for its `was_wc` branch, since `into` is
+    unconditionally `@` here. Routes through the same `_confirm()`/"don't
+    ask again" gate every other mutation does (action key
+    `"restore_file"`), passing the same `render_file_diff()` result as
+    the confirm's `detail` -- so the restore confirm shows exactly what's
+    about to change. A no-op guard (browsing `@` itself) skips the
+    confirm entirely and just notifies "nothing to restore" -- restoring
+    a commit into itself is meaningless, not just harmless. Restoring
+    doesn't dismiss the screen: `FilesScreen` calls `app._run_mutation()`
+    and `app.action_refresh_log()` directly (reaching into `self.app`'s
+    private-by-convention helpers -- acceptable here since `FilesScreen`
+    lives in the same package and browsing is meant to continue
+    uninterrupted after a restore), then re-renders the current pane so
+    a diff-mode view immediately reflects the new "no difference".
 - **Operation log browsing**: `o` opens `screens/oplog.py`'s `OpLogScreen`
   over `ReadonlyRepo.operation_log()` (newest first, same order as `jj op
   log`) -- a two-pane modal, `_OpTable` (a `DataTable` of every past

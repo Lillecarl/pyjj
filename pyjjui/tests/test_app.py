@@ -920,3 +920,84 @@ async def test_f_browses_the_cursor_commit_files(app, render):
         await pilot.press("escape")
         await pilot.pause()
         assert len(app.screen_stack) == 1
+
+
+async def test_d_toggles_diff_view_and_r_restores_a_file(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("old\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+        historic = app.state.repo.resolve_single(app.state.settings, "@")
+
+        await pilot.press("n")  # new child -- working copy moves off `historic`
+        await pilot.pause()
+
+        (root / "a.txt").write_text("new\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        log_view.move_cursor(row=_row_of(log_view, historic.change_id))
+        await pilot.pause()
+
+        await pilot.press("f")
+        await pilot.pause()
+        content = app.screen.query_one(ContentPane)
+        assert "old" in _pane_text(content)
+
+        await pilot.press("d")
+        await pilot.pause()
+        render(app, "files-diff-mode")
+        diff_text = _pane_text(content)
+        assert "-new" in diff_text
+        assert "+old" in diff_text
+
+        await pilot.press("r")
+        await pilot.pause()
+        render(app, "restore-file-confirm")
+        assert app.screen.query_one("#detail") is not None
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-restore-file")
+
+        assert len(app.screen_stack) == 2  # FilesScreen stays open
+        new_wc = app.state.repo.resolve_single(app.state.settings, "@")
+        assert new_wc.read_file("a.txt") == b"old\n"
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+async def test_r_on_the_working_copy_itself_just_notifies(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+
+        root = Path(app.state.workspace.workspace_root)
+        (root / "a.txt").write_text("hello\n")
+        new_repo, _stats = await app.state.workspace.snapshot_async(app.state.settings)
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        target = app.state.repo.resolve_single(app.state.settings, "@")
+        log_view.move_cursor(row=_row_of(log_view, target.change_id))
+        await pilot.pause()
+
+        await pilot.press("f")
+        await pilot.pause()
+
+        await pilot.press("r")
+        await pilot.pause()
+        render(app, "restore-file-noop-notice")
+
+        assert len(app.screen_stack) == 2  # no confirm modal was pushed
+        assert len(app._notifications) >= 1
