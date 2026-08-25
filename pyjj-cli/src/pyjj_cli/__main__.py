@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """pyjj-cli — Python CLI for Jujutsu VCS, backed by the pyjj Rust bindings."""
+# PYTHON_ARGCOMPLETE_OK
 
 import argparse
 import sys
 
-from .commands import describe, init, log, status, version
+import argcomplete
 
 
 def main() -> int:
@@ -47,7 +48,13 @@ def main() -> int:
     # version
     sub.add_parser("version", help="Show version information")
 
+    # Completion runs the CLI itself on every <TAB>; keep everything heavy
+    # (the pyjj bindings, via .commands) out of that path.
+    argcomplete.autocomplete(parser)
     args = parser.parse_args()
+
+    from .commands import describe, init, log, status, version
+
     if args.command is None:
         parser.print_help()
         return 1
