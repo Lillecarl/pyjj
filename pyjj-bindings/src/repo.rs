@@ -546,9 +546,31 @@ impl PyTransaction {
     }
 
     /// Rebase descendants after rewrites. Call this before `commit()`.
-    fn rebase_descendants(&self) -> PyResult<usize> {
+    ///
+    /// `delete_abandoned_bookmarks` controls what happens to bookmarks
+    /// pointing at *abandoned* commits (only recorded via
+    /// `abandon_commit()`/`edit()`-style operations): `false` (the
+    /// jj_lib default) moves them to the abandoned commit's parents,
+    /// `true` deletes them -- matching the real CLI's `jj abandon`
+    /// default (`--retain-bookmarks` opts back into moving). Rewritten
+    /// (non-abandoned) commits always track their successors regardless.
+    #[pyo3(signature = (delete_abandoned_bookmarks=false))]
+    fn rebase_descendants(&self, delete_abandoned_bookmarks: bool) -> PyResult<usize> {
         with_mut_repo(self, |mut_repo| {
-            pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)
+            let options = jj_lib::rewrite::RebaseOptions {
+                rewrite_refs: jj_lib::rewrite::RewriteRefsOptions {
+                    delete_abandoned_bookmarks,
+                },
+                ..Default::default()
+            };
+            let num_rebased = std::cell::Cell::new(0usize);
+            pollster::block_on(mut_repo.rebase_descendants_with_options(
+                &jj_lib::revset::RevsetExpression::none(),
+                &options,
+                |_, _| num_rebased.set(num_rebased.get() + 1),
+            ))
+            .map_err(map_transaction_err)?;
+            Ok(num_rebased.into_inner())
         })
     }
 
