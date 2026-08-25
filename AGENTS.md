@@ -54,8 +54,8 @@ pip install -e pyjj-bindings[test] -e pyjj[test]
 ```
 
 A third suite, `pyjj/tests/parity/`, is conformance testing against the real
-`jj` binary: every scenario runs identical operations through `jj` and
-through pyjj in two separate fresh repos, then asserts the resulting repos
+`jj` binary: every scenario runs the *same argv* through `jj` and through
+pyjj-cli in two separate fresh repos, then asserts the resulting repos
 are **bit-identical** (down to change ids and commit ids — determinism comes
 from pinned identity/timestamps via the same `JJ_*` env vars both tools
 read, a scratch HOME suppressing machine config, and per-logical-step

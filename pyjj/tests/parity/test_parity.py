@@ -1,10 +1,10 @@
-"""Conformance scenarios: the same operations through real jj and pyjj
+"""Conformance scenarios: the same argv through real jj and pyjj-cli
 must produce bit-identical repositories (see parity_harness module docs).
 
-Each test builds a RepoPair in its own tmp_path, walks one scenario as a
-sequence of `pair.op(...)` steps, then asserts parity. A failure's
-unified diff is the bug report: it names exactly which commit, bookmark,
-working-copy pointer or file diverged.
+Both sides get literally the same command line (the `py=` override exists
+only for the asymmetric `git init` destination), so every flag and value
+here must exist in pyjj-cli's parser with jj's semantics for the suite to
+pass at all.
 
 Revisions are addressed by description glob (`description(glob:"x*")`)
 because change ids/commit ids cannot be written into scenarios by hand --
@@ -33,19 +33,11 @@ def chain(pair: RepoPair) -> None:
     """base <- one <- two, with base.txt/one.txt/two.txt and bookmark main
     on 'one' -- the shared prefix most scenarios start from."""
     pair.init()
-    pair.op(
-        files={"base.txt": b"base\n"},
-        jj=["describe", "-m", "base"],
-        py_ops=[{"op": "snapshot"}, {"op": "describe", "message": "base"}],
-    )
-    pair.op(jj=["new", "-m", "one"], py_ops=[{"op": "new", "message": "one"}])
-    pair.op(
-        files={"one.txt": b"one\n"},
-        jj=["bookmark", "create", "main"],
-        py_ops=[{"op": "snapshot"}, {"op": "bookmark", "name": "main"}],
-    )
-    pair.op(jj=["new", "-m", "two"], py_ops=[{"op": "new", "message": "two"}])
-    pair.op(files={"two.txt": b"two\n"}, jj=["status"], py_ops=[{"op": "snapshot"}])
+    pair.op(files={"base.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"one.txt": b"one\n"}, jj=["bookmark", "create", "main"])
+    pair.op(jj=["new", "-m", "two"])
+    pair.op(files={"two.txt": b"two\n"}, jj=["status"])
 
 
 def test_init_only(pair: RepoPair) -> None:
@@ -60,52 +52,33 @@ def test_describe_and_commit_chain(pair: RepoPair) -> None:
 
 def test_squash_non_wc_commit(pair: RepoPair) -> None:
     chain(pair)
-    pair.op(
-        jj=["squash", "-r", rev("one"), "-u"],
-        py_ops=[{"op": "squash", "revision": rev("one")}],
-    )
+    pair.op(jj=["squash", "-r", rev("one"), "--use-destination-message"])
     pair.assert_parity()
 
 
 def test_rebase_revision_onto_sibling(pair: RepoPair) -> None:
     chain(pair)
-    pair.op(
-        jj=["new", rev("base"), "-m", "side"],
-        py_ops=[{"op": "new", "message": "side", "parents": [rev("base")]}],
-    )
-    # Rebasing 'one' onto 'side' must drag descendant 'two' along on both
-    # sides, leaving the same rewritten graph.
-    pair.op(
-        jj=["rebase", "-r", rev("one"), "-d", rev("side")],
-        py_ops=[
-            {"op": "rebase", "revision": rev("one"), "destination": rev("side")}
-        ],
-    )
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    # Rebasing 'one' onto 'side' must graft its descendant 'two' onto
+    # one's ORIGINAL parent (real -r treats the moved slot as abandoned),
+    # leaving the same rewritten graph on both sides.
+    pair.op(jj=["rebase", "-r", rev("one"), "-d", rev("side")])
     pair.assert_parity()
 
 
 def test_abandon_middle_commit(pair: RepoPair) -> None:
     chain(pair)
-    pair.op(
-        jj=["abandon", rev("one")],
-        py_ops=[{"op": "abandon", "revision": rev("one")}],
-    )
+    pair.op(jj=["abandon", rev("one")])
     pair.assert_parity()
 
 
 def test_duplicate_commit(pair: RepoPair) -> None:
     chain(pair)
-    pair.op(
-        jj=["duplicate", rev("one")],
-        py_ops=[{"op": "duplicate", "revision": rev("one")}],
-    )
+    pair.op(jj=["duplicate", rev("one")])
     pair.assert_parity()
 
 
 def test_bookmark_move(pair: RepoPair) -> None:
     chain(pair)
-    pair.op(
-        jj=["bookmark", "set", "main", "-r", rev("two")],
-        py_ops=[{"op": "bookmark", "name": "main", "target": rev("two")}],
-    )
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
     pair.assert_parity()

@@ -99,31 +99,22 @@ class RepoPair:
     # -- driving -----------------------------------------------------------
 
     def init(self) -> None:
-        # `jj git init <path>` must not carry `-R`: that flag makes every
-        # other command search for an existing repo upward.
-        self._step += 1
-        env = self._env(bump=False)
-        self._run([self.jj_bin, "git", "init", str(self.cli_repo)], env)
-        for py_op in [{"op": "init"}]:
-            self._run(
-                [sys.executable, str(DRIVER), str(self.py_repo), json.dumps(py_op)],
-                env,
-            )
+        self.op(["git", "init", str(self.cli_repo)], py=["git", "init", str(self.py_repo)])
 
     def op(
         self,
-        jj: list[str] | None = None,
-        py_ops: list[dict] | None = None,
+        jj: list[str],
+        py: list[str] | None = None,
         files: dict[str, bytes] | None = None,
     ) -> None:
         """Run one logical operation on both sides.
 
-        `jj` args are passed to the binary verbatim (`-R <cli-repo>` is
-        prepended automatically). `py_ops` are driver operations executed
-        in order against `<py-repo>` -- usually `[{"op": "snapshot"},
-        {...}]` so file writes land before the real operation, mirroring
-        the CLI's implicit snapshot. `files` are written into both
-        working copies first.
+        `jj` args go to the binary verbatim (`-R <cli-repo>` is prepended
+        automatically). `py` goes to the pyjj-cli driver against
+        `<py-repo>`; when omitted, the SAME argv runs on both sides --
+        which is the point: pyjj-cli must speak jj's argument dialect for
+        parity to pass at all. `files` are written into both working
+        copies first (both CLIs pick them up via implicit snapshot).
         """
         env = self._env(bump=True)
         for name, content in (files or {}).items():
@@ -132,10 +123,15 @@ class RepoPair:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(content)
         if jj:
-            self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env)
-        for py_op in py_ops or []:
+            # `git init` must not carry `-R`: that flag makes every other
+            # command search for an existing repo upward.
+            if jj[:2] == ["git", "init"]:
+                self._run([self.jj_bin, *jj], env)
+            else:
+                self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env)
+        if jj or py:
             self._run(
-                [sys.executable, str(DRIVER), str(self.py_repo), json.dumps(py_op)],
+                [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
             )
 
