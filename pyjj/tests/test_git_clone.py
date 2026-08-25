@@ -4,6 +4,7 @@ Uses a local bare Git repo as the "remote" so these run without network
 access, same approach as test_git_remote.py.
 """
 
+import os
 import subprocess
 
 import pytest
@@ -12,11 +13,23 @@ import pyjj
 
 
 def _git(cwd, *args):
+    # Neutralize machine git config that could hijack these seed commands:
+    # a headless editor (e.g. for force-sign-annotated tags) panics without
+    # a terminal, and signing needs keys this environment doesn't have.
+    env = {**os.environ, "GIT_EDITOR": "true", "EDITOR": "true"}
     subprocess.run(
-        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A", *args],
+        [
+            "git",
+            "-c", "user.email=a@b.c",
+            "-c", "user.name=A",
+            "-c", "tag.gpgsign=false",
+            "-c", "tag.forcesignannotated=false",
+            *args,
+        ],
         cwd=cwd,
         check=True,
         capture_output=True,
+        env=env,
     )
 
 
