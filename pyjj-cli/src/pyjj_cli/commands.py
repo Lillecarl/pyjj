@@ -1,4 +1,10 @@
-"""CLI command implementations exercising pyjj bindings."""
+"""CLI command implementations exercising pyjj bindings.
+
+Command semantics mirror the real `jj` CLI (0.43-era): every
+workspace-attached command implicitly snapshots the working copy before
+acting, descriptions go through complete_newline, and `jj abandon`
+deletes bookmarks on the abandoned commits unless told otherwise.
+"""
 
 import sys
 from pathlib import Path
@@ -6,64 +12,122 @@ from pathlib import Path
 import pyjj
 
 
-def init(args) -> int:
-    """Initialize a new jj repository."""
-    path = args.path or "."
+def complete_newline(s: str) -> str:
+    """The real CLI's text_util::complete_newline: append exactly one
+    trailing newline to non-empty text lacking one; empty stays empty.
+    jj_lib stores descriptions verbatim, so this normalization lives at
+    the frontend."""
+    if s and not s.endswith("\n"):
+        return s + "\n"
+    return s
+
+
+def join_message_paragraphs(paragraphs) -> str:
+    """The real CLI's description_util::join_message_paragraphs: each -m
+    becomes a paragraph completed with a newline, paragraphs separated by
+    one blank line."""
+    return "\n".join(complete_newline(p) for p in paragraphs)
+
+
+class CommandError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+
+def _load(args):
+    """Load settings + workspace at the -R path, snapshotting the working
+    copy first like every real jj workspace command does."""
     settings = pyjj.UserSettings()
+    ws = pyjj.Workspace.load(settings, args.repository)
+    repo, _stats = ws.snapshot(settings)
+    return settings, ws, repo
 
-    ws, repo = pyjj.Workspace.init_internal_git(settings, str(Path(path).resolve()))
 
-    view = repo.view()
-    print(f"Initialized jj repo in {ws.workspace_root}")
-    print(f"  Repo path:     {ws.repo_path}")
-    for ws_name, commit_id in view.items():
-        print(f"  Working copy [{ws_name}]: {commit_id[:12]}")
+def _resolve_all(repo, settings, expressions):
+    commits = []
+    for expr in expressions:
+        commits.extend(repo.revset(settings, expr))
+    return commits
+
+
+def _resolve_one(repo, settings, expression):
+    matches = repo.revset(settings, expression)
+    if len(matches) != 1:
+        raise CommandError(f"revset `{expression}` resolved to {len(matches)} revisions")
+    return matches[0]
+
+
+def _wc_commit(repo, ws):
+    return repo.get_commit(pyjj.CommitId(repo.view()[ws.workspace_name]))
+
+
+def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
+    """Commit the transaction, then mirror the real CLI's
+    transaction-finish behavior: when a rewrite moved the working-copy
+    commit (e.g. an abandon or rebase rebased it), update the on-disk
+    working copy to match."""
+    old_wc_hex = base_repo.view()[ws.workspace_name]
+    tx.rebase_descendants(delete_abandoned_bookmarks)
+    new_repo = tx.commit(description)
+
+    fresh_ws = pyjj.Workspace.load(settings, ws.workspace_root)
+    fresh_repo = fresh_ws.load_at_head()
+    new_wc_hex = fresh_repo.view()[fresh_ws.workspace_name]
+    if new_wc_hex != old_wc_hex:
+        fresh_ws.check_out(new_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
+    return new_repo
+
+
+# -- commands --------------------------------------------------------------
+
+
+def git_init(args) -> int:
+    """`jj git init` — create a new jj repo backed by an internal Git store."""
+    settings = pyjj.UserSettings()
+    # Real `jj git init` creates missing parent directories.
+    destination = Path(args.destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        ws, repo = pyjj.Workspace.init_internal_git(settings, str(destination))
+    except pyjj.WorkspaceInitError as e:
+        print(f"Error: {e.message}", file=sys.stderr)
+        return 1
+
+    print(f"Initialized repo in {ws.workspace_root}")
+    for ws_name, commit_id in repo.view().items():
+        print(f"Working copy ({ws_name}) now at: {commit_id[:12]}")
     return 0
 
 
-def _resolve_workspace(args) -> tuple:
-    """Resolve workspace path and load workspace + repo."""
-    settings = pyjj.UserSettings()
-    cwd = args.path or str(Path.cwd())
-    ws_path = str(Path(cwd).resolve())
-
-    ws = pyjj.Workspace.load(settings, ws_path)
-    repo = ws.load_at_head()
-    return ws, repo, settings
-
-
 def status(args) -> int:
-    """Show working copy status."""
     try:
-        ws, repo, _settings = _resolve_workspace(args)
+        _settings, ws, repo = _load(args)
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
     print(f"Workspace: {ws.workspace_root}")
-    print(f"  Repo path: {ws.repo_path}")
-
     view = repo.view()
     for ws_name, commit_id in view.items():
-        print(f"  Working copy [{ws_name}]: {commit_id[:12]}")
-
+        commit = repo.get_commit(pyjj.CommitId(commit_id))
+        desc = commit.description.splitlines()[0] if commit.description else "(no description set)"
+        print(f"Working copy ({ws_name}) now at: {commit_id[:12]} {desc}")
     return 0
 
 
 def log(args) -> int:
-    """Show commit history."""
     try:
-        _ws, repo, _settings = _resolve_workspace(args)
+        _settings, _ws, repo = _load(args)
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    limit = args.limit or 10
     view = repo.view()
     seen = set()
     queue: list = [(cid, 0) for cid in view.values()]
 
-    while queue and limit > 0:
+    while queue and args.limit > 0:
         commit_id_hex, indent = queue.pop(0)
         if commit_id_hex in seen:
             continue
@@ -73,9 +137,8 @@ def log(args) -> int:
         prefix = "  " * indent
         desc = commit.description.splitlines()[0] if commit.description else "(no description)"
         print(f"{prefix}@ {commit_id_hex[:12]} {desc}")
-        print(f"{prefix}  author: {commit.author.name} <{commit.author.email}>")
 
-        limit -= 1
+        args.limit -= 1
         if indent < 5:
             for parent_id in commit.parent_ids:
                 queue.append((parent_id.hex(), indent + 1))
@@ -83,65 +146,206 @@ def log(args) -> int:
     return 0
 
 
-def complete_newline(s: str) -> str:
-    """Append one trailing newline to a non-empty description lacking one.
-
-    Mirrors the real jj CLI's text_util::complete_newline, which wraps
-    every description-producing path (-m/--stdin/editor). jj_lib stores
-    descriptions verbatim; this normalization is a CLI convention.
-    """
-    if s and not s.endswith("\n"):
-        return s + "\n"
-    return s
-
-
 def describe(args) -> int:
-    """Set working-copy commit description (snapshot + describe)."""
     try:
-        _ws, repo, settings = _resolve_workspace(args)
+        settings, ws, repo = _load(args)
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    description = complete_newline(" ".join(args.message))
-    if not description.strip():
-        print("Error: description required", file=sys.stderr)
+    if args.stdin:
+        description = sys.stdin.read()
+    elif args.messages:
+        description = join_message_paragraphs(args.messages)
+    else:
+        print("Error: interactive description editing is not supported; "
+              "pass -m or --stdin", file=sys.stderr)
+        return 2
+
+    revsets = list(args.revisions_pos or [])
+    if args.revisions_opt:
+        revsets.extend(args.revisions_opt)
+    if not revsets:
+        revsets = ["@"]
+
+    try:
+        targets = _resolve_all(repo, settings, revsets)
+        if not targets:
+            print("No revisions to describe.")
+            return 0
+
+        tx = repo.start_transaction(settings)
+        new_wc_id = None
+        wc_id = repo.view().get(ws.workspace_name)
+        for commit in targets:
+            builder = (
+                tx.rewrite_commit(settings, commit)
+                .set_description(description)
+            )
+            new_commit = builder.write(repo)
+            if commit.id.hex() == wc_id:
+                new_wc_id = new_commit.id
+        if new_wc_id is not None:
+            tx.set_wc_commit(ws.workspace_name, new_wc_id)
+        _finish(tx, f"describe commit {targets[0].id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def new(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
+        print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    tx = repo.start_transaction(settings)
-
-    view = repo.view()
-    wc_commit_ids = list(view.values())
-    if not wc_commit_ids:
-        print("Error: no working copy commit", file=sys.stderr)
+    try:
+        if args.parents_pos:
+            parents = _resolve_all(repo, settings, args.parents_pos)
+        else:
+            parents = [_wc_commit(repo, ws)]
+        tx = repo.start_transaction(settings)
+        builder = tx.new_commit(settings, [c.id for c in parents])
+        if args.message:
+            builder = builder.set_description(complete_newline(args.message))
+        child = builder.write(repo)
+        tx.set_wc_commit(ws.workspace_name, child.id)
+        _finish(tx, "new empty commit", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
+    return 0
 
-    wc_commit_id = wc_commit_ids[0]
-    wc_commit = repo.get_commit(pyjj.CommitId(wc_commit_id))
 
-    builder = tx.rewrite_commit(settings, wc_commit)
-    builder.set_description(description)
-    snapshot = builder.write(repo)
+def bookmark(args) -> int:
+    """`jj bookmark create NAMES... [-r REVSET]` / `bookmark set NAME -r REVSET`."""
+    try:
+        settings, ws, repo = _load(args)
+        target = _resolve_one(repo, settings, args.revision)
+        tx = repo.start_transaction(settings)
+        if hasattr(args, "names"):
+            for name in args.names:
+                if repo.get_bookmark(name) is not None:
+                    raise CommandError(
+                        f"Bookmark already exists: {name} "
+                        "(use `bookmark set` to move it)"
+                    )
+                tx.set_bookmark(name, target.id)
+        else:
+            if repo.get_bookmark(args.name) is None:
+                raise CommandError(f"No such bookmark: {args.name}")
+            tx.set_bookmark(args.name, target.id)
+        _finish(tx, f"point bookmark at {target.id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
 
-    wid = snapshot.id
-    print(f"  Rewrote commit: {wid.short(12)} -> {wid.hex()}")
 
-    # Update working copy refs
-    for ws_name, _old_id in view.items():
-        tx.set_wc_commit(ws_name, snapshot.id)
+def squash(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        sources = _resolve_all(repo, settings, list(args.from_ or []) + list(args.revision or []))
+        if not sources:
+            sources = [_wc_commit(repo, ws)]
+        if len(sources) != 1:
+            raise CommandError("squashing multiple source revisions is not supported yet")
+        source = sources[0]
+        dest = (
+            _resolve_one(repo, settings, args.into)
+            if args.into
+            else repo.get_commit(source.parent_ids[0])
+        )
 
-    num_rebased = tx.rebase_descendants()
-    wc_name = list(view.keys())[0] if view else "default"
-    new_repo = tx.commit(f"describe: {description}")
+        # Message handling, mirroring the real CLI's non-interactive paths.
+        # -u keeps the destination's description untouched; -m replaces;
+        # with no flag, a single non-empty side wins and two non-empty
+        # descriptions need the user (interactive editing is unsupported).
+        use_dest_desc = args.use_destination_message and args.message is None
+        if args.message is not None:
+            description = complete_newline(args.message)
+        else:
+            candidates = [c.description for c in [source, dest] if c.description]
+            if len(candidates) == 1:
+                description = candidates[0]
+            elif len(candidates) == 0:
+                description = ""
+            elif not args.use_destination_message:
+                raise CommandError(
+                    "both source and destination have descriptions; "
+                    "pass -m or --use-destination-message"
+                )
 
-    print(f"  Rebased: {num_rebased} descendants")
-    print(f"  Committed: {new_repo}")
+        tx = repo.start_transaction(settings)
+        builder = tx.squash(source, dest)
+        if builder is None:
+            print("Nothing changed.")
+            return 0
+        if not use_dest_desc:
+            builder = builder.set_description(description)
+        builder.write(repo)
+        _finish(tx, "squash commit", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
 
+
+def rebase(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        if not args.revisions:
+            print("Error: currently only `-r REVSETS` mode is supported", file=sys.stderr)
+            return 2
+        targets = _resolve_all(repo, settings, args.revisions)
+        destinations = _resolve_all(repo, settings, args.destinations)
+        tx = repo.start_transaction(settings)
+        tx.move_commits([c.id for c in targets], [], [d.id for d in destinations], [])
+        _finish(tx, "rebase commit", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def abandon(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        revsets = args.revisions_pos or ["@"]
+        targets = _resolve_all(repo, settings, revsets)
+        if not targets:
+            print("No revisions to abandon.")
+            return 0
+        tx = repo.start_transaction(settings)
+        for commit in targets:
+            tx.abandon_commit(commit)
+        # The real `jj abandon` deletes bookmarks pointing at the abandoned
+        # commits by default (--retain-bookmarks moves them instead).
+        _finish(tx, f"abandon commit {targets[0].id.hex()}", settings, ws, repo,
+                delete_abandoned_bookmarks=True)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def duplicate(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        revsets = args.revisions_pos or ["@"]
+        targets = _resolve_all(repo, settings, revsets)
+        tx = repo.start_transaction(settings)
+        tx.duplicate(targets)
+        _finish(tx, "duplicate commit", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
     return 0
 
 
 def version(args) -> int:
-    """Show version information."""
     print(f"pyjj-cli v0.1.0")
     print(f"  pyjj (Rust bindings): v{pyjj.VERSION}")
     print(f"  Python: {sys.version}")
