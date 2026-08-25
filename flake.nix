@@ -17,6 +17,16 @@
     # only needs to exist so `nix flake lock` can pin/fetch it for
     # nix/compat.nix to read from flake.lock directly.
     flake-compatish.url = "github:lillecarl/flake-compatish";
+
+    # The reference `jj` binary, pinned to the same upstream release as
+    # pyjj-bindings' jj-lib crate dependency (see that Cargo.toml -- keep
+    # the two in sync when bumping). The conformance/parity suite drives
+    # this binary against pyjj-built repos; pinning it here means tests
+    # always run against the exact jj version the bindings were built
+    # against, not whatever `jj` happens to be on PATH. Deliberately left
+    # unfollowed: jj builds with the rustPlatform of the nixpkgs *it*
+    # pins, which is what its own CI tested that release with.
+    jj-vcs.url = "github:jj-vcs/jj/v0.43.0";
   };
 
   # This flake exists only to pin inputs and produce flake.lock for

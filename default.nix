@@ -32,6 +32,12 @@ in
 let
   inherit (pkgs) lib;
 
+  # The reference `jj` CLI, pinned to the release matching pyjj-bindings'
+  # jj-lib crate pin (flake.nix input `jj-vcs`) -- never the machine's own
+  # `jj`. Conformance tests (pyjj/tests/parity) drive this against
+  # pyjj-built repos so both sides of a comparison speak the same release.
+  jj = inputs.jj-vcs.packages.${system}.jujutsu;
+
   pyprojectLib = import ./nix/pyproject.nix {
     pyproject-nix-src = inputs.pyproject-nix;
     inherit lib;
@@ -135,7 +141,7 @@ let
       in
       pkgs.mkShell {
         name = "pyjjui";
-        packages = [ pythonEnv ];
+        packages = [ pythonEnv jj ];
         shellHook = ''
           export GIT_ROOT="$(git rev-parse --show-toplevel)"
           unset PYTHONPATH
@@ -149,6 +155,7 @@ in
     lib
     flake
     shells
+    jj
     ;
   inherit
     pyjj-bindings
