@@ -83,6 +83,18 @@ def log(args) -> int:
     return 0
 
 
+def complete_newline(s: str) -> str:
+    """Append one trailing newline to a non-empty description lacking one.
+
+    Mirrors the real jj CLI's text_util::complete_newline, which wraps
+    every description-producing path (-m/--stdin/editor). jj_lib stores
+    descriptions verbatim; this normalization is a CLI convention.
+    """
+    if s and not s.endswith("\n"):
+        return s + "\n"
+    return s
+
+
 def describe(args) -> int:
     """Set working-copy commit description (snapshot + describe)."""
     try:
@@ -91,7 +103,7 @@ def describe(args) -> int:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    description = " ".join(args.message)
+    description = complete_newline(" ".join(args.message))
     if not description.strip():
         print("Error: description required", file=sys.stderr)
         return 1
