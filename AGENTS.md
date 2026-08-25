@@ -26,13 +26,13 @@ re-check this section against that release's actual behavior/changelog.
 
 ## Fast local loop
 
-For iterating on the Rust bindings, use `shells.default` (see "Reproducible
-builds" below for why not `nix develop`/`.#`-style flake syntax) — a bare
-cargo/rustc/maturin/python3 shell, deliberately not the `shells.pyjjui`
-editable-install one:
+For iterating on the Rust bindings, use `shells.default` (entered via
+`nix develop --file .`; see "Reproducible builds" below for why not
+`.#`-style flake installable syntax) — a bare cargo/rustc/maturin/python3
+shell, deliberately not the `shells.pyjjui` editable-install one:
 
 ```
-nix-shell -A shells.default
+nix develop --file . shells.default --command bash
 python3 -m venv .venv && source .venv/bin/activate
 maturin develop -m pyjj-bindings/Cargo.toml   # incremental rebuild, installs into venv
 pip install -e pyjj -e pyjj-cli
@@ -52,6 +52,21 @@ pip install -e pyjj-bindings[test] -e pyjj[test]
 (cd pyjj-bindings && pytest)   # unit-level: ids, errors, settings — no filesystem/workspace state
 (cd pyjj && pytest)            # comprehensive: workspace/repo/transaction workflows, via tmp_path
 ```
+
+A third suite, `pyjj/tests/parity/`, is conformance testing against the real
+`jj` binary: every scenario runs identical operations through `jj` and
+through pyjj in two separate fresh repos, then asserts the resulting repos
+are **bit-identical** (down to change ids and commit ids — determinism comes
+from pinned identity/timestamps via the same `JJ_*` env vars both tools
+read, a scratch HOME suppressing machine config, and per-logical-step
+`JJ_RANDOMNESS_SEED` seeds; the pyjj side runs one fresh interpreter per
+operation to mirror jj's process-per-command RNG model). Both repos are
+extracted through the same `jj` binary, so a mismatch means real semantic
+divergence, never extractor disagreement. It skips if no `jj` is on PATH;
+set `PYJJ_PARITY_JJ=/path/to/jj` to pin the version under test (the Nix
+build pins it to the release matching `pyjj-bindings`' jj-lib, see
+"Reproducible builds"). This suite is where CLI-parity bugs get found and
+regression-proven.
 
 - `pyjj-bindings/tests/` tests the native module directly (`import pyjj_bindings`)
   and stays mechanical: type construction, exception hierarchy/constructibility,
@@ -120,10 +135,15 @@ Current state:
   `Transaction.set_bookmark()`/`.delete_bookmark()`/`.get_bookmark()`/
   `.bookmarks()` (mutate). Local bookmarks only — no remote-tracking-bookmark
   read/write surface yet. `Transaction.rebase_descendants()` automatically
-  moves a bookmark pointing at a rewritten commit to its new successor, and
-  moves a bookmark pointing at an abandoned commit to that commit's parent
-  — same as real `jj describe`/`jj abandon` — with no separate call needed;
-  this falls straight out of `jj_lib::rewrite::rebase_descendants` itself.
+  moves a bookmark pointing at a *rewritten* commit to its new successor.
+  For *abandoned* commits, bookmarks move to the abandoned commit's parent
+  by default — but that is jj_lib's default (`RewriteRefsOptions::
+  delete_abandoned_bookmarks = false`), **not** what the real CLI's
+  `jj abandon` does: it deletes such bookmarks unless `--retain-bookmarks`
+  is passed. To match the CLI, call
+  `rebase_descendants(delete_abandoned_bookmarks=True)`. Found by the
+  parity suite (`pyjj/tests/parity`) — the old "same as real `jj abandon`"
+  claim here was wrong.
 - **Tags**: same shape as bookmarks — `ReadonlyRepo.tags()`/`.get_tag()`
   (read), `Transaction.set_tag()`/`.delete_tag()`/`.get_tag()`/`.tags()`
   (mutate) — a separate namespace from bookmarks, backed by the same
@@ -260,12 +280,15 @@ Current state:
   real jj's "hidden, not deleted" semantics.
 - **Rebase**: two levels of primitive, matching the two things `jj rebase`
   itself can do.
-  - `Transaction.rebase(commit, new_parents) -> Commit` is `jj rebase -r
-    <rev> -d <dest>` for a *single* commit — wraps
-    `jj_lib::rewrite::rebase_commit` directly (already written; no
-    `CommitBuilder` step, unlike `set_executable`). `commit`'s own
-    descendants aren't moved along automatically; call
-    `rebase_descendants()` afterward for that.
+  - `Transaction.rebase(commit, new_parents) -> Commit` wraps
+    `jj_lib::rewrite::rebase_commit` directly for a *single* commit (no
+    `CommitBuilder` step, unlike `set_executable`). Beware: this primitive
+    + `rebase_descendants()` does **not** reproduce `jj rebase -r <rev>
+    -d <dest>` — real `-r` treats the moved commit's old slot as
+    abandoned, grafting its descendants onto its *original* parents, while
+    rebase_descendants() drags them along into the new location (a real
+    divergence the parity suite caught). For CLI-equivalent `-r`/`-s`
+    semantics use `move_commits()` below, like the CLI itself does.
   - `Transaction.move_commits(target_commit_ids, target_root_ids,
     new_parent_ids, new_child_ids) -> MoveCommitsStats` wraps the full
     `jj_lib::rewrite::move_commits`/`compute_move_commits` machinery the
@@ -716,13 +739,39 @@ mandatory store-copy step. `overrides.self` in `nix/compat.nix` points
 straight at the live repo directory:
 
 ```
-nix-build -A pyjj-bindings          # native module only
-nix-build -A pyjj                   # pythonic wrapper
-nix-build -A pyjj-cli                # CLI
-nix build --file . pyjjui           # or any other package attr
-nix-shell -A shells.default         # fast Rust loop for pyjj-bindings
-nix-shell -A shells.pyjjui          # pyjjui editable-install dev loop
+nix develop --file . shells.default --command bash   # fast Rust loop for pyjj-bindings
+nix develop --file . shells.pyjjui  --command bash   # editable-install dev loop (pyjj/pyjj-cli/pyjjui)
+nix build --file . pyjj-bindings                     # native module only
+nix build --file . pyjj                              # pythonic wrapper
+nix build --file . pyjj-cli                          # CLI
 ```
+
+**Use `--file .`, never bare `-A`.** On current Nix the legacy
+`nix-shell`/`nix-build` front-ends are shims into the unified CLI, and in a
+directory containing a `flake.nix` they resolve `-A` against *flake outputs*.
+This repo's `flake.nix` deliberately declares none, so
+`nix-shell -A shells.pyjjui` fails with "attribute 'shells' not found".
+`--file .` bypasses flake resolution and evaluates `default.nix` directly —
+no `flake.lock` consultation, no whole-tree store copy.
+
+**Remote builders.** Big Rust builds (jj itself, fresh binding trees) go much
+faster delegated to the nix-community build boxes:
+
+```
+--builders @/home/lillecarl/tmp/builders --max-jobs 0
+```
+
+Append to any `nix build`/`nix develop` invocation (`--max-jobs 0` forces
+full delegation; drop it to build locally in parallel). The builders file is
+machine-local — check it exists before relying on it.
+
+The top-level `jj` attribute (`nix build --file . jj`) is the reference
+CLI binary, pinned via the `jj-vcs` flake input to the same upstream
+release as `pyjj-bindings`' jj-lib crate pin — keep that input tag in
+sync when bumping the crate. The parity suite prefers whatever
+`PYJJ_PARITY_JJ` names, else `jj` on PATH, so point it at this build
+(`$(nix-build -L --file . -A jj)/bin/jj`) when you need the
+version-matched comparison.
 
 `flake.nix` still exists, but only to pin inputs and produce `flake.lock`
 for `nix/compat.nix` (flake-compatish) to read directly — it declares no

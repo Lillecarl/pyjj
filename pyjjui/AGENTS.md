@@ -333,7 +333,8 @@ Package builds (`pyjj.nix`, `pyjj-cli.nix`, `pyjjui.nix`) are rendered from
 each project's own `pyproject.toml` via `pyproject-nix`
 (`nix/pyproject.nix`'s `renderPyproject` — dependencies/build-system/entry
 points read straight from the TOML, not hand-duplicated in Nix). Wired into
-`default.nix`'s outputs (and re-exposed per-system by `flake.nix`).
+`default.nix`'s outputs — the single source of truth (`flake.nix` only pins
+inputs for `nix/compat.nix`; it declares no outputs itself).
 
 Build via classic (non-flake) evaluation — `nix build .#pyjjui` /
 `nix develop .#pyjjui` are banned repo-wide, see root `AGENTS.md`'s
@@ -343,10 +344,9 @@ changes):
 
 ```
 nix build --file . pyjjui
-nix-build -A pyjjui
 ```
 
-### Dev loop: `nix-shell -A shells.pyjjui`, editable installs, no PYTHONPATH
+### Dev loop: `nix develop --file . shells.pyjjui`, editable installs, no PYTHONPATH
 
 `shells.pyjjui` (in `default.nix`, evaluated via `nix/compat.nix`'s
 flake-compatish shim) uses `nix/pyproject.nix`'s `renderEditablePyproject`
@@ -359,14 +359,14 @@ invocation in that shell — no `PYTHONPATH`, no reinstall step, no Nix
 rebuild:
 
 ```
-nix-shell -A shells.pyjjui
+nix develop --file . shells.pyjjui --command bash
 python -m pyjjui
 pytest pyjjui/tests
 ```
 
 `pyjj-bindings` (the compiled Rust extension) is *not* editable here --
-for fast Rust iteration use `nix-shell -A shells.default` + `maturin
-develop`, then re-enter `nix-shell -A shells.pyjjui` to pick up the freshly
+for fast Rust iteration use `shells.default` + `maturin
+develop`, then re-enter `shells.pyjjui` to pick up the freshly
 built extension.
 
 No `pip install` anywhere, at any point, for any reason.
