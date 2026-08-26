@@ -211,6 +211,88 @@ pub fn split_selected(
     Ok(PyCommitBuilder::from_rust(builder))
 }
 
+/// Overlays per-path content overrides onto `base_tree`: `Some(bytes)`
+/// writes that exact content (executable bit inherited from `commit_tree`
+/// when the path exists there), `None` removes the path. This is the
+/// diff-editor result model — the tool edits copies of the changed files,
+/// and whatever exists in its output directory afterwards becomes the new
+/// state, deletions and additions included.
+fn overlay_contents(
+    base_tree: MergedTree,
+    commit_tree: Option<&MergedTree>,
+    selections: HashMap<String, Option<Vec<u8>>>,
+) -> PyResult<MergedTree> {
+    if selections.is_empty() {
+        return Ok(base_tree);
+    }
+    let store = base_tree.store().clone();
+    let mut builder = MergedTreeBuilder::new(base_tree);
+    for (path_str, content) in selections {
+        let repo_path = RepoPathBuf::from_internal_string(&path_str)
+            .map_err(|err| JjError::new_err(err.to_string()))?;
+        match content {
+            None => {
+                builder.set_or_remove(repo_path, Merge::absent());
+            }
+            Some(bytes) => {
+                let executable = commit_tree
+                    .and_then(|tree| {
+                        pollster::block_on(tree.path_value(&repo_path))
+                            .ok()
+                            .and_then(|v| v.into_resolved().ok().flatten())
+                    })
+                    .and_then(|tv| match tv {
+                        TreeValue::File { executable, .. } => Some(executable),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
+                let file_id =
+                    pollster::block_on(store.write_file(&repo_path, &mut bytes.as_slice()))
+                        .map_err(map_backend_err)?;
+                let value: jj_lib::merge::MergedTreeValue = Merge::normal(TreeValue::File {
+                    id: file_id,
+                    executable,
+                    copy_id: jj_lib::backend::CopyId::placeholder(),
+                });
+                builder.set_or_remove(repo_path, value);
+            }
+        }
+    }
+    pollster::block_on(builder.write_tree()).map_err(map_backend_err)
+}
+
+/// `split_selected()` for diff-editor flows: `selections` maps changed
+/// paths to their post-editing content (`None` = dropped/reverted). The
+/// first half's tree is `target`'s PARENT tree overlaid with exactly these
+/// contents — so unselected paths stay at parent state, and partially
+/// edited files carry the edited bytes verbatim.
+pub fn split_selected_edited(
+    mut_repo: &mut MutableRepo,
+    target: &PyCommit,
+    selections: HashMap<String, Option<Vec<u8>>>,
+) -> PyResult<PyCommitBuilder> {
+    let parent_tree =
+        pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+    let edited = overlay_contents(parent_tree, Some(&target.inner.tree()), selections)?;
+    let builder = mut_repo
+        .rewrite_commit(&target.inner)
+        .set_tree(edited);
+    Ok(PyCommitBuilder::from_rust(builder))
+}
+
+/// Rewrites `commit` with per-path content overrides applied on top of its
+/// own tree (`diffedit`'s model: edit the diff between two revisions and
+/// apply the result to the destination side).
+pub fn edit_commit_tree(
+    mut_repo: &mut MutableRepo,
+    commit: &PyCommit,
+    selections: HashMap<String, Option<Vec<u8>>>,
+) -> PyResult<PyCommitBuilder> {
+    let edited = overlay_contents(commit.inner.tree(), Some(&commit.inner.tree()), selections)?;
+    let builder = mut_repo.rewrite_commit(&commit.inner).set_tree(edited);
+    Ok(PyCommitBuilder::from_rust(builder))
+}
+
 /// Second half of `jj split`: a `CommitBuilder` for `target`'s remaining
 /// changes (everything not in `first`), as a child of `first` with a fresh
 /// change id (so it doesn't collide with `first`'s, which kept `target`'s

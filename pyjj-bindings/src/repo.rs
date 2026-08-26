@@ -697,6 +697,31 @@ impl PyTransaction {
         })
     }
 
+    /// `split_selected()` for diff-editor flows: `selections` maps changed
+    /// paths to post-editing content (`None` = dropped). The first half's
+    /// tree is the parent tree overlaid with exactly these contents.
+    fn split_selected_edited(
+        &self,
+        target: &PyCommit,
+        selections: std::collections::HashMap<String, Option<Vec<u8>>>,
+    ) -> PyResult<PyCommitBuilder> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::split_selected_edited(mut_repo, target, selections)
+        })
+    }
+
+    /// Rewrite `commit` with per-path content overrides on top of its own
+    /// tree (`diffedit`'s model; `None` removes a path).
+    fn edit_commit_tree(
+        &self,
+        commit: &PyCommit,
+        selections: std::collections::HashMap<String, Option<Vec<u8>>>,
+    ) -> PyResult<PyCommitBuilder> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::edit_commit_tree(mut_repo, commit, selections)
+        })
+    }
+
     /// `jj split` equivalent, second half: a `CommitBuilder` for `target`'s
     /// remaining changes, as a child of `first`.
     fn split_remainder(&self, target: &PyCommit, first: &PyCommit) -> PyResult<PyCommitBuilder> {
