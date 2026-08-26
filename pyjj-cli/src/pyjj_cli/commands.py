@@ -45,6 +45,22 @@ def _load(args):
 
 
 def _resolve_all(repo, settings, expressions):
+    """Resolve positional REVSETS the way the real CLI does for target
+    SETS (describe/abandon/duplicate/...): as ONE union expression, so
+    evaluation order -- which drives seeded change-id draws -- matches
+    `jj` exactly."""
+    if not expressions:
+        return []
+    if len(expressions) == 1:
+        return repo.revset(settings, expressions[0])
+    union = " | ".join(f"({expr})" for expr in expressions)
+    return repo.revset(settings, union)
+
+
+def _resolve_in_arg_order(repo, settings, expressions):
+    """Resolve expressions where the ARGUMENT ORDER is semantic (parents
+    of a new commit, rebases' -d destinations): evaluate each positional
+    separately and concatenate, like the real CLI's parent-list handling."""
     commits = []
     for expr in expressions:
         commits.extend(repo.revset(settings, expr))
@@ -218,7 +234,7 @@ def new(args) -> int:
 
     try:
         if args.parents_pos:
-            parents = _resolve_all(repo, settings, args.parents_pos)
+            parents = _resolve_in_arg_order(repo, settings, args.parents_pos)
         else:
             parents = [_wc_commit(repo, ws)]
         tx = repo.start_transaction(settings)
@@ -315,7 +331,7 @@ def rebase(args) -> int:
             print("Error: currently only `-r REVSETS` mode is supported", file=sys.stderr)
             return 2
         targets = _resolve_all(repo, settings, args.revisions)
-        destinations = _resolve_all(repo, settings, args.destinations)
+        destinations = _resolve_in_arg_order(repo, settings, args.destinations)
         tx = repo.start_transaction(settings)
         tx.move_commits([c.id for c in targets], [], [d.id for d in destinations], [])
         _finish(tx, "rebase commit", settings, ws, repo)
