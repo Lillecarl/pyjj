@@ -316,3 +316,63 @@ def test_describe_ancestor_rebases_descendants(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["describe", "-r", rev("base"), "-m", "renamed base"])
     pair.assert_parity()
+
+
+# -- editor-driven flows -------------------------------------------------------
+#
+# $EDITOR is the scripted parity-editor (see editor.py); a spec arms it
+# per invocation. An unexpected editor launch without a spec fails loudly
+# on both sides, so these scenarios can't silently skip the mechanism.
+
+
+def test_describe_via_editor(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(
+        files={"a.txt": b"a\n"},
+        jj=["describe"],
+        editor_spec={"op": "set", "value": "edited description\n"},
+    )
+    pair.assert_parity()
+
+
+def test_describe_editor_append_keeps_typed_text(pair: RepoPair) -> None:
+    # Appending proves the buffer actually round-tripped through the
+    # editor: whatever survives cleanup must be identical on both sides.
+    pair.init()
+    pair.op(
+        files={"a.txt": b"a\n"},
+        jj=["describe"],
+        editor_spec={"op": "append", "value": "typed by the fake editor\n"},
+    )
+    pair.assert_parity()
+
+
+def test_commit_via_editor(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(
+        files={"a.txt": b"a\n"},
+        jj=["commit"],
+        editor_spec={"op": "set", "value": "committed via editor\n"},
+    )
+    pair.assert_parity()
+
+
+def test_squash_combines_messages_via_editor(pair: RepoPair) -> None:
+    chain(pair)
+    # Both source ('one') and destination ('base') have descriptions, so
+    # plain squash opens the combining editor; dropping its JJ: comment
+    # lines keeps both descriptions in file order.
+    pair.op(jj=["squash", "-r", rev("one")],
+            editor_spec={"op": "drop_jj_comments"})
+    pair.assert_parity()
+
+
+def test_split_first_half_message_via_editor(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(
+        files={"base.txt": b"base\n", "one.txt": b"one\n"},
+        jj=["describe", "-m", "base"],
+    )
+    pair.op(jj=["split", "base.txt"],
+            editor_spec={"op": "drop_jj_comments"})
+    pair.assert_parity()

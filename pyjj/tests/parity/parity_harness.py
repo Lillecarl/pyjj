@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 
 DRIVER = Path(__file__).with_name("driver.py")
+EDITOR = Path(__file__).with_name("editor.py")
 
 PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
@@ -55,6 +56,12 @@ class RepoPair:
         self.jj_bin = jj_bin or os.environ.get("PYJJ_PARITY_JJ") or "jj"
         self.cli_repo = root / "cli" / "repo"
         self.py_repo = root / "py" / "repo"
+        # The scripted editor lives in the pair dir (never chmod files in
+        # the source tree); both CLIs find it via $EDITOR.
+        self.editor_bin = root / "bin" / "parity-editor"
+        self.editor_bin.parent.mkdir(parents=True, exist_ok=True)
+        self.editor_bin.write_bytes(EDITOR.read_bytes())
+        self.editor_bin.chmod(0o755)
         # jj creates missing intermediate dirs on init; pyjj requires the
         # destination to exist, so create both up front (empty is fine).
         self.cli_repo.mkdir(parents=True)
@@ -63,7 +70,7 @@ class RepoPair:
         (self.home / ".config").mkdir(parents=True)
         self._step = 0
 
-    def _env(self, *, bump: bool) -> dict[str, str]:
+    def _env(self, *, bump: bool, editor_spec: dict | None = None) -> dict[str, str]:
         if bump:
             self._step += 1
         # Inherit the parent environment (the dev-shell vars the editable
@@ -82,12 +89,24 @@ class RepoPair:
                 "JJ_TIMESTAMP": PIN_TIME,
                 "JJ_OP_TIMESTAMP": PIN_TIME,
                 "JJ_RANDOMNESS_SEED": str(SEED_BASE + self._step),
+                "EDITOR": str(self.editor_bin),
+                "VISUAL": str(self.editor_bin),
             }
         )
+        # Real jj resolves the editor as ui.editor -> JJ_EDITOR -> VISUAL
+        # -> EDITOR; pin every layer so a stray host setting can't win.
+        env.pop("JJ_EDITOR", None)
+        if editor_spec is not None:
+            env["PARITY_EDITOR_SPEC"] = json.dumps(editor_spec)
+        else:
+            env.pop("PARITY_EDITOR_SPEC", None)
         return env
 
     def _run(self, argv: list[str], env: dict[str, str],
-             stdin: str | None = None, cwd: Path | None = None) -> None:
+             stdin: str | None = None, cwd: Path | None = None,
+             editor_spec: dict | None = None) -> None:
+        if editor_spec is not None:
+            env["PARITY_EDITOR_SPEC"] = json.dumps(editor_spec)
         proc = subprocess.run(
             argv,
             env=env,
@@ -97,6 +116,7 @@ class RepoPair:
             text=True,
             cwd=str(cwd) if cwd else None,
         )
+        env.pop("PARITY_EDITOR_SPEC", None)
         if proc.returncode != 0:
             raise AssertionError(
                 f"command failed ({proc.returncode}): {argv}\n"
@@ -116,6 +136,7 @@ class RepoPair:
         stdin: str | None = None,
         cli_files: dict[str, bytes] | None = None,
         py_files: dict[str, bytes] | None = None,
+        editor_spec: dict | tuple[dict, dict] | None = None,
     ) -> None:
         """Run one logical operation on both sides.
 
@@ -128,26 +149,34 @@ class RepoPair:
         `cli_files`/`py_files` additionally write per-side bytes, for
         content that legitimately differs across repos (conflict-marker
         text embeds repo-local change ids). `stdin` is piped verbatim to
-        both commands (--stdin scenarios).
+        both commands (--stdin scenarios). `editor_spec` arms the scripted
+        $EDITOR for editor-based flows; a single dict goes to both sides,
+        a (cli, py) tuple differentiates when the buffer embeds repo-local
+        ids.
         """
         env = self._env(bump=True)
         self._write_files({**(files or {}), **(cli_files or {})}, self.cli_repo)
         self._write_files({**(files or {}), **(py_files or {})}, self.py_repo)
+        cli_spec = py_spec = editor_spec
+        if isinstance(editor_spec, tuple):
+            cli_spec, py_spec = editor_spec
         if jj:
             # `git init` must not carry `-R`: that flag makes every other
             # command search for an existing repo upward. Commands run with
             # their repo as CWD so relative FILESETS resolve identically.
             if jj[:2] == ["git", "init"]:
-                self._run([self.jj_bin, *jj], env, stdin=stdin)
+                self._run([self.jj_bin, *jj], env, stdin=stdin,
+                          editor_spec=cli_spec)
             else:
                 self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
-                          stdin=stdin, cwd=self.cli_repo)
+                          stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec)
         if jj or py:
             self._run(
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
                 stdin=stdin,
                 cwd=self.py_repo,
+                editor_spec=py_spec,
             )
 
     def _write_files(self, files: dict[str, bytes], ws: Path) -> None:
