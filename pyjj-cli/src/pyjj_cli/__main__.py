@@ -17,6 +17,7 @@ from .commands import (
     bookmark,
     commit,
     describe,
+    diffedit,
     duplicate,
     edit,
     git_init,
@@ -154,8 +155,20 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Revision to split (default: @)")
     p_spl.add_argument("-m", "--message", default=None, metavar="MESSAGE",
                        help="Description of the first half")
+    p_spl.add_argument("--tool", default=None, metavar="NAME",
+                       help="Diff editor for selecting changes (no FILESETS)")
     p_spl.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                        help="Paths going into the first half")
+
+    # diffedit
+    p_de = sub.add_parser("diffedit",
+                          help="Edit the diff between two revisions in a diff editor")
+    p_de.add_argument("--from", dest="from_", default="@-", metavar="REVSET",
+                      help="Show the diff FROM this revision (default: @-)")
+    p_de.add_argument("--to", dest="into", default="@", metavar="REVSET",
+                      help="Apply edits TO this revision (default: @)")
+    p_de.add_argument("--tool", default=None, metavar="NAME",
+                      help="Diff editor to use")
 
     # operation-level
     sub.add_parser("undo", help="Undo the last operation")
@@ -199,6 +212,7 @@ def main(argv=None) -> int:
         "commit": commit,
         "restore": restore,
         "split": split,
+        "diffedit": diffedit,
         "undo": undo,
         "redo": redo,
         "op": lambda a: {"restore": op_restore}.get(a.op_command or "", _op_help)(a),

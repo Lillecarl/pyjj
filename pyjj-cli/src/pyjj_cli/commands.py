@@ -327,6 +327,74 @@ def bookmark(args) -> int:
     return 0
 
 
+def _changed_files(repo, settings, from_commit, to_commit):
+    """{path: (before_bytes_or_absent, after_bytes_or_absent)} for the diff
+    between two commits, using the same sentinel-absence convention the
+    diff-editor protocol needs."""
+    changed = {}
+    for entry in from_commit.diff(to_commit):
+        path = entry.path
+
+        def read(commit, p=path):
+            return commit.read_file(p) if commit.file_exists(p) else None
+
+        changed[path] = (read(from_commit), read(to_commit))
+    return changed
+
+
+def _run_diff_tool(settings, tool: str, before: dict, after: dict) -> dict:
+    """The merge-tools edit protocol: materialize $left/$right temp dirs
+    holding exactly the changed paths (left = before, read-only in spirit;
+    right = editable), invoke merge-tools.<tool>.edit-args with the
+    placeholders substituted, then snapshot the RIGHT directory --
+    surviving files carry their edited bytes, deleted files become None,
+    and brand-new files are picked up too."""
+    args_tmpl = settings.get_string_list(f"merge-tools.{tool}.edit-args")
+    if not args_tmpl:
+        raise CommandError(
+            f"No edit-args configured for diff editor '{tool}' "
+            "(set merge-tools.<name>.edit-args)"
+        )
+    # The program is merge-tools.<name>.program (default: the tool name,
+    # resolved via PATH), mirroring upstream's ExternalMergeTool.
+    program = settings.get_string(f"merge-tools.{tool}.program") or tool
+    with tempfile.TemporaryDirectory(prefix="pyjj-diff-") as td:
+        left_dir = Path(td) / "left"
+        right_dir = Path(td) / "right"
+        for base, files in ((left_dir, before), (right_dir, after)):
+            for rel, content in files.items():
+                p = base / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if content is not None:
+                    p.write_bytes(content)
+        argv = [program] + [
+            arg.replace("$left", str(left_dir))
+            .replace("$right", str(right_dir))
+            .replace("$output", str(right_dir))
+            for arg in args_tmpl
+        ]
+        subprocess.run(argv, check=True)
+
+        selections: dict[str, bytes | None] = {}
+        for rel in set(before) | set(after):
+            rp = right_dir / rel
+            selections[rel] = rp.read_bytes() if rp.exists() else None
+        for p in right_dir.rglob("*"):
+            if p.is_file():
+                rel = p.relative_to(right_dir).as_posix()
+                if rel not in selections:
+                    selections[rel] = p.read_bytes()
+        return selections
+
+
+def _selection_is_empty(selections: dict, before: dict) -> bool:
+    """True when every path ended up identical to its before-state."""
+    for rel, content in selections.items():
+        if content != before.get(rel):
+            return False
+    return True
+
+
 def squash(args) -> int:
     try:
         settings, ws, repo = _load(args)
@@ -510,11 +578,28 @@ def restore(args) -> int:
 def split(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        if not args.paths_pos:
-            print("Error: interactive split is not supported; pass FILESETS",
-                  file=sys.stderr)
-            return 2
         target = _resolve_one(repo, settings, args.revision or "@")
+
+        tx = repo.start_transaction(settings)
+        if args.paths_pos:
+            first_builder = tx.split_selected(target, list(args.paths_pos))
+        else:
+            # The diff-editor path: select changes by editing the right
+            # directory. Upstream order applies the diff selection first,
+            # then the description.
+            if not args.tool:
+                print("Error: no diff editor specified; pass --tool",
+                      file=sys.stderr)
+                return 2
+            parent = repo.get_commit(target.parent_ids[0])
+            changed = _changed_files(repo, settings, parent, target)
+            before = {p: b for p, (b, _a) in changed.items()}
+            after = {p: a for p, (_b, a) in changed.items()}
+            selections = _run_diff_tool(settings, args.tool, before, after)
+            if _selection_is_empty(selections, before):
+                print("No changes selected.")
+                return 1
+            first_builder = tx.split_selected_edited(target, selections)
 
         if args.message is not None:
             first_description = complete_newline(args.message)
@@ -523,8 +608,6 @@ def split(args) -> int:
             # description past all "JJ:" comments.
             first_description = _run_editor(settings, target.description)
 
-        tx = repo.start_transaction(settings)
-        first_builder = tx.split_selected(target, list(args.paths_pos))
         first = first_builder.set_description(first_description).write(repo)
         second = tx.split_remainder(target, first).write(repo)
         if target.id.hex() == repo.view().get(ws.workspace_name):
@@ -532,6 +615,53 @@ def split(args) -> int:
         _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as e:
+        print(f"Error: diff editor exited with status {e.returncode}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def diffedit(args) -> int:
+    """`jj diffedit --from X --to Y`: edit the diff between two revisions;
+    the result is applied to the destination side."""
+    try:
+        settings, ws, repo = _load(args)
+        if not args.tool:
+            print("Error: no diff editor specified; pass --tool",
+                  file=sys.stderr)
+            return 2
+        from_commit = _resolve_one(repo, settings, args.from_)
+        to_commit = _resolve_one(repo, settings, args.into)
+
+        changed = _changed_files(repo, settings, from_commit, to_commit)
+        before = {p: b for p, (b, _a) in changed.items()}
+        after = {p: a for p, (_b, a) in changed.items()}
+        if not changed:
+            print("No changes to edit.")
+            return 0
+        selections = _run_diff_tool(settings, args.tool, before, after)
+        if _selection_is_empty(selections, before):
+            print("Nothing changed.")
+            return 0
+
+        tx = repo.start_transaction(settings)
+        builder = tx.edit_commit_tree(to_commit, selections)
+        edited = builder.write(repo)
+        if to_commit.id.hex() == repo.view().get(ws.workspace_name):
+            tx.set_wc_commit(ws.workspace_name, edited.id)
+        _finish(
+            tx,
+            f"edit diff from {from_commit.id.hex()} to {to_commit.id.hex()}",
+            settings, ws, repo,
+        )
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as e:
+        print(f"Error: diff editor exited with status {e.returncode}",
+              file=sys.stderr)
         return 1
     return 0
 
