@@ -24,11 +24,12 @@ from .commands import (
     log,
     new,
     op_restore,
-    rebase,
     redo,
+    resolve,
     restore,
-    split,
+    rebase,
     squash,
+    split,
     status,
     undo,
     version,
@@ -169,6 +170,16 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Apply edits TO this revision (default: @)")
     p_de.add_argument("--tool", default=None, metavar="NAME",
                       help="Diff editor to use")
+    p_rslv = sub.add_parser("resolve",
+                            help="Resolve conflicted files with an external merge tool")
+    p_rslv.add_argument("-r", "--revision", default="@", metavar="REVSET",
+                        help="The revision to resolve conflicts in (default: @)")
+    p_rslv.add_argument("-l", "--list", dest="list_", action="store_true",
+                        help="Instead of resolving conflicts, list all the conflicts")
+    p_rslv.add_argument("--tool", default=None, metavar="NAME",
+                        help="3-way merge tool to be used")
+    p_rslv.add_argument("paths_pos", nargs="*", metavar="FILESETS",
+                        help="Only resolve conflicts in these paths")
 
     # operation-level
     sub.add_parser("undo", help="Undo the last operation")
@@ -213,6 +224,7 @@ def main(argv=None) -> int:
         "restore": restore,
         "split": split,
         "diffedit": diffedit,
+        "resolve": resolve,
         "undo": undo,
         "redo": redo,
         "op": lambda a: {"restore": op_restore}.get(a.op_command or "", _op_help)(a),

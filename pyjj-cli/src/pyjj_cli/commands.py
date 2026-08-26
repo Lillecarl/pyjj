@@ -11,7 +11,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pyjj
 
@@ -395,6 +395,69 @@ def _selection_is_empty(selections: dict, before: dict) -> bool:
     return True
 
 
+def _merge_marker_len(materialized: bytes) -> int:
+    """The marker length jj would have chosen to render this conflict
+    (max of the 7-char minimum and the longest marker run actually
+    present) -- used for the $marker_length substitution."""
+    longest = 7
+    for line in materialized.split(b"\n"):
+        if line.startswith(b"<"):
+            longest = max(longest, len(line) - len(line.lstrip(b"<")))
+    return longest
+
+
+def _run_merge_tool(settings, tool: str, sides: dict, path: str,
+                    edits_markers: bool, materialized: bytes) -> bytes:
+    """The 3-way merge-tool protocol for one conflicted file: materialize
+    $base/$left/$right (read-only) plus $output into a temp dir named like
+    upstream's (`{role}_{filename}`), invoke
+    merge-tools.<tool>.program with merge-args substituted, and return the
+    output file's final bytes. The caller decides whether those bytes mean
+    full resolution, partial markers, or an unchanged no-op."""
+    args_tmpl = settings.get_string_list(f"merge-tools.{tool}.merge-args")
+    if not args_tmpl:
+        raise CommandError(
+            f"No merge-args configured for merge tool '{tool}' "
+            "(set merge-tools.<name>.merge-args)"
+        )
+    program = settings.get_string(f"merge-tools.{tool}.program") or tool
+    filename = PurePosixPath(path).name or "file"
+    with tempfile.TemporaryDirectory(prefix="jj-resolve-") as td:
+        roles = {
+            "base": sides["base"],
+            "left": sides["left"],
+            "right": sides["right"],
+            "output": materialized if edits_markers else b"",
+        }
+        variables = {}
+        for role, content in roles.items():
+            p = Path(td) / f"{role}_{filename}"
+            p.write_bytes(content)
+            if role != "output":
+                p.chmod(0o444)
+            variables[f"${role}"] = str(p)
+        variables["$path"] = path
+        variables["$marker_length"] = str(_merge_marker_len(materialized))
+        argv = [program] + [
+            arg.replace("$base", variables["$base"])
+            .replace("$left", variables["$left"])
+            .replace("$right", variables["$right"])
+            .replace("$output", variables["$output"])
+            .replace("$path", variables["$path"])
+            .replace("$marker_length", variables["$marker_length"])
+            for arg in args_tmpl
+        ]
+        proc = subprocess.run(argv)
+        if proc.returncode != 0:
+            # Mirrors upstream's ToolAborted: a failing tool aborts the
+            # whole command before anything is written.
+            raise CommandError(
+                f"Tool exited with status {proc.returncode}, "
+                "but did not produce a valid resolution"
+            )
+        return Path(variables["$output"]).read_bytes()
+
+
 def squash(args) -> int:
     try:
         settings, ws, repo = _load(args)
@@ -662,6 +725,93 @@ def diffedit(args) -> int:
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)
+        return 1
+    return 0
+
+
+def resolve(args) -> int:
+    """`jj resolve [-r REV] [--tool NAME] [FILESETS]`: run a 3-way merge
+    tool per conflicted file. Mirrors upstream ordering: conflict listing
+    and tool runs happen before any mutation (an aborted tool leaves no
+    operation), the commit is rewritten even when nothing resolved, and
+    leftover conflicts are reported as an error AFTER the operation
+    commits."""
+    try:
+        settings, ws, repo = _load(args)
+        commit = _resolve_one(repo, settings, args.revision)
+
+        candidates = commit.list_files(list(args.paths_pos) or None)
+        conflicts = []
+        for p in candidates:
+            try:
+                commit.read_file(p)
+            except pyjj.JjError:
+                conflicts.append(p)
+        conflicts.sort()
+        if not conflicts:
+            if args.paths_pos:
+                print("Error: No conflicts found at the given path(s)",
+                      file=sys.stderr)
+            else:
+                print("Error: No conflicts found at this revision",
+                      file=sys.stderr)
+            return 1
+
+        if args.list_:
+            for p in conflicts:
+                print(p)
+            return 0
+
+        if not args.tool:
+            print("Error: no merge tool specified; pass --tool",
+                  file=sys.stderr)
+            return 2
+        edits_markers = bool(
+            settings.get_bool(
+                f"merge-tools.{args.tool}.merge-tool-edits-conflict-markers"
+            )
+        )
+
+        resolutions: dict[str, bytes] = {}
+        for p in conflicts:
+            sides = dict(commit.conflict_sides(p))
+            materialized = commit.materialize_conflict(settings, p)
+            out = _run_merge_tool(settings, args.tool, sides, p,
+                                  edits_markers, bytes(materialized))
+            initial = bytes(materialized) if edits_markers else b""
+            if not out or out == initial:
+                # Upstream's EmptyOrUnchanged: leave this path conflicted
+                # and keep going with the remaining files.
+                continue
+            resolutions[p] = out
+
+        tx = repo.start_transaction(settings)
+        if resolutions:
+            builder = tx.resolve_conflicts(commit, resolutions)
+        else:
+            # Nothing changed, but real jj still rewrites the commit
+            # (committer-timestamp bump) and records the operation.
+            builder = tx.rewrite_commit(commit)
+        new_commit = builder.write(repo)
+        if commit.id.hex() == repo.view().get(ws.workspace_name):
+            tx.set_wc_commit(ws.workspace_name, new_commit.id)
+        _finish(tx, f"Resolve conflicts in commit {commit.id.hex()}",
+                settings, ws, repo)
+
+        unresolved = []
+        for p in conflicts:
+            try:
+                new_commit.read_file(p)
+            except pyjj.JjError:
+                unresolved.append(p)
+        if unresolved:
+            print("Warning: Some files at this revision still have "
+                  "conflicts:", file=sys.stderr)
+            for p in unresolved:
+                print(f"  {p}", file=sys.stderr)
+            return 1
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
 
