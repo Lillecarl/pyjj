@@ -41,6 +41,7 @@ from pathlib import Path
 DRIVER = Path(__file__).with_name("driver.py")
 EDITOR = Path(__file__).with_name("editor.py")
 DIFF_TOOL = Path(__file__).with_name("diff_tool.py")
+MERGE_TOOL = Path(__file__).with_name("merge_tool.py")
 
 PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
@@ -67,16 +68,32 @@ class RepoPair:
         self.diff_tool_bin = root / "bin" / "parity-diff-tool"
         self.diff_tool_bin.write_bytes(DIFF_TOOL.read_bytes())
         self.diff_tool_bin.chmod(0o755)
+        self.merge_tool_bin = root / "bin" / "parity-merge-tool"
+        self.merge_tool_bin.write_bytes(MERGE_TOOL.read_bytes())
+        self.merge_tool_bin.chmod(0o755)
         # Scratch-home jj config, loaded identically by both sides
-        # (load_config=True): registers the scripted diff tool. `program`
-        # carries the executable path; edit-args get $left/$right
-        # substituted.
+        # (load_config=True): registers the scripted diff tool (the
+        # dir-based edit protocol split/diffedit use) and two scripted
+        # 3-way merge tools sharing one program -- `parity-merge` runs in
+        # marker mode ($output pre-populated with the materialized
+        # conflict), `parity-write` verbatim ($output starts empty and
+        # its final bytes are taken as fully resolved). `program` carries
+        # the executable path; jj substitutes $left/$right/$base/$output.
         config_dir = self.home / ".config" / "jj"
         config_dir.mkdir(parents=True, exist_ok=True)
         (config_dir / "config.toml").write_text(
             "[merge-tools.parity-diff]\n"
             f'program = "{self.diff_tool_bin}"\n'
             'edit-args = ["--edit", "$left", "$right"]\n'
+            "\n"
+            "[merge-tools.parity-merge]\n"
+            f'program = "{self.merge_tool_bin}"\n'
+            'merge-args = ["--marker", "$base", "$left", "$right", "$output", "$path"]\n'
+            "merge-tool-edits-conflict-markers = true\n"
+            "\n"
+            "[merge-tools.parity-write]\n"
+            f'program = "{self.merge_tool_bin}"\n'
+            'merge-args = ["--verbatim", "$base", "$left", "$right", "$output"]\n'
         )
         # jj creates missing intermediate dirs on init; pyjj requires the
         # destination to exist, so create both up front (empty is fine).
@@ -116,11 +133,15 @@ class RepoPair:
     def _run(self, argv: list[str], env: dict[str, str],
              stdin: str | None = None, cwd: Path | None = None,
              editor_spec: dict | None = None,
-             diff_spec: dict | None = None) -> None:
+             diff_spec: dict | None = None,
+             merge_spec: dict | None = None,
+             may_fail: bool = False) -> int:
         if editor_spec is not None:
             env["PARITY_EDITOR_SPEC"] = json.dumps(editor_spec)
         if diff_spec is not None:
             env["PARITY_DIFF_SPEC"] = json.dumps(diff_spec)
+        if merge_spec is not None:
+            env["PARITY_MERGE_SPEC"] = json.dumps(merge_spec)
         proc = subprocess.run(
             argv,
             env=env,
@@ -132,11 +153,13 @@ class RepoPair:
         )
         env.pop("PARITY_EDITOR_SPEC", None)
         env.pop("PARITY_DIFF_SPEC", None)
-        if proc.returncode != 0:
+        env.pop("PARITY_MERGE_SPEC", None)
+        if proc.returncode != 0 and not may_fail:
             raise AssertionError(
                 f"command failed ({proc.returncode}): {argv}\n"
                 f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
             )
+        return proc.returncode
 
     # -- driving -----------------------------------------------------------
 
@@ -153,7 +176,9 @@ class RepoPair:
         py_files: dict[str, bytes] | None = None,
         editor_spec: dict | tuple[dict, dict] | None = None,
         diff_spec: dict | None = None,
-    ) -> None:
+        merge_spec: dict | None = None,
+        may_fail: bool = False,
+    ) -> int | None:
         """Run one logical operation on both sides.
 
         `jj` args go to the binary verbatim (`-R <cli-repo>` is prepended
@@ -168,7 +193,10 @@ class RepoPair:
         both commands (--stdin scenarios). `editor_spec` arms the scripted
         $EDITOR for editor-based flows; a single dict goes to both sides,
         a (cli, py) tuple differentiates when the buffer embeds repo-local
-        ids.
+        ids. `diff_spec` arms the scripted dir-based diff tool;
+        `merge_spec` arms the scripted 3-way merge tool. `may_fail`
+        accepts nonzero exits from BOTH sides (expected-failure flows like
+        partial resolution); state comparison still applies.
         """
         env = self._env(bump=True)
         self._write_files({**(files or {}), **(cli_files or {})}, self.cli_repo)
@@ -176,26 +204,31 @@ class RepoPair:
         cli_spec = py_spec = editor_spec
         if isinstance(editor_spec, tuple):
             cli_spec, py_spec = editor_spec
+        rc = 0
         if jj:
             # `git init` must not carry `-R`: that flag makes every other
             # command search for an existing repo upward. Commands run with
             # their repo as CWD so relative FILESETS resolve identically.
             if jj[:2] == ["git", "init"]:
-                self._run([self.jj_bin, *jj], env, stdin=stdin,
-                          editor_spec=cli_spec)
+                rc = self._run([self.jj_bin, *jj], env, stdin=stdin,
+                               editor_spec=cli_spec, may_fail=may_fail)
             else:
-                self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
-                          stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec,
-                          diff_spec=diff_spec)
+                rc = self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
+                               stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec,
+                               diff_spec=diff_spec, merge_spec=merge_spec,
+                               may_fail=may_fail)
         if jj or py:
-            self._run(
+            return self._run(
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
                 stdin=stdin,
                 cwd=self.py_repo,
                 editor_spec=py_spec,
                 diff_spec=diff_spec,
+                merge_spec=merge_spec,
+                may_fail=may_fail,
             )
+        return rc
 
     def _write_files(self, files: dict[str, bytes], ws: Path) -> None:
         for name, content in files.items():

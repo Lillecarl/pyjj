@@ -282,6 +282,103 @@ def test_partial_resolution_keeps_conflict(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- resolve (3-way merge tool) ------------------------------------------------
+#
+# merge-tools.parity-merge / parity-write (scratch-HOME config, loaded by
+# both sides) point at the scripted merge tool; PARITY_MERGE_SPEC arms it.
+# This is real jj's own resolve protocol: $base/$left/$right/$output
+# files per conflicted path; the output file's final content decides.
+
+
+def multi_hunk_conflict(pair: RepoPair) -> None:
+    """Like conflict_pair, but the two siblings change TWO separate lines,
+    so the materialized conflict carries two distinct marker regions."""
+    pair.init()
+    pair.op(files={"f.txt": b"a\nm\nz\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"f.txt": b"A1\nm\nZ1\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "two"])
+    pair.op(files={"f.txt": b"A2\nm\nZ2\n"}, jj=["status"])
+    pair.op(jj=["new", rev("one"), rev("two"), "-m", "merge"])
+
+
+def test_resolve_list_shows_conflicts(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    pair.op(jj=["resolve", "-l"])
+    # --list must not touch state at all.
+    pair.assert_parity()
+
+
+def test_resolve_no_conflicts_is_an_error(pair: RepoPair) -> None:
+    chain(pair)
+    rc = pair.op(jj=["resolve"], may_fail=True)
+    assert rc != 0
+    pair.assert_parity()
+
+
+def test_resolve_partial_region_leaves_conflict(pair: RepoPair) -> None:
+    multi_hunk_conflict(pair)
+    # Resolving only the first region of a two-region conflict still
+    # leaves the file conflicted (partial resolution): op recorded, but
+    # real jj exits nonzero afterwards.
+    pair.op(
+        jj=["resolve", "--tool", "parity-merge"],
+        merge_spec={"op": "resolve_first_region", "text": "chosen-a"},
+        may_fail=True,
+    )
+    pair.assert_parity()
+
+
+def test_resolve_pick_left_resolves_fully(pair: RepoPair) -> None:
+    multi_hunk_conflict(pair)
+    # A whole-side pick collapses every region of both hunks at once.
+    pair.op(
+        jj=["resolve", "--tool", "parity-merge"],
+        merge_spec={"op": "pick_left"},
+    )
+    pair.assert_parity()
+
+
+def test_resolve_verbatim_output_is_taken_as_is(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    # parity-write runs without merge-tool-edits-conflict-markers: $output
+    # starts empty and its final bytes become the resolved file verbatim.
+    pair.op(
+        jj=["resolve", "--tool", "parity-write"],
+        merge_spec={"op": "pick_right"},
+    )
+    pair.assert_parity()
+
+
+def test_resolve_unchanged_output_still_commits(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    # Upstream's EmptyOrUnchanged path: nothing resolved, but the commit
+    # is rewritten (committer-timestamp bump) and the operation recorded --
+    # then the command fails.
+    pair.op(
+        jj=["resolve", "--tool", "parity-merge"],
+        merge_spec={"op": "unchanged"},
+        may_fail=True,
+    )
+    pair.assert_parity()
+
+
+def test_resolve_specific_file_only(pair: RepoPair) -> None:
+    """Two conflicted files; FILESETS restricts the tool run to one."""
+    pair.init()
+    pair.op(files={"f.txt": b"f0\n", "g.txt": b"g0\n"},
+            jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"f.txt": b"F1\n", "g.txt": b"G1\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "two"])
+    pair.op(files={"f.txt": b"F2\n", "g.txt": b"G2\n"}, jj=["status"])
+    pair.op(jj=["new", rev("one"), rev("two"), "-m", "merge"])
+    pair.op(jj=["resolve", "--tool", "parity-write", "g.txt"],
+            merge_spec={"op": "pick_right"})
+    # f.txt stays conflicted; only g.txt resolved.
+    pair.assert_parity()
+
+
 # -- flag combinations --------------------------------------------------------
 
 
