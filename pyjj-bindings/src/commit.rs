@@ -290,6 +290,28 @@ impl PyCommit {
         })
     }
 
+    /// The raw sides of the file conflict at `path`, as an external 3-way
+    /// merge tool receives them:
+    /// `{"base": bytes, "left": bytes, "right": bytes, "executable": bool}`.
+    /// `$base`/`$left`/`$right` in merge-args; base may be empty for
+    /// add/add-style conflicts. Raises `JjError` unless `path` is a
+    /// two-sided plain-file conflict (real `jj resolve` rejects anything
+    /// else too).
+    fn conflict_sides<'a>(
+        &self,
+        py: Python<'a>,
+        path: &str,
+    ) -> PyResult<Bound<'a, pyo3::types::PyDict>> {
+        let (base, left, right, executable) =
+            crate::conflicts::conflict_sides(self, path)?;
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("base", base)?;
+        dict.set_item("left", left)?;
+        dict.set_item("right", right)?;
+        dict.set_item("executable", executable)?;
+        Ok(dict)
+    }
+
     /// `jj file annotate <path>` equivalent (a.k.a. blame): who last touched
     /// each line of `path` as it appears in this commit.
     fn annotate(

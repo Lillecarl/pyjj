@@ -745,6 +745,21 @@ impl PyTransaction {
         })
     }
 
+    /// Multi-path variant of `resolve_conflict`: resolves every entry of
+    /// `{path: edited marker text}` in ONE tree rewrite (single
+    /// committer-timestamp bump), like real `jj resolve` applying all its
+    /// merge-tool results to one tree. Raises `JjError` if any path isn't
+    /// a resolvable file conflict.
+    fn resolve_conflicts(
+        &self,
+        commit: &PyCommit,
+        selections: std::collections::HashMap<String, Vec<u8>>,
+    ) -> PyResult<PyCommitBuilder> {
+        with_mut_repo(self, |mut_repo| {
+            crate::conflicts::resolve_conflicts(mut_repo, commit, selections)
+        })
+    }
+
     /// `jj revert -r <commit> -d <new_parent_ids>` equivalent: reverses
     /// `commit`'s own changes and applies that reverse on top of
     /// `new_parent_ids`. Returns a `CommitBuilder` -- caller sets a

@@ -93,6 +93,21 @@ impl PyUserSettings {
         }
     }
 
+    /// Reads an arbitrary dotted config key as a boolean (e.g.
+    /// `merge-tools.<name>.merge-tool-edits-conflict-markers`). Returns
+    /// `None` if unset anywhere; raises `JjError` if present but not a
+    /// bool.
+    fn get_bool(&self, key: &str) -> PyResult<Option<bool>> {
+        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
+            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+        })?;
+        match self.0.config().get::<bool>(path) {
+            Ok(value) => Ok(Some(value)),
+            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
+            Err(err) => Err(crate::errors::map_py_err(err)),
+        }
+    }
+
     fn __repr__(&self) -> String {
         format!("UserSettings({} <{}>)", self.user_name(), self.user_email())
     }

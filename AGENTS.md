@@ -610,6 +610,16 @@ Current state:
   conflicted). Both raise `JjError` for paths that aren't file conflicts
   (not conflicted at all, or a non-file conflict like a file/directory
   conflict, which can't be materialized as text).
+  Two additions back `jj resolve`'s external-merge-tool flow:
+  `Commit.conflict_sides(path) -> {"base", "left", "right", "executable"}`
+  exposes the raw remove/add contents exactly as `$base`/`$left`/`$right`
+  in merge-args (rejecting non-file, >2-sided, and executable-bit
+  conflicts — the same restrictions real `jj resolve` enforces), and
+  `Transaction.resolve_conflicts(commit, {path: edited_text})` resolves
+  every path in ONE tree rewrite (a single committer-timestamp bump
+  regardless of path count, matching upstream's apply-all-then-
+  set_tree-once shape; empty map still rewrites, since real jj records
+  the attempt even when the tool changed nothing).
 
   The real `jj st`/`jj diff` editing workflow works transparently too, with
   no extra binding: `Workspace.check_out()` on a conflicted commit writes
