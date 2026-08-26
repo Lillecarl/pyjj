@@ -15,12 +15,16 @@ import argcomplete
 from .commands import (
     abandon,
     bookmark,
+    commit,
     describe,
     duplicate,
+    edit,
     git_init,
     log,
     new,
     rebase,
+    restore,
+    split,
     squash,
     status,
     version,
@@ -113,6 +117,43 @@ def build_parser() -> argparse.ArgumentParser:
     p_dup.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
                        help="Revisions to duplicate (default: @)")
 
+    # edit
+    p_edit = sub.add_parser("edit", help="Edit (check out) a specific revision")
+    p_edit.add_argument("revision_pos", metavar="REVSETS",
+                        help="The revision to edit")
+
+    # commit
+    p_com = sub.add_parser("commit",
+                           help="Describe @ and create a new empty change on top")
+    p_com.add_argument("-m", "--message", default=None, metavar="MESSAGE",
+                       help="Description text")
+    p_com.add_argument("--editor", action="store_true",
+                       help="Open an editor to edit the description")
+    p_com.add_argument("-i", "--interactive", action="store_true",
+                       help="Interactively choose which changes to include")
+    p_com.add_argument("--tool", default=None, metavar="NAME",
+                       help="Diff editor to use (implies --interactive)")
+    p_com.add_argument("paths_pos", nargs="*", metavar="FILESETS",
+                       help="Paths staying in the current commit")
+
+    # restore
+    p_res = sub.add_parser("restore", help="Restore paths from another revision")
+    p_res.add_argument("--from", dest="from_", default="@-", metavar="REVSET",
+                       help="Revision to restore from (default: @-)")
+    p_res.add_argument("--into", dest="into", default="@", metavar="REVSET",
+                       help="Revision to restore into (default: @)")
+    p_res.add_argument("paths_pos", nargs="*", metavar="FILESETS",
+                       help="Paths to restore (default: all)")
+
+    # split
+    p_spl = sub.add_parser("split", help="Split a revision in two")
+    p_spl.add_argument("-r", "--revision", default=None, metavar="REVSETS",
+                       help="Revision to split (default: @)")
+    p_spl.add_argument("-m", "--message", default=None, metavar="MESSAGE",
+                       help="Description of the first half")
+    p_spl.add_argument("paths_pos", nargs="*", metavar="FILESETS",
+                       help="Paths going into the first half")
+
     # version
     sub.add_parser("version", help="Show version information")
 
@@ -142,6 +183,10 @@ def main(argv=None) -> int:
         "rebase": rebase,
         "abandon": abandon,
         "duplicate": duplicate,
+        "edit": edit,
+        "commit": commit,
+        "restore": restore,
+        "split": split,
         "version": version,
     }
     return commands[args.command](args)

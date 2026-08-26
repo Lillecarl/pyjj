@@ -345,6 +345,107 @@ def duplicate(args) -> int:
     return 0
 
 
+def edit(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        target = _resolve_one(repo, settings, args.revision_pos)
+        tx = repo.start_transaction(settings)
+        # MutableRepo::edit abandons a discardable, unreferenced old wc
+        # itself; rebase_descendants() in _finish clears the pending map.
+        tx.edit(ws.workspace_name, target)
+        _finish(tx, f"edit commit {target.id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def commit(args) -> int:
+    """`jj commit`: describe @, then put the selected paths (or all of @'s
+    change) into it and create a new working-copy child on top."""
+    try:
+        settings, ws, repo = _load(args)
+        if args.interactive or args.tool or args.editor:
+            print("Error: interactive commit is not supported; pass -m "
+                  "(with optional FILESETS)", file=sys.stderr)
+            return 2
+        if args.message is None:
+            print("Error: interactive description editing is not supported; "
+                  "pass -m", file=sys.stderr)
+            return 2
+
+        wc = _wc_commit(repo, ws)
+        tx = repo.start_transaction(settings)
+        if args.paths_pos:
+            # Selected paths stay in @ (same change id); everything else
+            # moves to the new child -- the same primitives `split` uses,
+            # with the roles reversed.
+            kept = (
+                tx.split_selected(wc, list(args.paths_pos))
+                .set_description(complete_newline(args.message))
+                .write(repo)
+            )
+            child = tx.split_remainder(wc, kept).write(repo)
+        else:
+            described = (
+                tx.rewrite_commit(settings, wc)
+                .set_description(complete_newline(args.message))
+                .write(repo)
+            )
+            child = tx.new_commit(settings, [described.id]).write(repo)
+        tx.set_wc_commit(ws.workspace_name, child.id)
+        _finish(tx, f"commit {wc.id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def restore(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        src = _resolve_one(repo, settings, args.from_)
+        dst = _resolve_one(repo, settings, args.into)
+        paths = list(args.paths_pos) or None
+        tx = repo.start_transaction(settings)
+        builder = tx.restore(src, dst, paths)
+        restored = builder.write(repo)
+        if dst.id.hex() == repo.view().get(ws.workspace_name):
+            tx.set_wc_commit(ws.workspace_name, restored.id)
+        _finish(tx, f"restore from {src.id.hex()} into {dst.id.hex()}",
+                settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def split(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        if not args.paths_pos:
+            print("Error: interactive split is not supported; pass FILESETS",
+                  file=sys.stderr)
+            return 2
+        if args.message is None:
+            print("Error: interactive description editing is not supported; "
+                  "pass -m for the first half's description", file=sys.stderr)
+            return 2
+        target = _resolve_one(repo, settings, args.revision or "@")
+
+        tx = repo.start_transaction(settings)
+        first_builder = tx.split_selected(target, list(args.paths_pos))
+        first = first_builder.set_description(complete_newline(args.message)).write(repo)
+        second = tx.split_remainder(target, first).write(repo)
+        if target.id.hex() == repo.view().get(ws.workspace_name):
+            tx.set_wc_commit(ws.workspace_name, second.id)
+        _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def version(args) -> int:
     print(f"pyjj-cli v0.1.0")
     print(f"  pyjj (Rust bindings): v{pyjj.VERSION}")
