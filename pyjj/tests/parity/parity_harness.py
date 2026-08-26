@@ -40,6 +40,7 @@ from pathlib import Path
 
 DRIVER = Path(__file__).with_name("driver.py")
 EDITOR = Path(__file__).with_name("editor.py")
+DIFF_TOOL = Path(__file__).with_name("diff_tool.py")
 
 PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
@@ -56,21 +57,35 @@ class RepoPair:
         self.jj_bin = jj_bin or os.environ.get("PYJJ_PARITY_JJ") or "jj"
         self.cli_repo = root / "cli" / "repo"
         self.py_repo = root / "py" / "repo"
+        self.home = root / "home"
         # The scripted editor lives in the pair dir (never chmod files in
         # the source tree); both CLIs find it via $EDITOR.
         self.editor_bin = root / "bin" / "parity-editor"
         self.editor_bin.parent.mkdir(parents=True, exist_ok=True)
         self.editor_bin.write_bytes(EDITOR.read_bytes())
         self.editor_bin.chmod(0o755)
+        self.diff_tool_bin = root / "bin" / "parity-diff-tool"
+        self.diff_tool_bin.write_bytes(DIFF_TOOL.read_bytes())
+        self.diff_tool_bin.chmod(0o755)
+        # Scratch-home jj config, loaded identically by both sides
+        # (load_config=True): registers the scripted diff tool. `program`
+        # carries the executable path; edit-args get $left/$right
+        # substituted.
+        config_dir = self.home / ".config" / "jj"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.toml").write_text(
+            "[merge-tools.parity-diff]\n"
+            f'program = "{self.diff_tool_bin}"\n'
+            'edit-args = ["--edit", "$left", "$right"]\n'
+        )
         # jj creates missing intermediate dirs on init; pyjj requires the
         # destination to exist, so create both up front (empty is fine).
         self.cli_repo.mkdir(parents=True)
         self.py_repo.mkdir(parents=True)
-        self.home = root / "home"
-        (self.home / ".config").mkdir(parents=True)
+        (self.home / ".config").mkdir(parents=True, exist_ok=True)
         self._step = 0
 
-    def _env(self, *, bump: bool, editor_spec: dict | None = None) -> dict[str, str]:
+    def _env(self, *, bump: bool) -> dict[str, str]:
         if bump:
             self._step += 1
         # Inherit the parent environment (the dev-shell vars the editable
@@ -96,17 +111,16 @@ class RepoPair:
         # Real jj resolves the editor as ui.editor -> JJ_EDITOR -> VISUAL
         # -> EDITOR; pin every layer so a stray host setting can't win.
         env.pop("JJ_EDITOR", None)
-        if editor_spec is not None:
-            env["PARITY_EDITOR_SPEC"] = json.dumps(editor_spec)
-        else:
-            env.pop("PARITY_EDITOR_SPEC", None)
         return env
 
     def _run(self, argv: list[str], env: dict[str, str],
              stdin: str | None = None, cwd: Path | None = None,
-             editor_spec: dict | None = None) -> None:
+             editor_spec: dict | None = None,
+             diff_spec: dict | None = None) -> None:
         if editor_spec is not None:
             env["PARITY_EDITOR_SPEC"] = json.dumps(editor_spec)
+        if diff_spec is not None:
+            env["PARITY_DIFF_SPEC"] = json.dumps(diff_spec)
         proc = subprocess.run(
             argv,
             env=env,
@@ -117,6 +131,7 @@ class RepoPair:
             cwd=str(cwd) if cwd else None,
         )
         env.pop("PARITY_EDITOR_SPEC", None)
+        env.pop("PARITY_DIFF_SPEC", None)
         if proc.returncode != 0:
             raise AssertionError(
                 f"command failed ({proc.returncode}): {argv}\n"
@@ -137,6 +152,7 @@ class RepoPair:
         cli_files: dict[str, bytes] | None = None,
         py_files: dict[str, bytes] | None = None,
         editor_spec: dict | tuple[dict, dict] | None = None,
+        diff_spec: dict | None = None,
     ) -> None:
         """Run one logical operation on both sides.
 
@@ -169,7 +185,8 @@ class RepoPair:
                           editor_spec=cli_spec)
             else:
                 self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
-                          stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec)
+                          stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec,
+                          diff_spec=diff_spec)
         if jj or py:
             self._run(
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
@@ -177,6 +194,7 @@ class RepoPair:
                 stdin=stdin,
                 cwd=self.py_repo,
                 editor_spec=py_spec,
+                diff_spec=diff_spec,
             )
 
     def _write_files(self, files: dict[str, bytes], ws: Path) -> None:

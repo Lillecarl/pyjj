@@ -376,3 +376,61 @@ def test_split_first_half_message_via_editor(pair: RepoPair) -> None:
     pair.op(jj=["split", "base.txt"],
             editor_spec={"op": "drop_jj_comments"})
     pair.assert_parity()
+
+
+# -- diff-editor flows ---------------------------------------------------------
+#
+# merge-tools.parity-diff (scratch-HOME config, loaded by both sides)
+# points at the scripted dir-based diff tool; PARITY_DIFF_SPEC arms it.
+# This is real jj's own protocol: $left/$right directories holding the
+# changed paths, result = a snapshot of the right directory.
+
+
+def two_file_change(pair: RepoPair) -> None:
+    """base <- work, where 'work' adds one.txt AND two.txt in one commit."""
+    pair.init()
+    pair.op(files={"base.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "work"])
+    pair.op(files={"one.txt": b"one\n", "two.txt": b"two\n"}, jj=["status"])
+
+
+def test_split_via_diff_tool_selects_whole_files(pair: RepoPair) -> None:
+    two_file_change(pair)
+    pair.op(
+        jj=["split", "--tool", "parity-diff", "-m", "first"],
+        diff_spec={"op": "keep", "paths": ["one.txt"]},
+    )
+    pair.assert_parity()
+
+
+def test_split_diff_tool_partial_edit_is_verbatim(pair: RepoPair) -> None:
+    two_file_change(pair)
+    # Editing a single line inside the right directory selects that file
+    # with the EDITED bytes -- fidelity beyond whole-file selection.
+    pair.op(
+        jj=["split", "--tool", "parity-diff", "-m", "first"],
+        diff_spec={"op": "edit",
+                   "edits": [{"path": "one.txt",
+                              "find": "one", "replace": "one-edited"}]},
+    )
+    pair.assert_parity()
+
+
+def test_split_diff_tool_dropped_file_stays_in_remainder(pair: RepoPair) -> None:
+    two_file_change(pair)
+    pair.op(
+        jj=["split", "--tool", "parity-diff", "-m", "first"],
+        diff_spec={"op": "drop", "paths": ["two.txt"]},
+    )
+    pair.assert_parity()
+
+
+def test_diffedit_rewrites_destination(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(
+        jj=["diffedit", "--tool", "parity-diff"],
+        diff_spec={"op": "edit",
+                   "edits": [{"path": "two.txt",
+                              "find": "two", "replace": "TWO-edited"}]},
+    )
+    pair.assert_parity()
