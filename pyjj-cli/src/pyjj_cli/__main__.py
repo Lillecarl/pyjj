@@ -22,11 +22,14 @@ from .commands import (
     git_init,
     log,
     new,
+    op_restore,
     rebase,
+    redo,
     restore,
     split,
     squash,
     status,
+    undo,
     version,
 )
 
@@ -154,6 +157,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_spl.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                        help="Paths going into the first half")
 
+    # operation-level
+    sub.add_parser("undo", help="Undo the last operation")
+    sub.add_parser("redo", help="Redo a previously undone operation")
+    p_op = sub.add_parser("op", help="Operation log commands")
+    op_sub = p_op.add_subparsers(dest="op_command")
+    p_opr = op_sub.add_parser("restore", help="Restore to the state of an operation")
+    p_opr.add_argument("operation_pos", metavar="OPERATION",
+                       help="The operation to restore to")
+
     # version
     sub.add_parser("version", help="Show version information")
 
@@ -187,6 +199,9 @@ def main(argv=None) -> int:
         "commit": commit,
         "restore": restore,
         "split": split,
+        "undo": undo,
+        "redo": redo,
+        "op": lambda a: {"restore": op_restore}.get(a.op_command or "", _op_help)(a),
         "version": version,
     }
     return commands[args.command](args)
@@ -199,6 +214,11 @@ def _git_help(args) -> int:
 
 def _bm_help(args) -> int:
     print("usage: pyjj bookmark {create,set}", file=sys.stderr)
+    return 2
+
+
+def _op_help(args) -> int:
+    print("usage: pyjj op {restore}", file=sys.stderr)
     return 2
 
 

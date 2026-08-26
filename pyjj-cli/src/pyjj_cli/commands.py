@@ -62,6 +62,17 @@ def _wc_commit(repo, ws):
     return repo.get_commit(pyjj.CommitId(repo.view()[ws.workspace_name]))
 
 
+def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
+    """Mirror the real CLI's transaction-finish behavior: when the current
+    view's working-copy commit differs from `old_wc_hex`, update the
+    on-disk working copy to match."""
+    fresh_ws = pyjj.Workspace.load(settings, ws.workspace_root)
+    fresh_repo = fresh_ws.load_at_head()
+    new_wc_hex = fresh_repo.view()[fresh_ws.workspace_name]
+    if new_wc_hex != old_wc_hex:
+        fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
+
+
 def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
@@ -69,14 +80,18 @@ def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookma
     working copy to match."""
     old_wc_hex = base_repo.view()[ws.workspace_name]
     tx.rebase_descendants(delete_abandoned_bookmarks)
-    new_repo = tx.commit(description)
+    tx.commit(description)
+    _checkout_if_moved(settings, ws, old_wc_hex)
 
-    fresh_ws = pyjj.Workspace.load(settings, ws.workspace_root)
-    fresh_repo = fresh_ws.load_at_head()
-    new_wc_hex = fresh_repo.view()[fresh_ws.workspace_name]
-    if new_wc_hex != old_wc_hex:
-        fresh_ws.check_out(new_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
-    return new_repo
+
+def _restore_view_command(tx, description, settings, ws, repo):
+    """Shared tail for view-restoring operations (undo/redo/op restore):
+    they produce no rewrites to rebase and take their operation description
+    verbatim from the binding -- for undo/redo it encodes the target op so
+    future stack jumps keep working."""
+    old_wc_hex = repo.view()[ws.workspace_name]
+    tx.commit(description)
+    _checkout_if_moved(settings, ws, old_wc_hex)
 
 
 # -- commands --------------------------------------------------------------
@@ -440,6 +455,46 @@ def split(args) -> int:
         if target.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, second.id)
         _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def undo(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        tx = repo.start_transaction(settings)
+        _undone, _restored_to, description = tx.undo()
+        _restore_view_command(tx, description, settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def redo(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        tx = repo.start_transaction(settings)
+        _redone, _restored_to, description = tx.redo()
+        _restore_view_command(tx, description, settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def op_restore(args) -> int:
+    """`jj op restore <OPERATION>`: make the view match a past operation."""
+    try:
+        settings, ws, repo = _load(args)
+        target = repo.load_operation(args.operation_pos)
+        tx = repo.start_transaction(settings)
+        tx.restore_operation(target)
+        _restore_view_command(
+            tx, f"restore operation {args.operation_pos}", settings, ws, repo
+        )
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
