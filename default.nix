@@ -57,6 +57,12 @@ let
     inherit (pyprojectLib) renderPyproject;
   };
 
+  # Store-built conformance runs: the pyjj pytest suite (unit + parity vs
+  # real jj) with the pinned `jj` on PATH. See nix/checks.nix.
+  checks = pkgs.callPackage ./nix/checks.nix {
+    inherit pyjj pyjj-cli jj;
+  };
+
   shells = {
     # Fast local loop for pyjj-bindings (the compiled Rust extension): plain
     # nixpkgs stable rustc/cargo (pyjj-bindings needs edition 2024 / rustc
@@ -156,6 +162,7 @@ in
     flake
     shells
     jj
+    checks
     ;
   inherit
     pyjj-bindings

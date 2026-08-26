@@ -82,3 +82,63 @@ def test_bookmark_move(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
     pair.assert_parity()
+
+
+def test_edit_moves_working_copy(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["edit", rev("base")])
+    pair.assert_parity()
+
+
+def test_commit_describes_and_advances(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"a\n"}, jj=["commit", "-m", "one"])
+    pair.assert_parity()
+
+
+def test_describe_multiple_revisions_shared_message(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(
+        jj=["describe", "-r", rev("base"), "-r", rev("one"),
+            "-m", "shared description"]
+    )
+    pair.assert_parity()
+
+
+def test_describe_stdin_description(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"a\n"}, jj=["describe", "--stdin"], stdin="from stdin\n")
+    pair.assert_parity()
+
+
+def test_restore_all_from_parent(pair: RepoPair) -> None:
+    chain(pair)
+    # The implicit snapshot absorbs the edit into @ first; the restore
+    # then pulls @'s whole tree back to @-'s.
+    pair.op(files={"two.txt": b"changed\n"}, jj=["restore"])
+    pair.assert_parity()
+
+
+def test_restore_single_path_between_revisions(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(
+        jj=["restore", "--from", rev("base"), "--into", rev("two"), "one.txt"]
+    )
+    pair.assert_parity()
+
+
+def test_split_paths_on_wc(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(
+        files={"base.txt": b"base\n", "one.txt": b"one\n"},
+        jj=["describe", "-m", "base"],
+    )
+    pair.op(jj=["split", "base.txt", "-m", "first"])
+    pair.assert_parity()
+
+
+def test_new_merge_two_parents(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(jj=["new", rev("one"), rev("side"), "-m", "merge"])
+    pair.assert_parity()

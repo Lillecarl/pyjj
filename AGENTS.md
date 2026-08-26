@@ -66,7 +66,10 @@ divergence, never extractor disagreement. It skips if no `jj` is on PATH;
 set `PYJJ_PARITY_JJ=/path/to/jj` to pin the version under test (the Nix
 build pins it to the release matching `pyjj-bindings`' jj-lib, see
 "Reproducible builds"). This suite is where CLI-parity bugs get found and
-regression-proven.
+regression-proven. In Nix, `nix build --file . checks.pyjj-conformance`
+runs the whole pyjj pytest suite store-built against that pinned binary
+(`nix/checks.nix`), with gitMinimal/openssh present for the clone and
+signing fixtures.
 
 - `pyjj-bindings/tests/` tests the native module directly (`import pyjj_bindings`)
   and stays mechanical: type construction, exception hierarchy/constructibility,

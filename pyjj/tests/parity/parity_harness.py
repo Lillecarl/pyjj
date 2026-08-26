@@ -86,9 +86,16 @@ class RepoPair:
         )
         return env
 
-    def _run(self, argv: list[str], env: dict[str, str]) -> None:
+    def _run(self, argv: list[str], env: dict[str, str],
+             stdin: str | None = None, cwd: Path | None = None) -> None:
         proc = subprocess.run(
-            argv, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True
+            argv,
+            env=env,
+            input=stdin,
+            stdin=subprocess.DEVNULL if stdin is None else None,
+            capture_output=True,
+            text=True,
+            cwd=str(cwd) if cwd else None,
         )
         if proc.returncode != 0:
             raise AssertionError(
@@ -106,6 +113,7 @@ class RepoPair:
         jj: list[str],
         py: list[str] | None = None,
         files: dict[str, bytes] | None = None,
+        stdin: str | None = None,
     ) -> None:
         """Run one logical operation on both sides.
 
@@ -115,6 +123,7 @@ class RepoPair:
         which is the point: pyjj-cli must speak jj's argument dialect for
         parity to pass at all. `files` are written into both working
         copies first (both CLIs pick them up via implicit snapshot).
+        `stdin` is piped verbatim to both commands (--stdin scenarios).
         """
         env = self._env(bump=True)
         for name, content in (files or {}).items():
@@ -124,15 +133,19 @@ class RepoPair:
                 path.write_bytes(content)
         if jj:
             # `git init` must not carry `-R`: that flag makes every other
-            # command search for an existing repo upward.
+            # command search for an existing repo upward. Commands run with
+            # their repo as CWD so relative FILESETS resolve identically.
             if jj[:2] == ["git", "init"]:
-                self._run([self.jj_bin, *jj], env)
+                self._run([self.jj_bin, *jj], env, stdin=stdin)
             else:
-                self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env)
+                self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
+                          stdin=stdin, cwd=self.cli_repo)
         if jj or py:
             self._run(
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
+                stdin=stdin,
+                cwd=self.py_repo,
             )
 
     # -- extracting & comparing --------------------------------------------
