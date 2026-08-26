@@ -6,7 +6,11 @@ acting, descriptions go through complete_newline, and `jj abandon`
 deletes bookmarks on the abandoned commits unless told otherwise.
 """
 
+import os
+import shlex
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pyjj
@@ -33,6 +37,49 @@ class CommandError(Exception):
     def __init__(self, message):
         super().__init__(message)
         self.message = message
+
+
+def _run_editor(settings, content: str) -> str:
+    """Run $EDITOR (or ui.editor) over `content`, then clean it up exactly
+    like the real CLI's description_util::edit_description: strip "JJ:"
+    comment lines (stopping at "JJ: ignore-rest"), trim blank edges, and
+    complete the trailing newline."""
+    editor_cmd = (
+        settings.get_string("ui.editor")
+        or os.environ.get("JJ_EDITOR")
+        or os.environ.get("VISUAL")
+        or os.environ.get("EDITOR")
+        or "nano"
+    )
+    argv = shlex.split(editor_cmd)
+
+    prepped = content
+    if prepped and not prepped.endswith("\n"):
+        prepped += "\n"
+    last_line = prepped.splitlines()[-1] if prepped.splitlines() else ""
+    prepped += "JJ:\n" if last_line.startswith("JJ:") else "\n"
+    prepped += 'JJ: Lines starting with "JJ:" (like this one) will be removed.\n'
+
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".jjdescription", delete=False
+    ) as f:
+        f.write(prepped)
+        path = f.name
+    try:
+        subprocess.run([*argv, path], check=True)
+        with open(path, encoding="utf-8") as f:
+            edited = f.read()
+    finally:
+        os.unlink(path)
+
+    kept: list[str] = []
+    for line in edited.splitlines():
+        if line.startswith("JJ: ignore-rest"):
+            break
+        if line.startswith("JJ:"):
+            continue
+        kept.append(line)
+    return complete_newline("\n".join(kept).strip("\n"))
 
 
 def _load(args):
@@ -184,18 +231,23 @@ def describe(args) -> int:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
+    revsets = list(args.revisions_pos or [])
+    if args.revisions_opt:
+        revsets.extend(args.revisions_opt)
+
     if args.stdin:
         description = sys.stdin.read()
     elif args.messages:
         description = join_message_paragraphs(args.messages)
+    elif len(revsets) <= 1:
+        # Bare `describe` (or a single revision): the editor path.
+        base_commit = _resolve_one(repo, settings, revsets[0] if revsets else "@")
+        description = _run_editor(settings, base_commit.description)
     else:
-        print("Error: interactive description editing is not supported; "
-              "pass -m or --stdin", file=sys.stderr)
+        print("Error: bulk description editing is not supported; pass -m "
+              "or --stdin", file=sys.stderr)
         return 2
 
-    revsets = list(args.revisions_pos or [])
-    if args.revisions_opt:
-        revsets.extend(args.revisions_opt)
     if not revsets:
         revsets = ["@"]
 
@@ -290,10 +342,10 @@ def squash(args) -> int:
             else repo.get_commit(source.parent_ids[0])
         )
 
-        # Message handling, mirroring the real CLI's non-interactive paths.
-        # -u keeps the destination's description untouched; -m replaces;
-        # with no flag, a single non-empty side wins and two non-empty
-        # descriptions need the user (interactive editing is unsupported).
+        # Message handling, mirroring the real CLI's paths. -u keeps the
+        # destination's description untouched; -m replaces; with no flag,
+        # a single non-empty side wins, two non-empty sides open the
+        # combining editor whose template is destination-block-first.
         use_dest_desc = args.use_destination_message and args.message is None
         if args.message is not None:
             description = complete_newline(args.message)
@@ -303,11 +355,16 @@ def squash(args) -> int:
                 description = candidates[0]
             elif len(candidates) == 0:
                 description = ""
-            elif not args.use_destination_message:
-                raise CommandError(
-                    "both source and destination have descriptions; "
-                    "pass -m or --use-destination-message"
+            elif args.use_destination_message:
+                pass
+            else:
+                combined = (
+                    "JJ: Description from the destination commit:\n"
+                    + dest.description
+                    + "\nJJ: Description from source commit:\n"
+                    + source.description
                 )
+                description = _run_editor(settings, combined)
 
         tx = repo.start_transaction(settings)
         builder = tx.squash(source, dest)
@@ -400,12 +457,11 @@ def commit(args) -> int:
             print("Error: interactive commit is not supported; pass -m "
                   "(with optional FILESETS)", file=sys.stderr)
             return 2
-        if args.message is None:
-            print("Error: interactive description editing is not supported; "
-                  "pass -m", file=sys.stderr)
-            return 2
-
         wc = _wc_commit(repo, ws)
+        if args.message is not None:
+            description = complete_newline(args.message)
+        else:
+            description = _run_editor(settings, wc.description)
         tx = repo.start_transaction(settings)
         if args.paths_pos:
             # Selected paths stay in @ (same change id); everything else
@@ -413,14 +469,14 @@ def commit(args) -> int:
             # with the roles reversed.
             kept = (
                 tx.split_selected(wc, list(args.paths_pos))
-                .set_description(complete_newline(args.message))
+                .set_description(description)
                 .write(repo)
             )
             child = tx.split_remainder(wc, kept).write(repo)
         else:
             described = (
                 tx.rewrite_commit(settings, wc)
-                .set_description(complete_newline(args.message))
+                .set_description(description)
                 .write(repo)
             )
             child = tx.new_commit(settings, [described.id]).write(repo)
@@ -458,15 +514,18 @@ def split(args) -> int:
             print("Error: interactive split is not supported; pass FILESETS",
                   file=sys.stderr)
             return 2
-        if args.message is None:
-            print("Error: interactive description editing is not supported; "
-                  "pass -m for the first half's description", file=sys.stderr)
-            return 2
         target = _resolve_one(repo, settings, args.revision or "@")
+
+        if args.message is not None:
+            first_description = complete_newline(args.message)
+        else:
+            # The editor path: the draft template carries the current
+            # description past all "JJ:" comments.
+            first_description = _run_editor(settings, target.description)
 
         tx = repo.start_transaction(settings)
         first_builder = tx.split_selected(target, list(args.paths_pos))
-        first = first_builder.set_description(complete_newline(args.message)).write(repo)
+        first = first_builder.set_description(first_description).write(repo)
         second = tx.split_remainder(target, first).write(repo)
         if target.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, second.id)
