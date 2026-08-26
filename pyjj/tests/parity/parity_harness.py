@@ -114,6 +114,8 @@ class RepoPair:
         py: list[str] | None = None,
         files: dict[str, bytes] | None = None,
         stdin: str | None = None,
+        cli_files: dict[str, bytes] | None = None,
+        py_files: dict[str, bytes] | None = None,
     ) -> None:
         """Run one logical operation on both sides.
 
@@ -121,16 +123,16 @@ class RepoPair:
         automatically). `py` goes to the pyjj-cli driver against
         `<py-repo>`; when omitted, the SAME argv runs on both sides --
         which is the point: pyjj-cli must speak jj's argument dialect for
-        parity to pass at all. `files` are written into both working
-        copies first (both CLIs pick them up via implicit snapshot).
-        `stdin` is piped verbatim to both commands (--stdin scenarios).
+        parity to pass at all. `files` are written into BOTH working
+        copies first (both CLIs pick them up via implicit snapshot);
+        `cli_files`/`py_files` additionally write per-side bytes, for
+        content that legitimately differs across repos (conflict-marker
+        text embeds repo-local change ids). `stdin` is piped verbatim to
+        both commands (--stdin scenarios).
         """
         env = self._env(bump=True)
-        for name, content in (files or {}).items():
-            for ws in (self.cli_repo, self.py_repo):
-                path = ws / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(content)
+        self._write_files({**(files or {}), **(cli_files or {})}, self.cli_repo)
+        self._write_files({**(files or {}), **(py_files or {})}, self.py_repo)
         if jj:
             # `git init` must not carry `-R`: that flag makes every other
             # command search for an existing repo upward. Commands run with
@@ -147,6 +149,23 @@ class RepoPair:
                 stdin=stdin,
                 cwd=self.py_repo,
             )
+
+    def _write_files(self, files: dict[str, bytes], ws: Path) -> None:
+        for name, content in files.items():
+            path = ws / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+
+    def read_wc_file(self, side: str, name: str) -> bytes:
+        """Read a raw working-copy file from one side ('cli' or 'py') --
+        for scenarios that transform each side's own text (conflict
+        markers embed repo-local ids)."""
+        root = self.cli_repo if side == "cli" else self.py_repo
+        return (root / name).read_bytes()
+
+    def write_wc_file(self, side: str, name: str, content: bytes) -> None:
+        root = self.cli_repo if side == "cli" else self.py_repo
+        (root / name).write_bytes(content)
 
     # -- extracting & comparing --------------------------------------------
 

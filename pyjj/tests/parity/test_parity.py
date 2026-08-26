@@ -232,3 +232,87 @@ def test_undo_three_times_through_snapshot_op(pair: RepoPair) -> None:
     pair.op(jj=["undo"])
     pair.op(jj=["undo"])
     pair.assert_parity()
+
+
+# -- conflicts ----------------------------------------------------------------
+
+
+def conflict_pair(pair: RepoPair) -> None:
+    """base <- one, two (siblings editing the same line); @ = merge with a
+    2-sided conflict on f.txt."""
+    pair.init()
+    pair.op(files={"f.txt": b"line1\nline2\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"f.txt": b"ONE\nline2\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "two"])
+    pair.op(files={"f.txt": b"TWO\nline2\n"}, jj=["status"])
+    pair.op(
+        jj=["new", rev("one"), rev("two"), "-m", "merge"]
+    )
+
+
+def test_new_merge_conflict(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    # The extractor hashes `jj file show` output, which materializes the
+    # conflicted path deterministically -- so byte parity here covers the
+    # whole conflict object.
+    pair.assert_parity()
+
+
+def test_resolve_by_editing_working_copy(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    # Writing marker-free text and letting any command's implicit snapshot
+    # pick it up is how real jj resolves non-interactively too.
+    for side in ("cli", "py"):
+        pair.write_wc_file(side, "f.txt", b"RESOLVED\nline2\n")
+    pair.op(jj=["status"])
+    pair.assert_parity()
+
+
+def test_partial_resolution_keeps_conflict(pair: RepoPair) -> None:
+    conflict_pair(pair)
+    # Marker text embeds repo-local change ids, so each side edits its own
+    # copy: append a line inside one conflict side. Both sides must parse
+    # their edited text back into an equivalent (still-conflicted) shape.
+    for side in ("cli", "py"):
+        text = pair.read_wc_file(side, "f.txt")
+        assert b"<<<<<<<" in text
+        pair.write_wc_file(side, "f.txt", text.replace(b"\nline2\n", b"\nline2 edited\n"))
+    pair.op(jj=["status"])
+    pair.assert_parity()
+
+
+# -- flag combinations --------------------------------------------------------
+
+
+def test_bookmark_create_multiple_names(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "alpha", "beta"])
+    pair.assert_parity()
+
+
+def test_abandon_two_revisions_at_once(pair: RepoPair) -> None:
+    chain(pair)
+    # Includes @ itself, so both sides must also produce a fresh empty
+    # working-copy commit on top.
+    pair.op(jj=["abandon", rev("one"), rev("two")])
+    pair.assert_parity()
+
+
+def test_duplicate_two_revisions_at_once(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(jj=["duplicate", rev("one"), rev("side")])
+    pair.assert_parity()
+
+
+def test_squash_with_explicit_message(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["squash", "-r", rev("one"), "-m", "explicit message"])
+    pair.assert_parity()
+
+
+def test_describe_ancestor_rebases_descendants(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["describe", "-r", rev("base"), "-m", "renamed base"])
+    pair.assert_parity()
