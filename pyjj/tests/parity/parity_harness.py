@@ -150,6 +150,25 @@ class RepoPair:
 
     # -- extracting & comparing --------------------------------------------
 
+    def _op_id(self, repo: Path, depth: int) -> str:
+        """The operation id `depth` steps back from the head op (depth 0 =
+        current head). Op ids differ between the two repos (hostnames,
+        snapshot-op folding), so scenarios address them PER SIDE."""
+        out = self._out(
+            [self.jj_bin, "-R", str(repo), "--no-pager", "op", "log",
+             "--no-graph", "--limit", str(depth + 1), "-T", 'self.id() ++ "\\n"'],
+            repo,
+        )
+        ids = [line for line in out.splitlines() if line]
+        return ids[-1]
+
+    def op_restore(self, depth: int) -> None:
+        """Restore both sides to their own state `depth` operations back."""
+        self.op(
+            jj=["op", "restore", self._op_id(self.cli_repo, depth)],
+            py=["op", "restore", self._op_id(self.py_repo, depth)],
+        )
+
     def _extract_repo(self, repo: Path) -> dict:
         """Canonical state of one repository, read through the pinned jj."""
         out = self._out(

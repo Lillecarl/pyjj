@@ -142,3 +142,93 @@ def test_new_merge_two_parents(pair: RepoPair) -> None:
     pair.op(jj=["new", rev("base"), "-m", "side"])
     pair.op(jj=["new", rev("one"), rev("side"), "-m", "merge"])
     pair.assert_parity()
+
+
+# -- operation-level commands ------------------------------------------------
+#
+# Both CLIs commit an identical operation structure per step: when the
+# working copy is dirty, each emits its own "snapshot working copy"
+# operation followed by the command's operation (verified against real
+# jj 0.43's op log). Undoing across file-write boundaries is therefore
+# fair game -- see the *_crossing scenarios below.
+
+
+def test_undo_bookmark_move(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
+    pair.op(jj=["undo"])
+    pair.assert_parity()
+
+
+def test_undo_then_redo(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
+    pair.op(jj=["undo"])
+    pair.op(jj=["redo"])
+    pair.assert_parity()
+
+
+def test_undo_describe(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["describe", "-m", "renamed"])
+    pair.op(jj=["undo"])
+    pair.assert_parity()
+
+
+def test_undo_twice(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "extra"])
+    pair.op(jj=["describe", "-m", "renamed"])
+    pair.op(jj=["undo"])
+    pair.op(jj=["undo"])
+    pair.assert_parity()
+
+
+def test_op_restore_skips_last_operation(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "extra"])
+    # Depth 1 = the state before the last logical operation: the new
+    # empty commit disappears, the bookmark creation stays.
+    pair.op(jj=["new", "-m", "transient"])
+    pair.op_restore(1)
+    pair.assert_parity()
+
+
+def test_op_restore_across_wc_move(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", "-m", "later"])
+    # Back two ops lands on the pre-chain-head working copy; both sides
+    # must check the on-disk working copy back out to it.
+    pair.op_restore(2)
+    pair.assert_parity()
+
+
+def test_undo_across_file_write(pair: RepoPair) -> None:
+    chain(pair)
+    # The dirty-wc describe emits "snapshot working copy" then "describe
+    # commit" on both sides; one undo removes only the describe.
+    pair.op(files={"two.txt": b"changed\n"}, jj=["describe", "-m", "renamed"])
+    pair.op(jj=["undo"])
+    pair.assert_parity()
+
+
+def test_undo_twice_past_describe_onto_snapshot(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(files={"two.txt": b"changed\n"}, jj=["describe", "-m", "renamed"])
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("renamed")])
+    pair.op(jj=["undo"])
+    # The second undo removes the describe; the standalone snapshot op is
+    # now head on both sides.
+    pair.op(jj=["undo"])
+    pair.assert_parity()
+
+
+def test_undo_three_times_through_snapshot_op(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(files={"two.txt": b"changed\n"}, jj=["describe", "-m", "renamed"])
+    # The third undo removes the "snapshot working copy" operation itself,
+    # reverting the absorbed tree change on both sides.
+    pair.op(jj=["undo"])
+    pair.op(jj=["undo"])
+    pair.op(jj=["undo"])
+    pair.assert_parity()
