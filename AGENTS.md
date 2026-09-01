@@ -672,21 +672,36 @@ Current state:
   from `after`, the result is written as a new file blob
   (`Store::write_file`), and it's set into the selected tree via
   `MergedTreeBuilder` before being handed to the same `jj_lib::rewrite`
-  primitives the whole-file path uses.
+   primitives the whole-file path uses.
 
-  This whole feature — including hunk-level selection — is built entirely
-  on public, CLI-independent `jj_lib` primitives (`jj_lib::rewrite::{
-  restore_tree, CommitWithSelection, squash_commits}`,
-  `jj_lib::diff::ContentDiff`, `MergedTreeBuilder`, `Store::write_file`).
-  It does **not** reuse jj's own interactive hunk-picker UI
-  (`edit_diff_builtin` in `cli/src/merge_tools/builtin.rs`, built on the
-  `scm_record` TUI crate) — that lives entirely in the `cli` crate and is
-  inherently an interactive-editor concern, not something `lib` exposes or
-  something this library depends on. (A different, complementary approach
-  exists too: `jj-hunk` (github.com/laulauland/jj-hunk) drives the real
-  `jj` CLI as a subprocess and registers itself as jj's external
-  `merge-tools` diff-editor to answer `jj split -i`/`squash -i`'s callback
-  programmatically — reusing jj's actual interactive-split code paths at
+   `pyjj.hunk` provides an AI-agent-friendly layer on top: `Spec`
+   (`{"files": {path: {"hunks": [0,"hunk-..."],"ids":[...],"lines":[[1,5]]}}, "default": "reset"}`)
+   mirrors `jj-hunk`'s DSL, validated via **pydantic** (`SpecModel`,
+   `FileSpecModel`, `HunkObjectModel`). `lines: [[start,end]]` selects
+   hunks overlapping 1-indexed `after` ranges; per-hunk
+   `{"index":0,"lines":[0,2]}` selects lines within a hunk's `added`
+   block (most common for splitting multi-line inserts). `get_hunks_detailed()`,
+   `parse_spec()`, `apply_spec()`, `spec_to_overrides()` expose the
+   data-in/data-out split; `pyjj hunk list/split/commit/squash` are the
+   CLI wrappers (supporting `--spec`/`--spec-file`/`-` stdin and
+   `yaml`).
+
+   This whole feature — including hunk-level selection — is built entirely
+   on public, CLI-independent `jj_lib` primitives (`jj_lib::rewrite::{
+   restore_tree, CommitWithSelection, squash_commits}`,
+   `jj_lib::diff::ContentDiff`, `MergedTreeBuilder`, `Store::write_file`).
+   It does **not** reuse jj's own interactive hunk-picker UI
+   (`edit_diff_builtin` in `cli/src/merge_tools/builtin.rs`, built on the
+   `scm_record` TUI crate) — that lives entirely in the `cli` crate and is
+   inherently an interactive-editor concern, not something `lib` exposes or
+   something this library depends on. `pyjj.hunk` adds *line-level*
+   filtering on top: `lines` ranges are resolved against `after` line
+   numbers, per-hunk `lines` are filtered from the hunk's `added`/`removed`
+   blocks before reconstruction. (A different, complementary approach
+   exists too: `jj-hunk` (github.com/laulauland/jj-hunk) drives the real
+   `jj` CLI as a subprocess and registers itself as jj's external
+   `merge-tools` diff-editor to answer `jj split -i`/`squash -i`'s callback
+   programmatically — reusing jj's actual interactive-split code paths at
   the cost of shelling out per operation. What's implemented here instead
   stays fully in-process against `jj_lib`, with no subprocess or temp-file
   round trip.)

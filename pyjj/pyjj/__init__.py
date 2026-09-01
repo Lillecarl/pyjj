@@ -52,6 +52,7 @@ from pyjj_bindings import (
     __version__,
 )
 from . import _async as _async  # noqa: F401  (installs *_async methods below)
+from . import hunk as hunk  # noqa: F401
 
 __all__ = [
     "JjError",
@@ -96,5 +97,6 @@ __all__ = [
     "GraphEdge",
     "GraphNode",
     "diff_hunks",
+    "hunk",
     "__version__",
 ]
