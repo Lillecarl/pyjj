@@ -140,7 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("-m", "--message", dest="message", default="", metavar="MESSAGE",
                        help="Description of the new change")
 
-    # bookmark create/set
+    # bookmark create/set/delete/forget/list/move/rename
     p_bm = sub.add_parser("bookmark", help="Manage bookmarks")
     bm_sub = p_bm.add_subparsers(dest="bookmark_command")
     p_bmc = bm_sub.add_parser("create", help="Create a new bookmark")
@@ -150,6 +150,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_bms = bm_sub.add_parser("set", help="Move an existing bookmark")
     p_bms.add_argument("name")
     p_bms.add_argument("-r", "--revision", required=True, metavar="REVSET")
+    p_bmd = bm_sub.add_parser("delete", help="Delete a bookmark")
+    p_bmd.add_argument("names", nargs="+", metavar="NAMES", help="Bookmarks to delete")
+    p_bmf = bm_sub.add_parser("forget", help="Forget a bookmark")
+    p_bmf.add_argument("names", nargs="+", metavar="NAMES", help="Bookmarks to forget")
+    p_bml = bm_sub.add_parser("list", help="List bookmarks")
+    p_bml.add_argument("names", nargs="*", metavar="NAMES", help="Bookmark names to list")
+    p_bml.add_argument("-a", "--all-remotes", action="store_true", help=argparse.SUPPRESS)
+    p_bmm = bm_sub.add_parser("move", help="Move bookmarks to a revision")
+    p_bmm.add_argument("names", nargs="*", metavar="NAMES", help="Bookmark names to move")
+    p_bmm.add_argument("-f", "--from", dest="from_", default=None, metavar="REVSETS",
+                       help=argparse.SUPPRESS)
+    p_bmm.add_argument("-t", "--to", dest="to", default="@", metavar="REVSET",
+                       help="Target revision (default: @)")
+    p_bmr = bm_sub.add_parser("rename", help="Rename a bookmark")
+    p_bmr.add_argument("old", metavar="OLD", help="Old bookmark name")
+    p_bmr.add_argument("new", metavar="NEW", help="New bookmark name")
 
     # squash
     p_sq = sub.add_parser("squash", help="Move changes from a revision into another")
@@ -316,9 +332,7 @@ def main(argv=None) -> int:
         )(a),
         "describe": describe,
         "new": new,
-        "bookmark": lambda a: {"create": bookmark, "set": bookmark}.get(
-            a.bookmark_command or "", _bm_help
-        )(a),
+        "bookmark": bookmark,
         "squash": squash,
         "rebase": rebase,
         "abandon": abandon,
@@ -350,7 +364,7 @@ def _git_help(args) -> int:
 
 
 def _bm_help(args) -> int:
-    print("usage: pyjj bookmark {create,set}", file=sys.stderr)
+    print("usage: pyjj bookmark {create,set,delete,forget,list,move,rename}", file=sys.stderr)
     return 2
 
 
