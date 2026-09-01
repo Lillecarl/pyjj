@@ -266,3 +266,86 @@ pub fn conflict_sides(
         Ok(None) => Err(JjError::new_err(format!("`{path}` does not exist"))),
     }
 }
+
+/// Pick one side of each file conflict at `paths`, like `jj resolve
+/// --tool :ours` (side 0) / `:theirs` (side 1). The chosen side's
+/// `FileId` (and executable bit / `copy_id`) is kept verbatim, exactly
+/// as `jj`'s `pick_conflict_side` does -- no re-hashing of file
+/// contents. Raises `JjError` unless every path is a resolvable
+/// two-sided plain-file conflict, mirroring real `jj resolve`'s own
+/// restrictions.
+pub fn pick_conflict_sides(
+    mut_repo: &mut MutableRepo,
+    commit: &PyCommit,
+    paths: Vec<String>,
+    side: usize,
+) -> PyResult<PyCommitBuilder> {
+    if side > 1 {
+        return Err(JjError::new_err(format!(
+            "side index {side} out of range; only 0 (:ours) and 1 (:theirs) are supported"
+        )));
+    }
+    if paths.is_empty() {
+        let builder = mut_repo.rewrite_commit(&commit.inner);
+        return Ok(PyCommitBuilder::from_rust(builder));
+    }
+    let tree = commit.inner.tree();
+    let mut builder = MergedTreeBuilder::new(tree.clone());
+    for path_str in paths {
+        let repo_path = RepoPathBuf::from_internal_string(&path_str)
+            .map_err(|err| JjError::new_err(err.to_string()))?;
+        let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        if value.as_resolved().is_some() {
+            return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));
+        }
+        let materialized = pollster::block_on(try_materialize_file_conflict_value(
+            tree.store(),
+            &repo_path,
+            &value,
+            tree.labels(),
+        ))
+        .map_err(map_backend_err)?
+        .ok_or_else(|| {
+            JjError::new_err(format!(
+                "`{path_str}` is conflicted, but not as a plain file -- no 3-way \
+                 merge sides to expose"
+            ))
+        })?;
+        if materialized.ids.num_sides() > 2 {
+            return Err(JjError::new_err(format!(
+                "`{path_str}` has a {}-sided conflict; only 3-way (two-sided) conflicts \
+                 can be resolved with a merge tool",
+                materialized.ids.num_sides()
+            )));
+        }
+        if materialized.executable.is_none() {
+            return Err(JjError::new_err(format!(
+                "`{path_str}` has conflicting executable bits; not resolvable via a \
+                 merge tool"
+            )));
+        }
+        if side >= materialized.ids.num_sides() {
+            return Err(JjError::new_err(format!(
+                "`{path_str}` does not have side {side}"
+            )));
+        }
+        let file_id = materialized.ids.get_add(side).unwrap().clone();
+        let executable = materialized.executable.unwrap_or(false);
+        let copy_id = materialized
+            .copy_id
+            .clone()
+            .unwrap_or_else(jj_lib::backend::CopyId::placeholder);
+        let new_value = match file_id {
+            Some(id) => Merge::normal(jj_lib::backend::TreeValue::File {
+                id,
+                executable,
+                copy_id,
+            }),
+            None => Merge::absent(),
+        };
+        builder.set_or_remove(repo_path, new_value);
+    }
+    let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
+    let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
+    Ok(PyCommitBuilder::from_rust(commit_builder))
+}

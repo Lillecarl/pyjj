@@ -177,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rslv.add_argument("-l", "--list", dest="list_", action="store_true",
                         help="Instead of resolving conflicts, list all the conflicts")
     p_rslv.add_argument("--tool", default=None, metavar="NAME",
-                        help="3-way merge tool to be used")
+                        help="3-way merge tool to be used; :ours and :theirs pick side #1/#2")
     p_rslv.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                         help="Only resolve conflicts in these paths")
 

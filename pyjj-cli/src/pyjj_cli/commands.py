@@ -766,37 +766,49 @@ def resolve(args) -> int:
             print("Error: no merge tool specified; pass --tool",
                   file=sys.stderr)
             return 2
-        edits_markers = bool(
-            settings.get_bool(
-                f"merge-tools.{args.tool}.merge-tool-edits-conflict-markers"
-            )
-        )
 
-        resolutions: dict[str, bytes] = {}
-        for p in conflicts:
-            sides = dict(commit.conflict_sides(p))
-            materialized = commit.materialize_conflict(settings, p)
-            out = _run_merge_tool(settings, args.tool, sides, p,
-                                  edits_markers, bytes(materialized))
-            initial = bytes(materialized) if edits_markers else b""
-            if not out or out == initial:
-                # Upstream's EmptyOrUnchanged: leave this path conflicted
-                # and keep going with the remaining files.
-                continue
-            resolutions[p] = out
-
-        tx = repo.start_transaction(settings)
-        if resolutions:
-            builder = tx.resolve_conflicts(commit, resolutions)
+        # Built-in side-picking tools: no external process, no merge-args.
+        if args.tool in (":ours", ":theirs"):
+            side = 0 if args.tool == ":ours" else 1
+            tx = repo.start_transaction(settings)
+            builder = tx.pick_conflict_sides(commit, conflicts, side)
+            new_commit = builder.write(repo)
+            if commit.id.hex() == repo.view().get(ws.workspace_name):
+                tx.set_wc_commit(ws.workspace_name, new_commit.id)
+            _finish(tx, f"Resolve conflicts in commit {commit.id.hex()}",
+                    settings, ws, repo)
         else:
-            # Nothing changed, but real jj still rewrites the commit
-            # (committer-timestamp bump) and records the operation.
-            builder = tx.rewrite_commit(commit)
-        new_commit = builder.write(repo)
-        if commit.id.hex() == repo.view().get(ws.workspace_name):
-            tx.set_wc_commit(ws.workspace_name, new_commit.id)
-        _finish(tx, f"Resolve conflicts in commit {commit.id.hex()}",
-                settings, ws, repo)
+            edits_markers = bool(
+                settings.get_bool(
+                    f"merge-tools.{args.tool}.merge-tool-edits-conflict-markers"
+                )
+            )
+
+            resolutions: dict[str, bytes] = {}
+            for p in conflicts:
+                sides = dict(commit.conflict_sides(p))
+                materialized = commit.materialize_conflict(settings, p)
+                out = _run_merge_tool(settings, args.tool, sides, p,
+                                      edits_markers, bytes(materialized))
+                initial = bytes(materialized) if edits_markers else b""
+                if not out or out == initial:
+                    # Upstream's EmptyOrUnchanged: leave this path conflicted
+                    # and keep going with the remaining files.
+                    continue
+                resolutions[p] = out
+
+            tx = repo.start_transaction(settings)
+            if resolutions:
+                builder = tx.resolve_conflicts(commit, resolutions)
+            else:
+                # Nothing changed, but real jj still rewrites the commit
+                # (committer-timestamp bump) and records the operation.
+                builder = tx.rewrite_commit(commit)
+            new_commit = builder.write(repo)
+            if commit.id.hex() == repo.view().get(ws.workspace_name):
+                tx.set_wc_commit(ws.workspace_name, new_commit.id)
+            _finish(tx, f"Resolve conflicts in commit {commit.id.hex()}",
+                    settings, ws, repo)
 
         unresolved = []
         for p in conflicts:

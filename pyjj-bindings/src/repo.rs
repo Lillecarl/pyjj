@@ -760,6 +760,21 @@ impl PyTransaction {
         })
     }
 
+    /// Pick one side of each conflicted file, like `jj resolve --tool
+    /// :ours` (side 0) / `:theirs` (side 1). The chosen side's `FileId`
+    /// is kept verbatim. Raises `JjError` unless every path is a
+    /// resolvable two-sided plain-file conflict.
+    fn pick_conflict_sides(
+        &self,
+        commit: &PyCommit,
+        paths: Vec<String>,
+        side: usize,
+    ) -> PyResult<PyCommitBuilder> {
+        with_mut_repo(self, |mut_repo| {
+            crate::conflicts::pick_conflict_sides(mut_repo, commit, paths, side)
+        })
+    }
+
     /// `jj revert -r <commit> -d <new_parent_ids>` equivalent: reverses
     /// `commit`'s own changes and applies that reverse on top of
     /// `new_parent_ids`. Returns a `CommitBuilder` -- caller sets a
