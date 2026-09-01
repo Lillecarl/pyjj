@@ -17,9 +17,13 @@ from .commands import (
     bookmark,
     commit,
     describe,
+    diff,
     diffedit,
     duplicate,
     edit,
+    file_annotate,
+    file_list,
+    file_show,
     git_init,
     hunk_commit,
     hunk_list,
@@ -33,6 +37,7 @@ from .commands import (
     resolve,
     restore,
     rebase,
+    show,
     squash,
     split,
     status,
@@ -63,8 +68,58 @@ def build_parser() -> argparse.ArgumentParser:
 
     # log
     p_log = sub.add_parser("log", help="Show commit history")
+    p_log.add_argument("-r", "--revisions", dest="revisions", default=None, metavar="REVSETS",
+                       help="Which revisions to show (revset)")
     p_log.add_argument("-n", "--limit", type=int, default=10, metavar="LIMIT",
                        help="Max commits to show (default: 10)")
+    p_log.add_argument("-G", "--no-graph", action="store_true", help="Don't show the graph")
+    p_log.add_argument("-T", "--template", dest="template", default=None, metavar="TEMPLATE",
+                       help=argparse.SUPPRESS)
+    p_log.add_argument("-p", "--patch", action="store_true", help="Show patch")
+    p_log.add_argument("filesets", nargs="*", metavar="FILESETS", help=argparse.SUPPRESS)
+
+    # diff
+    p_diff = sub.add_parser("diff", help="Compare file contents between two revisions")
+    p_diff.add_argument("-r", "--revisions", dest="revisions", default=None, metavar="REVSETS",
+                        help="Show changes in these revisions")
+    p_diff.add_argument("-f", "--from", dest="from_", default=None, metavar="REVSET",
+                        help="Show changes from this revision")
+    p_diff.add_argument("-t", "--to", dest="to", default=None, metavar="REVSET",
+                        help="Show changes to this revision")
+    p_diff.add_argument("-s", "--summary", action="store_true", help="Show only summary")
+    p_diff.add_argument("--stat", action="store_true", help="Show histogram")
+    p_diff.add_argument("--name-only", action="store_true", help="Show only path")
+    p_diff.add_argument("--git", action="store_true", help="Show Git-format diff")
+    p_diff.add_argument("-T", "--template", dest="template", default=None, metavar="TEMPLATE",
+                        help=argparse.SUPPRESS)
+    p_diff.add_argument("filesets", nargs="*", metavar="FILESETS", help="Paths to restrict diff to")
+
+    # show
+    p_show = sub.add_parser("show", help="Show revision metadata and diff")
+    p_show.add_argument("revisions", nargs="*", metavar="REVSETS", help="Revisions to show (default: @)")
+    p_show.add_argument("-T", "--template", dest="template", default=None, metavar="TEMPLATE",
+                        help=argparse.SUPPRESS)
+    p_show.add_argument("-s", "--summary", action="store_true", help="Show only summary")
+    p_show.add_argument("--stat", action="store_true", help="Show histogram")
+    p_show.add_argument("--name-only", action="store_true", help="Show only path")
+    p_show.add_argument("--git", action="store_true", help="Show Git-format diff")
+    p_show.add_argument("--no-patch", action="store_true", help="Do not show patch")
+
+    # file
+    p_file = sub.add_parser("file", help="File operations")
+    file_sub = p_file.add_subparsers(dest="file_command")
+    p_flist = file_sub.add_parser("list", help="List files in a revision")
+    p_flist.add_argument("-r", "--revision", dest="revision", default="@", metavar="REVSET",
+                         help="Revision to list files for (default: @)")
+    p_flist.add_argument("filesets", nargs="*", metavar="FILESETS", help="Paths to restrict to")
+    p_fshow = file_sub.add_parser("show", help="Print contents of files in a revision")
+    p_fshow.add_argument("-r", "--revision", dest="revision", default="@", metavar="REVSET",
+                         help="Revision to show files from (default: @)")
+    p_fshow.add_argument("filesets", nargs="+", metavar="FILESETS", help="Paths to show")
+    p_fannot = file_sub.add_parser("annotate", help="Show line annotation (blame)")
+    p_fannot.add_argument("-r", "--revision", dest="revision", default="@", metavar="REVSET",
+                          help="Revision to annotate (default: @)")
+    p_fannot.add_argument("path", metavar="PATH", help="File to annotate")
 
     # describe: -r REVSETS, repeatable -m MESSAGE, --stdin
     p_desc = sub.add_parser("describe", aliases=["desc"], help="Set commit descriptions")
@@ -254,6 +309,11 @@ def main(argv=None) -> int:
         "git": lambda a: {"init": git_init}.get(a.git_command or "", _git_help)(a),
         "status": status,
         "log": log,
+        "diff": diff,
+        "show": show,
+        "file": lambda a: {"list": file_list, "show": file_show, "annotate": file_annotate}.get(
+            a.file_command or "", _file_help
+        )(a),
         "describe": describe,
         "new": new,
         "bookmark": lambda a: {"create": bookmark, "set": bookmark}.get(
@@ -296,6 +356,11 @@ def _bm_help(args) -> int:
 
 def _op_help(args) -> int:
     print("usage: pyjj op {restore}", file=sys.stderr)
+    return 2
+
+
+def _file_help(args) -> int:
+    print("usage: pyjj file {list,show,annotate}", file=sys.stderr)
     return 2
 
 
