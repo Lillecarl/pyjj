@@ -23,6 +23,7 @@ from .commands import (
     git_init,
     hunk_commit,
     hunk_list,
+    hunk_schema,
     hunk_split,
     hunk_squash,
     log,
@@ -187,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # hunk (AI agent granular selection)
     p_hunk = sub.add_parser("hunk", help="Hunk-level selection for AI agents (like jj-hunk)")
+    p_hunk.add_argument("--json-schema", action="store_true", help="Dump JSON schema for LLM tool-calling and exit")
     hunk_sub = p_hunk.add_subparsers(dest="hunk_command")
     p_hunk_list = hunk_sub.add_parser("list", help="List hunks for a revision")
     p_hunk_list.add_argument("-r", "--revision", default="@", metavar="REVSET",
@@ -211,6 +213,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_hunk_squash.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                                help="Read spec from file (JSON/YAML)")
     p_hunk_squash.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
+    p_hunk_schema = hunk_sub.add_parser("schema", help="Dump JSON schema for LLM tool-calling")
+    p_hunk_schema.add_argument("--format", choices=["json", "yaml"], default="json",
+                               help="Output format (default: json)")
 
     # operation-level
     sub.add_parser("undo", help="Undo the last operation")
@@ -256,11 +261,12 @@ def main(argv=None) -> int:
         "split": split,
         "diffedit": diffedit,
         "resolve": resolve,
-        "hunk": lambda a: {
+        "hunk": lambda a: hunk_schema(a) if getattr(a, "json_schema", False) else {
             "list": hunk_list,
             "split": hunk_split,
             "commit": hunk_commit,
             "squash": hunk_squash,
+            "schema": hunk_schema,
         }.get(a.hunk_command or "", _hunk_help)(a),
         "undo": undo,
         "redo": redo,
@@ -286,7 +292,7 @@ def _op_help(args) -> int:
 
 
 def _hunk_help(args) -> int:
-    print("usage: pyjj hunk {list,split,commit,squash}", file=sys.stderr)
+    print("usage: pyjj hunk {list,split,commit,squash,schema}", file=sys.stderr)
     return 2
 
 
