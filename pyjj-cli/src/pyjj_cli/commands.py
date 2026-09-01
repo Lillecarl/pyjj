@@ -940,21 +940,46 @@ def _load_spec(args) -> hunk_mod.Spec:
     return hunk_mod.load_spec_from_input(spec_str, spec_file)
 
 
+def _resolve_message_arg(msg: str | None, use_stdin: bool) -> str | None:
+    """Resolve commit message: '-' or --stdin reads from stdin (supports long messages without quoting)."""
+    if use_stdin:
+        text = sys.stdin.read()
+        if not text.strip():
+            return None
+        return text
+    if msg == "-":
+        text = sys.stdin.read()
+        if not text:
+            return None
+        return text
+    return msg
+
+
 def hunk_split(args) -> int:
     """`pyjj hunk split [-r REV] <spec> <message>` — split with hunk/line spec."""
     try:
         settings, ws, repo = _load(args)
-        # Handle spec/message normalization like jj-hunk: spec can be '-' for stdin, or --spec-file
+        # Handle spec/message normalization like jj-hunk: spec can be '-' for stdin, --spec, or --spec-file
         spec_str = getattr(args, "spec", None)
+        spec_flag = getattr(args, "spec_flag", None)
         spec_file = getattr(args, "spec_file", None)
         message = getattr(args, "message", None)
+        use_stdin = bool(getattr(args, "stdin", False))
+        # --spec flag takes precedence over positional spec
+        if spec_flag is not None:
+            if spec_str is not None or spec_file is not None:
+                print("Error: hunk split: use either --spec, --spec-file orpositional <spec>, not both", file=sys.stderr)
+                return 2
+            spec_str = spec_flag
         # Normalize like jj-hunk's normalize_spec_message
         if spec_file and message is None:
             # When --spec-file is used, the positional spec is actually the message
             message = spec_str
             spec_str = None
+        # Resolve message from stdin if requested
+        message = _resolve_message_arg(message, use_stdin)
         if message is None:
-            print("Error: hunk split requires a commit message", file=sys.stderr)
+            print("Error: hunk split requires a commit message (use '-' or --stdin for stdin)", file=sys.stderr)
             return 2
         if spec_file:
             if spec_str is not None:
@@ -963,7 +988,7 @@ def hunk_split(args) -> int:
             spec = hunk_mod.load_spec_from_input(None, spec_file)
         else:
             if spec_str is None:
-                print("Error: hunk split requires a spec (or use --spec-file)", file=sys.stderr)
+                print("Error: hunk split requires a spec (or use --spec/--spec-file)", file=sys.stderr)
                 return 2
             spec = hunk_mod.load_spec_from_input(spec_str, None)
         target = _resolve_one(repo, settings, args.revision or "@")
@@ -991,13 +1016,21 @@ def hunk_commit(args) -> int:
     try:
         settings, ws, repo = _load(args)
         spec_str = getattr(args, "spec", None)
+        spec_flag = getattr(args, "spec_flag", None)
         spec_file = getattr(args, "spec_file", None)
         message = getattr(args, "message", None)
+        use_stdin = bool(getattr(args, "stdin", False))
+        if spec_flag is not None:
+            if spec_str is not None or spec_file is not None:
+                print("Error: hunk commit: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
+                return 2
+            spec_str = spec_flag
         if spec_file and message is None:
             message = spec_str
             spec_str = None
+        message = _resolve_message_arg(message, use_stdin)
         if message is None:
-            print("Error: hunk commit requires a commit message", file=sys.stderr)
+            print("Error: hunk commit requires a commit message (use '-' or --stdin for stdin)", file=sys.stderr)
             return 2
         if spec_file:
             if spec_str is not None:
@@ -1006,7 +1039,7 @@ def hunk_commit(args) -> int:
             spec = hunk_mod.load_spec_from_input(None, spec_file)
         else:
             if spec_str is None:
-                print("Error: hunk commit requires a spec (or use --spec-file)", file=sys.stderr)
+                print("Error: hunk commit requires a spec (or use --spec/--spec-file)", file=sys.stderr)
                 return 2
             spec = hunk_mod.load_spec_from_input(spec_str, None)
         # For commit, the target is the working copy commit
@@ -1039,7 +1072,13 @@ def hunk_squash(args) -> int:
     try:
         settings, ws, repo = _load(args)
         spec_str = getattr(args, "spec", None)
+        spec_flag = getattr(args, "spec_flag", None)
         spec_file = getattr(args, "spec_file", None)
+        if spec_flag is not None:
+            if spec_str is not None or spec_file is not None:
+                print("Error: hunk squash: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
+                return 2
+            spec_str = spec_flag
         if spec_file:
             if spec_str is not None:
                 print("Error: hunk squash: omit <spec> when using --spec-file", file=sys.stderr)
@@ -1047,7 +1086,7 @@ def hunk_squash(args) -> int:
             spec = hunk_mod.load_spec_from_input(None, spec_file)
         else:
             if spec_str is None:
-                print("Error: hunk squash requires a spec (or use --spec-file)", file=sys.stderr)
+                print("Error: hunk squash requires a spec (or use --spec/--spec-file)", file=sys.stderr)
                 return 2
             spec = hunk_mod.load_spec_from_input(spec_str, None)
         target = _resolve_one(repo, settings, args.revision or "@")

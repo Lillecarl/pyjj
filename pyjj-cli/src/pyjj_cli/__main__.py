@@ -198,18 +198,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_hunk_split = hunk_sub.add_parser("split", help="Split a revision with hunk/line spec")
     p_hunk_split.add_argument("-r", "--revision", default="@", metavar="REVSET",
                               help="Revision to split (default: @)")
+    p_hunk_split.add_argument("--spec", dest="spec_flag", default=None, metavar="SPEC",
+                              help="Spec string (JSON/YAML), alternative to positional <spec>")
     p_hunk_split.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                               help="Read spec from file (JSON/YAML)")
+    p_hunk_split.add_argument("--stdin", action="store_true", help="Read commit message from stdin")
     p_hunk_split.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
-    p_hunk_split.add_argument("message", nargs="?", help="Commit message for first half")
+    p_hunk_split.add_argument("message", nargs="?", help="Commit message for first half (or '-' for stdin)")
     p_hunk_commit = hunk_sub.add_parser("commit", help="Commit selected hunks from working copy")
+    p_hunk_commit.add_argument("--spec", dest="spec_flag", default=None, metavar="SPEC",
+                               help="Spec string (JSON/YAML), alternative to positional <spec>")
     p_hunk_commit.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                                help="Read spec from file (JSON/YAML)")
+    p_hunk_commit.add_argument("--stdin", action="store_true", help="Read commit message from stdin")
     p_hunk_commit.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
-    p_hunk_commit.add_argument("message", nargs="?", help="Commit message")
+    p_hunk_commit.add_argument("message", nargs="?", help="Commit message (or '-' for stdin)")
     p_hunk_squash = hunk_sub.add_parser("squash", help="Squash selected hunks into parent")
     p_hunk_squash.add_argument("-r", "--revision", default="@", metavar="REVSET",
                                help="Revision to squash (default: @)")
+    p_hunk_squash.add_argument("--spec", dest="spec_flag", default=None, metavar="SPEC",
+                               help="Spec string (JSON/YAML), alternative to positional <spec>")
     p_hunk_squash.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                                help="Read spec from file (JSON/YAML)")
     p_hunk_squash.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
