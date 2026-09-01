@@ -180,13 +180,25 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Keep destination's description unchanged")
     p_sq.add_argument("-m", "--message", dest="message", default=None, metavar="MESSAGE",
                       help="Description for the squashed revision")
+    p_sq.add_argument("filesets", nargs="*", metavar="FILESETS",
+                      help="Paths to squash (default: all)")
 
     # rebase
     p_re = sub.add_parser("rebase", help="Move revisions to a different parent")
     p_re.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
                       metavar="REVSETS", help="Revisions to move (-r mode)")
-    p_re.add_argument("-d", "--destination", dest="destinations", action="append",
-                      required=True, metavar="REVSETS", help="New parent(s)")
+    p_re.add_argument("-s", "--source", dest="sources", action="append", default=None,
+                      metavar="REVSETS", help="Revisions to move with descendants (-s mode)")
+    p_re.add_argument("-b", "--branch", dest="branches", action="append", default=None,
+                      metavar="REVSETS", help="Branch to rebase (-b mode)")
+    p_re.add_argument("-d", "--destination", dest="destinations", action="append", default=None,
+                      metavar="REVSETS", help="New parent(s) (-d/--destination)")
+    p_re.add_argument("-o", "--onto", dest="ontos", action="append", default=None,
+                      metavar="REVSETS", help="New parent(s) (--onto synonym for -d)")
+    p_re.add_argument("-A", "--insert-after", dest="insert_afters", action="append", default=None,
+                      metavar="REVSETS", help="Insert after this revision")
+    p_re.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None,
+                      metavar="REVSETS", help="Insert before this revision")
 
     # abandon
     p_ab = sub.add_parser("abandon", help="Remove revisions (their descendants are rebased)")

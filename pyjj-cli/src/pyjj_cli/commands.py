@@ -796,7 +796,11 @@ def squash(args) -> int:
                 description = _run_editor(settings, combined)
 
         tx = repo.start_transaction(settings)
-        builder = tx.squash(source, dest)
+        paths = getattr(args, "filesets", None) or None
+        # Normalize empty list to None (means all paths)
+        if paths == []:
+            paths = None
+        builder = tx.squash(source, dest, paths=paths)
         if builder is None:
             print("Nothing changed.")
             return 0
@@ -813,13 +817,81 @@ def squash(args) -> int:
 def rebase(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        if not args.revisions:
-            print("Error: currently only `-r REVSETS` mode is supported", file=sys.stderr)
+        # Determine source mode: -r (commit_ids), -s (root_ids), -b (branch roots)
+        revisions = getattr(args, "revisions", None)
+        sources = getattr(args, "sources", None)
+        branches = getattr(args, "branches", None)
+        # Count how many source modes were given
+        mode_count = sum(1 for m in (revisions, sources, branches) if m)
+        if mode_count == 0:
+            # Default is -b @ when nothing given, like real jj
+            sources = ["@"]
+            mode_count = 1
+        if mode_count > 1:
+            print("Error: specify only one of -r, -s, -b", file=sys.stderr)
             return 2
-        targets = _resolve_all(repo, settings, args.revisions)
-        destinations = _resolve_in_arg_order(repo, settings, args.destinations)
+        if revisions:
+            targets = _resolve_all(repo, settings, revisions)
+            target_commit_ids = [c.id for c in targets]
+            target_root_ids = []
+        elif sources:
+            roots = _resolve_all(repo, settings, sources)
+            target_root_ids = [c.id for c in roots]
+            target_commit_ids = []
+        else:  # branches
+            roots = _resolve_all(repo, settings, branches)
+            target_root_ids = [c.id for c in roots]
+            target_commit_ids = []
+
+        # Destinations: -d/--destination, -o/--onto, -A/--insert-after, -B/--insert-before
+        dests = getattr(args, "destinations", None) or []
+        ontos = getattr(args, "ontos", None) or []
+        afters = getattr(args, "insert_afters", None) or []
+        befores = getattr(args, "insert_befores", None) or []
+
+        # Expand -o as alias for -d
+        new_parent_ids: list[pyjj.CommitId] = []
+        new_child_ids: list[pyjj.CommitId] = []
+
+        # Collect plain destinations (-d / -o)
+        plain_dests = list(dests) + list(ontos)
+        if plain_dests:
+            if afters or befores:
+                print("Error: cannot combine -d/-o with -A/-B", file=sys.stderr)
+                return 2
+            dest_commits = _resolve_in_arg_order(repo, settings, plain_dests)
+            new_parent_ids = [c.id for c in dest_commits]
+            new_child_ids = []
+        elif afters:
+            # -A: insert after -> new parents = after, new children = children(after)
+            after_commits = _resolve_in_arg_order(repo, settings, afters)
+            new_parent_ids = [c.id for c in after_commits]
+            # Find children of after commits via revset
+            try:
+                children_expr = " | ".join(f"children({a})" for a in afters)
+                children = repo.revset(settings, children_expr)
+                new_child_ids = [c.id for c in children]
+            except pyjj.JjError:
+                new_child_ids = []
+        elif befores:
+            # -B: insert before -> new children = before, new parents = parents(before)
+            before_commits = _resolve_in_arg_order(repo, settings, befores)
+            new_child_ids = [c.id for c in before_commits]
+            parents_set: dict[str, pyjj.Commit] = {}
+            for c in before_commits:
+                for pid in c.parent_ids:
+                    try:
+                        p = repo.get_commit(pid)
+                        parents_set[pid.hex()] = p
+                    except pyjj.JjError:
+                        pass
+            new_parent_ids = [c.id for c in parents_set.values()]
+        else:
+            print("Error: no destination specified (use -d, -o, -A or -B)", file=sys.stderr)
+            return 2
+
         tx = repo.start_transaction(settings)
-        tx.move_commits([c.id for c in targets], [], [d.id for d in destinations], [])
+        tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
         _finish(tx, "rebase commit", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
