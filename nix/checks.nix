@@ -31,6 +31,16 @@ let
       ps.anyio
     ]
   );
+
+  # Impure pytest args passthrough for human workflow:
+  #   PYTEST_ARGS="-k test_absorb -xvs" nix build --impure --file . checks.pyjj-conformance
+  # or via the `tests` app:
+  #   PYTEST_ARGS="-k test_absorb -q" nix run --impure --file . tests
+  # In pure evaluation (CI, no --impure) builtins.getEnv returns "" and the
+  # default "-q" is used, so existing `nix build --file . checks.pyjj-conformance`
+  # stays pure and hermetic.
+  pytestArgs = builtins.getEnv "PYTEST_ARGS";
+  pytestArgsStr = if pytestArgs == "" then "-q" else pytestArgs;
 in
 {
   pyjj-conformance =
@@ -57,7 +67,8 @@ in
         chmod -R u+w ./proj
         cd ./proj
 
-        pytest tests -q
+        # shellcheck disable=SC2086
+        pytest tests ${pytestArgsStr}
         touch "$out"
       '';
 }

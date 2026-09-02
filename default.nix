@@ -63,6 +63,59 @@ let
     inherit pyjj pyjj-cli jj;
   };
 
+  # Human-workable impure test runner for `PYTEST_ARGS="..." nix run --file . tests`
+  # (and `PYTEST_ARGS="..." nix run --impure --file . tests`). Unlike
+  # `checks.pyjj-conformance` (store-built, runs at build time in a sandbox),
+  # this is a live `nix run` app that executes pytest directly on the working
+  # tree with the pinned `jj` on PATH, so you can filter with `-k`, `-xvs`, etc.
+  # without the `nix build` sandbox indirection. Both `PYTEST_ARGS` env var and
+  # CLI args are forwarded:
+  #   PYTEST_ARGS="-k test_absorb -xvs" nix run --file . tests
+  #   nix run --file . tests -- -k test_absorb -q
+  #   PYTEST_ARGS="-k test_absorb" nix build --impure --file . checks.pyjj-conformance
+  tests =
+    let
+      pythonEnv = pkgs.python3.withPackages (
+        ps: [
+          pyjj
+          pyjj-cli
+          ps.pytest
+          ps.anyio
+        ]
+      );
+      # Eval-time impure passthrough so `nix build --impure` can also bake args.
+      impureArgs = builtins.getEnv "PYTEST_ARGS";
+    in
+    pkgs.writeShellApplication {
+      name = "tests";
+      runtimeInputs = [
+        pythonEnv
+        jj
+        pkgs.gitMinimal
+        pkgs.openssh
+      ];
+      text = ''
+        export PYJJ_PARITY_JJ="${lib.getExe jj}"
+        export PYTHONDONTWRITEBYTECODE=1
+        # Isolate HOME like checks.nix does (parity suite suppresses machine config)
+        if [ -z "''${HOME:-}" ]; then
+          export HOME="$(mktemp -d)"
+          mkdir -p "$HOME"
+        fi
+        # Prefer runtime PYTEST_ARGS; fall back to eval-time impure args if present.
+        extraArgs="${impureArgs}"
+        if [ -n "''${PYTEST_ARGS:-}" ]; then
+          extraArgs="''${PYTEST_ARGS}"
+        fi
+        if [ -n "''${extraArgs:-}" ]; then
+          # shellcheck disable=SC2086
+          exec pytest pyjj/tests ''${extraArgs} "$@"
+        else
+          exec pytest pyjj/tests -q "$@"
+        fi
+      '';
+    };
+
   shells = {
     # Fast local loop for pyjj-bindings (the compiled Rust extension): plain
     # nixpkgs stable rustc/cargo (pyjj-bindings needs edition 2024 / rustc
@@ -163,6 +216,7 @@ in
     shells
     jj
     checks
+    tests
     ;
   inherit
     pyjj-bindings
