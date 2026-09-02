@@ -26,7 +26,14 @@ from .commands import (
     file_list,
     file_show,
     fix,
+    git_clone,
+    git_export,
+    git_fetch,
+    git_import,
     git_init,
+    git_push,
+    git_remote,
+    git_root,
     hunk_commit,
     hunk_list,
     hunk_schema,
@@ -65,6 +72,57 @@ def build_parser() -> argparse.ArgumentParser:
     git_sub = p_git.add_subparsers(dest="git_command")
     p_ginit = git_sub.add_parser("init", help="Create a new jj repo backed by Git")
     p_ginit.add_argument("destination", nargs="?", default=".", help="Destination directory")
+    p_gclone = git_sub.add_parser("clone", help="Create a new repo backed by a clone of a Git repo")
+    p_gclone.add_argument("source", help="URL or path of the Git repo to clone")
+    p_gclone.add_argument("destination", nargs="?", help="Target directory for the clone")
+    p_gclone.add_argument("--remote", dest="remote_name", default="origin", metavar="REMOTE_NAME",
+                          help="Name of the newly created remote (default: origin)")
+    p_gclone.add_argument("--colocate", dest="colocate", action="store_true", default=True,
+                          help="Colocate the Jujutsu repo with the git repo (default)")
+    p_gclone.add_argument("--no-colocate", dest="colocate", action="store_false",
+                          help="Disable colocation")
+    p_gclone.add_argument("--depth", dest="depth", type=int, default=None, help=argparse.SUPPRESS)
+    p_gclone.add_argument("-b", "--branch", dest="branches", action="append", default=None,
+                          metavar="BRANCH", help=argparse.SUPPRESS)
+    p_gfetch = git_sub.add_parser("fetch", help="Fetch from a Git remote")
+    p_gfetch.add_argument("--remote", dest="remote", default=None, metavar="REMOTE",
+                          help="The remote to fetch from")
+    p_gfetch.add_argument("-b", "--branch", dest="branches", action="append", default=None,
+                          metavar="BRANCH", help="Branch to fetch (repeatable)")
+    p_gfetch.add_argument("-t", "--tag", dest="tags", action="append", default=None,
+                          metavar="TAG", help=argparse.SUPPRESS)
+    p_gfetch.add_argument("--tracked", action="store_true", help=argparse.SUPPRESS)
+    p_gfetch.add_argument("--all-remotes", action="store_true", help="Fetch from all remotes")
+    p_gimport = git_sub.add_parser("import", help="Update repo with changes made in the underlying Git repo")
+    p_gexport = git_sub.add_parser("export", help="Update the underlying Git repo with changes made in the repo")
+    p_gpush = git_sub.add_parser("push", help="Push to a Git remote")
+    p_gpush.add_argument("--remote", dest="remote", default=None, metavar="REMOTE",
+                         help="The remote to push to")
+    p_gpush.add_argument("-b", "--bookmark", dest="bookmarks", action="append", default=None,
+                         metavar="BOOKMARK", help="Bookmark to push (repeatable)")
+    p_gpush.add_argument("-t", "--tag", dest="tags", action="append", default=None,
+                         metavar="TAG", help=argparse.SUPPRESS)
+    p_gpush.add_argument("--all", dest="all_flag", action="store_true", help="Push all bookmarks and tags")
+    p_gpush.add_argument("--tracked", dest="tracked", action="store_true", help=argparse.SUPPRESS)
+    p_gpush.add_argument("--deleted", dest="deleted", action="store_true", help=argparse.SUPPRESS)
+    p_gpush.add_argument("--allow-empty-description", action="store_true", help=argparse.SUPPRESS)
+    p_gpush.add_argument("--allow-private", action="store_true", help=argparse.SUPPRESS)
+    p_gremote = git_sub.add_parser("remote", help="Manage Git remotes")
+    remote_sub = p_gremote.add_subparsers(dest="remote_command")
+    p_gr_list = remote_sub.add_parser("list", help="List Git remotes")
+    p_gr_add = remote_sub.add_parser("add", help="Add a Git remote")
+    p_gr_add.add_argument("name", help="Remote name")
+    p_gr_add.add_argument("url", help="Remote URL")
+    p_gr_remove = remote_sub.add_parser("remove", help="Remove a Git remote")
+    p_gr_remove.add_argument("name", help="Remote name")
+    p_gr_rename = remote_sub.add_parser("rename", help="Rename a Git remote")
+    p_gr_rename.add_argument("old", help="Old remote name")
+    p_gr_rename.add_argument("new", help="New remote name")
+    p_gr_set_url = remote_sub.add_parser("set-url", help="Set the URL of a Git remote")
+    p_gr_set_url.add_argument("name", help="Remote name")
+    p_gr_set_url.add_argument("--url", dest="url", default=None, help="New URL")
+    p_gr_set_url.add_argument("--push-url", dest="push_url", default=None, help="New push URL")
+    p_groot = git_sub.add_parser("root", help="Show the underlying Git directory")
 
     # status
     sub.add_parser("status", help="Show working copy status")
@@ -373,7 +431,16 @@ def main(argv=None) -> int:
         return 1
 
     commands = {
-        "git": lambda a: {"init": git_init}.get(a.git_command or "", _git_help)(a),
+        "git": lambda a: {
+            "init": git_init,
+            "clone": git_clone,
+            "fetch": git_fetch,
+            "push": git_push,
+            "import": git_import,
+            "export": git_export,
+            "remote": git_remote,
+            "root": git_root,
+        }.get(a.git_command or "", _git_help)(a),
         "status": status,
         "log": log,
         "diff": diff,
@@ -413,7 +480,12 @@ def main(argv=None) -> int:
 
 
 def _git_help(args) -> int:
-    print("usage: pyjj git {init}", file=sys.stderr)
+    print("usage: pyjj git {init,clone,fetch,push,import,export,remote,root}", file=sys.stderr)
+    return 2
+
+
+def _git_remote_help(args) -> int:
+    print("usage: pyjj git remote {add,list,remove,rename,set-url}", file=sys.stderr)
     return 2
 
 

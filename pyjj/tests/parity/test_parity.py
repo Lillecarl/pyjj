@@ -14,10 +14,14 @@ the trailing newline `jj -m` stores in every description.
 
 import os
 import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
-from parity_harness import RepoPair
+from parity_harness import DRIVER, RepoPair
 
 pytestmark = pytest.mark.skipif(
     shutil.which(os.environ.get("PYJJ_PARITY_JJ", "jj")) is None,
@@ -663,4 +667,89 @@ def test_revert_insert_after(pair: RepoPair) -> None:
     pair.op(files={"file.txt": b"hello\nworld\nmore\n"}, jj=["status"])
     # Revert B insert-after A (A's child C should be rebased onto the revert)
     pair.op(jj=["revert", "-r", rev("B"), "--insert-after", rev("A")])
+    pair.assert_parity()
+
+
+# -- git ----------------------------------------------------------------------
+
+def _make_bare_remote(base: Path) -> Path:
+    """Create a bare git remote with a single branch 'main' seeded with one commit."""
+    remote_dir = base / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(remote_dir)], check=True, capture_output=True)
+    seed_dir = base / "seed"
+    subprocess.run(["git", "init", "-b", "main", str(seed_dir)], check=True, capture_output=True)
+    (seed_dir / "file.txt").write_text("hello\n")
+    env = {**os.environ, "GIT_EDITOR": "true", "EDITOR": "true"}
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "tag.gpgsign=false", "add", "file.txt"],
+        cwd=str(seed_dir), check=True, capture_output=True, env=env,
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "tag.gpgsign=false", "commit", "-m", "seed"],
+        cwd=str(seed_dir), check=True, capture_output=True, env=env,
+    )
+    subprocess.run(["git", "push", str(remote_dir), "main"], cwd=str(seed_dir), check=True, capture_output=True, env=env)
+    return remote_dir
+
+
+def test_git_clone(pair: RepoPair) -> None:
+    # Clone via both CLIs from the same bare remote and assert parity.
+    # This is the only git test that doesn't use pair.init() — it creates its own repos.
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        root = pair.root
+        cli_dest = root / "cli-clone"
+        py_dest = root / "py-clone"
+        env = pair._env(bump=False)
+        subprocess.run([pair.jj_bin, "git", "clone", str(remote), str(cli_dest)], check=True, capture_output=True, env=env)
+        pair._run([sys.executable, str(DRIVER), str(py_dest), "git", "clone", str(remote), str(py_dest)], env, cwd=py_dest.parent)
+        got_cli = pair._extract_repo(cli_dest)
+        got_py = pair._extract_repo(py_dest)
+        if got_cli != got_py:
+            import difflib, json
+            a = json.dumps(got_cli, indent=1, sort_keys=True).splitlines()
+            b = json.dumps(got_py, indent=1, sort_keys=True).splitlines()
+            diff = "\n".join(difflib.unified_diff(a, b, "cli", "py", lineterm=""))
+            raise AssertionError(f"git clone repos diverged:\n{diff}")
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+def test_git_fetch(pair: RepoPair) -> None:
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remote)])
+        pair.op(jj=["git", "fetch"])
+        pair.assert_parity()
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+def test_git_push(pair: RepoPair) -> None:
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remote)])
+        pair.op(jj=["git", "fetch"])
+        pair.op(files={"new.txt": b"new\n"}, jj=["describe", "-m", "new"])
+        pair.op(jj=["bookmark", "create", "mybranch"])
+        pair.op(jj=["git", "push", "--remote", "origin", "-b", "mybranch"])
+        pair.assert_parity()
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+def test_git_remote_add_list_remove(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", "https://example.com/repo.git"])
+    pair.op(jj=["git", "remote", "add", "upstream", "https://example.com/upstream.git"])
+    pair.op(jj=["git", "remote", "list"])
+    pair.op(jj=["git", "remote", "remove", "upstream"])
     pair.assert_parity()
