@@ -108,6 +108,19 @@ impl PyUserSettings {
         }
     }
 
+    /// Lists the tool names under `fix.tools` (e.g. `["clang-format", "black"]`
+    /// for `fix.tools.clang-format` / `fix.tools.black`). Returns an empty
+    /// list if the table is not set anywhere. Used by `jj fix` to discover
+    /// which formatters to run.
+    fn list_fix_tools(&self) -> PyResult<Vec<String>> {
+        use jj_lib::config::ConfigGetError;
+        match self.0.config().get_table("fix.tools") {
+            Ok(table) => Ok(table.iter().map(|(k, _)| k.to_string()).collect()),
+            Err(ConfigGetError::NotFound { .. }) => Ok(vec![]),
+            Err(err) => Err(crate::errors::map_py_err(err)),
+        }
+    }
+
     fn __repr__(&self) -> String {
         format!("UserSettings({} <{}>)", self.user_name(), self.user_email())
     }

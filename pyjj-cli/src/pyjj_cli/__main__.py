@@ -25,6 +25,7 @@ from .commands import (
     file_annotate,
     file_list,
     file_show,
+    fix,
     git_init,
     hunk_commit,
     hunk_list,
@@ -214,6 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_ab.add_argument("filesets", nargs="*", metavar="FILESETS",
                       help="Paths to absorb (default: all)")
 
+    # fix
+    p_fix = sub.add_parser("fix", help="Update files with formatting fixes")
+    p_fix.add_argument("-s", "--source", dest="source", default=None, metavar="REVSETS",
+                       help="Fix files in revision(s) and descendants (default: reachable(@, mutable()))")
+    p_fix.add_argument("--include-unchanged-files", dest="include_unchanged", action="store_true",
+                       help="Fix unchanged files as well")
+    p_fix.add_argument("filesets", nargs="*", metavar="FILESETS",
+                       help="Paths to fix (default: all)")
+
     # abandon
     p_ab = sub.add_parser("abandon", help="Remove revisions (their descendants are rebased)")
     p_ab.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
@@ -362,6 +372,7 @@ def main(argv=None) -> int:
         "squash": squash,
         "rebase": rebase,
         "absorb": absorb,
+        "fix": fix,
         "abandon": abandon,
         "duplicate": duplicate,
         "edit": edit,

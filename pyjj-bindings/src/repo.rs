@@ -884,15 +884,16 @@ impl PyTransaction {
     /// subprocesses itself, see `cli/src/commands/fix.rs`), but the trait
     /// itself is satisfied here by a plain Rust closure over
     /// already-computed data, not by calling back into Python.
-    #[pyo3(signature = (settings, revset=None, paths=None))]
+    #[pyo3(signature = (settings, revset=None, paths=None, include_unchanged_files=false))]
     fn fix_enumerate(
         &self,
         settings: &PyUserSettings,
         revset: Option<&str>,
         paths: Option<Vec<String>>,
+        include_unchanged_files: bool,
     ) -> PyResult<Vec<crate::fix::PyFileToFix>> {
         with_mut_repo(self, |mut_repo| {
-            crate::fix::fix_enumerate(self, mut_repo, settings, revset, paths)
+            crate::fix::fix_enumerate(self, mut_repo, settings, revset, paths, include_unchanged_files)
         })
     }
 
@@ -903,16 +904,17 @@ impl PyTransaction {
     /// same rule real `jj fix` follows. A file whose key is missing from
     /// `fixes` is left unchanged. Still needs `rebase_descendants()` before
     /// `commit()`, same as every other rewrite here.
-    #[pyo3(signature = (settings, fixes, revset=None, paths=None))]
+    #[pyo3(signature = (settings, fixes, revset=None, paths=None, include_unchanged_files=false))]
     fn fix_apply(
         &self,
         settings: &PyUserSettings,
         fixes: std::collections::HashMap<String, Vec<u8>>,
         revset: Option<&str>,
         paths: Option<Vec<String>>,
+        include_unchanged_files: bool,
     ) -> PyResult<crate::fix::PyFixSummary> {
         with_mut_repo(self, |mut_repo| {
-            crate::fix::fix_apply(self, mut_repo, settings, revset, paths, fixes)
+            crate::fix::fix_apply(self, mut_repo, settings, revset, paths, fixes, include_unchanged_files)
         })
     }
 

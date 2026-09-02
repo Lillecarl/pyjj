@@ -569,3 +569,54 @@ def test_absorb_keeps_described_source(pair: RepoPair) -> None:
     pair.op(files={"a.txt": b"line1\nLINE2-MODIFIED\nline3\n"}, jj=["status"])
     pair.op(jj=["absorb", "--into", rev("base")])
     pair.assert_parity()
+
+
+# -- fix ----------------------------------------------------------------------
+
+def _add_fix_tool(pair: RepoPair) -> None:
+    """Inject a trivial fix tool (tr a-z A-Z) into the pair's scratch config."""
+    config_path = pair.home / ".config" / "jj" / "config.toml"
+    with open(config_path, "a") as f:
+        f.write('\n[fix.tools.trivial]\ncommand = ["tr", "a-z", "A-Z"]\npatterns = ["glob:\'**/*.txt\'"]\n')
+
+
+def test_fix_basic(pair: RepoPair) -> None:
+    _add_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"hello\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"hello world\n"}, jj=["status"])
+    pair.op(jj=["fix"])
+    pair.assert_parity()
+
+
+def test_fix_with_path_filter(pair: RepoPair) -> None:
+    _add_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"a\n", "b.txt": b"b\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"a changed\n", "b.txt": b"b changed\n"}, jj=["status"])
+    pair.op(jj=["fix", "a.txt"])
+    pair.assert_parity()
+
+
+def test_fix_with_source_filter(pair: RepoPair) -> None:
+    _add_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"hello\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "child"])
+    pair.op(files={"a.txt": b"hello world\n"}, jj=["status"])
+    pair.op(jj=["fix", "-s", rev("base")])
+    pair.assert_parity()
+
+
+def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
+    _add_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"a\n", "b.txt": b"b\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"b.txt": b"b changed\n"}, jj=["status"])
+    pair.op(jj=["describe", "-m", "child"])
+    # Fixing base's a.txt should propagate to child even though child didn't touch a.txt
+    pair.op(jj=["fix", "-s", rev("base")])
+    pair.assert_parity()

@@ -104,6 +104,7 @@ pub fn fix_enumerate(
     settings: &PyUserSettings,
     revset: Option<&str>,
     paths: Option<Vec<String>>,
+    include_unchanged_files: bool,
 ) -> PyResult<Vec<PyFileToFix>> {
     let root_commits = resolve_root_commits(tx, mut_repo, settings, revset)?;
     let matcher = paths_matcher(paths)?;
@@ -111,7 +112,7 @@ pub fn fix_enumerate(
     pollster::block_on(lib_fix_files(
         root_commits,
         matcher.as_ref(),
-        false,
+        include_unchanged_files,
         mut_repo,
         &mut fixer,
     ))
@@ -153,6 +154,7 @@ pub fn fix_apply(
     revset: Option<&str>,
     paths: Option<Vec<String>>,
     fixes: HashMap<String, Vec<u8>>,
+    include_unchanged_files: bool,
 ) -> PyResult<PyFixSummary> {
     let root_commits = resolve_root_commits(tx, mut_repo, settings, revset)?;
     let matcher = paths_matcher(paths)?;
@@ -160,7 +162,7 @@ pub fn fix_apply(
     let summary = pollster::block_on(lib_fix_files(
         root_commits,
         matcher.as_ref(),
-        false,
+        include_unchanged_files,
         mut_repo,
         &mut fixer,
     ))
