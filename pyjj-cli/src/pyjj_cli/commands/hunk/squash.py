@@ -1,4 +1,4 @@
-"""pyjj-cli commands: hunk."""
+"""hunk subcommand: hunk_squash."""
 import json
 import os
 import shlex
@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
-from .common import (
+from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -17,210 +17,10 @@ from .common import (
     _resolve_all,
     _resolve_in_arg_order,
     _resolve_one,
-    _restore_view_command,
     _wc_commit,
     complete_newline,
-    join_message_paragraphs,
     _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
 )
-
-def hunk_list(args) -> int:
-    """`pyjj hunk list [-r REV] [--format json|yaml|text]` — list hunks like jj-hunk."""
-    try:
-        settings, ws, repo = _load(args)
-        target = _resolve_one(repo, settings, args.revision)
-        # Collect file contents for the target's diff against parent
-        file_contents = hunk_mod.collect_file_contents_for_commit(repo, target, settings)
-        # Build output like jj-hunk: {files: [{path, status, hunks: [...]}, ...]}
-        files_output = []
-        for path, (before, after) in sorted(file_contents.items()):
-            # Skip binary files for now
-            try:
-                before_s = before.decode()
-                after_s = after.decode()
-            except UnicodeDecodeError:
-                files_output.append(
-                    {"path": path, "status": "modified", "hunks": [], "binary": True}
-                )
-                continue
-            hunks = hunk_mod.get_hunks_detailed(before_s, after_s)
-            if not hunks and before != after:
-                # For binary or whole-file case, still report
-                hunks = []
-            # Determine status
-            if not before and after:
-                status = "modified"
-            elif not before:
-                status = "added"
-            elif not after:
-                status = "removed"
-            else:
-                status = "modified"
-            files_output.append({"path": path, "status": status, "hunks": hunks})
-        output = {"files": files_output}
-        fmt = args.format or "json"
-        if fmt == "json":
-            print(json.dumps(output, indent=2))
-        elif fmt == "yaml":
-            try:
-                import yaml  # type: ignore
-
-                print(yaml.safe_dump(output, sort_keys=False))
-            except ImportError:
-                print("Error: PyYAML not installed, cannot output YAML", file=sys.stderr)
-                return 1
-        elif fmt == "text":
-            # Simple text format like jj-hunk --files
-            for f in files_output:
-                print(f"{f['status'][0].upper()} {f['path']} ({len(f['hunks'])} hunks)")
-                for h in f["hunks"]:
-                    print(f"  hunk {h['index']} {h['type']} {h['id']}")
-        else:
-            print(f"Error: unknown format {fmt!r}", file=sys.stderr)
-            return 1
-    except (pyjj.JjError, CommandError, ValueError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
-    return 0
-
-def _load_spec(args) -> hunk_mod.Spec:
-    """Load spec from args.spec / args.spec_file / stdin, handling '-'."""
-    spec_str = getattr(args, "spec", None)
-    spec_file = getattr(args, "spec_file", None)
-    # Handle case where spec_file is provided and spec is None, but message is in spec position
-    # For hunk split, args has spec and message; for commit, similar.
-    # The _load_spec_from_input helper already handles '-'
-    return hunk_mod.load_spec_from_input(spec_str, spec_file)
-
-def _resolve_message_arg(msg: str | None, use_stdin: bool) -> str | None:
-    """Resolve commit message: '-' or --stdin reads from stdin (supports long messages without quoting)."""
-    if use_stdin:
-        text = sys.stdin.read()
-        if not text.strip():
-            return None
-        return text
-    if msg == "-":
-        text = sys.stdin.read()
-        if not text:
-            return None
-        return text
-    return msg
-
-def hunk_split(args) -> int:
-    """`pyjj hunk split [-r REV] <spec> <message>` — split with hunk/line spec."""
-    try:
-        settings, ws, repo = _load(args)
-        # Handle spec/message normalization like jj-hunk: spec can be '-' for stdin, --spec, or --spec-file
-        spec_str = getattr(args, "spec", None)
-        spec_flag = getattr(args, "spec_flag", None)
-        spec_file = getattr(args, "spec_file", None)
-        message = getattr(args, "message", None)
-        use_stdin = bool(getattr(args, "stdin", False))
-        # --spec flag takes precedence over positional spec
-        if spec_flag is not None:
-            if spec_str is not None or spec_file is not None:
-                print("Error: hunk split: use either --spec, --spec-file orpositional <spec>, not both", file=sys.stderr)
-                return 2
-            spec_str = spec_flag
-        # Normalize like jj-hunk's normalize_spec_message
-        if spec_file and message is None:
-            # When --spec-file is used, the positional spec is actually the message
-            message = spec_str
-            spec_str = None
-        # Resolve message from stdin if requested
-        message = _resolve_message_arg(message, use_stdin)
-        if message is None:
-            print("Error: hunk split requires a commit message (use '-' or --stdin for stdin)", file=sys.stderr)
-            return 2
-        if spec_file:
-            if spec_str is not None:
-                print("Error: hunk split: omit <spec> when using --spec-file", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(None, spec_file)
-        else:
-            if spec_str is None:
-                print("Error: hunk split requires a spec (or use --spec/--spec-file)", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(spec_str, None)
-        target = _resolve_one(repo, settings, args.revision or "@")
-        overrides = hunk_mod.spec_to_overrides(repo, target, spec, settings)
-        if not overrides:
-            print("No changes selected.")
-            return 1
-        tx = repo.start_transaction(settings)
-        # Use split_selected_edited with overrides
-        first_builder = tx.split_selected_edited(target, overrides)
-        first_builder.set_description(complete_newline(message))
-        first = first_builder.write(repo)
-        second = tx.split_remainder(target, first).write(repo)
-        if target.id.hex() == repo.view().get(ws.workspace_name):
-            tx.set_wc_commit(ws.workspace_name, second.id)
-        _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
-    except (pyjj.JjError, CommandError, ValueError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
-    return 0
-
-def hunk_commit(args) -> int:
-    """`pyjj hunk commit <spec> <message>` — commit selected hunks from working copy."""
-    try:
-        settings, ws, repo = _load(args)
-        spec_str = getattr(args, "spec", None)
-        spec_flag = getattr(args, "spec_flag", None)
-        spec_file = getattr(args, "spec_file", None)
-        message = getattr(args, "message", None)
-        use_stdin = bool(getattr(args, "stdin", False))
-        if spec_flag is not None:
-            if spec_str is not None or spec_file is not None:
-                print("Error: hunk commit: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
-                return 2
-            spec_str = spec_flag
-        if spec_file and message is None:
-            message = spec_str
-            spec_str = None
-        message = _resolve_message_arg(message, use_stdin)
-        if message is None:
-            print("Error: hunk commit requires a commit message (use '-' or --stdin for stdin)", file=sys.stderr)
-            return 2
-        if spec_file:
-            if spec_str is not None:
-                print("Error: hunk commit: omit <spec> when using --spec-file", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(None, spec_file)
-        else:
-            if spec_str is None:
-                print("Error: hunk commit requires a spec (or use --spec/--spec-file)", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(spec_str, None)
-        # For commit, the target is the working copy commit
-        target = _wc_commit(repo, ws)
-        # Collect file contents for working copy changes? For commit, we need to snapshot working copy
-        # The working copy's changes are not yet in a commit; we need to use the working copy's file contents
-        # For now, we treat the working copy's parent as the base, similar to split
-        # Use the same spec_to_overrides but for the working copy's diff against parent
-        overrides = hunk_mod.spec_to_overrides(repo, target, spec, settings)
-        if not overrides:
-            print("No changes selected.")
-            return 1
-        tx = repo.start_transaction(settings)
-        # For commit, we want to keep selected changes in the current commit, and leave the rest in a new child
-        # This is the same as split, but the current commit is the working copy
-        first_builder = tx.split_selected_edited(target, overrides)
-        first_builder.set_description(complete_newline(message))
-        first = first_builder.write(repo)
-        second = tx.split_remainder(target, first).write(repo)
-        tx.set_wc_commit(ws.workspace_name, second.id)
-        _finish(tx, f"commit {target.id.hex()}", settings, ws, repo)
-    except (pyjj.JjError, CommandError, ValueError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
-    return 0
 
 def hunk_squash(args) -> int:
     """`pyjj hunk squash [-r REV] <spec>` — squash selected hunks into parent."""
@@ -431,30 +231,3 @@ def hunk_squash(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
-
-def hunk_schema(args) -> int:
-    """`pyjj hunk schema` — dump JSON schema for LLM tool-calling."""
-    try:
-        fmt = getattr(args, "format", "json")
-        if not hunk_mod.HAS_PYDANTIC:
-            print("Error: pydantic not available, cannot generate schema", file=sys.stderr)
-            return 1
-        schema = hunk_mod.SpecModel.model_json_schema()  # type: ignore
-        if fmt == "json":
-            print(json.dumps(schema, indent=2))
-        elif fmt == "yaml":
-            try:
-                import yaml  # type: ignore
-
-                print(yaml.safe_dump(schema, sort_keys=False))
-            except ImportError:
-                print("Error: PyYAML not installed, cannot output YAML", file=sys.stderr)
-                return 1
-        else:
-            print(f"Error: unknown format {fmt!r}", file=sys.stderr)
-            return 1
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    return 0
-
