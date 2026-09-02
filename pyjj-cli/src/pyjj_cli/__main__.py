@@ -16,6 +16,9 @@ from .commands import (
     abandon,
     absorb,
     bookmark,
+    bookmark_advance,
+    bookmark_track,
+    bookmark_untrack,
     commit,
     config_get,
     config_list,
@@ -26,9 +29,14 @@ from .commands import (
     diffedit,
     duplicate,
     edit,
+    evolog,
     file_annotate,
+    file_chmod,
     file_list,
+    file_search,
     file_show,
+    file_track,
+    file_untrack,
     fix,
     git_clone,
     git_colocation,
@@ -44,10 +52,18 @@ from .commands import (
     hunk_schema,
     hunk_split,
     hunk_squash,
+    interdiff,
     log,
     metaedit,
     new,
+    next_commit,
+    op_abandon,
+    op_diff,
+    op_log,
     op_restore,
+    op_show,
+    parallelize,
+    prev_commit,
     redo,
     resolve,
     restore,
@@ -65,6 +81,8 @@ from .commands import (
     tag_delete,
     tag_list,
     tag_set,
+    tag_track,
+    tag_untrack,
     undo,
     unsign,
     version,
@@ -216,8 +234,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_fshow.add_argument("filesets", nargs="+", metavar="FILESETS", help="Paths to show")
     p_fannot = file_sub.add_parser("annotate", help="Show line annotation (blame)")
     p_fannot.add_argument("-r", "--revision", dest="revision", default="@", metavar="REVSET",
-                          help="Revision to annotate (default: @)")
+                           help="Revision to annotate (default: @)")
     p_fannot.add_argument("path", metavar="PATH", help="File to annotate")
+    p_fchmod = file_sub.add_parser("chmod", help="Sets or removes the executable bit for paths in the repo")
+    p_fchmod.add_argument("-r", "--revision", dest="revision", default="@", metavar="REVSET", help="Revision to update (default: @)")
+    p_fchmod.add_argument("--executable", dest="executable", action="store_true", help="Make the file executable")
+    p_fchmod.add_argument("--normal", dest="normal", action="store_true", help="Make the file normal (non-executable)")
+    p_fchmod.add_argument("paths", nargs="+", help="Paths to update")
+    p_ftrack = file_sub.add_parser("track", help="Start tracking specified paths in the working copy")
+    p_ftrack.add_argument("paths", nargs="+", help="Paths to track")
+    p_funtrack = file_sub.add_parser("untrack", help="Stop tracking specified paths in the working copy")
+    p_funtrack.add_argument("paths", nargs="+", help="Paths to untrack")
+    p_fsearch = file_sub.add_parser("search", help="Search for content in files")
+    p_fsearch.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to search in (default: @)")
+    p_fsearch.add_argument("pattern", help="Pattern to search for")
 
     # describe: -r REVSETS, repeatable -m MESSAGE, --stdin
     p_desc = sub.add_parser("describe", aliases=["desc"], help="Set commit descriptions")
@@ -264,6 +294,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_bmr = bm_sub.add_parser("rename", help="Rename a bookmark")
     p_bmr.add_argument("old", metavar="OLD", help="Old bookmark name")
     p_bmr.add_argument("new", metavar="NEW", help="New bookmark name")
+    p_bmt = bm_sub.add_parser("track", help="Start tracking given remote bookmarks")
+    p_bmt.add_argument("names", nargs="+", help="Bookmarks to track")
+    p_bmt.add_argument("--remote", dest="remote", default=None, help="Remote to track")
+    p_bmut = bm_sub.add_parser("untrack", help="Stop tracking given remote bookmarks")
+    p_bmut.add_argument("names", nargs="+", help="Bookmarks to untrack")
+    p_bmut.add_argument("--remote", dest="remote", default=None, help="Remote to untrack")
+    p_bma = bm_sub.add_parser("advance", help="Advance the closest bookmarks to a target revision")
+    p_bma.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to advance to (default: @)")
 
     # squash
     p_sq = sub.add_parser("squash", help="Move changes from a revision into another")
@@ -480,6 +518,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_tag_set.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to point at (default: @)")
     p_tag_delete = tag_sub.add_parser("delete", help="Delete existing tags")
     p_tag_delete.add_argument("names", nargs="+", help="Tags to delete")
+    p_tag_track = tag_sub.add_parser("track", help="Start tracking given remote tags")
+    p_tag_track.add_argument("names", nargs="+", help="Tags to track")
+    p_tag_track.add_argument("--remote", dest="remote", default=None, help="Remote to track")
+    p_tag_untrack = tag_sub.add_parser("untrack", help="Stop tracking given remote tags")
+    p_tag_untrack.add_argument("names", nargs="+", help="Tags to untrack")
+    p_tag_untrack.add_argument("--remote", dest="remote", default=None, help="Remote to untrack")
 
     # config
     p_config = sub.add_parser("config", help="Manage config options")
@@ -511,10 +555,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_opr = op_sub.add_parser("restore", help="Restore to the state of an operation")
     p_opr.add_argument("operation_pos", metavar="OPERATION",
                        help="The operation to restore to")
-    p_op_log = sub.add_parser("metaedit", help="Modify metadata of a revision without changing content")
-    p_op_log.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to modify")
-    p_op_log.add_argument("--author", dest="author", default=None, help="Set author")
-    p_op_log.add_argument("--committer", dest="committer", default=None, help="Set committer")
+    p_oplog = sub.add_parser("operation", help="Commands for working with the operation log")
+    oplog_sub = p_oplog.add_subparsers(dest="oplog_command")
+    p_oplog_log = oplog_sub.add_parser("log", help="Show the operation log")
+    p_oplog_show = oplog_sub.add_parser("show", help="Show changes to the repository in an operation")
+    p_oplog_show.add_argument("operation", nargs="?", help="Operation to show")
+    p_oplog_abandon = oplog_sub.add_parser("abandon", help="Abandon operation history")
+    p_oplog_abandon.add_argument("operations", nargs="+", help="Operations to abandon")
+    p_oplog_diff = oplog_sub.add_parser("diff", help="Compare changes to the repository between two operations")
+    p_oplog_diff.add_argument("from", help="From operation")
+    p_oplog_diff.add_argument("to", help="To operation")
+    p_oplog_restore2 = oplog_sub.add_parser("restore", help="Restore to the state of an operation")
+    p_oplog_restore2.add_argument("operation", help="Operation to restore to")
+    p_evolog = sub.add_parser("evolog", help="Show how a change has evolved over time")
+    p_evolog.add_argument("-r", "--revisions", dest="revisions", default="@", help="Revisions to follow (default: @)")
+    p_evolog.add_argument("-n", "--limit", dest="limit", type=int, default=None, help="Limit number of revisions")
+    p_next = sub.add_parser("next", help="Move the working-copy commit to the child revision")
+    p_next.add_argument("amount", nargs="?", type=int, default=1, help="Number of revisions to move")
+    p_prev = sub.add_parser("prev", help="Change the working copy revision relative to the parent revision")
+    p_prev.add_argument("amount", nargs="?", type=int, default=1, help="Number of revisions to move")
+    sub.add_parser("parallelize", help="Parallelize revisions by making them siblings")
+    sub.add_parser("interdiff", help="Show differences between the diffs of two revisions")
+    p_meta = sub.add_parser("metaedit", help="Modify metadata of a revision without changing content")
+    p_meta.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to modify")
+    p_meta.add_argument("--author", dest="author", default=None, help="Set author")
+    p_meta.add_argument("--committer", dest="committer", default=None, help="Set committer")
 
     # version
     sub.add_parser("version", help="Show version information")
@@ -548,12 +613,16 @@ def main(argv=None) -> int:
         "log": log,
         "diff": diff,
         "show": show,
-        "file": lambda a: {"list": file_list, "show": file_show, "annotate": file_annotate}.get(
-            a.file_command or "", _file_help
-        )(a),
+        "file": lambda a: {
+            "list": file_list, "show": file_show, "annotate": file_annotate,
+            "chmod": file_chmod, "track": file_track, "untrack": file_untrack, "search": file_search,
+        }.get(a.file_command or "", _file_help)(a),
         "describe": describe,
         "new": new,
-        "bookmark": bookmark,
+        "bookmark": lambda a: {
+            "create": bookmark, "set": bookmark, "delete": bookmark, "forget": bookmark, "list": bookmark,
+            "move": bookmark, "rename": bookmark, "track": bookmark_track, "untrack": bookmark_untrack, "advance": bookmark_advance,
+        }.get(a.bookmark_command or "", _bm_help)(a),
         "squash": squash,
         "rebase": rebase,
         "absorb": absorb,
@@ -567,6 +636,11 @@ def main(argv=None) -> int:
         "split": split,
         "diffedit": diffedit,
         "resolve": resolve,
+        "evolog": evolog,
+        "next": next_commit,
+        "prev": prev_commit,
+        "parallelize": parallelize,
+        "interdiff": interdiff,
         "sparse": lambda a: {
             "list": sparse_list,
             "set": sparse_set,
@@ -583,9 +657,8 @@ def main(argv=None) -> int:
         }.get(a.workspace_command or "", _workspace_help)(a),
         "root": workspace_root,
         "tag": lambda a: {
-            "list": tag_list,
-            "set": tag_set,
-            "delete": tag_delete,
+            "list": tag_list, "set": tag_set, "delete": tag_delete,
+            "track": tag_track, "untrack": tag_untrack,
         }.get(a.tag_command or "", _tag_help)(a),
         "config": lambda a: {
             "get": config_get,
@@ -605,7 +678,12 @@ def main(argv=None) -> int:
         }.get(a.hunk_command or "", _hunk_help)(a),
         "undo": undo,
         "redo": redo,
-        "op": lambda a: {"restore": op_restore}.get(a.op_command or "", _op_help)(a),
+        "op": lambda a: {
+            "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
+        }.get(a.op_command or "", _op_help)(a),
+        "operation": lambda a: {
+            "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
+        }.get(a.oplog_command or "", _op_help)(a),
         "version": version,
     }
     return commands[args.command](args)
