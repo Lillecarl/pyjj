@@ -1,0 +1,301 @@
+"""Shared helpers for CLI commands."""
+"""CLI command implementations exercising pyjj bindings."""
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
+from pathlib import Path, PurePosixPath
+
+import pyjj
+import pyjj.hunk as hunk_mod
+def complete_newline(s: str) -> str:
+    """The real CLI's text_util::complete_newline: append exactly one
+    trailing newline to non-empty text lacking one; empty stays empty.
+    jj_lib stores descriptions verbatim, so this normalization lives at
+    the frontend."""
+    if s and not s.endswith("\n"):
+        return s + "\n"
+    return s
+
+def join_message_paragraphs(paragraphs) -> str:
+    """The real CLI's description_util::join_message_paragraphs: each -m
+    becomes a paragraph completed with a newline, paragraphs separated by
+    one blank line."""
+    return "\n".join(complete_newline(p) for p in paragraphs)
+
+class CommandError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+def _run_editor(settings, content: str) -> str:
+    """Run $EDITOR (or ui.editor) over `content`, then clean it up exactly
+    like the real CLI's description_util::edit_description: strip "JJ:"
+    comment lines (stopping at "JJ: ignore-rest"), trim blank edges, and
+    complete the trailing newline."""
+    editor_cmd = (
+        settings.get_string("ui.editor")
+        or os.environ.get("JJ_EDITOR")
+        or os.environ.get("VISUAL")
+        or os.environ.get("EDITOR")
+        or "nano"
+    )
+    argv = shlex.split(editor_cmd)
+
+    prepped = content
+    if prepped and not prepped.endswith("\n"):
+        prepped += "\n"
+    last_line = prepped.splitlines()[-1] if prepped.splitlines() else ""
+    prepped += "JJ:\n" if last_line.startswith("JJ:") else "\n"
+    prepped += 'JJ: Lines starting with "JJ:" (like this one) will be removed.\n'
+
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".jjdescription", delete=False
+    ) as f:
+        f.write(prepped)
+        path = f.name
+    try:
+        subprocess.run([*argv, path], check=True)
+        with open(path, encoding="utf-8") as f:
+            edited = f.read()
+    finally:
+        os.unlink(path)
+
+    kept: list[str] = []
+    for line in edited.splitlines():
+        if line.startswith("JJ: ignore-rest"):
+            break
+        if line.startswith("JJ:"):
+            continue
+        kept.append(line)
+    return complete_newline("\n".join(kept).strip("\n"))
+
+def _load(args):
+    """Load settings + workspace at the -R path, snapshotting the working
+    copy first like every real jj workspace command does."""
+    settings = pyjj.UserSettings()
+    ws = pyjj.Workspace.load(settings, args.repository)
+    repo, _stats = ws.snapshot(settings)
+    return settings, ws, repo
+
+def _resolve_all(repo, settings, expressions):
+    """Resolve positional REVSETS the way the real CLI does for target
+    SETS (describe/abandon/duplicate/...): as ONE union expression, so
+    evaluation order -- which drives seeded change-id draws -- matches
+    `jj` exactly."""
+    if not expressions:
+        return []
+    if len(expressions) == 1:
+        return repo.revset(settings, expressions[0])
+    union = " | ".join(f"({expr})" for expr in expressions)
+    return repo.revset(settings, union)
+
+def _resolve_in_arg_order(repo, settings, expressions):
+    """Resolve expressions where the ARGUMENT ORDER is semantic (parents
+    of a new commit, rebases' -d destinations): evaluate each positional
+    separately and concatenate, like the real CLI's parent-list handling."""
+    commits = []
+    for expr in expressions:
+        commits.extend(repo.revset(settings, expr))
+    return commits
+
+def _resolve_one(repo, settings, expression):
+    matches = repo.revset(settings, expression)
+    if len(matches) != 1:
+        raise CommandError(f"revset `{expression}` resolved to {len(matches)} revisions")
+    return matches[0]
+
+def _wc_commit(repo, ws):
+    return repo.get_commit(pyjj.CommitId(repo.view()[ws.workspace_name]))
+
+def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
+    """Mirror the real CLI's transaction-finish behavior: when the current
+    view's working-copy commit differs from `old_wc_hex`, update the
+    on-disk working copy to match."""
+    fresh_ws = pyjj.Workspace.load(settings, ws.workspace_root)
+    fresh_repo = fresh_ws.load_at_head()
+    new_wc_hex = fresh_repo.view()[fresh_ws.workspace_name]
+    if new_wc_hex != old_wc_hex:
+        fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
+
+def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
+    """Commit the transaction, then mirror the real CLI's
+    transaction-finish behavior: when a rewrite moved the working-copy
+    commit (e.g. an abandon or rebase rebased it), update the on-disk
+    working copy to match."""
+    old_wc_hex = base_repo.view()[ws.workspace_name]
+    tx.rebase_descendants(delete_abandoned_bookmarks)
+    tx.commit(description)
+    _checkout_if_moved(settings, ws, old_wc_hex)
+
+def _restore_view_command(tx, description, settings, ws, repo):
+    """Shared tail for view-restoring operations (undo/redo/op restore):
+    they produce no rewrites to rebase and take their operation description
+    verbatim from the binding -- for undo/redo it encodes the target op so
+    future stack jumps keep working."""
+    old_wc_hex = repo.view()[ws.workspace_name]
+    tx.commit(description)
+    _checkout_if_moved(settings, ws, old_wc_hex)
+
+
+# -- commands --------------------------------------------------------------
+
+def _changed_files(repo, settings, from_commit, to_commit):
+    """{path: (before_bytes_or_absent, after_bytes_or_absent)} for the diff
+    between two commits, using the same sentinel-absence convention the
+    diff-editor protocol needs."""
+    changed = {}
+    for entry in from_commit.diff(to_commit):
+        path = entry.path
+
+        def read(commit, p=path):
+            return commit.read_file(p) if commit.file_exists(p) else None
+
+        changed[path] = (read(from_commit), read(to_commit))
+    return changed
+
+def _run_diff_tool(settings, tool: str, before: dict, after: dict) -> dict:
+    """The merge-tools edit protocol: materialize $left/$right temp dirs
+    holding exactly the changed paths (left = before, read-only in spirit;
+    right = editable), invoke merge-tools.<tool>.edit-args with the
+    placeholders substituted, then snapshot the RIGHT directory --
+    surviving files carry their edited bytes, deleted files become None,
+    and brand-new files are picked up too."""
+    args_tmpl = settings.get_string_list(f"merge-tools.{tool}.edit-args")
+    if not args_tmpl:
+        raise CommandError(
+            f"No edit-args configured for diff editor '{tool}' "
+            "(set merge-tools.<name>.edit-args)"
+        )
+    # The program is merge-tools.<name>.program (default: the tool name,
+    # resolved via PATH), mirroring upstream's ExternalMergeTool.
+    program = settings.get_string(f"merge-tools.{tool}.program") or tool
+    with tempfile.TemporaryDirectory(prefix="pyjj-diff-") as td:
+        left_dir = Path(td) / "left"
+        right_dir = Path(td) / "right"
+        for base, files in ((left_dir, before), (right_dir, after)):
+            for rel, content in files.items():
+                p = base / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if content is not None:
+                    p.write_bytes(content)
+        argv = [program] + [
+            arg.replace("$left", str(left_dir))
+            .replace("$right", str(right_dir))
+            .replace("$output", str(right_dir))
+            for arg in args_tmpl
+        ]
+        subprocess.run(argv, check=True)
+
+        selections: dict[str, bytes | None] = {}
+        for rel in set(before) | set(after):
+            rp = right_dir / rel
+            selections[rel] = rp.read_bytes() if rp.exists() else None
+        for p in right_dir.rglob("*"):
+            if p.is_file():
+                rel = p.relative_to(right_dir).as_posix()
+                if rel not in selections:
+                    selections[rel] = p.read_bytes()
+        return selections
+
+def _selection_is_empty(selections: dict, before: dict) -> bool:
+    """True when every path ended up identical to its before-state."""
+    for rel, content in selections.items():
+        if content != before.get(rel):
+            return False
+    return True
+
+def _merge_marker_len(materialized: bytes) -> int:
+    """The marker length jj would have chosen to render this conflict
+    (max of the 7-char minimum and the longest marker run actually
+    present) -- used for the $marker_length substitution."""
+    longest = 7
+    for line in materialized.split(b"\n"):
+        if line.startswith(b"<"):
+            longest = max(longest, len(line) - len(line.lstrip(b"<")))
+    return longest
+
+def _run_merge_tool(settings, tool: str, sides: dict, path: str,
+                    edits_markers: bool, materialized: bytes) -> bytes:
+    """The 3-way merge-tool protocol for one conflicted file: materialize
+    $base/$left/$right (read-only) plus $output into a temp dir named like
+    upstream's (`{role}_{filename}`), invoke
+    merge-tools.<tool>.program with merge-args substituted, and return the
+    output file's final bytes. The caller decides whether those bytes mean
+    full resolution, partial markers, or an unchanged no-op."""
+    args_tmpl = settings.get_string_list(f"merge-tools.{tool}.merge-args")
+    if not args_tmpl:
+        raise CommandError(
+            f"No merge-args configured for merge tool '{tool}' "
+            "(set merge-tools.<name>.merge-args)"
+        )
+    program = settings.get_string(f"merge-tools.{tool}.program") or tool
+    filename = PurePosixPath(path).name or "file"
+    with tempfile.TemporaryDirectory(prefix="jj-resolve-") as td:
+        roles = {
+            "base": sides["base"],
+            "left": sides["left"],
+            "right": sides["right"],
+            "output": materialized if edits_markers else b"",
+        }
+        variables = {}
+        for role, content in roles.items():
+            p = Path(td) / f"{role}_{filename}"
+            p.write_bytes(content)
+            if role != "output":
+                p.chmod(0o444)
+            variables[f"${role}"] = str(p)
+        variables["$path"] = path
+        variables["$marker_length"] = str(_merge_marker_len(materialized))
+        argv = [program] + [
+            arg.replace("$base", variables["$base"])
+            .replace("$left", variables["$left"])
+            .replace("$right", variables["$right"])
+            .replace("$output", variables["$output"])
+            .replace("$path", variables["$path"])
+            .replace("$marker_length", variables["$marker_length"])
+            for arg in args_tmpl
+        ]
+        proc = subprocess.run(argv)
+        if proc.returncode != 0:
+            # Mirrors upstream's ToolAborted: a failing tool aborts the
+            # whole command before anything is written.
+            raise CommandError(
+                f"Tool exited with status {proc.returncode}, "
+                "but did not produce a valid resolution"
+            )
+        return Path(variables["$output"]).read_bytes()
+
+def _fix_pattern_matches(pattern: str, path: str) -> bool:
+    """Match a fix.tools pattern (e.g. ``glob:'**/*.py'``) against a repo path."""
+    pat = pattern.strip()
+    # Strip ``glob:`` prefix if present
+    if pat.startswith("glob:"):
+        pat = pat[5:].strip()
+        # Strip surrounding quotes (single or double)
+        if len(pat) >= 2 and ((pat[0] == "'" and pat[-1] == "'") or (pat[0] == '"' and pat[-1] == '"')):
+            pat = pat[1:-1]
+    else:
+        # Also strip quotes for bare patterns like ``"word_list.txt"``
+        if len(pat) >= 2 and ((pat[0] == "'" and pat[-1] == "'") or (pat[0] == '"' and pat[-1] == '"')):
+            pat = pat[1:-1]
+    # Exact match fast-path
+    if pat == path:
+        return True
+    # Handle ``**/`` prefix which PurePosixPath.match doesn't match at top-level
+    # (e.g. ``**/*.txt`` should match ``a.txt`` as well as ``sub/a.txt``).
+    # Real jj's fileset/glob does, so we try both with and without the ``**/``.
+    candidates = [pat]
+    if pat.startswith("**/"):
+        candidates.append(pat[3:])
+    # Also handle ``**/`` in the middle? For now handle the common prefix case.
+    for cand in candidates:
+        try:
+            if PurePosixPath(path).match(cand):
+                return True
+        except Exception:
+            continue
+    return False
+

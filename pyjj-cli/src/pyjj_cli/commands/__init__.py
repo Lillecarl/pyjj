@@ -1,0 +1,246 @@
+"""pyjj_cli.commands package — re-exports for backwards compat."""
+from .common import (
+    complete_newline,
+    join_message_paragraphs,
+    CommandError,
+    _run_editor,
+    _load,
+    _resolve_all,
+    _resolve_in_arg_order,
+    _resolve_one,
+    _wc_commit,
+    _checkout_if_moved,
+    _finish,
+    _restore_view_command,
+    _changed_files,
+    _run_diff_tool,
+    _selection_is_empty,
+    _merge_marker_len,
+    _run_merge_tool,
+    _fix_pattern_matches,
+)
+
+from .git import (
+    git_init,
+    git_clone,
+    git_fetch,
+    git_push,
+    git_import,
+    git_export,
+    git_remote,
+    git_root,
+    git_colocation,
+)
+
+from .history import (
+    status,
+    log,
+    diff,
+    show,
+)
+
+from .file import (
+    file_list,
+    file_show,
+    file_annotate,
+    file_chmod,
+    file_track,
+    file_untrack,
+    file_search,
+)
+
+from .sparse import (
+    sparse_list,
+    sparse_set,
+    sparse_reset,
+    sparse_edit,
+)
+
+from .workspace import (
+    workspace_list,
+    workspace_add,
+    workspace_forget,
+    workspace_rename,
+    workspace_root,
+    workspace_update_stale,
+)
+
+from .tag import (
+    tag_list,
+    tag_set,
+    tag_delete,
+    tag_track,
+    tag_untrack,
+)
+
+from .config import (
+    config_get,
+    config_list,
+    config_set,
+    config_unset,
+)
+
+from .crypto import (
+    sign,
+    unsign,
+    metaedit,
+    version,
+)
+
+from .bookmark import (
+    bookmark,
+    bookmark_track,
+    bookmark_untrack,
+    bookmark_advance,
+)
+
+from .operation import (
+    evolog,
+    next_commit,
+    prev_commit,
+    parallelize,
+    interdiff,
+    op_log,
+    op_show,
+    op_abandon,
+    op_diff,
+    op_integrate,
+    op_revert,
+    undo,
+    redo,
+    op_restore,
+)
+
+from .describe import (
+    describe,
+    new,
+)
+
+from .rewrite import (
+    squash,
+    rebase,
+    absorb,
+    fix,
+    revert,
+    abandon,
+    duplicate,
+    edit,
+    commit,
+    restore,
+    split,
+)
+
+from .resolve import (
+    diffedit,
+    resolve,
+)
+
+from .hunk import (
+    hunk_list,
+    hunk_split,
+    hunk_commit,
+    hunk_squash,
+    hunk_schema,
+)
+
+__all__ = [
+    "git_init",
+    "git_clone",
+    "git_fetch",
+    "git_push",
+    "git_import",
+    "git_export",
+    "git_remote",
+    "git_root",
+    "git_colocation",
+    "status",
+    "log",
+    "diff",
+    "show",
+    "file_list",
+    "file_show",
+    "file_annotate",
+    "file_chmod",
+    "file_track",
+    "file_untrack",
+    "file_search",
+    "sparse_list",
+    "sparse_set",
+    "sparse_reset",
+    "sparse_edit",
+    "workspace_list",
+    "workspace_add",
+    "workspace_forget",
+    "workspace_rename",
+    "workspace_root",
+    "workspace_update_stale",
+    "tag_list",
+    "tag_set",
+    "tag_delete",
+    "tag_track",
+    "tag_untrack",
+    "config_get",
+    "config_list",
+    "config_set",
+    "config_unset",
+    "sign",
+    "unsign",
+    "metaedit",
+    "version",
+    "bookmark",
+    "bookmark_track",
+    "bookmark_untrack",
+    "bookmark_advance",
+    "evolog",
+    "next_commit",
+    "prev_commit",
+    "parallelize",
+    "interdiff",
+    "op_log",
+    "op_show",
+    "op_abandon",
+    "op_diff",
+    "op_integrate",
+    "op_revert",
+    "undo",
+    "redo",
+    "op_restore",
+    "describe",
+    "new",
+    "squash",
+    "rebase",
+    "absorb",
+    "fix",
+    "revert",
+    "abandon",
+    "duplicate",
+    "edit",
+    "commit",
+    "restore",
+    "split",
+    "diffedit",
+    "resolve",
+    "hunk_list",
+    "hunk_split",
+    "hunk_commit",
+    "hunk_squash",
+    "hunk_schema",
+    "complete_newline",
+    "join_message_paragraphs",
+    "CommandError",
+    "_run_editor",
+    "_load",
+    "_resolve_all",
+    "_resolve_in_arg_order",
+    "_resolve_one",
+    "_wc_commit",
+    "_checkout_if_moved",
+    "_finish",
+    "_restore_view_command",
+    "_changed_files",
+    "_run_diff_tool",
+    "_selection_is_empty",
+    "_merge_marker_len",
+    "_run_merge_tool",
+    "_fix_pattern_matches",
+]

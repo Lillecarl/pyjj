@@ -3,7 +3,7 @@ import argparse
 
 def add_parsers(sub) -> None:
     p_status = sub.add_parser("status", help="Show working copy status")
-    p_status.set_defaults(_handler="pyjj_cli.commands:status")
+    p_status.set_defaults(_handler="pyjj_cli.commands.history:status")
 
     p_log = sub.add_parser("log", help="Show commit history")
     p_log.add_argument("-r", "--revisions", dest="revisions", default=None, metavar="REVSETS",
@@ -15,7 +15,7 @@ def add_parsers(sub) -> None:
                        help=argparse.SUPPRESS)
     p_log.add_argument("-p", "--patch", action="store_true", help="Show patch")
     p_log.add_argument("filesets", nargs="*", metavar="FILESETS", help=argparse.SUPPRESS)
-    p_log.set_defaults(_handler="pyjj_cli.commands:log")
+    p_log.set_defaults(_handler="pyjj_cli.commands.history:log")
 
     p_diff = sub.add_parser("diff", help="Compare file contents between two revisions")
     p_diff.add_argument("-r", "--revisions", dest="revisions", default=None, metavar="REVSETS",
@@ -31,7 +31,7 @@ def add_parsers(sub) -> None:
     p_diff.add_argument("-T", "--template", dest="template", default=None, metavar="TEMPLATE",
                         help=argparse.SUPPRESS)
     p_diff.add_argument("filesets", nargs="*", metavar="FILESETS", help="Paths to restrict diff to")
-    p_diff.set_defaults(_handler="pyjj_cli.commands:diff")
+    p_diff.set_defaults(_handler="pyjj_cli.commands.history:diff")
 
     p_show = sub.add_parser("show", help="Show revision metadata and diff")
     p_show.add_argument("revisions", nargs="*", metavar="REVSETS", help="Revisions to show (default: @)")
@@ -42,4 +42,4 @@ def add_parsers(sub) -> None:
     p_show.add_argument("--name-only", action="store_true", help="Show only path")
     p_show.add_argument("--git", action="store_true", help="Show Git-format diff")
     p_show.add_argument("--no-patch", action="store_true", help="Do not show patch")
-    p_show.set_defaults(_handler="pyjj_cli.commands:show")
+    p_show.set_defaults(_handler="pyjj_cli.commands.history:show")
