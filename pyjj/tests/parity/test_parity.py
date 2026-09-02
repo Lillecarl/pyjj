@@ -620,3 +620,47 @@ def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
     # Fixing base's a.txt should propagate to child even though child didn't touch a.txt
     pair.op(jj=["fix", "-s", rev("base")])
     pair.assert_parity()
+
+
+# -- revert -------------------------------------------------------------------
+
+def test_revert_single_onto_parent(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
+    pair.op(jj=["new", "-m", "B"])
+    pair.op(files={"file.txt": b"hello\nworld\n"}, jj=["status"])
+    pair.op(jj=["revert", "-r", rev("B"), "--onto", rev("A")])
+    pair.assert_parity()
+
+
+def test_revert_onto_self(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
+    pair.op(jj=["new", "-m", "B"])
+    pair.op(files={"file.txt": b"hello\nworld\n"}, jj=["status"])
+    pair.op(jj=["revert", "-r", rev("B"), "--onto", rev("B")])
+    pair.assert_parity()
+
+
+def test_revert_multiple_in_reverse_topological(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"file.txt": b"a\n"}, jj=["describe", "-m", "A"])
+    pair.op(jj=["new", "-m", "B"])
+    pair.op(files={"file.txt": b"a\nb\n"}, jj=["status"])
+    pair.op(jj=["new", "-m", "C"])
+    pair.op(files={"file.txt": b"a\nb\nc\n"}, jj=["status"])
+    # Revert B and C onto A (B is parent of C, so C should be reverted first)
+    pair.op(jj=["revert", "-r", rev("B"), "-r", rev("C"), "--onto", rev("A")])
+    pair.assert_parity()
+
+
+def test_revert_insert_after(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
+    pair.op(jj=["new", "-m", "B"])
+    pair.op(files={"file.txt": b"hello\nworld\n"}, jj=["status"])
+    pair.op(jj=["new", "-m", "C"])
+    pair.op(files={"file.txt": b"hello\nworld\nmore\n"}, jj=["status"])
+    # Revert B insert-after A (A's child C should be rebased onto the revert)
+    pair.op(jj=["revert", "-r", rev("B"), "--insert-after", rev("A")])
+    pair.assert_parity()

@@ -39,6 +39,7 @@ from .commands import (
     resolve,
     restore,
     rebase,
+    revert,
     show,
     squash,
     split,
@@ -224,6 +225,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_fix.add_argument("filesets", nargs="*", metavar="FILESETS",
                        help="Paths to fix (default: all)")
 
+    # revert
+    p_rev = sub.add_parser("revert", help="Apply the reverse of given revisions")
+    p_rev.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
+                       metavar="REVSETS", required=True,
+                       help="Revision(s) to revert")
+    p_rev.add_argument("-o", "--onto", dest="ontos", action="append", default=None,
+                       metavar="REVSETS", help="Apply reverse on top of this revision")
+    p_rev.add_argument("-d", "--destination", dest="destinations", action="append", default=None,
+                       metavar="REVSETS", help="Alias for --onto")
+    p_rev.add_argument("-A", "--insert-after", dest="insert_afters", action="append", default=None,
+                       metavar="REVSETS", help="Insert after this revision")
+    p_rev.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None,
+                       metavar="REVSETS", help="Insert before this revision")
+
     # abandon
     p_ab = sub.add_parser("abandon", help="Remove revisions (their descendants are rebased)")
     p_ab.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
@@ -373,6 +388,7 @@ def main(argv=None) -> int:
         "rebase": rebase,
         "absorb": absorb,
         "fix": fix,
+        "revert": revert,
         "abandon": abandon,
         "duplicate": duplicate,
         "edit": edit,
