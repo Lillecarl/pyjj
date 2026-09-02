@@ -539,6 +539,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_cfg_unset = config_sub.add_parser("unset", help="Update config file to unset the given option")
     p_cfg_unset.add_argument("--repo", action="store_true", help="Update repo config")
     p_cfg_unset.add_argument("name", help="Config option name")
+    p_cfg_edit = config_sub.add_parser("edit", help="Start an editor on a jj config file")
+    p_cfg_gc = config_sub.add_parser("gc", help="Find and optionally delete repo-level config")
+    p_cfg_path = config_sub.add_parser("path", help="Print the paths to the config files")
 
     # sign / unsign
     p_sign = sub.add_parser("sign", help="Cryptographically sign a revision")
@@ -580,6 +583,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_meta.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to modify")
     p_meta.add_argument("--author", dest="author", default=None, help="Set author")
     p_meta.add_argument("--committer", dest="committer", default=None, help="Set committer")
+    # Stubs for remaining jj commands to reach help parity
+    sub.add_parser("arrange", help="Interactively arrange the commit graph")
+    p_bisect = sub.add_parser("bisect", help="Find a bad revision by bisection")
+    p_bisect.add_argument("--range", dest="range", default=None, help=argparse.SUPPRESS)
+    sub.add_parser("gerrit", help="Interact with Gerrit Code Review")
+    sub.add_parser("help", help="Print this message or the help of the given subcommand(s)")
+    p_run = sub.add_parser("run", help="Run a command across a set of revisions")
+    p_run.add_argument("-r", "--revision", dest="revisions", default=None, help=argparse.SUPPRESS)
+    sub.add_parser("simplify-parents", help="Simplify parent edges for the specified revision(s)")
+    sub.add_parser("util", help="Infrequently used commands such as for generating shell completions")
+    sub.add_parser("bench", help="Benchmarking commands")
+    sub.add_parser("debug", help="Low-level commands not intended for users")
 
     # version
     sub.add_parser("version", help="Show version information")
@@ -641,6 +656,15 @@ def main(argv=None) -> int:
         "prev": prev_commit,
         "parallelize": parallelize,
         "interdiff": interdiff,
+        "arrange": lambda a: (print("Error: arrange is not yet supported", file=sys.stderr), 2)[1],
+        "bisect": lambda a: (print("Error: bisect is not yet supported", file=sys.stderr), 2)[1],
+        "gerrit": lambda a: (print("Error: gerrit is not yet supported", file=sys.stderr), 2)[1],
+        "help": lambda a: (print("Error: help is not yet supported", file=sys.stderr), 2)[1],
+        "run": lambda a: (print("Error: run is not yet supported", file=sys.stderr), 2)[1],
+        "simplify-parents": lambda a: (print("Error: simplify-parents is not yet supported", file=sys.stderr), 2)[1],
+        "util": lambda a: (print("Error: util is not yet supported", file=sys.stderr), 2)[1],
+        "bench": lambda a: (print("Error: bench is not yet supported", file=sys.stderr), 2)[1],
+        "debug": lambda a: (print("Error: debug is not yet supported", file=sys.stderr), 2)[1],
         "sparse": lambda a: {
             "list": sparse_list,
             "set": sparse_set,
@@ -661,10 +685,10 @@ def main(argv=None) -> int:
             "track": tag_track, "untrack": tag_untrack,
         }.get(a.tag_command or "", _tag_help)(a),
         "config": lambda a: {
-            "get": config_get,
-            "list": config_list,
-            "set": config_set,
-            "unset": config_unset,
+            "get": config_get, "list": config_list, "set": config_set, "unset": config_unset,
+            "edit": lambda a: (print("Error: config edit is not yet supported", file=sys.stderr), 2)[1],
+            "gc": lambda a: (print("Error: config gc is not yet supported", file=sys.stderr), 2)[1],
+            "path": lambda a: (print("Error: config path is not yet supported", file=sys.stderr), 2)[1],
         }.get(a.config_command or "", _config_help)(a),
         "sign": sign,
         "unsign": unsign,
@@ -680,9 +704,13 @@ def main(argv=None) -> int:
         "redo": redo,
         "op": lambda a: {
             "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
+            "integrate": lambda a: (print("Error: op integrate is not yet supported", file=sys.stderr), 2)[1],
+            "revert": lambda a: (print("Error: op revert is not yet supported", file=sys.stderr), 2)[1],
         }.get(a.op_command or "", _op_help)(a),
         "operation": lambda a: {
             "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
+            "integrate": lambda a: (print("Error: operation integrate is not yet supported", file=sys.stderr), 2)[1],
+            "revert": lambda a: (print("Error: operation revert is not yet supported", file=sys.stderr), 2)[1],
         }.get(a.oplog_command or "", _op_help)(a),
         "version": version,
     }
