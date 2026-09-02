@@ -24,7 +24,7 @@ def add_parsers(sub) -> None:
     p_edit = sub.add_parser("edit", help="Edit (check out) a specific revision")
     p_edit.add_argument("revision_pos", metavar="REVSETS",
                         help="The revision to edit")
-    p_edit.set_defaults(_handler="pyjj_cli.commands.rewrite:edit")
+    p_edit.set_defaults(_handler="pyjj_cli.commands.rewrite.edit:edit")
 
     p_com = sub.add_parser("commit",
                            help="Describe @ and create a new empty change on top")
@@ -38,7 +38,7 @@ def add_parsers(sub) -> None:
                        help="Diff editor to use (implies --interactive)")
     p_com.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                        help="Paths staying in the current commit")
-    p_com.set_defaults(_handler="pyjj_cli.commands.rewrite:commit")
+    p_com.set_defaults(_handler="pyjj_cli.commands.rewrite.commit:commit")
 
     p_de = sub.add_parser("diffedit",
                           help="Edit the diff between two revisions in a diff editor")
@@ -48,7 +48,7 @@ def add_parsers(sub) -> None:
                       help="Apply edits TO this revision (default: @)")
     p_de.add_argument("--tool", default=None, metavar="NAME",
                       help="Diff editor to use")
-    p_de.set_defaults(_handler="pyjj_cli.commands.history:diffedit")
+    p_de.set_defaults(_handler="pyjj_cli.commands.resolve:diffedit")
 
     p_rslv = sub.add_parser("resolve",
                             help="Resolve conflicted files with an external merge tool")

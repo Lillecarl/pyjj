@@ -16,7 +16,7 @@ def add_parsers(sub) -> None:
                       help="Description for the squashed revision")
     p_sq.add_argument("filesets", nargs="*", metavar="FILESETS",
                       help="Paths to squash (default: all)")
-    p_sq.set_defaults(_handler="pyjj_cli.commands.rewrite:squash")
+    p_sq.set_defaults(_handler="pyjj_cli.commands.rewrite.squash:squash")
 
     p_re = sub.add_parser("rebase", help="Move revisions to a different parent")
     p_re.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
@@ -33,7 +33,7 @@ def add_parsers(sub) -> None:
                       metavar="REVSETS", help="Insert after this revision")
     p_re.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None,
                       metavar="REVSETS", help="Insert before this revision")
-    p_re.set_defaults(_handler="pyjj_cli.commands.rewrite:rebase")
+    p_re.set_defaults(_handler="pyjj_cli.commands.rewrite.rebase:rebase")
 
     p_ab = sub.add_parser("absorb", help="Move changes from a revision into ancestors")
     p_ab.add_argument("-f", "--from", dest="from_", default="@", metavar="REVSET",
@@ -46,7 +46,7 @@ def add_parsers(sub) -> None:
                       help="Diff editor for interactive selection")
     p_ab.add_argument("filesets", nargs="*", metavar="FILESETS",
                       help="Paths to absorb (default: all)")
-    p_ab.set_defaults(_handler="pyjj_cli.commands.rewrite:absorb")
+    p_ab.set_defaults(_handler="pyjj_cli.commands.rewrite.absorb:absorb")
 
     p_fix = sub.add_parser("fix", help="Update files with formatting fixes")
     p_fix.add_argument("-s", "--source", dest="source", default=None, metavar="REVSETS",
@@ -55,7 +55,7 @@ def add_parsers(sub) -> None:
                        help="Fix unchanged files as well")
     p_fix.add_argument("filesets", nargs="*", metavar="FILESETS",
                        help="Paths to fix (default: all)")
-    p_fix.set_defaults(_handler="pyjj_cli.commands.rewrite:fix")
+    p_fix.set_defaults(_handler="pyjj_cli.commands.rewrite.fix:fix")
 
     p_rev = sub.add_parser("revert", help="Apply the reverse of given revisions")
     p_rev.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
@@ -69,17 +69,17 @@ def add_parsers(sub) -> None:
                        metavar="REVSETS", help="Insert after this revision")
     p_rev.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None,
                        metavar="REVSETS", help="Insert before this revision")
-    p_rev.set_defaults(_handler="pyjj_cli.commands.rewrite:revert")
+    p_rev.set_defaults(_handler="pyjj_cli.commands.rewrite.revert:revert")
 
     p_abandon = sub.add_parser("abandon", help="Remove revisions (their descendants are rebased)")
     p_abandon.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
                       help="Revisions to abandon (default: @)")
-    p_abandon.set_defaults(_handler="pyjj_cli.commands.rewrite:abandon")
+    p_abandon.set_defaults(_handler="pyjj_cli.commands.rewrite.abandon:abandon")
 
     p_dup = sub.add_parser("duplicate", help="Duplicate revisions onto their parents")
     p_dup.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
                        help="Revisions to duplicate (default: @)")
-    p_dup.set_defaults(_handler="pyjj_cli.commands.rewrite:duplicate")
+    p_dup.set_defaults(_handler="pyjj_cli.commands.rewrite.duplicate:duplicate")
 
     p_res = sub.add_parser("restore", help="Restore paths from another revision")
     p_res.add_argument("--from", dest="from_", default="@-", metavar="REVSET",
@@ -88,7 +88,7 @@ def add_parsers(sub) -> None:
                        help="Revision to restore into (default: @)")
     p_res.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                        help="Paths to restore (default: all)")
-    p_res.set_defaults(_handler="pyjj_cli.commands.rewrite:restore")
+    p_res.set_defaults(_handler="pyjj_cli.commands.rewrite.restore:restore")
 
     p_spl = sub.add_parser("split", help="Split a revision in two")
     p_spl.add_argument("-r", "--revision", default=None, metavar="REVSETS",
@@ -99,4 +99,4 @@ def add_parsers(sub) -> None:
                        help="Diff editor for selecting changes (no FILESETS)")
     p_spl.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                        help="Paths going into the first half")
-    p_spl.set_defaults(_handler="pyjj_cli.commands.rewrite:split")
+    p_spl.set_defaults(_handler="pyjj_cli.commands.rewrite.split:split")
