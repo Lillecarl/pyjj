@@ -59,8 +59,10 @@ from .commands import (
     next_commit,
     op_abandon,
     op_diff,
+    op_integrate,
     op_log,
     op_restore,
+    op_revert,
     op_show,
     parallelize,
     prev_commit,
@@ -558,6 +560,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_opr = op_sub.add_parser("restore", help="Restore to the state of an operation")
     p_opr.add_argument("operation_pos", metavar="OPERATION",
                        help="The operation to restore to")
+    p_op_log2 = op_sub.add_parser("log", help="Show the operation log")
+    p_op_show2 = op_sub.add_parser("show", help="Show changes to the repository in an operation")
+    p_op_show2.add_argument("operation", nargs="?", help="Operation to show")
+    p_op_abandon2 = op_sub.add_parser("abandon", help="Abandon operation history")
+    p_op_abandon2.add_argument("operations", nargs="+", help="Operations to abandon")
+    p_op_diff2 = op_sub.add_parser("diff", help="Compare changes to the repository between two operations")
+    p_op_diff2.add_argument("from", help="From operation")
+    p_op_diff2.add_argument("to", help="To operation")
+    p_op_integrate2 = op_sub.add_parser("integrate", help="Make an operation part of the operation log")
+    p_op_integrate2.add_argument("operation", help="Operation to integrate")
+    p_op_revert2 = op_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
+    p_op_revert2.add_argument("operation", help="Operation to revert")
     p_oplog = sub.add_parser("operation", help="Commands for working with the operation log")
     oplog_sub = p_oplog.add_subparsers(dest="oplog_command")
     p_oplog_log = oplog_sub.add_parser("log", help="Show the operation log")
@@ -570,6 +584,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_oplog_diff.add_argument("to", help="To operation")
     p_oplog_restore2 = oplog_sub.add_parser("restore", help="Restore to the state of an operation")
     p_oplog_restore2.add_argument("operation", help="Operation to restore to")
+    p_oplog_integrate = oplog_sub.add_parser("integrate", help="Make an operation part of the operation log")
+    p_oplog_integrate.add_argument("operation", help="Operation to integrate")
+    p_oplog_revert = oplog_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
+    p_oplog_revert.add_argument("operation", help="Operation to revert")
     p_evolog = sub.add_parser("evolog", help="Show how a change has evolved over time")
     p_evolog.add_argument("-r", "--revisions", dest="revisions", default="@", help="Revisions to follow (default: @)")
     p_evolog.add_argument("-n", "--limit", dest="limit", type=int, default=None, help="Limit number of revisions")
@@ -704,13 +722,11 @@ def main(argv=None) -> int:
         "redo": redo,
         "op": lambda a: {
             "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
-            "integrate": lambda a: (print("Error: op integrate is not yet supported", file=sys.stderr), 2)[1],
-            "revert": lambda a: (print("Error: op revert is not yet supported", file=sys.stderr), 2)[1],
+            "integrate": op_integrate, "revert": op_revert,
         }.get(a.op_command or "", _op_help)(a),
         "operation": lambda a: {
             "restore": op_restore, "log": op_log, "show": op_show, "abandon": op_abandon, "diff": op_diff,
-            "integrate": lambda a: (print("Error: operation integrate is not yet supported", file=sys.stderr), 2)[1],
-            "revert": lambda a: (print("Error: operation revert is not yet supported", file=sys.stderr), 2)[1],
+            "integrate": op_integrate, "revert": op_revert,
         }.get(a.oplog_command or "", _op_help)(a),
         "version": version,
     }

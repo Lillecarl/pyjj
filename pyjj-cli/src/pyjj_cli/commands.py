@@ -975,6 +975,16 @@ def op_diff(args) -> int:
     return 2
 
 
+def op_integrate(args) -> int:
+    print("Error: op integrate is not yet supported", file=sys.stderr)
+    return 2
+
+
+def op_revert(args) -> int:
+    print("Error: op revert is not yet supported", file=sys.stderr)
+    return 2
+
+
 def git_colocation(args) -> int:
     """`jj git colocation` — manage colocation status."""
     try:
