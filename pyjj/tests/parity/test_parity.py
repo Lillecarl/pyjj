@@ -531,3 +531,41 @@ def test_diffedit_rewrites_destination(pair: RepoPair) -> None:
                               "find": "two", "replace": "TWO-edited"}]},
     )
     pair.assert_parity()
+
+
+# -- absorb -------------------------------------------------------------------
+
+def test_absorb_moves_change_into_parent(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"line1\nLINE2-MODIFIED\nline3\n"}, jj=["status"])
+    pair.op(jj=["absorb", "--from", "@", "--into", rev("base")])
+    pair.assert_parity()
+
+
+def test_absorb_default_mutable_destination(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"line1\nLINE2-MODIFIED\nline3\n"}, jj=["status"])
+    pair.op(jj=["absorb"])
+    pair.assert_parity()
+
+
+def test_absorb_with_path_filter(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"a1\n", "b.txt": b"b1\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"a1-changed\n", "b.txt": b"b1-changed\n"}, jj=["status"])
+    pair.op(jj=["absorb", "--into", rev("base"), "a.txt"])
+    pair.assert_parity()
+
+
+def test_absorb_keeps_described_source(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "keep me"])
+    pair.op(files={"a.txt": b"line1\nLINE2-MODIFIED\nline3\n"}, jj=["status"])
+    pair.op(jj=["absorb", "--into", rev("base")])
+    pair.assert_parity()

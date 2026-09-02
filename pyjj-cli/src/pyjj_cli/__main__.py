@@ -14,6 +14,7 @@ import argcomplete
 # with it the Rust extension module, which must not load on every <TAB>.
 from .commands import (
     abandon,
+    absorb,
     bookmark,
     commit,
     describe,
@@ -200,6 +201,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_re.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None,
                       metavar="REVSETS", help="Insert before this revision")
 
+    # absorb
+    p_ab = sub.add_parser("absorb", help="Move changes from a revision into ancestors")
+    p_ab.add_argument("-f", "--from", dest="from_", default="@", metavar="REVSET",
+                      help="Source revision to absorb from (default: @)")
+    p_ab.add_argument("-t", "--into", "--to", dest="into", default=None, metavar="REVSETS",
+                      help="Destination revisions to absorb into (default: mutable())")
+    p_ab.add_argument("-i", "--interactive", action="store_true",
+                      help="Interactively choose which parts to absorb")
+    p_ab.add_argument("--tool", dest="tool", default=None, metavar="NAME",
+                      help="Diff editor for interactive selection")
+    p_ab.add_argument("filesets", nargs="*", metavar="FILESETS",
+                      help="Paths to absorb (default: all)")
+
     # abandon
     p_ab = sub.add_parser("abandon", help="Remove revisions (their descendants are rebased)")
     p_ab.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
@@ -347,6 +361,7 @@ def main(argv=None) -> int:
         "bookmark": bookmark,
         "squash": squash,
         "rebase": rebase,
+        "absorb": absorb,
         "abandon": abandon,
         "duplicate": duplicate,
         "edit": edit,

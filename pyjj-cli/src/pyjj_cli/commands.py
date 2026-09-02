@@ -899,6 +899,32 @@ def rebase(args) -> int:
     return 0
 
 
+def absorb(args) -> int:
+    """`jj absorb --from X --into Y [FILESETS]` — move hunks into ancestors."""
+    try:
+        settings, ws, repo = _load(args)
+        if getattr(args, "interactive", False) or getattr(args, "tool", None):
+            print("Error: interactive absorb (--interactive/--tool) is not yet supported", file=sys.stderr)
+            return 2
+        source = _resolve_one(repo, settings, args.from_)
+        dest_expr = getattr(args, "into", None)
+        paths = getattr(args, "filesets", None) or None
+        if paths == []:
+            paths = None
+        tx = repo.start_transaction(settings)
+        stats = tx.absorb(settings, source, destinations=dest_expr, paths=paths)
+        _finish(tx, f"absorb from {source.id.hex()[:12]} into {dest_expr or 'mutable()'}", settings, ws, repo)
+        # Minimal feedback like jj (number of destinations)
+        if stats.source is None:
+            # Fully absorbed and abandoned (empty description)
+            pass
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def abandon(args) -> int:
     try:
         settings, ws, repo = _load(args)
