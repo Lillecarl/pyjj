@@ -69,7 +69,26 @@ build pins it to the release matching `pyjj-bindings`' jj-lib, see
 regression-proven. In Nix, `nix build --file . checks.pyjj-conformance`
 runs the whole pyjj pytest suite store-built against that pinned binary
 (`nix/checks.nix`), with gitMinimal/openssh present for the clone and
-signing fixtures.
+signing fixtures. For filtered runs without remembering the full pytest
+invocation, use the impure passthrough:
+
+```
+# store-built (sandboxed) — needs --impure to read host env at eval time
+PYTEST_ARGS="-k test_absorb -xvs" nix build --impure --file . checks.pyjj-conformance
+PYTEST_ARGS="--collect-only -q" nix build --impure --file . checks.pyjj-conformance
+
+# live run on the working tree — no sandbox copy, faster for iteration
+PYTEST_ARGS="-k test_absorb -q" nix run --file . tests
+PYTEST_ARGS="--collect-only -q" nix run --file . tests
+nix run --file . tests -- -k test_absorb -xvs   # CLI args also forwarded
+```
+
+Pure `nix build --file . checks.pyjj-conformance` (no `PYTEST_ARGS`, no
+`--impure`) stays hermetic — `builtins.getEnv` returns `""` and the default
+`-q` is used. The `tests` app (`default.nix:tests`, `writeShellApplication`)
+sets `PYJJ_PARITY_JJ` to the pinned `jj` and isolates `HOME`; `PYTEST_ARGS`
+at runtime wins over any eval-time fallback, and `"$@"` is appended, so
+both forms compose.
 
 - `pyjj-bindings/tests/` tests the native module directly (`import pyjj_bindings`)
   and stays mechanical: type construction, exception hierarchy/constructibility,
