@@ -453,6 +453,287 @@ def git_root(args) -> int:
         return 1
 
 
+def sparse_list(args) -> int:
+    try:
+        _settings, ws, _repo = _load(args)
+        patterns = ws.sparse_patterns()
+        for p in patterns:
+            print(p if p else ".")
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def sparse_set(args) -> int:
+    try:
+        _settings, ws, _repo = _load(args)
+        # Get current patterns
+        current = ws.sparse_patterns()
+        # Handle --clear
+        if getattr(args, "clear", False):
+            new_patterns: list[str] = []
+        else:
+            new_patterns = list(current)
+        adds = getattr(args, "adds", None) or []
+        removes = getattr(args, "removes", None) or []
+        for pat in adds:
+            if pat not in new_patterns:
+                new_patterns.append(pat)
+        for pat in removes:
+            if pat in new_patterns:
+                new_patterns.remove(pat)
+        # If after clear and no adds, it means empty sparse (no files) — but jj would keep at least?
+        # For reset, we use [""] — for set with --clear and no adds, we set to []
+        if not new_patterns and not getattr(args, "clear", False):
+            # No change, just list
+            for p in current:
+                print(p if p else ".")
+            return 0
+        ws.set_sparse_patterns(new_patterns)
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def sparse_reset(args) -> int:
+    try:
+        _settings, ws, _repo = _load(args)
+        ws.set_sparse_patterns([""])
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def sparse_edit(args) -> int:
+    print("Error: sparse edit is not yet supported (requires an editor)", file=sys.stderr)
+    return 2
+
+
+def workspace_list(args) -> int:
+    try:
+        _settings, ws, repo = _load(args)
+        view = repo.view()
+        for name, commit_id in sorted(view.items()):
+            # Try to get workspace path
+            try:
+                ws_path = ws.workspace_path(name)
+                path_str = ws_path if ws_path else "(unknown)"
+            except Exception:
+                path_str = "(unknown)"
+            print(f"{name}: {commit_id[:12]} {path_str}")
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def workspace_add(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        dest = str(Path(args.destination).resolve())
+        revs = getattr(args, "revisions", None)
+        revision_ids = None
+        if revs:
+            commits = _resolve_all(repo, settings, revs)
+            revision_ids = [c.id for c in commits]
+        name = getattr(args, "name", None)
+        new_ws, new_repo = ws.add_workspace(settings, dest, name=name, revision_ids=revision_ids)
+        print(f"Created workspace at {new_ws.workspace_root}")
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def workspace_forget(args) -> int:
+    try:
+        settings, ws, _repo = _load(args)
+        names = getattr(args, "names", [])
+        ws.forget_workspaces(settings, names)
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def workspace_rename(args) -> int:
+    try:
+        settings, ws, _repo = _load(args)
+        new_name = getattr(args, "new_name", "")
+        ws.rename_workspace(settings, new_name)
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def workspace_root(args) -> int:
+    try:
+        _settings, ws, _repo = _load(args)
+        print(ws.workspace_root)
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def workspace_update_stale(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        # repo is already at head via _load, so we can check if ws is stale
+        result = ws.update_stale(repo)
+        if result is None:
+            print("Working copy is not stale")
+        else:
+            print(f"Updated stale working copy: {result}")
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def tag_list(args) -> int:
+    try:
+        _settings, _ws, repo = _load(args)
+        names = getattr(args, "names", None) or []
+        tags = repo.tags()  # list[Tag]
+        if names:
+            tags = [t for t in tags if t.name in names]
+        for tag in sorted(tags, key=lambda t: t.name):
+            if tag.has_conflict:
+                ids = " ".join(t.hex()[:12] for t in tag.target_ids)
+                print(f"{tag.name}@conflicted: {ids}")
+            elif tag.target_ids:
+                print(f"{tag.name}: {tag.target_ids[0].hex()[:12]}")
+            else:
+                print(f"{tag.name}: (deleted)")
+        return 0
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def tag_set(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        rev = getattr(args, "revision", "@")
+        target = _resolve_one(repo, settings, rev)
+        tx = repo.start_transaction(settings)
+        for name in getattr(args, "names", []):
+            tx.set_tag(name, target.id)
+        _finish(tx, f"set tag {','.join(getattr(args, 'names', []))}", settings, ws, repo)
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def tag_delete(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        tx = repo.start_transaction(settings)
+        for name in getattr(args, "names", []):
+            if repo.get_tag(name) is None:
+                print(f"Warning: No such tag: {name}", file=sys.stderr)
+                continue
+            tx.delete_tag(name)
+        _finish(tx, f"delete tag {','.join(getattr(args, 'names', []))}", settings, ws, repo)
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def config_get(args) -> int:
+    try:
+        settings = pyjj.UserSettings()
+        val = settings.get_string(args.name)
+        if val is None:
+            print(f"Error: config {args.name} not set", file=sys.stderr)
+            return 1
+        print(val)
+        return 0
+    except pyjj.JjError as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def config_list(args) -> int:
+    try:
+        settings = pyjj.UserSettings()
+        # For now, just show a few known keys if prefix is given, else nothing
+        # We don't have a way to list all config keys via bindings, so we just
+        # try to get the requested prefix as a string and list if it's set
+        prefix = getattr(args, "name", None)
+        if prefix:
+            val = settings.get_string(prefix)
+            if val is not None:
+                print(f'{prefix} = "{val}"')
+            else:
+                # Try as table? We don't have table listing, so just print nothing
+                pass
+        else:
+            # No prefix: list is not yet supported to enumerate all
+            print("Error: config list without prefix not yet supported", file=sys.stderr)
+            return 2
+        return 0
+    except pyjj.JjError as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def config_set(args) -> int:
+    print("Error: config set is not yet supported (requires writing to config file)", file=sys.stderr)
+    return 2
+
+
+def config_unset(args) -> int:
+    print("Error: config unset is not yet supported", file=sys.stderr)
+    return 2
+
+
+def sign(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        revs = getattr(args, "revisions", None) or ["@"]
+        targets = _resolve_all(repo, settings, revs)
+        tx = repo.start_transaction(settings)
+        for commit in targets:
+            b = tx.rewrite_commit(settings, commit)
+            b.set_sign_behavior("force")
+            b.write(repo)
+        _finish(tx, f"sign {len(targets)} commits", settings, ws, repo)
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def unsign(args) -> int:
+    try:
+        settings, ws, repo = _load(args)
+        revs = getattr(args, "revisions", None) or ["@"]
+        targets = _resolve_all(repo, settings, revs)
+        tx = repo.start_transaction(settings)
+        for commit in targets:
+            b = tx.rewrite_commit(settings, commit)
+            b.set_sign_behavior("drop")
+            b.write(repo)
+        _finish(tx, f"unsign {len(targets)} commits", settings, ws, repo)
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def metaedit(args) -> int:
+    print("Error: metaedit is not yet supported (use describe for description)", file=sys.stderr)
+    return 2
+
+
 def git_colocation(args) -> int:
     """`jj git colocation` — manage colocation status."""
     try:

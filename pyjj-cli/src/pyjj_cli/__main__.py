@@ -17,6 +17,10 @@ from .commands import (
     absorb,
     bookmark,
     commit,
+    config_get,
+    config_list,
+    config_set,
+    config_unset,
     describe,
     diff,
     diffedit,
@@ -41,6 +45,7 @@ from .commands import (
     hunk_split,
     hunk_squash,
     log,
+    metaedit,
     new,
     op_restore,
     redo,
@@ -49,11 +54,26 @@ from .commands import (
     rebase,
     revert,
     show,
+    sign,
+    sparse_edit,
+    sparse_list,
+    sparse_reset,
+    sparse_set,
     squash,
     split,
     status,
+    tag_delete,
+    tag_list,
+    tag_set,
     undo,
+    unsign,
     version,
+    workspace_add,
+    workspace_forget,
+    workspace_list,
+    workspace_rename,
+    workspace_root,
+    workspace_update_stale,
 )
 
 
@@ -422,6 +442,67 @@ def build_parser() -> argparse.ArgumentParser:
     p_hunk_schema.add_argument("--format", choices=["json", "yaml"], default="json",
                                help="Output format (default: json)")
 
+    # sparse
+    p_sparse = sub.add_parser("sparse", help="Manage which paths are present in the working copy")
+    sparse_sub = p_sparse.add_subparsers(dest="sparse_command")
+    p_sparse_list = sparse_sub.add_parser("list", help="List the patterns that are currently present")
+    p_sparse_set = sparse_sub.add_parser("set", help="Update the patterns that are present")
+    p_sparse_set.add_argument("--add", dest="adds", action="append", default=None, metavar="ADD", help="Patterns to add")
+    p_sparse_set.add_argument("--remove", dest="removes", action="append", default=None, metavar="REMOVE", help="Patterns to remove")
+    p_sparse_set.add_argument("--clear", action="store_true", help="Include no files (combine with --add)")
+    p_sparse_reset = sparse_sub.add_parser("reset", help="Reset the patterns to include all files")
+    p_sparse_edit = sparse_sub.add_parser("edit", help="Start an editor to update the patterns")
+
+    # workspace
+    p_ws = sub.add_parser("workspace", help="Commands for working with workspaces")
+    ws_sub = p_ws.add_subparsers(dest="workspace_command")
+    p_ws_add = ws_sub.add_parser("add", help="Add a workspace")
+    p_ws_add.add_argument("destination", help="Where to create the new workspace")
+    p_ws_add.add_argument("--name", dest="name", default=None, help="A name for the workspace")
+    p_ws_add.add_argument("-r", "--revision", dest="revisions", action="append", default=None, metavar="REVSETS", help="Parent revisions for the new workspace")
+    p_ws_forget = ws_sub.add_parser("forget", help="Stop tracking a workspace")
+    p_ws_forget.add_argument("names", nargs="+", help="Workspaces to forget")
+    p_ws_list = ws_sub.add_parser("list", help="List workspaces")
+    p_ws_list.add_argument("-T", "--template", dest="template", default=None, help=argparse.SUPPRESS)
+    p_ws_rename = ws_sub.add_parser("rename", help="Renames the current workspace")
+    p_ws_rename.add_argument("new_name", help="New workspace name")
+    p_ws_root = ws_sub.add_parser("root", help="Show the workspace root directory")
+    p_ws_update = ws_sub.add_parser("update-stale", help="Update a workspace that has become stale")
+    sub.add_parser("root", help="Show the current workspace root directory (shortcut for `jj workspace root`)")
+
+    # tag
+    p_tag = sub.add_parser("tag", help="Manage tags")
+    tag_sub = p_tag.add_subparsers(dest="tag_command")
+    p_tag_list = tag_sub.add_parser("list", help="List tags")
+    p_tag_list.add_argument("names", nargs="*", help="Tags to list")
+    p_tag_set = tag_sub.add_parser("set", help="Create or update tags")
+    p_tag_set.add_argument("names", nargs="+", help="Tags to set")
+    p_tag_set.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to point at (default: @)")
+    p_tag_delete = tag_sub.add_parser("delete", help="Delete existing tags")
+    p_tag_delete.add_argument("names", nargs="+", help="Tags to delete")
+
+    # config
+    p_config = sub.add_parser("config", help="Manage config options")
+    config_sub = p_config.add_subparsers(dest="config_command")
+    p_cfg_get = config_sub.add_parser("get", help="Get the value of a given config option")
+    p_cfg_get.add_argument("name", help="Config option name")
+    p_cfg_list = config_sub.add_parser("list", help="List variables set in config files")
+    p_cfg_list.add_argument("name", nargs="?", help="Optional config name prefix")
+    p_cfg_set = config_sub.add_parser("set", help="Update config file to set the given option")
+    p_cfg_set.add_argument("--repo", action="store_true", help="Update repo config")
+    p_cfg_set.add_argument("name", help="Config option name")
+    p_cfg_set.add_argument("value", help="Config value")
+    p_cfg_unset = config_sub.add_parser("unset", help="Update config file to unset the given option")
+    p_cfg_unset.add_argument("--repo", action="store_true", help="Update repo config")
+    p_cfg_unset.add_argument("name", help="Config option name")
+
+    # sign / unsign
+    p_sign = sub.add_parser("sign", help="Cryptographically sign a revision")
+    p_sign.add_argument("-r", "--revision", dest="revisions", action="append", default=None, metavar="REVSETS", help="Revision to sign (can be repeated)")
+    p_sign.add_argument("--key", dest="key", default=None, help=argparse.SUPPRESS)
+    p_unsign = sub.add_parser("unsign", help="Drop a cryptographic signature")
+    p_unsign.add_argument("-r", "--revision", dest="revisions", action="append", default=None, metavar="REVSETS", help="Revision to unsign (can be repeated)")
+
     # operation-level
     sub.add_parser("undo", help="Undo the last operation")
     sub.add_parser("redo", help="Redo a previously undone operation")
@@ -430,6 +511,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_opr = op_sub.add_parser("restore", help="Restore to the state of an operation")
     p_opr.add_argument("operation_pos", metavar="OPERATION",
                        help="The operation to restore to")
+    p_op_log = sub.add_parser("metaedit", help="Modify metadata of a revision without changing content")
+    p_op_log.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to modify")
+    p_op_log.add_argument("--author", dest="author", default=None, help="Set author")
+    p_op_log.add_argument("--committer", dest="committer", default=None, help="Set committer")
 
     # version
     sub.add_parser("version", help="Show version information")
@@ -482,6 +567,35 @@ def main(argv=None) -> int:
         "split": split,
         "diffedit": diffedit,
         "resolve": resolve,
+        "sparse": lambda a: {
+            "list": sparse_list,
+            "set": sparse_set,
+            "reset": sparse_reset,
+            "edit": sparse_edit,
+        }.get(a.sparse_command or "", _sparse_help)(a),
+        "workspace": lambda a: {
+            "add": workspace_add,
+            "forget": workspace_forget,
+            "list": workspace_list,
+            "rename": workspace_rename,
+            "root": workspace_root,
+            "update-stale": workspace_update_stale,
+        }.get(a.workspace_command or "", _workspace_help)(a),
+        "root": workspace_root,
+        "tag": lambda a: {
+            "list": tag_list,
+            "set": tag_set,
+            "delete": tag_delete,
+        }.get(a.tag_command or "", _tag_help)(a),
+        "config": lambda a: {
+            "get": config_get,
+            "list": config_list,
+            "set": config_set,
+            "unset": config_unset,
+        }.get(a.config_command or "", _config_help)(a),
+        "sign": sign,
+        "unsign": unsign,
+        "metaedit": metaedit,
         "hunk": lambda a: hunk_schema(a) if getattr(a, "json_schema", False) else {
             "list": hunk_list,
             "split": hunk_split,
@@ -519,6 +633,26 @@ def _op_help(args) -> int:
 
 def _file_help(args) -> int:
     print("usage: pyjj file {list,show,annotate}", file=sys.stderr)
+    return 2
+
+
+def _sparse_help(args) -> int:
+    print("usage: pyjj sparse {list,set,reset,edit}", file=sys.stderr)
+    return 2
+
+
+def _workspace_help(args) -> int:
+    print("usage: pyjj workspace {add,forget,list,rename,root,update-stale}", file=sys.stderr)
+    return 2
+
+
+def _tag_help(args) -> int:
+    print("usage: pyjj tag {list,set,delete}", file=sys.stderr)
+    return 2
+
+
+def _config_help(args) -> int:
+    print("usage: pyjj config {get,list,set,unset}", file=sys.stderr)
     return 2
 
 
