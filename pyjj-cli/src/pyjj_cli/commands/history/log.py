@@ -159,9 +159,12 @@ def log(args) -> int:
     jinja_template = None
     if template_str:
         try:
-            from jinja2 import Environment, StrictUndefined
+            # Sandboxed: the context binds a live Commit object, so plain
+            # attribute traversal would reach further than a template needs.
+            from jinja2 import StrictUndefined
+            from jinja2.sandbox import SandboxedEnvironment
 
-            env = Environment(undefined=StrictUndefined, autoescape=False)
+            env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
             # Filter to color prefix like jj does, usable as {{ commit_id|short(2) }}
             def _short_filter(value, n=8):
                 return value[:n] if isinstance(value, str) else value
