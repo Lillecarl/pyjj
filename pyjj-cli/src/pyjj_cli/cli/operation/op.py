@@ -1,20 +1,5 @@
-import argparse
-
-from .flags import Flag, add_flags
-
-
-def _op_help(args):
-    import sys
-    print("usage: pyjj op {restore}", file=sys.stderr)
-    return 2
-
-
-def add_parsers(sub) -> None:
-    p_undo = sub.add_parser("undo", help="Undo the last operation")
-    p_undo.set_defaults(_handler="pyjj_cli.commands.operation.undo:undo")
-    p_redo = sub.add_parser("redo", help="Redo a previously undone operation")
-    p_redo.set_defaults(_handler="pyjj_cli.commands.operation.redo:redo")
-
+def register(sub) -> None:
+    # `op` — short form
     p_op = sub.add_parser("op", help="Operation log commands")
     p_op.set_defaults(_handler="pyjj_cli.cli.operation:_op_help")
     op_sub = p_op.add_subparsers(dest="op_command")
@@ -40,6 +25,7 @@ def add_parsers(sub) -> None:
     p_op_revert2.add_argument("operation", help="Operation to revert")
     p_op_revert2.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
 
+    # `operation` — long form (duplicate of `op` for compatibility)
     p_oplog = sub.add_parser("operation", help="Commands for working with the operation log")
     p_oplog.set_defaults(_handler="pyjj_cli.cli.operation:_op_help")
     oplog_sub = p_oplog.add_subparsers(dest="oplog_command")
@@ -64,20 +50,3 @@ def add_parsers(sub) -> None:
     p_oplog_revert = oplog_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
     p_oplog_revert.add_argument("operation", help="Operation to revert")
     p_oplog_revert.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
-
-    p_evolog = sub.add_parser("evolog", help="Show how a change has evolved over time")
-    add_flags(p_evolog, [Flag.REVISIONS, Flag.LIMIT])
-    p_evolog.set_defaults(_handler="pyjj_cli.commands.operation.evolog:evolog")
-
-    p_next = sub.add_parser("next", help="Move the working-copy commit to the child revision")
-    p_next.add_argument("amount", nargs="?", type=int, default=1, help="Number of revisions to move")
-    p_next.set_defaults(_handler="pyjj_cli.commands.operation.next_commit:next_commit")
-
-    p_prev = sub.add_parser("prev", help="Change the working copy revision relative to the parent revision")
-    p_prev.add_argument("amount", nargs="?", type=int, default=1, help="Number of revisions to move")
-    p_prev.set_defaults(_handler="pyjj_cli.commands.operation.prev_commit:prev_commit")
-
-    p_par = sub.add_parser("parallelize", help="Parallelize revisions by making them siblings")
-    p_par.set_defaults(_handler="pyjj_cli.commands.operation.parallelize:parallelize")
-    p_inter = sub.add_parser("interdiff", help="Show differences between the diffs of two revisions")
-    p_inter.set_defaults(_handler="pyjj_cli.commands.operation.interdiff:interdiff")
