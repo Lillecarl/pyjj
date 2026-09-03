@@ -1,0 +1,7 @@
+from ..flags import Flag, add_flags
+
+
+def register(git_sub) -> None:
+    p = git_sub.add_parser("push", help="Push to a Git remote")
+    add_flags(p, [Flag.REMOTE, Flag.BOOKMARK, Flag.TAG, Flag.ALL, Flag.TRACKED, Flag.DELETED, Flag.ALLOW_EMPTY, Flag.ALLOW_PRIVATE, Flag.ALLOW_CONFLICTS, Flag.DRY_RUN, Flag.CHANGE, Flag.NAMED])
+    p.set_defaults(_handler="pyjj_cli.commands.git.push:git_push")
