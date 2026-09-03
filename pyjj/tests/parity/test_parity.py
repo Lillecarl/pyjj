@@ -859,3 +859,40 @@ def test_op_abandon_old_operations(pair: RepoPair) -> None:
         py=["op", "abandon", f"..{pair.op_id('py', 2)}"],
     )
     pair.assert_parity()
+
+
+# -- bookmarks ----------------------------------------------------------
+#
+# `chain()` leaves bookmark `main` on the commit described "one".
+
+
+def test_bookmark_delete(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "delete", "main"])
+    pair.assert_parity()
+
+
+def test_bookmark_forget(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "forget", "main"])
+    pair.assert_parity()
+
+
+def test_bookmark_rename(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "rename", "main", "trunk"])
+    pair.assert_parity()
+
+
+def test_bookmark_move_to_revision(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "move", "main", "--to", rev("two")])
+    pair.assert_parity()
+
+
+def test_bookmark_list_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "list"])
+    pair.assert_parity()
+
+
