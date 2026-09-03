@@ -12,9 +12,6 @@ def _stub(message: str):
 def add_parsers(sub) -> None:
     p_arrange = sub.add_parser("arrange", help="Interactively arrange the commit graph")
     p_arrange.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_arrange")
-    p_bisect = sub.add_parser("bisect", help="Find a bad revision by bisection")
-    p_bisect.add_argument("--range", dest="range", default=None, help=argparse.SUPPRESS)
-    p_bisect.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_bisect")
     p_gerrit = sub.add_parser("gerrit", help="Interact with Gerrit Code Review")
     p_gerrit.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_gerrit")
     p_help = sub.add_parser("help", help="Print this message or the help of the given subcommand(s)")
@@ -35,12 +32,6 @@ def add_parsers(sub) -> None:
 def _stub_arrange(args):
     import sys
     print("Error: arrange is not yet supported", file=sys.stderr)
-    return 2
-
-
-def _stub_bisect(args):
-    import sys
-    print("Error: bisect is not yet supported", file=sys.stderr)
     return 2
 
 
