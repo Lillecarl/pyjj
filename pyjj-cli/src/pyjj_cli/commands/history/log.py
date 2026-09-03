@@ -129,6 +129,35 @@ def log(args) -> int:
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
     use_color = _use_color()
+    template_str = getattr(args, "template", None)
+
+    # Compile Jinja template if --template given. We expose a Pythonic context
+    # (commit, change_id, commit_id, author, author_email, description, bookmarks,
+    # is_wc, datetime) — most well-known templating language in Python, so users
+    # can do `pyjj log -T '{{ author }} {{ description }}'` etc. Builtin jj names
+    # like `builtin_log_compact` are mapped to a Jinja equivalent.
+    jinja_template = None
+    builtin_templates = {
+        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }} {{ description }}",
+        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
+        "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
+    }
+    if template_str:
+        # jj allows `jj log -T builtin_*` — map it, else treat as raw Jinja
+        template_str = builtin_templates.get(template_str, template_str)
+        try:
+            from jinja2 import Environment, StrictUndefined
+
+            env = Environment(undefined=StrictUndefined, autoescape=False)
+            # Filter to color prefix like jj does, usable as {{ commit_id|short(2) }}
+            def _short_filter(value, n=8):
+                return value[:n] if isinstance(value, str) else value
+
+            env.filters["short"] = _short_filter
+            jinja_template = env.from_string(template_str)
+        except Exception as e:
+            print(f"Error: invalid template: {e}", file=sys.stderr)
+            return 1
 
     # Decide year display: 26 not 2026, unless visible range spans two millennia
     # (e.g. 1999 and 2026 are 1xxx vs 2xxx → show 4-digit to disambiguate).
@@ -208,21 +237,25 @@ def log(args) -> int:
         ws_name = wc_names_by_hex.get(hex_id) if is_wc else None
         if ws_name and ws_name not in bm_names:
             bm_names = bm_names + [f"{ws_name}@"]
+        # Keep raw for template context, and colored for default rendering
+        bm_str_raw = " ".join(sorted(bm_names))
         if bm_names:
-            bm_str = " " + " ".join(sorted(bm_names))
+            bm_str = " " + bm_str_raw
             if use_color:
-                # Working-copy bookmark/workspace in green, others also green like jj
                 bm_str = f" {_BOOKMARK_COLOR}{bm_str.strip()}{_RESET}"
                 bm_str = " " + bm_str.strip()
         else:
             bm_str = ""
 
+        # Author: username (name) is default like we do (jj shows email, we think name is better);
+        # template can pick either via {{ author }} vs {{ author_email }}.
         try:
-            author = commit.author.name or commit.author.email
+            author_name = commit.author.name or ""
+            author_email = commit.author.email or ""
+            author = author_name or author_email
         except Exception:
-            author = ""
-        if use_color and author:
-            author = f"{_AUTHOR_COLOR}{author}{_RESET}"
+            author_name = author_email = author = ""
+        author_disp = f"{_AUTHOR_COLOR}{author}{_RESET}" if use_color and author else author
 
         try:
             ts = commit.author.timestamp if hasattr(commit.author, "timestamp") else commit.committer.timestamp
@@ -238,27 +271,90 @@ def log(args) -> int:
                 datetime_str = dt.strftime("%y-%m-%d %H:%M")
         except Exception:
             datetime_str = ""
-        if use_color and datetime_str:
-            datetime_str = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}"
+            dt = None
+        datetime_disp = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}" if use_color and datetime_str else datetime_str
 
         first_line = commit.description.splitlines()[0] if commit.description else None
-        desc = first_line or "(no description set)"
-        if use_color and is_green:
-            desc = f"{_BOOKMARK_COLOR}{desc}{_RESET}"
+        desc_raw = first_line or "(no description set)"
+        desc = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if use_color and is_green else desc_raw
 
-        author_part = f" {author}" if author else ""
-        datetime_part = f" {datetime_str}" if datetime_str else ""
-        line1 = f"{graph_prefix}{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}"
-        print(line1)
-        if not no_graph:
-            cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
-            desc_disp = f"{_BOOKMARK_COLOR}{desc}{_RESET}" if use_color and is_green else desc
-            if use_color and is_green:
-                print(f"{cont_prefix_disp}{desc_disp}")
-            else:
-                print(f"{cont_prefix}{desc}")
+        # If --template given, render it via Jinja2. Context exposes both raw and
+        # colored short ids, plus author/email/description/bookmarks.
+        if jinja_template is not None:
+            # Build colored and raw shorts for template to pick
+            try:
+                c_len = repo.shortest_change_id_prefix_len(commit.change_id)
+            except Exception:
+                c_len = 8
+            try:
+                k_len = repo.shortest_commit_id_prefix_len(commit.id)
+            except Exception:
+                k_len = 8
+            ctx = {
+                "commit": commit,
+                "change_id": commit.change_id.hex(),
+                "commit_id": commit.id.hex(),
+                "change_id_short": _color_change_id(commit.change_id.hex(), c_len, use_color),
+                "commit_id_short": _color_commit_id(commit.id.hex(), k_len, use_color),
+                "change_id_short_raw": commit.change_id.hex()[:8],
+                "commit_id_short_raw": commit.id.hex()[:8],
+                "author": author,
+                "author_name": author_name,
+                "author_email": author_email,
+                "author_display": author_disp,
+                "description": desc_raw,
+                "description_display": desc,
+                "bookmarks": bm_names,
+                "bookmarks_str": bm_str_raw,
+                "bookmarks_display": bm_str.strip() if bm_str else "",
+                "datetime": datetime_str,
+                "datetime_display": datetime_disp,
+                "is_wc": is_wc,
+                "is_current_wc": is_current_wc,
+                "is_root": is_root,
+            }
+            try:
+                rendered = jinja_template.render(ctx)
+            except Exception as e:
+                print(f"Error: template render failed: {e}", file=sys.stderr)
+                return 1
+            # Template may contain newlines — print with graph prefix on first line,
+            # continuation prefix on subsequent lines.
+            lines = rendered.splitlines() or [""]
+            print(f"{graph_prefix}{lines[0]}")
+            for extra in lines[1:]:
+                if not no_graph:
+                    print(f"{cont_prefix}{extra}")
+                else:
+                    print(f"  {extra}")
+            # Still show second row description if template didn't already include it?
+            # If template was single-line, we already printed second row? No — template replaces line1 only.
+            # Keep our two-row desc unless template explicitly covered it (heuristic: if template contains 'description', skip).
+            if "description" not in (template_str or ""):
+                if not no_graph:
+                    cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
+                    desc_disp = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if use_color and is_green else desc_raw
+                    if use_color and is_green:
+                        print(f"{cont_prefix_disp}{desc_disp}")
+                    else:
+                        print(f"{cont_prefix}{desc_raw}")
+                else:
+                    print(f"  {desc_raw}")
         else:
-            print(f"  {desc}")
+            # Default two-row like jj but with username (name) not email — user says name is better
+            author_part = f" {author_disp}" if author else ""
+            datetime_part = f" {datetime_disp}" if datetime_str else ""
+            line1 = f"{graph_prefix}{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}"
+            print(line1)
+            if not no_graph:
+                cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
+                desc_disp = f"{_BOOKMARK_COLOR}{desc}{_RESET}" if use_color and is_green else desc
+                if use_color and is_green:
+                    print(f"{cont_prefix_disp}{desc_disp}")
+                else:
+                    print(f"{cont_prefix}{desc}")
+            else:
+                print(f"  {desc_raw}")
 
         if show_patch:
             if commit.parent_ids:
