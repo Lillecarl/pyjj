@@ -896,3 +896,30 @@ def test_bookmark_list_is_read_only(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- rebase modes -------------------------------------------------------
+
+
+def test_rebase_source_onto_grandparent(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["rebase", "-s", rev("two"), "-d", rev("base")])
+    pair.assert_parity()
+
+
+def test_rebase_branch_onto_grandparent(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["rebase", "-b", rev("two"), "-d", rev("base")])
+    pair.assert_parity()
+
+
+def test_rebase_insert_after(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["rebase", "-r", rev("two"), "--insert-after", rev("base")])
+    pair.assert_parity()
+
+
+def test_rebase_insert_before(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["rebase", "-r", rev("two"), "--insert-before", rev("one")])
+    pair.assert_parity()
+
+

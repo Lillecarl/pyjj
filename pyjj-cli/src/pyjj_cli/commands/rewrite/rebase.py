@@ -47,8 +47,11 @@ def rebase(args) -> int:
             target_root_ids = [c.id for c in roots]
             target_commit_ids = []
         else:  # branches
-            roots = _resolve_all(repo, settings, branches)
-            target_root_ids = [c.id for c in roots]
+            # `-b` names any commit in a branch; the commits that actually
+            # move are the roots of that branch relative to the
+            # destination. Those roots need the destination, so they are
+            # computed once it is known, below.
+            target_root_ids = []
             target_commit_ids = []
 
         # Destinations: -d/--destination, -o/--onto, -A/--insert-after, -B/--insert-before
@@ -98,6 +101,12 @@ def rebase(args) -> int:
             print("Error: no destination specified (use -d, -o, -A or -B)", file=sys.stderr)
             return 2
 
+        if branches:
+            target_root_ids = _branch_roots(repo, settings, branches, new_parent_ids)
+            if not target_root_ids:
+                print("Nothing changed.", file=sys.stderr)
+                return 0
+
         tx = repo.start_transaction(settings)
         tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
         _finish(tx, "rebase commit", settings, ws, repo)
@@ -105,3 +114,17 @@ def rebase(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
+
+
+def _branch_roots(repo, settings, branches, new_parent_ids):
+    """`roots(destination..branch)`: the commits `jj rebase -b` moves.
+
+    A branch commit that is already an ancestor of the destination stays
+    where it is, so only the roots of the part that is *not* yet below
+    the destination get rebased. Without this, `-b` would behave like
+    `-s` and drag the named commit off its own branch.
+    """
+    branch_expression = " | ".join(f"({b})" for b in branches)
+    dest_expression = " | ".join(p.hex() for p in new_parent_ids)
+    expression = f"roots(({dest_expression})..({branch_expression}))"
+    return [c.id for c in repo.revset(settings, expression)]
