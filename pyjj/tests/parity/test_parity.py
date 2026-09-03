@@ -999,3 +999,24 @@ def test_next_refuses_when_the_working_copy_has_children(pair: RepoPair) -> None
     pair.assert_parity()
 
 
+# -- new: graph insertion -----------------------------------------------
+
+
+def test_new_insert_after(pair: RepoPair) -> None:
+    """`-A` puts the change between its target and that target's
+    children, which are rebased onto it."""
+    chain(pair)
+    pair.op(jj=["new", "--insert-after", rev("one"), "-m", "inserted"])
+    pair.assert_parity()
+
+
+def test_new_insert_before(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", "--insert-before", rev("two"), "-m", "inserted"])
+    pair.assert_parity()
+
+
+def test_new_no_edit_keeps_the_working_copy(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", "--no-edit", "-m", "detached"])
+    pair.assert_parity()
