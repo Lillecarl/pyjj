@@ -10,6 +10,7 @@ mod commit;
 mod config;
 mod conflicts;
 mod errors;
+mod evolution;
 mod file;
 mod fix;
 mod git;
@@ -30,6 +31,7 @@ mod workspace;
 use absorb::PyAbsorbStats;
 use annotate::PyAnnotationLine;
 use bisect::{PyBisectStep, PyBisector};
+use evolution::PyEvolutionEntry;
 use bookmark::PyBookmark;
 use commit::{PyCommit, PyReadonlyRepo, PyVerification};
 use errors::{
@@ -104,6 +106,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGraphNode>()?;
     m.add_class::<PyBisector>()?;
     m.add_class::<PyBisectStep>()?;
+    m.add_class::<PyEvolutionEntry>()?;
     m.add_class::<PyMoveCommitsStats>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
 

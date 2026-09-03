@@ -154,6 +154,18 @@ impl PyReadonlyRepo {
         crate::graph::log_graph(self, settings, revision, limit)
     }
 
+    /// How the given commits evolved: every earlier version of each
+    /// change, newest first, the way `jj evolog` shows it. See
+    /// `EvolutionEntry`. `limit` stops after that many entries.
+    #[pyo3(signature = (start_commits, limit=None))]
+    fn evolution_log(
+        &self,
+        start_commits: Vec<PyCommitId>,
+        limit: Option<usize>,
+    ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
+        crate::evolution::evolution_log(self, start_commits, limit)
+    }
+
     /// Async sibling of `log_graph()`. See `get_commit_async()`'s docs for
     /// why this runs on tokio's blocking thread pool rather than directly.
     #[pyo3(signature = (settings, revision, limit=None))]
