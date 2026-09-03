@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def add_parsers(sub) -> None:
     p_desc = sub.add_parser("describe", aliases=["desc"], help="Set commit descriptions")
@@ -7,11 +9,7 @@ def add_parsers(sub) -> None:
                         default=None, metavar="REVSETS", help=argparse.SUPPRESS)
     p_desc.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
                         help="Revisions to describe (default: @)")
-    p_desc.add_argument("-m", "--message", dest="messages", action="append",
-                        default=None, metavar="MESSAGE",
-                        help="Description text (repeatable; paragraphs joined)")
-    p_desc.add_argument("--stdin", action="store_true",
-                        help="Read description from stdin")
+    add_flags(p_desc, {Flag.MESSAGE_APPEND, Flag.STDIN})
     p_desc.set_defaults(_handler="pyjj_cli.commands.describe.describe:describe")
 
     p_new = sub.add_parser("new", help="Create a new empty change on top of REVSETS")
