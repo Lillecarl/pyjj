@@ -1169,3 +1169,19 @@ def test_tag_delete(pair: RepoPair) -> None:
     pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
     pair.op(jj=["tag", "delete", "v1"])
     pair.assert_parity()
+
+
+def test_tag_set_then_move(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(jj=["tag", "set", "v1", "--allow-move", "-r", rev("two")])
+    pair.assert_parity()
+
+
+def test_tag_set_refuses_to_move_without_the_flag(pair: RepoPair) -> None:
+    """A tag is meant to stay put: moving it needs `--allow-move`."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(jj=["tag", "set", "v1", "-r", rev("two")], may_fail=True)
+    pair.assert_parity()
+

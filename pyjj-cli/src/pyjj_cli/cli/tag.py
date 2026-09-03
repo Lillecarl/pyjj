@@ -19,6 +19,8 @@ def add_parsers(sub) -> None:
     p_tag_set = tag_sub.add_parser("set", help="Create or update tags")
     p_tag_set.add_argument("names", nargs="+", help="Tags to set")
     add_revision_flag(p_tag_set, dest="revision", default="@", help="Revision to point at (default: @)")
+    p_tag_set.add_argument("--allow-move", dest="allow_move", action="store_true",
+                           default=False, help="Allow moving an existing tag")
     p_tag_set.set_defaults(_handler="pyjj_cli.commands.tag.tag_set:tag_set")
     p_tag_delete = tag_sub.add_parser("delete", help="Delete existing tags")
     p_tag_delete.add_argument("names", nargs="+", help="Tags to delete")
