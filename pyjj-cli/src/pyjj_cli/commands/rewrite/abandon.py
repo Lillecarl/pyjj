@@ -33,10 +33,11 @@ def abandon(args) -> int:
         tx = repo.start_transaction(settings)
         for commit in targets:
             tx.abandon_commit(commit)
-        # The real `jj abandon` deletes bookmarks pointing at the abandoned
-        # commits by default (--retain-bookmarks moves them instead).
+        # jj deletes bookmarks pointing at the abandoned commits by
+        # default; --retain-bookmarks moves them to the parent instead.
         _finish(tx, f"abandon commit {targets[0].id.hex()}", settings, ws, repo,
-                delete_abandoned_bookmarks=True)
+                delete_abandoned_bookmarks=not getattr(
+                    args, "retain_bookmarks", False))
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1

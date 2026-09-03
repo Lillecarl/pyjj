@@ -1344,3 +1344,22 @@ def test_display_only_global_options_are_accepted(pair: RepoPair, argv) -> None:
     chain(pair)
     pair.op(jj=argv)
     pair.assert_parity()
+
+
+# -- abandon and duplicate placement ------------------------------------
+
+
+def test_abandon_retain_bookmarks(pair: RepoPair) -> None:
+    """Without the flag jj deletes a bookmark on an abandoned commit;
+    with it, the bookmark moves to the parent."""
+    chain(pair)
+    pair.op(jj=["abandon", "--retain-bookmarks", rev("one")])
+    pair.assert_parity()
+
+
+@UNIMPLEMENTED
+def test_abandon_restore_descendants(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["abandon", "--restore-descendants", rev("one")])
+    pair.assert_parity()
+
