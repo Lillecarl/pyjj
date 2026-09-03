@@ -6,13 +6,13 @@ import tempfile
 from pathlib import Path
 
 import pyjj
-from ..common import _load
+from ..common import _load, _pyjj_template
 from .templates_set import _validate_template
 
 
 def templates_edit(args) -> int:
     try:
-        settings, _, _ = _load(args)
+        settings, ws, _ = _load(args)
     except pyjj.JjError as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
@@ -21,17 +21,8 @@ def templates_edit(args) -> int:
     is_repo = getattr(args, "repo", False)
     key = f"pyjj.templates.{name}"
 
-    # Load current value for initial content
-    current = None
-    try:
-        current = settings.get_string(key)
-    except Exception:
-        current = None
-    if current is None:
-        # Try jj config get
-        result = subprocess.run(["jj", "config", "get", key], capture_output=True, text=True)
-        if result.returncode == 0:
-            current = result.stdout.strip()
+    # Load current value for initial content, repo config included.
+    current = _pyjj_template(settings, name, cwd=ws.workspace_root)
 
     initial = current if current is not None else ""
     # Provide a helpful header comment for the user (like sudoedit)
@@ -77,7 +68,10 @@ def templates_edit(args) -> int:
 
         scope = "--repo" if is_repo else "--user"
         toml_value = "'''" + new_value.replace("'''", "\\'\\'\\'") + "'''"
-        result = subprocess.run(["jj", "config", "set", scope, key, toml_value], capture_output=True, text=True)
+        result = subprocess.run(
+            ["jj", "config", "set", scope, key, toml_value],
+            cwd=ws.workspace_root, capture_output=True, text=True,
+        )
         if result.returncode != 0:
             print(f"Error: {result.stderr}", file=sys.stderr)
             return result.returncode

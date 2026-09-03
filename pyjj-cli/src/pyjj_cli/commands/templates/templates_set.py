@@ -50,7 +50,11 @@ def templates_set(args) -> int:
     # jj config set expects TOML string, so we need to quote as TOML string
     # Use triple single quotes to avoid shell quoting issues: '''...'''
     toml_value = "'''" + value.replace("'''", "\\'\\'\\'") + "'''"
-    result = subprocess.run(["jj", "config", "set", scope, key, toml_value], capture_output=True, text=True)
+    cwd = getattr(args, "repository", None) or "."
+    result = subprocess.run(
+        ["jj", "config", "set", scope, key, toml_value],
+        cwd=cwd, capture_output=True, text=True,
+    )
     if result.returncode != 0:
         print(f"Error: {result.stderr}", file=sys.stderr)
         return result.returncode
