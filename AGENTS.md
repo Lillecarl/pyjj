@@ -133,6 +133,18 @@ Current state:
   (`renderdag`) the CLI uses; a caller wanting to *draw* the graph does its
   own lane/column layout from this edge data (well-understood technique,
   same one most git TUIs use).
+- **Evolution**: `ReadonlyRepo.evolution_log(start_commits, limit=None) ->
+  list[EvolutionEntry]` is `jj evolog`'s history
+  (`jj_lib::evolution::walk_predecessors`): every earlier version of a
+  change, newest first. Each `EvolutionEntry` has `.commit`, `.operation`
+  (the operation that created or rewrote it, `None` once that operation
+  has left the op log) and `.predecessor_ids` (empty for the first
+  version, several where versions were squashed together).
+
+  It walks the *operation* log rather than the commit graph, so it finds
+  versions that are hidden and no longer reachable in any revset. Unlike
+  the graph and bisect wrappers there is no lifetime to work around --
+  `walk_predecessors` streams owned entries, drained inside the call.
 - **Bisect**: `Bisector(repo, settings, ["v1.0..main", ...])` is
   `jj bisect`'s binary search (`jj_lib::bisect`). Call `next_step()` for a
   `BisectStep` -- `kind` `"evaluate"` (test `.commit`) or `"done"`
@@ -794,9 +806,7 @@ Current state:
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
   consistent with that machinery already being out of scope for `rebase()`
-  above. Evolog/predecessor history (`jj evolog`) has no dedicated binding
-  either — `Commit`'s `predecessor_ids`/store-level history walking isn't
-  exposed as a distinct API yet.
+  above.
 
 ## Reproducible builds
 
