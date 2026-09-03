@@ -1404,9 +1404,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["metaedit", "-r", rev("one"), "--author", "Bob <bob@example.com>"],
-    ["metaedit", "-r", rev("one"), "--update-author"],
-    ["metaedit", "-r", rev("one"), "--update-change-id"],
     ["parallelize", rev("one"), rev("two")],
     ["interdiff", "--from", rev("base"), "--to", rev("one")],
     # `--parallel` needs the remainder tree computed against the
@@ -1502,4 +1499,45 @@ def test_unsign_an_unsigned_commit_changes_nothing(pair: RepoPair) -> None:
 def test_unsign_the_whole_chain_changes_nothing(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["unsign", "-r", "mutable()"])
+    pair.assert_parity()
+
+
+# -- metaedit -----------------------------------------------------------
+
+
+def test_metaedit_sets_the_author(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--author", "Bob <bob@example.com>"])
+    pair.assert_parity()
+
+
+def test_metaedit_update_author(pair: RepoPair) -> None:
+    """Name and email move to the configured user; the date does not."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-author"])
+    pair.assert_parity()
+
+
+def test_metaedit_update_author_timestamp(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-author-timestamp"])
+    pair.assert_parity()
+
+
+def test_metaedit_update_change_id(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-change-id"])
+    pair.assert_parity()
+
+
+def test_metaedit_message(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "-m", "renamed"])
+    pair.assert_parity()
+
+
+def test_metaedit_several_revisions(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "-r", rev("two"),
+                "--author", "Bob <bob@example.com>"])
     pair.assert_parity()
