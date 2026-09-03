@@ -1,10 +1,38 @@
 """history subcommand: log — now backed by log_graph + shared graph_layout."""
+import os
 import sys
 
 import pyjj
 from pyjj.graph_layout import layout
 
 from ..common import _load
+
+# ANSI for prefix highlight — matches jj's "unique prefix in bold" idea.
+# Only emitted when stdout is a TTY and NO_COLOR is not set.
+_BLUE_BOLD = "\033[1;34m"
+_CYAN_BOLD = "\033[1;36m"
+_RESET = "\033[0m"
+
+
+def _use_color() -> bool:
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if os.environ.get("FORCE_COLOR") is not None:
+        return True
+    return sys.stdout.isatty()
+
+
+def _color_prefix(hex_str: str, prefix_len: int, color: str) -> str:
+    """Color the shortest-unique prefix of a hex id."""
+    if prefix_len <= 0 or prefix_len > len(hex_str):
+        prefix_len = len(hex_str)
+    # jj highlights the *shortest* unique prefix; we show 8 chars, highlight first N.
+    # If prefix > 8, the whole 8 is highlighted (still unique within 8).
+    shown = hex_str[:8]
+    hl = min(prefix_len, len(shown))
+    if hl == len(shown):
+        return f"{color}{shown}{_RESET}"
+    return f"{color}{shown[:hl]}{_RESET}{shown[hl:]}"
 
 
 def _render_glyphs_plain(row) -> str:
@@ -102,12 +130,28 @@ def log(args) -> int:
             graph_prefix = "".join(chars) + " "
 
         # Summary: change_id + bookmark names + first line
-        change_id = commit.change_id.hex()[:8]
+        # Color the shortest-unique prefix so the user sees which shorthand is unambiguous,
+        # matching `jj log`'s own highlighting (commit and change ids each have their own shortest prefix).
+        use_color = _use_color()
+        if use_color:
+            try:
+                c_len = repo.shortest_change_id_prefix_len(commit.change_id)
+            except Exception:
+                c_len = 8
+            try:
+                k_len = repo.shortest_commit_id_prefix_len(commit.id)
+            except Exception:
+                k_len = 8
+            change_disp = _color_prefix(commit.change_id.hex(), c_len, _CYAN_BOLD)
+            commit_disp = _color_prefix(commit.id.hex(), k_len, _BLUE_BOLD)
+        else:
+            change_disp = commit.change_id.hex()[:8]
+            commit_disp = commit.id.hex()[:8]
         first_line = commit.description.splitlines()[0] if commit.description else None
         bm_names = bm_by_commit.get(commit.id.hex(), [])
         bm_str = (" " + " ".join(sorted(bm_names))) if bm_names else ""
         desc = first_line or "(no description set)"
-        line = f"{graph_prefix}{change_id} {commit.id.hex()[:8]}{bm_str} {desc}"
+        line = f"{graph_prefix}{change_disp} {commit_disp}{bm_str} {desc}"
         print(line)
 
         if show_patch:
