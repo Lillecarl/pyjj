@@ -130,6 +130,20 @@ def log(args) -> int:
     show_patch = getattr(args, "patch", False)
     use_color = _use_color()
     template_str = getattr(args, "template", None)
+    # pyjj.templates.* with Jinja — if no --template, check config `pyjj.templates.log`
+    if not template_str:
+        try:
+            template_str = settings.get_string("pyjj.templates.log")
+        except Exception:
+            template_str = None
+    # If --template is a bare name like `my-cool`, try `pyjj.templates.<name>` before treating as raw Jinja
+    if template_str and "{{" not in template_str and " " not in template_str and "\n" not in template_str:
+        try:
+            from_config = settings.get_string(f"pyjj.templates.{template_str}")
+            if from_config:
+                template_str = from_config
+        except Exception:
+            pass
 
     # Compile Jinja template if --template given. We expose a Pythonic context
     # (commit, change_id, commit_id, author, author_email, description, bookmarks,
