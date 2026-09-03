@@ -1,15 +1,15 @@
-"""config subcommand: config_unset."""
+"""config subcommand: config_path."""
 import sys
 
 import pyjj
 
 from ..common import CommandError
 from .config_set import _scope, _workspace_root
-from .paths import config_path, read_config, unset_key, write_config
+from .paths import config_path
 
 
-def config_unset(args) -> int:
-    """`jj config unset --repo|--user|--workspace <name>`."""
+def config_path_command(args) -> int:
+    """`jj config path --repo|--user|--workspace`."""
     scope = _scope(args)
     if scope is None:
         print("Error: No config target given; pass --user, --repo or --workspace",
@@ -17,12 +17,7 @@ def config_unset(args) -> int:
         return 2
     try:
         root = _workspace_root(args) if scope != "user" else None
-        path = config_path(root, scope)
-        data = read_config(path)
-        if not unset_key(data, args.name):
-            print(f'Error: "{args.name}" doesn\'t exist', file=sys.stderr)
-            return 1
-        write_config(path, data)
+        print(config_path(root, scope))
     except (pyjj.JjError, CommandError, OSError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

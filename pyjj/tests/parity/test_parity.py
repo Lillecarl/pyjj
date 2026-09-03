@@ -1414,12 +1414,7 @@ UNIMPLEMENTED_ARGV = [
      "2001-02-03T04:05:06+00:00"],
     ["op", "diff"],
     ["op", "revert"],
-    ["config", "list"],
-    ["config", "list", "--repo"],
-    ["config", "path", "--repo"],
     ["config", "gc"],
-    ["config", "set", "--repo", "user.name", "Bob"],
-    ["config", "unset", "--repo", "user.name"],
     ["log", "--stat"],
     ["show", "-r", rev("one")],
     ["run", "-r", rev("one"), "true"],
@@ -1559,4 +1554,50 @@ def test_parallelize_leaves_a_follower_on_both(pair: RepoPair) -> None:
     pair.op(jj=["new", "-m", "three"])
     pair.op(files={"three.txt": b"three\n"}, jj=["status"])
     pair.op(jj=["parallelize", rev("one"), rev("two")])
+    pair.assert_parity()
+
+
+# -- repo-level config --------------------------------------------------
+#
+# Repo config lives OUTSIDE the repository, under
+# `$XDG_CONFIG_HOME/jj/repos/<id>/`, so the harness never sees the file
+# itself. What it sees is the effect: a commit written afterwards
+# carries the configured author.
+
+
+def test_config_set_repo_changes_later_commits(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["config", "set", "--repo", "user.name", "Bob"])
+    pair.op(jj=["new", "-m", "after"])
+    pair.assert_parity()
+
+
+def test_config_set_then_unset_restores_the_author(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["config", "set", "--repo", "user.email", "bob@example.com"])
+    pair.op(jj=["config", "unset", "--repo", "user.email"])
+    pair.op(jj=["new", "-m", "after"])
+    pair.assert_parity()
+
+
+def test_config_unset_a_missing_key_fails_on_both(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["config", "unset", "--repo", "user.name"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["config", "list"],
+        ["config", "list", "--repo"],
+        ["config", "path", "--repo"],
+        ["config", "path", "--user"],
+    ],
+    ids=lambda a: "_".join(a).replace("-", ""),
+)
+def test_config_read_only_command(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=["config", "set", "--repo", "user.name", "Bob"])
+    pair.op(jj=argv)
     pair.assert_parity()

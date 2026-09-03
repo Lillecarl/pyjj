@@ -318,6 +318,16 @@ def add_repo_flag(parser: argparse.ArgumentParser, help: str = "Update repo conf
     parser.add_argument("--repo", action="store_true", help=help)
 
 
+def add_config_scope_flags(parser: argparse.ArgumentParser) -> None:
+    """`--user`/`--repo`/`--workspace`: which config file to act on."""
+    parser.add_argument("--user", action="store_true",
+                        help="Target the user-level config")
+    parser.add_argument("--repo", action="store_true",
+                        help="Target the repo-level config")
+    parser.add_argument("--workspace", action="store_true",
+                        help="Target the workspace-level config")
+
+
 def add_key_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--key", dest="key", default=None, help=argparse.SUPPRESS)
 
