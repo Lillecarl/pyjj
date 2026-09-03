@@ -80,6 +80,20 @@ def _load(args):
     repo, _stats = ws.snapshot(settings)
     return settings, ws, repo
 
+def _reload(settings, args):
+    """Re-open the workspace at its current head, reusing `settings`.
+
+    Not `_load()`: that builds a fresh `UserSettings`, and jj_lib seeds a
+    new change-id RNG from `debug.randomness-seed` every time one is
+    built. A command that reloads mid-run would restart that sequence and
+    draw the same change id again, where `jj` -- which builds its
+    settings once per process -- draws the next one. Only commands that
+    write commits after a reload can tell, but for those it is the
+    difference between matching `jj` and not."""
+    ws = pyjj.Workspace.load(settings, args.repository)
+    repo, _stats = ws.snapshot(settings)
+    return ws, repo
+
 def _resolve_all(repo, settings, expressions):
     """Resolve positional REVSETS the way the real CLI does for target
     SETS (describe/abandon/duplicate/...): as ONE union expression, so

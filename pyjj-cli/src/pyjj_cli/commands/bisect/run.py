@@ -12,7 +12,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load
+from ..common import CommandError, _finish, _load, _reload
 
 # The exit-status protocol `jj bisect run` documents.
 _SKIP_STATUS = 125
@@ -118,9 +118,12 @@ def bisect_run(args) -> int:
             evaluation = pyjj.Bisector.invert(evaluation)
         bisector.mark(commit.id, evaluation)
 
-        # The evaluation command may have run `jj`, so reload.
+        # The evaluation command may have run `jj`, so reload -- but keep
+        # the same settings object. A fresh one would reseed jj_lib's
+        # change-id RNG and make every checked-out commit draw the same
+        # id, where `jj` draws a new one each time.
         try:
-            settings, ws, repo = _load(args)
+            ws, repo = _reload(settings, args)
         except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
             print(f"Error: {e.message}", file=sys.stderr)
             return 1
