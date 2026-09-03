@@ -1020,3 +1020,54 @@ def test_new_no_edit_keeps_the_working_copy(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["new", "--no-edit", "-m", "detached"])
     pair.assert_parity()
+
+
+# -- file commands ------------------------------------------------------
+
+
+def test_file_list_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "list"])
+    pair.assert_parity()
+
+
+def test_file_show_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "show", "base.txt"])
+    pair.assert_parity()
+
+
+def test_file_annotate_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "annotate", "base.txt"])
+    pair.assert_parity()
+
+
+def test_file_search_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "search", "-p", "base"])
+    pair.assert_parity()
+
+
+def test_file_chmod_executable(pair: RepoPair) -> None:
+    """The executable bit is part of the git tree, so a divergence here
+    changes the commit id."""
+    chain(pair)
+    pair.op(jj=["file", "chmod", "x", "two.txt"])
+    pair.assert_parity()
+
+
+def test_file_chmod_back_to_normal(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "chmod", "x", "two.txt"])
+    pair.op(jj=["file", "chmod", "n", "two.txt"])
+    pair.assert_parity()
+
+
+def test_file_track_is_a_no_op_by_default(pair: RepoPair) -> None:
+    """`snapshot.auto-track` defaults to `all()`, so tracking an already
+    tracked path changes nothing."""
+    chain(pair)
+    pair.op(jj=["file", "track", "two.txt"])
+    pair.assert_parity()
+
