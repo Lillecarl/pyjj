@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def _sparse_help(args):
     import sys
@@ -14,9 +16,7 @@ def add_parsers(sub) -> None:
     p_sparse_list = sparse_sub.add_parser("list", help="List the patterns that are currently present")
     p_sparse_list.set_defaults(_handler="pyjj_cli.commands.sparse.sparse_list:sparse_list")
     p_sparse_set = sparse_sub.add_parser("set", help="Update the patterns that are present")
-    p_sparse_set.add_argument("--add", dest="adds", action="append", default=None, metavar="ADD", help="Patterns to add")
-    p_sparse_set.add_argument("--remove", dest="removes", action="append", default=None, metavar="REMOVE", help="Patterns to remove")
-    p_sparse_set.add_argument("--clear", action="store_true", help="Include no files (combine with --add)")
+    add_flags(p_sparse_set, [Flag.ADD, Flag.REMOVE, Flag.CLEAR])
     p_sparse_set.set_defaults(_handler="pyjj_cli.commands.sparse.sparse_set:sparse_set")
     p_sparse_reset = sparse_sub.add_parser("reset", help="Reset the patterns to include all files")
     p_sparse_reset.set_defaults(_handler="pyjj_cli.commands.sparse.sparse_reset:sparse_reset")

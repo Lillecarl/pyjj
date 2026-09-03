@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def _config_help(args):
     import sys
@@ -18,12 +20,12 @@ def add_parsers(sub) -> None:
     p_cfg_list.add_argument("name", nargs="?", help="Optional config name prefix")
     p_cfg_list.set_defaults(_handler="pyjj_cli.commands.config.config_list:config_list")
     p_cfg_set = config_sub.add_parser("set", help="Update config file to set the given option")
-    p_cfg_set.add_argument("--repo", action="store_true", help="Update repo config")
+    add_flags(p_cfg_set, [Flag.REPO_FLAG])
     p_cfg_set.add_argument("name", help="Config option name")
     p_cfg_set.add_argument("value", help="Config value")
     p_cfg_set.set_defaults(_handler="pyjj_cli.commands.config.config_set:config_set")
     p_cfg_unset = config_sub.add_parser("unset", help="Update config file to unset the given option")
-    p_cfg_unset.add_argument("--repo", action="store_true", help="Update repo config")
+    add_flags(p_cfg_unset, [Flag.REPO_FLAG])
     p_cfg_unset.add_argument("name", help="Config option name")
     p_cfg_unset.set_defaults(_handler="pyjj_cli.commands.config.config_unset:config_unset")
     p_cfg_edit = config_sub.add_parser("edit", help="Start an editor on a jj config file")

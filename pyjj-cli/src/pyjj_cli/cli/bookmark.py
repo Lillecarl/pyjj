@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags, add_revision_flag
+
 
 def _bm_help(args):
     import sys
@@ -14,8 +16,7 @@ def add_parsers(sub) -> None:
 
     p_bmc = bm_sub.add_parser("create", help="Create a new bookmark")
     p_bmc.add_argument("names", nargs="+", metavar="NAMES")
-    p_bmc.add_argument("-r", "--revision", default="@", metavar="REVSET",
-                       help="Revision to point at (default: @)")
+    add_revision_flag(p_bmc, dest="revision", default="@", help="Revision to point at (default: @)")
     p_bmc.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bms = bm_sub.add_parser("set", help="Move an existing bookmark")
@@ -51,14 +52,14 @@ def add_parsers(sub) -> None:
 
     p_bmt = bm_sub.add_parser("track", help="Start tracking given remote bookmarks")
     p_bmt.add_argument("names", nargs="+", help="Bookmarks to track")
-    p_bmt.add_argument("--remote", dest="remote", default=None, help="Remote to track")
+    add_flags(p_bmt, [Flag.REMOTE])
     p_bmt.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_track")
 
     p_bmut = bm_sub.add_parser("untrack", help="Stop tracking given remote bookmarks")
     p_bmut.add_argument("names", nargs="+", help="Bookmarks to untrack")
-    p_bmut.add_argument("--remote", dest="remote", default=None, help="Remote to untrack")
+    add_flags(p_bmut, [Flag.REMOTE])
     p_bmut.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_untrack")
 
     p_bma = bm_sub.add_parser("advance", help="Advance the closest bookmarks to a target revision")
-    p_bma.add_argument("-r", "--revision", dest="revision", default="@", help="Revision to advance to (default: @)")
+    add_revision_flag(p_bma, dest="revision", default="@", help="Revision to advance to (default: @)")
     p_bma.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_advance")

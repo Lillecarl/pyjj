@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def _op_help(args):
     import sys
@@ -64,8 +66,7 @@ def add_parsers(sub) -> None:
     p_oplog_revert.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
 
     p_evolog = sub.add_parser("evolog", help="Show how a change has evolved over time")
-    p_evolog.add_argument("-r", "--revisions", dest="revisions", default="@", help="Revisions to follow (default: @)")
-    p_evolog.add_argument("-n", "--limit", dest="limit", type=int, default=None, help="Limit number of revisions")
+    add_flags(p_evolog, [Flag.REVISIONS, Flag.LIMIT])
     p_evolog.set_defaults(_handler="pyjj_cli.commands.operation.evolog:evolog")
 
     p_next = sub.add_parser("next", help="Move the working-copy commit to the child revision")

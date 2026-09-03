@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def _git_help(args):
     import sys
@@ -27,18 +29,12 @@ def add_parsers(sub) -> None:
     p_gclone.add_argument("destination", nargs="?", help="Target directory for the clone")
     p_gclone.add_argument("--remote", dest="remote_name", default="origin", metavar="REMOTE_NAME",
                           help="Name of the newly created remote (default: origin)")
-    p_gclone.add_argument("--colocate", dest="colocate", action="store_true", default=True,
-                          help="Colocate the Jujutsu repo with the git repo (default)")
-    p_gclone.add_argument("--no-colocate", dest="colocate", action="store_false",
-                          help="Disable colocation")
-    p_gclone.add_argument("--depth", dest="depth", type=int, default=None, metavar="DEPTH",
-                          help="Create a shallow clone of the given depth")
+    add_flags(p_gclone, [Flag.COLOCATE, Flag.DEPTH])
     p_gclone.add_argument("-b", "--branch", dest="branches", action="append", default=None,
                           metavar="BRANCH", help="Branch to fetch (repeatable)")
     p_gclone.add_argument("-t", "--tag", dest="tags", action="append", default=None,
                           metavar="TAG", help="Tag to fetch (repeatable)")
-    p_gclone.add_argument("--object-hash", dest="object_hash", default=None, metavar="OBJECT_HASH",
-                          help="Object hash algorithm for the local Git repository")
+    add_flags(p_gclone, [Flag.OBJECT_HASH])
     p_gclone.set_defaults(_handler="pyjj_cli.commands.git.clone:git_clone")
 
     p_gcolocation = git_sub.add_parser("colocation", help="Manage Jujutsu repository colocation with Git")
@@ -53,14 +49,11 @@ def add_parsers(sub) -> None:
     p_gcol_disable.set_defaults(_handler="pyjj_cli.commands.git.colocation:git_colocation")
 
     p_gfetch = git_sub.add_parser("fetch", help="Fetch from a Git remote")
-    p_gfetch.add_argument("--remote", dest="remote", default=None, metavar="REMOTE",
-                          help="The remote to fetch from")
+    add_flags(p_gfetch, [Flag.REMOTE, Flag.ALL_REMOTES, Flag.TRACKED])
     p_gfetch.add_argument("-b", "--branch", dest="branches", action="append", default=None,
                           metavar="BRANCH", help="Branch to fetch (repeatable)")
     p_gfetch.add_argument("-t", "--tag", dest="tags", action="append", default=None,
                           metavar="TAG", help="Tag to fetch (repeatable)")
-    p_gfetch.add_argument("--tracked", dest="tracked", action="store_true", help="Fetch only tracked bookmarks and tags")
-    p_gfetch.add_argument("--all-remotes", dest="all_remotes", action="store_true", help="Fetch from all remotes")
     p_gfetch.set_defaults(_handler="pyjj_cli.commands.git.fetch:git_fetch")
 
     p_gimport = git_sub.add_parser("import", help="Update repo with changes made in the underlying Git repo")
@@ -69,23 +62,7 @@ def add_parsers(sub) -> None:
     p_gexport.set_defaults(_handler="pyjj_cli.commands.git.export:git_export")
 
     p_gpush = git_sub.add_parser("push", help="Push to a Git remote")
-    p_gpush.add_argument("--remote", dest="remote", default=None, metavar="REMOTE",
-                         help="The remote to push to")
-    p_gpush.add_argument("-b", "--bookmark", dest="bookmarks", action="append", default=None,
-                         metavar="BOOKMARK", help="Bookmark to push (repeatable)")
-    p_gpush.add_argument("-t", "--tag", dest="tags", action="append", default=None,
-                         metavar="TAG", help="Tag to push (repeatable)")
-    p_gpush.add_argument("--all", dest="all_flag", action="store_true", help="Push all bookmarks and tags")
-    p_gpush.add_argument("--tracked", dest="tracked", action="store_true", help="Push all tracked bookmarks and tags")
-    p_gpush.add_argument("--deleted", dest="deleted", action="store_true", help="Push all deleted bookmarks and tags")
-    p_gpush.add_argument("--allow-empty-description", dest="allow_empty", action="store_true", help="Allow pushing commits with empty descriptions")
-    p_gpush.add_argument("--allow-private", dest="allow_private", action="store_true", help="Allow pushing commits that are private")
-    p_gpush.add_argument("--allow-conflicts", dest="allow_conflicts", action="store_true", help="Allow pushing commits that contain conflicts")
-    p_gpush.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show what would be pushed without actually pushing")
-    p_gpush.add_argument("-c", "--change", dest="changes", action="append", default=None,
-                         metavar="REVSETS", help="Push this commit by creating a bookmark")
-    p_gpush.add_argument("--named", dest="named", action="append", default=None,
-                         metavar="NAME@REV", help="Push a revision as a named bookmark")
+    add_flags(p_gpush, [Flag.REMOTE, Flag.BOOKMARK, Flag.TAG, Flag.ALL, Flag.TRACKED, Flag.DELETED, Flag.ALLOW_EMPTY, Flag.ALLOW_PRIVATE, Flag.ALLOW_CONFLICTS, Flag.DRY_RUN, Flag.CHANGE, Flag.NAMED])
     p_gpush.set_defaults(_handler="pyjj_cli.commands.git.push:git_push")
 
     p_gremote = git_sub.add_parser("remote", help="Manage Git remotes")

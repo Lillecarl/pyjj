@@ -1,5 +1,7 @@
 import argparse
 
+from .flags import Flag, add_flags
+
 
 def _workspace_help(args):
     import sys
@@ -14,13 +16,13 @@ def add_parsers(sub) -> None:
     p_ws_add = ws_sub.add_parser("add", help="Add a workspace")
     p_ws_add.add_argument("destination", help="Where to create the new workspace")
     p_ws_add.add_argument("--name", dest="name", default=None, help="A name for the workspace")
-    p_ws_add.add_argument("-r", "--revision", dest="revisions", action="append", default=None, metavar="REVSETS", help="Parent revisions for the new workspace")
+    add_flags(p_ws_add, [Flag.REVISION_APPEND])
     p_ws_add.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_add:workspace_add")
     p_ws_forget = ws_sub.add_parser("forget", help="Stop tracking a workspace")
     p_ws_forget.add_argument("names", nargs="+", help="Workspaces to forget")
     p_ws_forget.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_forget:workspace_forget")
     p_ws_list = ws_sub.add_parser("list", help="List workspaces")
-    p_ws_list.add_argument("-T", "--template", dest="template", default=None, help=argparse.SUPPRESS)
+    add_flags(p_ws_list, [Flag.TEMPLATE])
     p_ws_list.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_list:workspace_list")
     p_ws_rename = ws_sub.add_parser("rename", help="Renames the current workspace")
     p_ws_rename.add_argument("new_name", help="New workspace name")
