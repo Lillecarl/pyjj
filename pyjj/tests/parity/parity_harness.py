@@ -294,10 +294,11 @@ class RepoPair:
                     ' ++ committer.email() ++ "\x1f"'
                     ' ++ parents.map(|p| p.commit_id().short(40)).join(" ")'
                     ' ++ "\x1f" ++ bookmarks.join(" ") ++ "\x1f"'
-                    ' ++ working_copies.join(" ")',
+                    ' ++ working_copies.join(" ") ++ "\x1f"'
+                    ' ++ tags.join(" ")',
                 ]
             )
-            desc, aname, amail, cname, cmail, parents, bookmarks, wcs = (
+            desc, aname, amail, cname, cmail, parents, bookmarks, wcs, tags = (
                 meta.split("\x1f")
             )
             files = {}
@@ -321,6 +322,7 @@ class RepoPair:
                 "parents": sorted(parents.split()),
                 "bookmarks": sorted(bookmarks.split()),
                 "working_copies": sorted(wcs.split()),
+                "tags": sorted(tags.split()),
                 "files": files,
             }
         return {"commits": commits}

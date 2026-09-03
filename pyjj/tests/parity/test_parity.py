@@ -1150,3 +1150,22 @@ def test_read_only_command_does_not_perturb_the_repo(pair: RepoPair, argv) -> No
     chain(pair)
     pair.op(jj=argv)
     pair.assert_parity()
+
+
+# -- tags ---------------------------------------------------------------
+#
+# Tags are refs, not part of any commit id, so the harness compares them
+# explicitly (`tags` in the extracted per-commit state).
+
+
+def test_tag_set(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.assert_parity()
+
+
+def test_tag_delete(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(jj=["tag", "delete", "v1"])
+    pair.assert_parity()
