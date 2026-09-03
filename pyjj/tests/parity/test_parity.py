@@ -1411,7 +1411,6 @@ UNIMPLEMENTED_ARGV = [
     ["config", "path", "--repo"],
     ["config", "set", "--repo", "user.name", "Bob"],
     ["split", "--parallel", "two.txt", "-m", "half"],
-    ["squash", "--keep-emptied", "-u"],
     ["log", "--stat"],
     ["show", "-r", rev("one")],
     ["run", "-r", rev("one"), "true"],
@@ -1471,4 +1470,12 @@ def test_simplify_parents_leaves_a_real_merge_alone(pair: RepoPair) -> None:
     pair.op(files={"side.txt": b"side\n"}, jj=["status"])
     pair.op(jj=["new", rev("two"), rev("side"), "-m", "merge"])
     pair.op(jj=["simplify-parents", "-r", rev("merge")])
+    pair.assert_parity()
+
+
+def test_squash_keep_emptied_leaves_the_source_behind(pair: RepoPair) -> None:
+    """Squashing everything out of a revision empties it, and jj abandons
+    it -- unless asked not to."""
+    chain(pair)
+    pair.op(jj=["squash", "--keep-emptied", "-u"])
     pair.assert_parity()

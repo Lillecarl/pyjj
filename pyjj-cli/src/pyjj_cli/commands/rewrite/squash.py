@@ -66,7 +66,8 @@ def squash(args) -> int:
         # Normalize empty list to None (means all paths)
         if paths == []:
             paths = None
-        builder = tx.squash(source, dest, paths=paths)
+        builder = tx.squash(source, dest, paths=paths,
+                            keep_emptied=getattr(args, "keep_emptied", False))
         if builder is None:
             print("Nothing changed.")
             return 0
