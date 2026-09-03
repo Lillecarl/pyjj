@@ -330,6 +330,10 @@ def add_committer_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--committer", dest="committer", default=None, help="Set committer")
 
 
+def add_json_schema_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json-schema", action="store_true", help="Dump JSON schema for LLM tool-calling and exit")
+
+
 # Registry for add_flags(enum set)
 _FLAG_HANDLERS = {
     Flag.REVISION: lambda p: add_revision_flag(p),
@@ -387,6 +391,7 @@ _FLAG_HANDLERS = {
     Flag.KEY: lambda p: add_key_flag(p),
     Flag.AUTHOR: lambda p: add_author_flag(p),
     Flag.COMMITTER: lambda p: add_committer_flag(p),
+    Flag.JSON_SCHEMA: lambda p: add_json_schema_flag(p),
 }
 
 
