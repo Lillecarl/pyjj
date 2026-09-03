@@ -10,8 +10,7 @@ from textual.widgets.data_table import RowKey
 from textual.message import Message
 
 import pyjj
-
-from ..graph_layout import GraphRow, layout
+from pyjj.graph_layout import GraphRow, layout
 
 
 class LogView(DataTable):

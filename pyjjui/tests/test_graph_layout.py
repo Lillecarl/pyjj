@@ -1,7 +1,7 @@
 """Tests for graph_layout.layout(): lane/column assignment over log_graph() nodes."""
 
 import pyjj
-from pyjjui.graph_layout import layout
+from pyjj.graph_layout import layout
 
 
 def _new_child(repo, settings, workspace, parent, description):

@@ -1,14 +1,21 @@
-"""Pure-Python lane/column layout for `list[GraphNode]` -- the DAG-drawing
-piece jjui gets for free from `jj log`'s own ASCII art (parsed out of a
-subprocess); pyjjui computes it directly from `log_graph()`'s structured
-data instead. Standard technique (same idea git/lazygit/tig graphs use):
-walk nodes in the topological order `log_graph()` already provides
+"""Shared lane/column layout for `list[GraphNode]` — the DAG-drawing
+piece jjui gets for free from `jj log`'s own ASCII art.
+
+Moved here from pyjjui so both pyjjui and pyjj-cli can reuse it
+without depending on each other. Pure Python, no Textual, no
+argcomplete — only `pyjj.GraphNode`/`pyjj.CommitId`.
+
+Walk nodes in the topological order `log_graph()` already provides
 (descendants before ancestors), tracking one "lane" per in-flight edge.
 """
 
 from dataclasses import dataclass
 
-import pyjj
+import pyjj_bindings as _bindings  # avoid circular `import pyjj` at module load
+
+# Re-export types for typing without importing pyjj at runtime
+GraphNode = _bindings.GraphNode
+CommitId = _bindings.CommitId
 
 
 @dataclass(frozen=True)
@@ -26,7 +33,7 @@ class LaneEdge:
 
 @dataclass(frozen=True)
 class GraphRow:
-    node: pyjj.GraphNode
+    node: GraphNode
     column: int
     """Column this row's own commit glyph is drawn in."""
     edges: list[LaneEdge]
@@ -35,13 +42,13 @@ class GraphRow:
     """Number of lanes visible in this row, for allocating render width."""
 
 
-def layout(nodes: list[pyjj.GraphNode]) -> list[GraphRow]:
+def layout(nodes: list[GraphNode]) -> list[GraphRow]:
     # Each lane holds the (commit_id, edge_type) it's waiting to reach, or
     # None if idle. Tracking edge_type here (not just the id) is what lets a
     # second/third child converging on the same ancestor draw its own
     # correctly-typed merge line into that ancestor's row, instead of the
     # type getting lost the moment the lane was first opened.
-    lanes: list[tuple[pyjj.CommitId, str] | None] = []
+    lanes: list[tuple[CommitId, str] | None] = []
     rows: list[GraphRow] = []
 
     for node in nodes:
@@ -82,7 +89,7 @@ def layout(nodes: list[pyjj.GraphNode]) -> list[GraphRow]:
     return rows
 
 
-def _allocate_lane(lanes: list[tuple[pyjj.CommitId, str] | None]) -> int:
+def _allocate_lane(lanes: list[tuple[CommitId, str] | None]) -> int:
     for i, lane in enumerate(lanes):
         if lane is None:
             return i
@@ -91,7 +98,7 @@ def _allocate_lane(lanes: list[tuple[pyjj.CommitId, str] | None]) -> int:
 
 
 def _find_or_allocate(
-    lanes: list[tuple[pyjj.CommitId, str] | None], commit_id: pyjj.CommitId
+    lanes: list[tuple[CommitId, str] | None], commit_id: CommitId
 ) -> int:
     for i, lane in enumerate(lanes):
         if lane is not None and lane[0] == commit_id:
