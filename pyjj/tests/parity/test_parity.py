@@ -1089,3 +1089,35 @@ def test_file_untrack_refuses_a_tracked_path(pair: RepoPair) -> None:
     pair.op(jj=["file", "untrack", "two.txt"], may_fail=True)
     pair.assert_parity()
 
+
+# -- sparse checkouts ---------------------------------------------------
+
+
+def test_sparse_list_is_read_only(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["sparse", "list"])
+    pair.assert_parity()
+
+
+def test_sparse_set_narrows_the_working_copy(pair: RepoPair) -> None:
+    """Narrowing removes paths from disk but not from the commit."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.assert_parity()
+
+
+def test_sparse_set_then_edit_only_touches_the_visible_path(pair: RepoPair) -> None:
+    """A snapshot taken through a narrowed working copy must not drop the
+    paths that are no longer materialized."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(files={"base.txt": b"base edited\n"}, jj=["describe", "-m", "narrow"])
+    pair.assert_parity()
+
+
+def test_sparse_reset_restores_everything(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(jj=["sparse", "reset"])
+    pair.assert_parity()
+
