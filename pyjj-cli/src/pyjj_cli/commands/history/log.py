@@ -239,11 +239,11 @@ def log(args) -> int:
 
         # IDs with shortest-prefix highlight — magenta for change, blue for commit, rest grey
         try:
-            c_len = repo.shortest_change_id_prefix_len(commit.change_id)
+            c_len = repo.shortest_change_id_prefix_len(commit.change_id, settings)
         except Exception:
             c_len = 8
         try:
-            k_len = repo.shortest_commit_id_prefix_len(commit.id)
+            k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
         except Exception:
             k_len = 8
         change_disp = _color_change_id(commit.change_id.hex(), c_len, use_color)
@@ -299,11 +299,11 @@ def log(args) -> int:
         if jinja_template is not None:
             # Build colored and raw shorts for template to pick
             try:
-                c_len = repo.shortest_change_id_prefix_len(commit.change_id)
+                c_len = repo.shortest_change_id_prefix_len(commit.change_id, settings)
             except Exception:
                 c_len = 8
             try:
-                k_len = repo.shortest_commit_id_prefix_len(commit.id)
+                k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
             except Exception:
                 k_len = 8
             ctx = {
