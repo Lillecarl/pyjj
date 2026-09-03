@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 mod absorb;
 mod aio;
 mod annotate;
+mod bisect;
 mod bookmark;
 mod checkout;
 mod commit;
@@ -28,6 +29,7 @@ mod workspace;
 
 use absorb::PyAbsorbStats;
 use annotate::PyAnnotationLine;
+use bisect::{PyBisectStep, PyBisector};
 use bookmark::PyBookmark;
 use commit::{PyCommit, PyReadonlyRepo, PyVerification};
 use errors::{
@@ -100,6 +102,8 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOpAbandonStats>()?;
     m.add_class::<PyGraphEdge>()?;
     m.add_class::<PyGraphNode>()?;
+    m.add_class::<PyBisector>()?;
+    m.add_class::<PyBisectStep>()?;
     m.add_class::<PyMoveCommitsStats>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
 
