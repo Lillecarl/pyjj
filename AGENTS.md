@@ -133,6 +133,30 @@ Current state:
   (`renderdag`) the CLI uses; a caller wanting to *draw* the graph does its
   own lane/column layout from this edge data (well-understood technique,
   same one most git TUIs use).
+- **Bisect**: `Bisector(repo, settings, ["v1.0..main", ...])` is
+  `jj bisect`'s binary search (`jj_lib::bisect`). Call `next_step()` for a
+  `BisectStep` -- `kind` `"evaluate"` (test `.commit`) or `"done"`
+  (`.result` is `"found"` with `.commits`, `"indeterminate"`, or
+  `"abort"`) -- then report the outcome with `mark(id, "good"|"bad"|
+  "skip"|"abort")`. `remaining_count()` gives the `(lower, upper)`
+  estimate `jj` turns into its "N revisions left to test" line, and the
+  static `Bisector.invert(evaluation)` is what `--find-good` applies.
+  The range's heads are assumed bad and seeded at construction; only an
+  empty bad set yields `"indeterminate"`, so skipping every candidate
+  still reports the seeded head.
+
+  `jj_lib`'s `Bisector<'repo>` borrows the repo, and a `#[pyclass]` cannot
+  hold a borrow, so this wrapper stores the search *state* (the input
+  range plus the three id sets) and rebuilds a real `Bisector` inside each
+  call. The borrow never escapes the call and everything stored is
+  `Send + Sync`, so a plain `#[pyclass]` suffices and `_async` siblings
+  remain possible if a caller ever wants them. Replay order is bad, good,
+  skipped: `Bisector::new` seeds `bad` from the range's heads, so the
+  stored set is always a superset of the seed, and `mark_bad` asserts only
+  against the two still-empty sets. `mark()` rejects a conflicting id
+  before storing it, because jj_lib's `assert!`s stay live in release
+  builds and would surface as `PanicException` rather than a catchable
+  error.
 - **Config**: `UserSettings()` loads jj's real config by default (system,
   user, `revset-aliases`, env var overrides -- see the module docs on
   `pyjj_bindings::config` in `pyjj-bindings/src/config.rs` for the exact
@@ -751,20 +775,7 @@ Current state:
   actual submodule checkout/update/clone machinery in `jj_lib` to bind to
   yet, experimental or otherwise — nothing for pyjj to expose here until
   upstream builds it.
-- **Deliberately deferred**: `jj bisect`
-  (`jj_lib::bisect::Bisector<'repo>`) is unusual: it's a small, pure,
-  stateful search algorithm, but its
-  constructor borrows `&'repo dyn Repo` with an explicit lifetime — every
-  other stateful thing pyjj wraps (`ReadonlyRepo`, `Commit`, ...) owns an
-  `Arc` instead, with no borrowed lifetime to smuggle across the Python/Rust
-  boundary. Wrapping it safely needs either unsafe self-referential-struct
-  tricks (no precedent here) or reconstructing a fresh `Bisector` on every
-  Python call and precisely replaying its `good`/`bad`/`skipped` sets back
-  in (fragile: `mark_good`/`mark_bad`/`mark_skipped` each assert the id
-  isn't already in one of the *other* sets, including the ones `Bisector`'s
-  own constructor auto-seeds from the input range's heads) — doable, but
-  risks a subtly-wrong reimplementation more than the value justifies for
-  now. `jj_lib::rewrite::{find_recursive_merge_commits,
+- **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
   consistent with that machinery already being out of scope for `rebase()`
