@@ -5,7 +5,7 @@ use jj_lib::object_id::ObjectId as _;
 use jj_lib::op_store::{self, OperationId};
 use jj_lib::op_walk;
 use jj_lib::operation::Operation;
-use jj_lib::repo::{MutableRepo, ReadonlyRepo};
+use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
 
 use crate::errors::{JjError, map_py_err};
 use crate::operation::PyOperation;
@@ -226,6 +226,55 @@ pub fn restore_operation(
     );
     mut_repo.set_view(new_view);
     Ok(())
+}
+
+/// `jj op revert <target_op>` equivalent: undo one operation's effect
+/// while keeping everything that happened after it.
+///
+/// This is not `restore_operation` with an older target. Restoring makes
+/// the view *be* some past view, discarding later work; reverting merges
+/// the target operation back out -- the repository at the target is
+/// merged towards the repository at its parent, so only that one
+/// operation's changes disappear.
+///
+/// Returns the description to pass to `Transaction.commit()`. Does not
+/// commit.
+pub fn revert_operation(
+    mut_repo: &mut MutableRepo,
+    target_op: &PyOperation,
+    what: Option<Vec<String>>,
+) -> PyResult<String> {
+    let (restore_repo, restore_remote_tracking) = parse_what(what)?;
+    let parents = pollster::block_on(target_op.0.parents()).map_err(map_py_err)?;
+    let target_parent = match <[Operation; 1]>::try_from(parents) {
+        Ok([parent]) => parent,
+        Err(parents) if parents.is_empty() => {
+            return Err(JjError::new_err("cannot revert the root operation"));
+        }
+        Err(_) => {
+            return Err(JjError::new_err("cannot revert a merge operation"));
+        }
+    };
+
+    let loader = mut_repo.base_repo().loader().clone();
+    let repo_at_target =
+        pollster::block_on(loader.load_at(&target_op.0)).map_err(map_py_err)?;
+    let repo_at_parent =
+        pollster::block_on(loader.load_at(&target_parent)).map_err(map_py_err)?;
+    pollster::block_on(mut_repo.merge(&repo_at_target, &repo_at_parent))
+        .map_err(map_py_err)?;
+
+    let merged_view = mut_repo.view().store_view().clone();
+    let base_view = mut_repo.base_repo().view().store_view().clone();
+    let new_view = view_with_desired_portions_restored(
+        &merged_view,
+        &base_view,
+        restore_repo,
+        restore_remote_tracking,
+    );
+    mut_repo.set_view(new_view);
+
+    Ok(format!("revert operation {}", target_op.0.id().hex()))
 }
 
 /// If `op`'s description matches `{prefix}{hex id}`, loads and returns the

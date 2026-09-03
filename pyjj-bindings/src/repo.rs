@@ -1104,6 +1104,20 @@ impl PyTransaction {
         })
     }
 
+    /// `jj op revert <operation>`: merge one operation's effect back out,
+    /// keeping everything that happened after it. Returns the description
+    /// for `commit()`. See `pyjj_bindings.oplog::revert_operation`.
+    #[pyo3(signature = (target_op, what=None))]
+    fn revert_operation(
+        &self,
+        target_op: &crate::operation::PyOperation,
+        what: Option<Vec<String>>,
+    ) -> PyResult<String> {
+        with_mut_repo(self, |mut_repo| {
+            crate::oplog::revert_operation(mut_repo, target_op, what)
+        })
+    }
+
     /// `jj undo` equivalent. Returns `(undone_op, restored_to_op,
     /// description)` -- pass `description` unchanged to `.commit()`
     /// afterward (it's not just a message, it's how future `undo()`/

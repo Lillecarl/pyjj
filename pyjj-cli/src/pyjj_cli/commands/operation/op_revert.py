@@ -1,35 +1,32 @@
 """operation subcommand: op_revert."""
-import json
-import os
-import shlex
-import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
-from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
-    _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
-)
+
+from ..common import CommandError, _finish, _load
+
 
 def op_revert(args) -> int:
-    print("Error: op revert is not yet supported", file=sys.stderr)
-    return 2
+    """`jj op revert [OPERATION]`: undo one operation, keep the rest.
+
+    Not the same as `op restore`, which makes the view *be* a past view
+    and discards everything after it. Reverting merges the named
+    operation back out, so only its own changes disappear.
+    """
+    try:
+        settings, ws, repo = _load(args)
+        # `@` is jj's name for the current operation; the binding only
+        # takes real ids.
+        wanted = getattr(args, "operation", None) or "@"
+        target = repo.operation if wanted == "@" else repo.load_operation(wanted)
+        tx = repo.start_transaction(settings)
+        description = tx.revert_operation(target)
+        # Not `_restore_view_command`: merging an operation out records
+        # rewrites, and `Transaction.commit` asserts they have been
+        # rebased. Restoring a view records none, which is why that
+        # helper can skip the step.
+        _finish(tx, description, settings, ws, repo)
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+    return 0

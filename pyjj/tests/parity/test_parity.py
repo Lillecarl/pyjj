@@ -1406,7 +1406,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 UNIMPLEMENTED_ARGV = [
     ["metaedit", "-r", rev("one"), "--force-rewrite"],
     ["op", "diff"],
-    ["op", "revert"],
     ["config", "gc"],
     ["log", "--stat"],
     ["run", "-r", rev("one"), "true"],
@@ -1656,4 +1655,36 @@ def test_split_parallel_with_a_descendant(pair: RepoPair) -> None:
     pair.op(jj=["new", "-m", "three"])
     pair.op(files={"three.txt": b"three\n"}, jj=["status"])
     pair.op(jj=["split", "--parallel", "-r", rev("two"), "two.txt", "-m", "half"])
+    pair.assert_parity()
+
+
+# -- op revert ----------------------------------------------------------
+#
+# Reverting is not restoring: `op restore` makes the view *be* a past
+# view and drops everything after it, while `op revert` merges one
+# operation back out and keeps the rest.
+
+
+def test_op_revert_the_last_operation(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["op", "revert"])
+    pair.assert_parity()
+
+
+def test_op_revert_an_earlier_operation_keeps_later_ones(pair: RepoPair) -> None:
+    """The bookmark move is reverted; the commit made after it stays."""
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
+    pair.op(jj=["new", "-m", "three"])
+    pair.op(
+        jj=["op", "revert", pair.op_id("cli", 1)],
+        py=["op", "revert", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
+def test_op_revert_a_describe(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["describe", "-m", "renamed"])
+    pair.op(jj=["op", "revert"])
     pair.assert_parity()

@@ -22,7 +22,8 @@ def register(sub) -> None:
     p_op_integrate2.add_argument("operation", help="Operation to integrate")
     p_op_integrate2.set_defaults(_handler="pyjj_cli.commands.operation.op_integrate:op_integrate")
     p_op_revert2 = op_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
-    p_op_revert2.add_argument("operation", help="Operation to revert")
+    p_op_revert2.add_argument("operation", nargs="?", default="@",
+                              help="Operation to revert (default: @)")
     p_op_revert2.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
 
     # `operation` — long form (duplicate of `op` for compatibility)
@@ -48,5 +49,6 @@ def register(sub) -> None:
     p_oplog_integrate.add_argument("operation", help="Operation to integrate")
     p_oplog_integrate.set_defaults(_handler="pyjj_cli.commands.operation.op_integrate:op_integrate")
     p_oplog_revert = oplog_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
-    p_oplog_revert.add_argument("operation", help="Operation to revert")
+    p_oplog_revert.add_argument("operation", nargs="?", default="@",
+                                help="Operation to revert (default: @)")
     p_oplog_revert.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
