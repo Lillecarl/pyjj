@@ -34,7 +34,7 @@ def op_log(args) -> int:
     try:
         _settings, _ws, repo = _load(args)
         for op in repo.operation_log():
-            print(f"{op.id.hex()[:12]} {op.description}")
+            print(f"{op.id[:12]} {op.description}")
         return 0
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

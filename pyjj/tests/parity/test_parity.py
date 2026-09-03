@@ -810,3 +810,52 @@ def test_bisect_run_skip(pair: RepoPair, tmp_path) -> None:
     pair.op(jj=["bisect", "run", "--range", "root()..@",
                 sys.executable, str(script)])
     pair.assert_parity()
+
+
+# -- operation log family -----------------------------------------------
+#
+# `op log`, `op show` and `op diff` only read. Parity for them is the
+# claim that they exit 0 on both sides and leave the repository exactly
+# as they found it -- a renderer that snapshots differently, or crashes,
+# fails here. The operation log itself is deliberately not compared:
+# snapshot-op folding differs between the two drivers by design (see the
+# harness module docs).
+
+
+def test_op_log_leaves_the_repo_alone(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["op", "log"])
+    pair.assert_parity()
+
+
+def test_op_show_leaves_the_repo_alone(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["op", "show"])
+    pair.assert_parity()
+
+
+def test_op_show_named_operation(pair: RepoPair) -> None:
+    """Op ids differ between the repos, so each side names its own."""
+    chain(pair)
+    pair.op(
+        jj=["op", "show", pair.op_id("cli", 1)],
+        py=["op", "show", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
+def test_operation_long_form_log(pair: RepoPair) -> None:
+    """`jj operation` is the same command as `jj op`."""
+    chain(pair)
+    pair.op(jj=["operation", "log"])
+    pair.assert_parity()
+
+
+def test_op_abandon_old_operations(pair: RepoPair) -> None:
+    """Abandoning old operations drops history, not repository state."""
+    chain(pair)
+    pair.op(
+        jj=["op", "abandon", f"..{pair.op_id('cli', 2)}"],
+        py=["op", "abandon", f"..{pair.op_id('py', 2)}"],
+    )
+    pair.assert_parity()

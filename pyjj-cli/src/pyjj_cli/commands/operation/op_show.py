@@ -38,7 +38,7 @@ def op_show(args) -> int:
             op = repo.load_operation(op_id)
         else:
             op = repo.operation
-        print(f"Operation: {op.id.hex()}")
+        print(f"Operation: {op.id}")
         print(f"Description: {op.description}")
         return 0
     except (pyjj.JjError, CommandError) as e:

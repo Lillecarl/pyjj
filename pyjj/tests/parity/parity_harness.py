@@ -261,6 +261,12 @@ class RepoPair:
         ids = [line for line in out.splitlines() if line]
         return ids[-1]
 
+    def op_id(self, side: str, depth: int) -> str:
+        """The operation id `depth` steps back on one side ('cli' or
+        'py'). Scenarios that name an operation on the command line need
+        this per side, because op ids differ between the two repos."""
+        return self._op_id(self.cli_repo if side == "cli" else self.py_repo, depth)
+
     def op_restore(self, depth: int) -> None:
         """Restore both sides to their own state `depth` operations back."""
         self.op(
