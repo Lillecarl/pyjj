@@ -1489,3 +1489,17 @@ def test_squash_keep_emptied_leaves_the_source_behind(pair: RepoPair) -> None:
     pair.op(jj=["squash", "--keep-emptied", "-u"])
     pair.assert_parity()
 
+
+
+def test_unsign_an_unsigned_commit_changes_nothing(pair: RepoPair) -> None:
+    """No signature to remove, so both sides must leave the commit alone
+    rather than rewriting it."""
+    chain(pair)
+    pair.op(jj=["unsign", "-r", rev("one")])
+    pair.assert_parity()
+
+
+def test_unsign_the_whole_chain_changes_nothing(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["unsign", "-r", "mutable()"])
+    pair.assert_parity()
