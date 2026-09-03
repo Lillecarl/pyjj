@@ -111,6 +111,52 @@ both forms compose.
   errors with no dedicated category (bad hex in `CommitId`/etc., unknown
   `set_sign_behavior` string) raise the generic `JjError`.
 
+## jj CLI parity coverage
+
+Every command the pinned `jj` (0.43) offers has a scenario in
+`pyjj/tests/parity/test_parity.py`. A command pyjj-cli does not implement
+yet still has one, marked `UNIMPLEMENTED` (a **strict** xfail): the day
+the command lands, its scenario stops being an expected failure and the
+run goes red until the marker is removed. So the matrix is executable --
+`nix run --file . tests -- -k parity` is the check, not this table.
+
+What parity proves depends on the command:
+
+- a command that **writes** is proved bit-identical: same change ids,
+  commit ids, bookmarks, tags, working-copy names and file contents;
+- a command that only **reads** is proved to exit 0 on both sides and to
+  leave the repository untouched -- which still catches a renderer that
+  crashes or snapshots differently on its way to printing. Output text is
+  never compared; the two tools format differently on purpose.
+
+Three kinds of state sit outside a commit id and are compared explicitly:
+bookmarks and tags (extracted per commit by the harness), workspace names
+(likewise), and git refs (`git_refs()` reads both sides with read-only
+git against the path `jj git root` reports -- `git export`/`import` move
+nothing else).
+
+Deliberately excluded, with the reason:
+
+| Excluded | Why |
+| --- | --- |
+| `arrange` | an interactive TUI; there is no argv to run on both sides |
+| `gerrit` | needs a Gerrit server |
+| `sparse edit`, `config edit` | open the editor on both sides |
+| `bench`, `debug` | hidden developer commands, not part of the CLI surface |
+| `hunk`, `templates` | pyjj-cli's own commands; `jj` has no such subcommand, so there is no other side to compare against. Covered by unit tests instead |
+| `tag track`, `tag untrack` | pyjj-cli has them; jj 0.43 does not |
+
+When adding a command or a flag, add its scenario in the same commit.
+Two traps the suite has already caught, worth knowing before you write
+one:
+
+- **The same argv runs on both sides.** A flag missing from pyjj-cli's
+  parser fails the scenario outright, which is the point -- pyjj-cli has
+  to speak jj's argument dialect, not a dialect of its own.
+- **Anything that names an operation names it per side.** Operation ids
+  differ between the two repos, so use `RepoPair.op_id(side, depth)` and
+  pass a different value to `jj=` and `py=`.
+
 ## API coverage
 
 Goal is to eventually expose "practically everything" the `jj` CLI can do.

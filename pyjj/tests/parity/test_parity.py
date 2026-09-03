@@ -1380,3 +1380,59 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["duplicate", rev("base"), "--insert-before", rev("two")])
     pair.assert_parity()
+
+
+# -- commands jj has and pyjj-cli does not yet ---------------------------
+#
+# Every one of these runs clean through `jj` and fails through pyjj-cli.
+# They are the executable half of the coverage matrix in AGENTS.md: the
+# xfail is strict, so the day a command lands, its scenario stops being
+# an expected failure and the marker has to go.
+#
+# Not listed here, and excluded on purpose:
+#   arrange       an interactive TUI, so there is no argv to compare
+#   gerrit        needs a Gerrit server
+#   sparse edit   opens the editor on both sides
+#   bench, debug  hidden developer commands
+#   hunk,         pyjj-cli's own commands; jj has no such subcommand, so
+#   templates     there is nothing to run on the other side
+
+
+UNIMPLEMENTED_ARGV = [
+    ["metaedit", "-r", rev("one"), "--author", "Bob <bob@example.com>"],
+    ["metaedit", "-r", rev("one"), "--update-author"],
+    ["metaedit", "-r", rev("one"), "--update-change-id"],
+    ["parallelize", rev("one"), rev("two")],
+    ["simplify-parents", "-r", rev("two")],
+    ["interdiff", "--from", rev("base"), "--to", rev("one")],
+    ["op", "diff"],
+    ["op", "revert"],
+    ["config", "list"],
+    ["config", "list", "--repo"],
+    ["config", "path", "--repo"],
+    ["config", "set", "--repo", "user.name", "Bob"],
+    ["split", "--parallel", "two.txt", "-m", "half"],
+    ["squash", "--keep-emptied", "-u"],
+    ["log", "--stat"],
+    ["show", "-r", rev("one")],
+    ["run", "-r", rev("one"), "true"],
+    ["util", "config-schema"],
+    ["help"],
+]
+
+
+@UNIMPLEMENTED
+@pytest.mark.parametrize("argv", UNIMPLEMENTED_ARGV, ids=lambda a: "_".join(a)[:40])
+def test_unimplemented_jj_command(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
+@UNIMPLEMENTED
+def test_sign_without_a_backend_must_fail(pair: RepoPair) -> None:
+    """jj refuses to sign with no signing backend configured. pyjj
+    reports success and rewrites the commit, so the repos diverge."""
+    chain(pair)
+    pair.op(jj=["sign", "-r", rev("one")], may_fail=True)
+    pair.assert_parity()
