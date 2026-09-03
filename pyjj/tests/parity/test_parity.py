@@ -1320,3 +1320,27 @@ def test_bookmark_advance_moves_to_the_working_copy_parent(pair: RepoPair) -> No
     chain(pair)
     pair.op(jj=["bookmark", "advance", "main"])
     pair.assert_parity()
+
+
+# -- global options -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["status", "--no-pager"],
+        ["--no-pager", "status"],
+        ["log", "--color", "never"],
+        ["log", "--color=never"],
+        ["status", "--quiet"],
+        ["describe", "--no-pager", "-m", "renamed"],
+    ],
+    ids=lambda a: "_".join(a).replace("-", ""),
+)
+def test_display_only_global_options_are_accepted(pair: RepoPair, argv) -> None:
+    """jj takes its global options anywhere on the command line. These
+    four change only what is printed, so both sides must accept them and
+    end up with the same repository."""
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()

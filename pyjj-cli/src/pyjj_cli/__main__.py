@@ -53,6 +53,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# jj takes its global options anywhere on the command line, before or
+# after the subcommand. These four change only what gets printed, never
+# what gets written, so pyjj accepts them and does nothing with them --
+# a script that passes `--no-pager` must not die on a usage dump.
+# The ones that DO change behaviour (`--at-operation`,
+# `--ignore-working-copy`, `--config`, `--ignore-immutable`) are
+# deliberately absent: silently ignoring one of those would make pyjj
+# quietly disagree with jj.
+_IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
+_IGNORED_GLOBAL_OPTIONS = {"--color"}
+
+
+def _drop_ignored_global_flags(argv):
+    """Strip display-only global options from anywhere in `argv`."""
+    kept = []
+    skip = False
+    for i, arg in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        if arg in _IGNORED_GLOBAL_FLAGS:
+            continue
+        if arg in _IGNORED_GLOBAL_OPTIONS:
+            # Its value follows, unless it was given as `--color=always`.
+            skip = i + 1 < len(argv)
+            continue
+        if any(arg.startswith(f"{name}=") for name in _IGNORED_GLOBAL_OPTIONS):
+            continue
+        kept.append(arg)
+    return kept
+
+
 def _load_handler(dotted: str):
     mod_name, func_name = dotted.rsplit(":", 1)
     mod = importlib.import_module(mod_name)
@@ -64,7 +96,9 @@ def main(argv=None) -> int:
     # Completion runs the CLI itself on every <TAB>; keep everything heavy
     # out of that path — handlers are not imported yet.
     argcomplete.autocomplete(parser)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(
+        _drop_ignored_global_flags(sys.argv[1:] if argv is None else argv)
+    )
     if args.command is None:
         parser.print_help()
         return 1
