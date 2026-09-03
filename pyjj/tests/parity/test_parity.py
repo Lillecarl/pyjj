@@ -1403,7 +1403,6 @@ UNIMPLEMENTED_ARGV = [
     ["metaedit", "-r", rev("one"), "--update-author"],
     ["metaedit", "-r", rev("one"), "--update-change-id"],
     ["parallelize", rev("one"), rev("two")],
-    ["simplify-parents", "-r", rev("two")],
     ["interdiff", "--from", rev("base"), "--to", rev("one")],
     ["op", "diff"],
     ["op", "revert"],
@@ -1435,4 +1434,41 @@ def test_sign_without_a_backend_must_fail(pair: RepoPair) -> None:
     reports success and rewrites the commit, so the repos diverge."""
     chain(pair)
     pair.op(jj=["sign", "-r", rev("one")], may_fail=True)
+    pair.assert_parity()
+
+
+# -- simplify-parents ---------------------------------------------------
+
+
+def redundant_merge(pair: RepoPair) -> None:
+    """`two` has both `one` and `base` as parents, and `base` is already
+    an ancestor of `one` -- so the edge to `base` says nothing."""
+    pair.init()
+    pair.op(files={"base.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"one.txt": b"one\n"}, jj=["status"])
+    pair.op(jj=["new", rev("one"), rev("base"), "-m", "two"])
+    pair.op(files={"two.txt": b"two\n"}, jj=["status"])
+
+
+def test_simplify_parents_drops_the_redundant_edge(pair: RepoPair) -> None:
+    redundant_merge(pair)
+    pair.op(jj=["simplify-parents", "-r", rev("two")])
+    pair.assert_parity()
+
+
+def test_simplify_parents_by_source(pair: RepoPair) -> None:
+    redundant_merge(pair)
+    pair.op(jj=["simplify-parents", "-s", rev("base")])
+    pair.assert_parity()
+
+
+def test_simplify_parents_leaves_a_real_merge_alone(pair: RepoPair) -> None:
+    """Neither parent of a genuine merge reaches the other, so nothing
+    is dropped."""
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(files={"side.txt": b"side\n"}, jj=["status"])
+    pair.op(jj=["new", rev("two"), rev("side"), "-m", "merge"])
+    pair.op(jj=["simplify-parents", "-r", rev("merge")])
     pair.assert_parity()
