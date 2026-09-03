@@ -1217,3 +1217,84 @@ def test_workspace_add_at_a_named_revision(pair: RepoPair) -> None:
     pair.op(jj=["workspace", "add", "--name", "second", "-r", rev("one"),
                 "../second"])
     pair.assert_parity()
+
+
+# -- git refs and remote-tracking bookmarks -----------------------------
+#
+# `git export`/`import` move refs inside the backing git repository, and
+# refs are not part of any commit id. These scenarios therefore compare
+# the git refs directly, on top of the usual repository comparison.
+
+
+def git_refs(pair: RepoPair, side: str) -> dict[str, str]:
+    """Every ref in one side's backing git repository.
+
+    Read-only git against the path `jj git root` reports -- the parity
+    harness never writes through git.
+    """
+    repo = pair.cli_repo if side == "cli" else pair.py_repo
+    root = subprocess.run(
+        [pair.jj_bin, "-R", str(repo), "--no-pager", "git", "root"],
+        capture_output=True, text=True, check=True, cwd=str(repo),
+    ).stdout.strip()
+    out = subprocess.run(
+        ["git", "-C", root, "for-each-ref", "--format=%(refname) %(objectname)"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return dict(line.split(" ", 1) for line in out.splitlines() if line)
+
+
+def assert_ref_parity(pair: RepoPair) -> None:
+    cli, py = git_refs(pair, "cli"), git_refs(pair, "py")
+    assert cli == py, f"git refs diverged:\ncli: {cli}\npy:  {py}"
+
+
+def test_git_export_writes_bookmarks_as_git_refs(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["git", "export"])
+    pair.assert_parity()
+    assert_ref_parity(pair)
+    assert any(name.startswith("refs/heads/main") for name in git_refs(pair, "cli"))
+
+
+def test_git_import_after_export_is_a_no_op(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["git", "export"])
+    pair.op(jj=["git", "import"])
+    pair.assert_parity()
+    assert_ref_parity(pair)
+
+
+def test_git_export_after_bookmark_delete(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["git", "export"])
+    pair.op(jj=["bookmark", "delete", "main"])
+    pair.op(jj=["git", "export"])
+    pair.assert_parity()
+    assert_ref_parity(pair)
+    assert not any(n.startswith("refs/heads/main") for n in git_refs(pair, "cli"))
+
+
+UNIMPLEMENTED = pytest.mark.xfail(
+    strict=True, reason="pyjj-cli does not implement this jj command yet",
+)
+
+
+@UNIMPLEMENTED
+def test_git_colocation_enable(pair: RepoPair) -> None:
+    """Colocation puts a real `.git` beside `.jj`, so git refs must match
+    afterwards too."""
+    chain(pair)
+    pair.op(jj=["git", "colocation", "enable"])
+    pair.assert_parity()
+    assert_ref_parity(pair)
+
+
+@UNIMPLEMENTED
+def test_git_colocation_enable_then_disable(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["git", "colocation", "enable"])
+    pair.op(jj=["git", "colocation", "disable"])
+    pair.assert_parity()
+    assert_ref_parity(pair)
+
