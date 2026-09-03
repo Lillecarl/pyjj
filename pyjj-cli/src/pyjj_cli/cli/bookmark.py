@@ -53,13 +53,13 @@ def add_parsers(sub) -> None:
     p_bmt = bm_sub.add_parser("track", help="Start tracking given remote bookmarks")
     p_bmt.add_argument("names", nargs="+", help="Bookmarks to track")
     add_flags(p_bmt, [Flag.REMOTE])
-    p_bmt.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_track")
+    p_bmt.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark_track:bookmark_track")
 
     p_bmut = bm_sub.add_parser("untrack", help="Stop tracking given remote bookmarks")
     p_bmut.add_argument("names", nargs="+", help="Bookmarks to untrack")
     add_flags(p_bmut, [Flag.REMOTE])
-    p_bmut.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_untrack")
+    p_bmut.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark_untrack:bookmark_untrack")
 
     p_bma = bm_sub.add_parser("advance", help="Advance the closest bookmarks to a target revision")
     add_revision_flag(p_bma, dest="revision", default="@", help="Revision to advance to (default: @)")
-    p_bma.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark_advance")
+    p_bma.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark_advance:bookmark_advance")
