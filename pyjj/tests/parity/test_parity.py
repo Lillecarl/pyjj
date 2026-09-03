@@ -1185,3 +1185,35 @@ def test_tag_set_refuses_to_move_without_the_flag(pair: RepoPair) -> None:
     pair.op(jj=["tag", "set", "v1", "-r", rev("two")], may_fail=True)
     pair.assert_parity()
 
+
+# -- workspaces ---------------------------------------------------------
+#
+# Workspace paths are given relative to the repo, so the same argv works
+# on both sides even though the two repos live in different directories.
+# `working_copies` in the extracted state carries the workspace names.
+
+
+def test_workspace_add(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "../second"])
+    pair.assert_parity()
+
+
+def test_workspace_add_then_forget(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "../second"])
+    pair.op(jj=["workspace", "forget", "second"])
+    pair.assert_parity()
+
+
+def test_workspace_rename(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "rename", "renamed"])
+    pair.assert_parity()
+
+
+def test_workspace_add_at_a_named_revision(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "-r", rev("one"),
+                "../second"])
+    pair.assert_parity()
