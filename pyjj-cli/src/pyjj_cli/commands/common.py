@@ -134,6 +134,52 @@ def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
     if new_wc_hex != old_wc_hex:
         fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
 
+def _wants_edit(args) -> bool:
+    """`--edit`/`--no-edit` for `jj next`/`jj prev`. The last flag wins in
+    jj's parser, and argparse's default store_true/store_false pair gives
+    the same result."""
+    return bool(getattr(args, "edit", False))
+
+def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
+    """Walk `steps` graph edges from `start_hexes`, forward or backward.
+
+    Returns the hex ids reached, or `[]` when the walk runs out of edges.
+    `exclude` drops commits from every level -- `jj next` needs it to
+    ignore the working copy itself when stepping forward from its parent.
+    """
+    current = list(start_hexes)
+    for _ in range(steps):
+        if not current:
+            return []
+        expression = f"{direction}({'|'.join(current)})"
+        reached = [
+            c.id.hex()
+            for c in repo.revset(settings, expression)
+            if c.id.hex() not in exclude
+        ]
+        if not reached:
+            return []
+        current = reached
+    return current
+
+def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
+    """Land `jj next`/`jj prev` on `targets`: edit the target itself, or
+    create a new empty commit on top of it."""
+    if len(targets) > 1:
+        print(f"Error: Ambiguous target for {name}: "
+              f"{', '.join(t[:12] for t in targets)}", file=sys.stderr)
+        return 1
+    target = repo.get_commit(pyjj.CommitId(targets[0]))
+    tx = repo.start_transaction(settings)
+    if edit:
+        tx.edit(ws.workspace_name, target)
+        _finish(tx, f"{name} to {target.id.hex()}", settings, ws, repo)
+    else:
+        child = tx.new_commit(settings, [target.id]).write(repo)
+        tx.set_wc_commit(ws.workspace_name, child.id)
+        _finish(tx, "new empty commit", settings, ws, repo)
+    return 0
+
 def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy

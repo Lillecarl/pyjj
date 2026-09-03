@@ -28,30 +28,46 @@ from ..common import (
     _merge_marker_len,
     _run_merge_tool,
     _fix_pattern_matches,
+    _move_to,
+    _walk,
+    _wants_edit,
 )
 
 def next_commit(args) -> int:
+    """`jj next [OFFSET]`: move the working copy forward.
+
+    Without `--edit` the new working copy is a *child* of the commit
+    `offset` steps ahead of `@`'s parent, and `@` itself is excluded from
+    that walk -- so from a sibling branch `next` lands on the other line
+    of development, not back on itself. With `--edit` the working copy
+    becomes the descendant `offset` steps ahead of `@`.
+    """
     try:
         settings, ws, repo = _load(args)
-        amount = getattr(args, "amount", 1) or 1
-        # Find child of @
+        offset = getattr(args, "amount", 1) or 1
+        edit = _wants_edit(args)
         wc = _wc_commit(repo, ws)
-        # Find children of wc via revset children(@)
-        children = repo.revset(settings, f"children({wc.id.hex()})")
-        if not children:
-            print("No child revision", file=sys.stderr)
-            return 1
-        # For amount >1, walk
-        target = children[0]
-        for _ in range(1, amount):
-            nxt = repo.revset(settings, f"children({target.id.hex()})")
-            if not nxt:
-                break
-            target = nxt[0]
-        tx = repo.start_transaction(settings)
-        tx.edit(ws.workspace_name, target)
-        _finish(tx, f"next to {target.id.hex()[:8]}", settings, ws, repo)
-        return 0
+
+        if edit:
+            targets = _walk(repo, settings, [wc.id.hex()], "children", offset)
+            if not targets:
+                print(f"Error: No descendant found {offset} commit(s) forward "
+                      "from the working copy", file=sys.stderr)
+                return 1
+        else:
+            if repo.revset(settings, f"children({wc.id.hex()})"):
+                print("Error: The working copy must not have any children",
+                      file=sys.stderr)
+                return 1
+            starts = [i.hex() for i in wc.parent_ids]
+            targets = _walk(repo, settings, starts, "children", offset,
+                            exclude={wc.id.hex()})
+            if not targets:
+                print(f"Error: No other descendant found {offset} commit(s) "
+                      "forward from the working copy parent(s)", file=sys.stderr)
+                return 1
+
+        return _move_to(args, settings, ws, repo, targets, edit, "next")
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

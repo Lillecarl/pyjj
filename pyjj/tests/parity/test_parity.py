@@ -945,3 +945,57 @@ def test_restore_into_named_revision(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- working-copy navigation --------------------------------------------
+
+
+def test_prev_moves_to_the_parent(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["prev"])
+    pair.assert_parity()
+
+
+def test_prev_with_edit_moves_onto_the_parent(pair: RepoPair) -> None:
+    """`--edit` moves onto the parent itself, one step less far back than
+    the default, which lands a NEW commit below it."""
+    chain(pair)
+    pair.op(jj=["prev", "--edit"])
+    pair.assert_parity()
+
+
+def test_prev_with_an_offset(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["prev", "2", "--edit"])
+    pair.assert_parity()
+
+
+def test_next_moves_onto_the_sibling_line(pair: RepoPair) -> None:
+    """`next` walks forward from `@`'s PARENT and skips `@` itself, so
+    from a sibling branch it lands on the other line of development."""
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(jj=["next"])
+    pair.assert_parity()
+
+
+def test_next_with_edit_moves_onto_the_descendant(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["edit", rev("base")])
+    pair.op(jj=["next", "--edit"])
+    pair.assert_parity()
+
+
+def test_next_without_a_descendant_fails_on_both(pair: RepoPair) -> None:
+    """At the tip there is nothing to move to. Both sides must refuse,
+    and neither may change the repository while refusing."""
+    chain(pair)
+    pair.op(jj=["next"], may_fail=True)
+    pair.assert_parity()
+
+
+def test_next_refuses_when_the_working_copy_has_children(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["edit", rev("base")])
+    pair.op(jj=["next"], may_fail=True)
+    pair.assert_parity()
+
+
