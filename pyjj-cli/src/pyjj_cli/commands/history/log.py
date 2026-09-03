@@ -116,22 +116,35 @@ def log(args) -> int:
         is_root = not commit.parent_ids  # root() has no parents
         glyph = "@" if is_wc else ("◆" if is_root else "○")
 
-        # Graph prefix
+        # Graph prefix for first row (commit line)
         if no_graph:
             graph_prefix = ""
+            cont_prefix = ""
         else:
             glyphs = _render_glyphs_plain(row)
-            # Replace column's char with actual glyph
             chars = list(glyphs)
-            # Ensure width covers column
             if row.column >= len(chars):
                 chars.extend([" "] * (row.column - len(chars) + 1))
             chars[row.column] = glyph
             graph_prefix = "".join(chars) + " "
+            # Second row (description) — vertical continuation of lanes
+            # Use │ for the commit's own lane and for any other active lane.
+            cont_chars = []
+            for i in range(row.width):
+                if i == row.column:
+                    cont_chars.append("│")
+                elif i < len(glyphs) and glyphs[i] != " ":
+                    cont_chars.append("│")
+                else:
+                    # Keep lane if it was active (had an edge) — check row.edges
+                    active = any(e.from_column == i or e.to_column == i for e in row.edges)
+                    cont_chars.append("│" if active else " ")
+            # Trim trailing spaces but keep at least column+1 width for alignment
+            while cont_chars and cont_chars[-1] == " " and len(cont_chars) > row.column + 1:
+                cont_chars.pop()
+            cont_prefix = "".join(cont_chars) + " "
 
-        # Summary: change_id + bookmark names + first line
-        # Color the shortest-unique prefix so the user sees which shorthand is unambiguous,
-        # matching `jj log`'s own highlighting (commit and change ids each have their own shortest prefix).
+        # IDs with shortest-prefix highlight
         use_color = _use_color()
         if use_color:
             try:
@@ -147,12 +160,42 @@ def log(args) -> int:
         else:
             change_disp = commit.change_id.hex()[:8]
             commit_disp = commit.id.hex()[:8]
-        first_line = commit.description.splitlines()[0] if commit.description else None
+
         bm_names = bm_by_commit.get(commit.id.hex(), [])
         bm_str = (" " + " ".join(sorted(bm_names))) if bm_names else ""
+
+        # Author + datetime without year (MM-DD HH:MM), like jj but without the 2k year
+        try:
+            author = commit.author.name or commit.author.email
+        except Exception:
+            author = ""
+        try:
+            ts = commit.author.timestamp if hasattr(commit.author, "timestamp") else commit.committer.timestamp
+            # millis_since_epoch + tz_offset_minutes
+            import datetime
+
+            millis = ts.millis_since_epoch
+            tz_min = ts.tz_offset_minutes
+            tz = datetime.timezone(datetime.timedelta(minutes=tz_min))
+            dt = datetime.datetime.fromtimestamp(millis / 1000, tz=tz)
+            # No year — MM-DD HH:MM
+            datetime_str = dt.strftime("%m-%d %H:%M")
+        except Exception:
+            datetime_str = ""
+
+        # Two-row default like jj: first row has ids+author+datetime, second has description
+        first_line = commit.description.splitlines()[0] if commit.description else None
         desc = first_line or "(no description set)"
-        line = f"{graph_prefix}{change_disp} {commit_disp}{bm_str} {desc}"
-        print(line)
+        # First row: graph + change + commit + bookmarks + author + datetime
+        author_part = f" {author}" if author else ""
+        datetime_part = f" {datetime_str}" if datetime_str else ""
+        line1 = f"{graph_prefix}{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}"
+        print(line1)
+        # Second row: continuation graph + description (no ids)
+        if not no_graph:
+            print(f"{cont_prefix}{desc}")
+        else:
+            print(f"  {desc}")
 
         if show_patch:
             if commit.parent_ids:
