@@ -753,3 +753,60 @@ def test_git_remote_add_list_remove(pair: RepoPair) -> None:
     pair.op(jj=["git", "remote", "list"])
     pair.op(jj=["git", "remote", "remove", "upstream"])
     pair.assert_parity()
+
+
+def bisect_line(pair: RepoPair, count: int) -> None:
+    """`count` commits where `n.txt` holds the commit's index."""
+    pair.init()
+    pair.op(files={"n.txt": b"0\n"}, jj=["describe", "-m", "c0"])
+    for i in range(1, count):
+        pair.op(jj=["new", "-m", f"c{i}"])
+        pair.op(files={"n.txt": f"{i}\n".encode()}, jj=["status"])
+
+
+def bisect_predicate(tmp_path, cutoff: int) -> str:
+    """A predicate script that calls index >= cutoff 'bad'.
+
+    It lives outside both repos on purpose: bisection checks out a
+    different tree at every step, so a script stored in the working copy
+    would vanish after the first one.
+    """
+    script = tmp_path / "bisect_check.py"
+    script.write_text(
+        "import pathlib, sys\n"
+        "n = int(pathlib.Path('n.txt').read_text())\n"
+        f"sys.exit(1 if n >= {cutoff} else 0)\n"
+    )
+    return str(script)
+
+
+def test_bisect_run(pair: RepoPair, tmp_path) -> None:
+    """`bisect run` must leave both repos in the same state.
+
+    Bisection is the one flow that writes commits from inside a loop --
+    one `check_out` per candidate -- so the repos only match if both
+    sides evaluate the same candidates in the same order.
+    """
+    bisect_line(pair, 8)
+    script = bisect_predicate(tmp_path, cutoff=5)
+    pair.op(jj=["bisect", "run", "--range", "root()..@",
+                sys.executable, script])
+    pair.assert_parity()
+
+
+def test_bisect_run_find_good(pair: RepoPair, tmp_path) -> None:
+    bisect_line(pair, 8)
+    script = bisect_predicate(tmp_path, cutoff=5)
+    pair.op(jj=["bisect", "run", "--find-good", "--range", "root()..@",
+                sys.executable, script])
+    pair.assert_parity()
+
+
+def test_bisect_run_skip(pair: RepoPair, tmp_path) -> None:
+    """Exit 125 skips, so no candidate is ever marked good or bad."""
+    bisect_line(pair, 6)
+    script = tmp_path / "bisect_skip.py"
+    script.write_text("import sys\nsys.exit(125)\n")
+    pair.op(jj=["bisect", "run", "--range", "root()..@",
+                sys.executable, str(script)])
+    pair.assert_parity()
