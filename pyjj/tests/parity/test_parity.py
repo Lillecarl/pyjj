@@ -1396,6 +1396,11 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 #   bench, debug  hidden developer commands
 #   hunk,         pyjj-cli's own commands; jj has no such subcommand, so
 #   templates     there is nothing to run on the other side
+#   op integrate  needs an operation created concurrently elsewhere, and
+#                 this harness runs strictly one operation at a time
+#   workspace     has to run inside the stale workspace, and `op()` always
+#   update-stale  runs with the primary repo as cwd and prepends its own
+#                 `-R`; jj rejects a second one
 
 
 UNIMPLEMENTED_ARGV = [
@@ -1413,7 +1418,9 @@ UNIMPLEMENTED_ARGV = [
     ["config", "list"],
     ["config", "list", "--repo"],
     ["config", "path", "--repo"],
+    ["config", "gc"],
     ["config", "set", "--repo", "user.name", "Bob"],
+    ["config", "unset", "--repo", "user.name"],
     ["log", "--stat"],
     ["show", "-r", rev("one")],
     ["run", "-r", rev("one"), "true"],
