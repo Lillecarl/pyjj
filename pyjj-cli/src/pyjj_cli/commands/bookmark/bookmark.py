@@ -1,4 +1,4 @@
-"""pyjj-cli commands: bookmark."""
+"""bookmark subcommand: bookmark."""
 import json
 import os
 import shlex
@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
-from .common import (
+from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -29,57 +29,6 @@ from .common import (
     _run_merge_tool,
     _fix_pattern_matches,
 )
-
-def bookmark_track(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        remote = getattr(args, "remote", None) or "origin"
-        tx = repo.start_transaction(settings)
-        for name in getattr(args, "names", []):
-            tx.git_track_remote_bookmark(remote, name)
-        _finish(tx, f"track {','.join(getattr(args, 'names', []))}", settings, ws, repo)
-        return 0
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
-
-def bookmark_untrack(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        remote = getattr(args, "remote", None) or "origin"
-        tx = repo.start_transaction(settings)
-        for name in getattr(args, "names", []):
-            tx.git_untrack_remote_bookmark(remote, name)
-        _finish(tx, f"untrack {','.join(getattr(args, 'names', []))}", settings, ws, repo)
-        return 0
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
-
-def bookmark_advance(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        rev = getattr(args, "revision", "@")
-        target = _resolve_one(repo, settings, rev)
-        # Advance closest bookmarks to target: find bookmarks whose target is ancestor of @ and descendant of target?
-        # Simplified: move all bookmarks that are ancestors of @ to target
-        tx = repo.start_transaction(settings)
-        for bm in repo.bookmarks():
-            # Check if bookmark is ancestor of @ and not already at target
-            try:
-                # Use revset: bookmarks that are ancestors of @
-                # For now, just move all bookmarks that are not at target and are ancestors of current @
-                # We can use revset: ancestors(@) to find
-                pass
-            except Exception:
-                pass
-            # For now, just advance all bookmarks to target if they are not already
-            tx.set_bookmark(bm.name, target.id)
-        _finish(tx, f"advance bookmarks to {target.id.hex()[:8]}", settings, ws, repo)
-        return 0
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
 
 def bookmark(args) -> int:
     """`jj bookmark` dispatch — create/set/delete/forget/list/move/rename."""
@@ -205,4 +154,3 @@ def bookmark(args) -> int:
         return 0
     print(f"usage: pyjj bookmark {{create,set,delete,forget,list,move,rename}}", file=sys.stderr)
     return 2
-

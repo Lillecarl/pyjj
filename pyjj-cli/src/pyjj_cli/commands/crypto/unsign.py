@@ -1,4 +1,4 @@
-"""pyjj-cli commands: crypto."""
+"""crypto subcommand: unsign."""
 import json
 import os
 import shlex
@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
-from .common import (
+from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -30,22 +30,6 @@ from .common import (
     _fix_pattern_matches,
 )
 
-def sign(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        revs = getattr(args, "revisions", None) or ["@"]
-        targets = _resolve_all(repo, settings, revs)
-        tx = repo.start_transaction(settings)
-        for commit in targets:
-            b = tx.rewrite_commit(settings, commit)
-            b.set_sign_behavior("force")
-            b.write(repo)
-        _finish(tx, f"sign {len(targets)} commits", settings, ws, repo)
-        return 0
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
-
 def unsign(args) -> int:
     try:
         settings, ws, repo = _load(args)
@@ -61,14 +45,3 @@ def unsign(args) -> int:
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
-
-def metaedit(args) -> int:
-    print("Error: metaedit is not yet supported (use describe for description)", file=sys.stderr)
-    return 2
-
-def version(args) -> int:
-    print(f"pyjj-cli v0.1.0")
-    print(f"  pyjj (Rust bindings): v{pyjj.VERSION}")
-    print(f"  Python: {sys.version}")
-    return 0
-

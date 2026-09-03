@@ -1,4 +1,4 @@
-"""pyjj-cli commands: sparse."""
+"""sparse subcommand: sparse_set."""
 import json
 import os
 import shlex
@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
-from .common import (
+from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -29,17 +29,6 @@ from .common import (
     _run_merge_tool,
     _fix_pattern_matches,
 )
-
-def sparse_list(args) -> int:
-    try:
-        _settings, ws, _repo = _load(args)
-        patterns = ws.sparse_patterns()
-        for p in patterns:
-            print(p if p else ".")
-        return 0
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
 
 def sparse_set(args) -> int:
     try:
@@ -71,17 +60,3 @@ def sparse_set(args) -> int:
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
-
-def sparse_reset(args) -> int:
-    try:
-        _settings, ws, _repo = _load(args)
-        ws.set_sparse_patterns([""])
-        return 0
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
-
-def sparse_edit(args) -> int:
-    print("Error: sparse edit is not yet supported (requires an editor)", file=sys.stderr)
-    return 2
-

@@ -1,4 +1,4 @@
-"""pyjj-cli commands: config."""
+"""config subcommand: config_list."""
 import json
 import os
 import shlex
@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
-from .common import (
+from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -29,19 +29,6 @@ from .common import (
     _run_merge_tool,
     _fix_pattern_matches,
 )
-
-def config_get(args) -> int:
-    try:
-        settings = pyjj.UserSettings()
-        val = settings.get_string(args.name)
-        if val is None:
-            print(f"Error: config {args.name} not set", file=sys.stderr)
-            return 1
-        print(val)
-        return 0
-    except pyjj.JjError as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
 
 def config_list(args) -> int:
     try:
@@ -65,12 +52,3 @@ def config_list(args) -> int:
     except pyjj.JjError as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
-
-def config_set(args) -> int:
-    print("Error: config set is not yet supported (requires writing to config file)", file=sys.stderr)
-    return 2
-
-def config_unset(args) -> int:
-    print("Error: config unset is not yet supported", file=sys.stderr)
-    return 2
-
