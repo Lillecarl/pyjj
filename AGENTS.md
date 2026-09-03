@@ -154,6 +154,8 @@ Deliberately excluded, with the reason:
 | `sparse edit`, `config edit` | open the editor on both sides |
 | `bench`, `debug` | hidden developer commands, not part of the CLI surface |
 | `hunk`, `templates` | pyjj-cli's own commands; `jj` has no such subcommand, so there is no other side to compare against. Covered by unit tests instead |
+| `op integrate` | needs an operation created concurrently elsewhere; the harness runs one operation at a time |
+| `workspace update-stale` | has to run inside the stale workspace, and `op()` runs with the primary repo as cwd and prepends its own `-R`, which jj rejects a second one of |
 | `tag track`, `tag untrack` | pyjj-cli has them; jj 0.43 does not |
 
 When adding a command or a flag, add its scenario in the same commit.
