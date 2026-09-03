@@ -192,6 +192,19 @@ impl PyReadonlyRepo {
             .collect()
     }
 
+    /// `jj interdiff --from A --to B`: how the changes `from` makes
+    /// differ from the changes `to` makes. Unlike a plain diff, this
+    /// leaves out whatever changed between the two commits' parents.
+    #[pyo3(signature = (from, to, paths=None))]
+    fn interdiff(
+        &self,
+        from: &PyCommit,
+        to: &PyCommit,
+        paths: Option<Vec<String>>,
+    ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
+        crate::tree::interdiff_commits(self, from, to, paths)
+    }
+
     /// All local tags, in lexicographical order. Tags are typically
     /// populated by `git_import_refs()` from real Git tags, though nothing
     /// prevents setting them by hand via `Transaction.set_tag()`.
@@ -915,6 +928,7 @@ impl PyTransaction {
             crate::rewrite::set_executable(mut_repo, commit, path, executable)
         })
     }
+
 
     /// `jj restore [paths] --from <src> --into <dest>` equivalent. Overwrites
     /// `paths` (or everything) in `into_commit`'s tree with content from

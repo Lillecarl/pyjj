@@ -1404,7 +1404,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["interdiff", "--from", rev("base"), "--to", rev("one")],
     # `--parallel` needs the remainder tree computed against the
     # original parent, not against the first half; the bindings'
     # `split_remainder` only knows the chained form.
@@ -1623,3 +1622,26 @@ def test_metaedit_author_timestamp(pair: RepoPair) -> None:
     pair.op(jj=["metaedit", "-r", rev("one"),
                 "--author-timestamp", "2011-12-13T14:15:16+00:00"])
     pair.assert_parity()
+
+
+# -- interdiff and split --parallel -------------------------------------
+
+
+def test_interdiff_between_two_revisions(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["interdiff", "--from", rev("base"), "--to", rev("one")])
+    pair.assert_parity()
+
+
+def test_interdiff_with_only_from(pair: RepoPair) -> None:
+    """One of --from/--to is enough; the other defaults to `@`."""
+    chain(pair)
+    pair.op(jj=["interdiff", "--from", rev("one")])
+    pair.assert_parity()
+
+
+def test_interdiff_needs_from_or_to(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["interdiff"], may_fail=True)
+    pair.assert_parity()
+

@@ -5,9 +5,9 @@ use pyo3::prelude::*;
 use jj_lib::backend::{FileId, TreeValue};
 use jj_lib::copies::{CopyOperation, CopyRecords};
 use jj_lib::merge::MergedTreeValue;
-use jj_lib::merged_tree::TreeDiffEntry;
+use jj_lib::merged_tree::{MergedTree, TreeDiffEntry};
 
-use crate::commit::PyCommit;
+use crate::commit::{PyCommit, PyReadonlyRepo};
 use crate::errors::map_backend_err;
 
 /// One changed path between two commits' trees.
@@ -74,10 +74,17 @@ pub fn diff_commits(
     to: &PyCommit,
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyDiffEntry>> {
-    let from_tree = from.inner.tree();
-    let to_tree = to.inner.tree();
+    diff_trees(&from.inner.tree(), &to.inner.tree(), paths)
+}
+
+/// The shared half of `diff_commits`: two trees in, diff entries out.
+fn diff_trees(
+    from_tree: &MergedTree,
+    to_tree: &MergedTree,
+    paths: Option<Vec<String>>,
+) -> PyResult<Vec<PyDiffEntry>> {
     let matcher = crate::rewrite::paths_matcher(paths)?;
-    let stream = from_tree.diff_stream(&to_tree, matcher.as_ref());
+    let stream = from_tree.diff_stream(to_tree, matcher.as_ref());
     let entries: Vec<TreeDiffEntry> = pollster::block_on(stream.collect());
 
     entries
@@ -105,6 +112,29 @@ pub fn diff_commits(
             })
         })
         .collect()
+}
+
+/// `jj interdiff --from A --to B`: the difference between two commits'
+/// *diffs*, rather than between their contents.
+///
+/// `jj_lib::rewrite::rebase_to_dest_parent` rebases `from`'s tree onto
+/// `to`'s parents, and the answer is that tree diffed against `to`'s. The
+/// distinction from a plain diff only shows when the two commits have
+/// different parents: a plain diff includes everything that changed
+/// between those parents, and this does not.
+pub fn interdiff_commits(
+    repo: &PyReadonlyRepo,
+    from: &PyCommit,
+    to: &PyCommit,
+    paths: Option<Vec<String>>,
+) -> PyResult<Vec<PyDiffEntry>> {
+    let from_tree = pollster::block_on(jj_lib::rewrite::rebase_to_dest_parent(
+        repo.inner.as_ref(),
+        std::slice::from_ref(&from.inner),
+        &to.inner,
+    ))
+    .map_err(map_backend_err)?;
+    diff_trees(&from_tree, &to.inner.tree(), paths)
 }
 
 /// Like `diff_commits`, but detects copies and renames using the backend's
