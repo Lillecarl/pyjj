@@ -1437,10 +1437,9 @@ def test_unimplemented_jj_command(pair: RepoPair, argv) -> None:
     pair.assert_parity()
 
 
-@UNIMPLEMENTED
 def test_sign_without_a_backend_must_fail(pair: RepoPair) -> None:
-    """jj refuses to sign with no signing backend configured. pyjj
-    reports success and rewrites the commit, so the repos diverge."""
+    """Signing with no backend configured would rewrite the commit and
+    attach nothing, so both sides must refuse and change nothing."""
     chain(pair)
     pair.op(jj=["sign", "-r", rev("one")], may_fail=True)
     pair.assert_parity()
