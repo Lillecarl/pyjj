@@ -7,11 +7,19 @@ from pyjj.graph_layout import layout
 
 from ..common import _load
 
-# ANSI for prefix highlight — matches jj's "unique prefix in bold" idea.
+# ANSI — match jj's 256-color palette where it matters.
 # Only emitted when stdout is a TTY and NO_COLOR is not set.
-_BLUE_BOLD = "\033[1;34m"
-_CYAN_BOLD = "\033[1;36m"
 _RESET = "\033[0m"
+_BOLD = "\033[1m"
+# jj log: change prefix magenta(13) bold, rest grey(8); commit prefix blue(12), rest grey; author yellow(3); timestamp cyan(14); bookmark/graph green(2)
+_CHANGE_PREFIX = "\033[1m\033[38;5;13m"
+_CHANGE_REST = "\033[38;5;8m"
+_COMMIT_PREFIX = "\033[38;5;12m"
+_COMMIT_REST = "\033[38;5;8m"
+_AUTHOR_COLOR = "\033[38;5;3m"
+_TIMESTAMP_COLOR = "\033[38;5;14m"
+_BOOKMARK_COLOR = "\033[38;5;2m"
+_GRAPH_GREEN_BOLD = "\033[1m\033[38;5;2m"
 
 
 def _use_color() -> bool:
@@ -22,17 +30,24 @@ def _use_color() -> bool:
     return sys.stdout.isatty()
 
 
-def _color_prefix(hex_str: str, prefix_len: int, color: str) -> str:
-    """Color the shortest-unique prefix of a hex id."""
-    if prefix_len <= 0 or prefix_len > len(hex_str):
-        prefix_len = len(hex_str)
-    # jj highlights the *shortest* unique prefix; we show 8 chars, highlight first N.
-    # If prefix > 8, the whole 8 is highlighted (still unique within 8).
+def _color_change_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
     shown = hex_str[:8]
-    hl = min(prefix_len, len(shown))
+    if not use_color:
+        return shown
+    hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
     if hl == len(shown):
-        return f"{color}{shown}{_RESET}"
-    return f"{color}{shown[:hl]}{_RESET}{shown[hl:]}"
+        return f"{_CHANGE_PREFIX}{shown}{_RESET}"
+    return f"{_CHANGE_PREFIX}{shown[:hl]}{_CHANGE_REST}{shown[hl:]}{_RESET}"
+
+
+def _color_commit_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
+    shown = hex_str[:8]
+    if not use_color:
+        return shown
+    hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
+    if hl == len(shown):
+        return f"{_COMMIT_PREFIX}{shown}{_RESET}"
+    return f"{_COMMIT_PREFIX}{shown[:hl]}{_COMMIT_REST}{shown[hl:]}{_RESET}"
 
 
 def _render_glyphs_plain(row) -> str:
@@ -85,13 +100,17 @@ def log(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
 
-    # Working-copy commit id for glyph choice
+    # Working-copy commits for glyph/description color — support multiple workspaces
     try:
         view = repo.view()
-        wc_hex = view.get(ws.workspace_name)
-        wc_id = pyjj.CommitId(wc_hex) if wc_hex else None
+        wc_ids = set(view.values())
+        wc_names_by_hex = {hex_id: name for name, hex_id in view.items()}
+        # Also handle current workspace explicitly for @ vs ○ distinction if needed
+        current_wc_hex = view.get(ws.workspace_name)
     except Exception:
-        wc_id = None
+        wc_ids = set()
+        wc_names_by_hex = {}
+        current_wc_hex = None
 
     # Bookmarks for summary
     try:
@@ -109,12 +128,40 @@ def log(args) -> int:
 
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
+    use_color = _use_color()
+
+    # Decide year display: 26 not 2026, unless visible range spans two millennia
+    # (e.g. 1999 and 2026 are 1xxx vs 2xxx → show 4-digit to disambiguate).
+    # Ignore root() (1970 epoch) — it's synthetic and would force 4-digit forever.
+    spans_millennia = False
+    if rows:
+        try:
+            import datetime
+
+            years = []
+            for r in rows:
+                if not r.node.commit.parent_ids:  # root
+                    continue
+                ts = r.node.commit.author.timestamp
+                tz = datetime.timezone(datetime.timedelta(minutes=ts.tz_offset_minutes))
+                dt = datetime.datetime.fromtimestamp(ts.millis_since_epoch / 1000, tz=tz)
+                years.append(dt.year)
+            if years:
+                spans_millennia = (min(years) // 1000) != (max(years) // 1000)
+        except Exception:
+            spans_millennia = False
 
     for row in rows:
         commit = row.node.commit
-        is_wc = wc_id is not None and commit.id == wc_id
+        hex_id = commit.id.hex()
+        is_wc = hex_id in wc_ids
+        is_current_wc = current_wc_hex is not None and hex_id == current_wc_hex
         is_root = not commit.parent_ids  # root() has no parents
-        glyph = "@" if is_wc else ("◆" if is_root else "○")
+        # Only current workspace is @; other workspaces are ○ but still show workspace name
+        raw_glyph = "@" if is_current_wc else ("◆" if is_root else "○")
+        # Only current wc gets green glyph/description — matches jj
+        is_green = is_current_wc
+        glyph = f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}" if use_color and is_green else raw_glyph
 
         # Graph prefix for first row (commit line)
         if no_graph:
@@ -125,10 +172,13 @@ def log(args) -> int:
             chars = list(glyphs)
             if row.column >= len(chars):
                 chars.extend([" "] * (row.column - len(chars) + 1))
-            chars[row.column] = glyph
+            chars[row.column] = raw_glyph
             graph_prefix = "".join(chars) + " "
+            if use_color:
+                # Color the glyph like jj does (bold green for @)
+                if is_wc:
+                    graph_prefix = graph_prefix.replace(raw_glyph, f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}", 1)
             # Second row (description) — vertical continuation of lanes
-            # Use │ for the commit's own lane and for any other active lane.
             cont_chars = []
             for i in range(row.width):
                 if i == row.column:
@@ -136,64 +186,77 @@ def log(args) -> int:
                 elif i < len(glyphs) and glyphs[i] != " ":
                     cont_chars.append("│")
                 else:
-                    # Keep lane if it was active (had an edge) — check row.edges
                     active = any(e.from_column == i or e.to_column == i for e in row.edges)
                     cont_chars.append("│" if active else " ")
-            # Trim trailing spaces but keep at least column+1 width for alignment
             while cont_chars and cont_chars[-1] == " " and len(cont_chars) > row.column + 1:
                 cont_chars.pop()
             cont_prefix = "".join(cont_chars) + " "
 
-        # IDs with shortest-prefix highlight
-        use_color = _use_color()
-        if use_color:
-            try:
-                c_len = repo.shortest_change_id_prefix_len(commit.change_id)
-            except Exception:
-                c_len = 8
-            try:
-                k_len = repo.shortest_commit_id_prefix_len(commit.id)
-            except Exception:
-                k_len = 8
-            change_disp = _color_prefix(commit.change_id.hex(), c_len, _CYAN_BOLD)
-            commit_disp = _color_prefix(commit.id.hex(), k_len, _BLUE_BOLD)
+        # IDs with shortest-prefix highlight — magenta for change, blue for commit, rest grey
+        try:
+            c_len = repo.shortest_change_id_prefix_len(commit.change_id)
+        except Exception:
+            c_len = 8
+        try:
+            k_len = repo.shortest_commit_id_prefix_len(commit.id)
+        except Exception:
+            k_len = 8
+        change_disp = _color_change_id(commit.change_id.hex(), c_len, use_color)
+        commit_disp = _color_commit_id(commit.id.hex(), k_len, use_color)
+
+        bm_names = bm_by_commit.get(hex_id, [])
+        ws_name = wc_names_by_hex.get(hex_id) if is_wc else None
+        if ws_name and ws_name not in bm_names:
+            bm_names = bm_names + [f"{ws_name}@"]
+        if bm_names:
+            bm_str = " " + " ".join(sorted(bm_names))
+            if use_color:
+                # Working-copy bookmark/workspace in green, others also green like jj
+                bm_str = f" {_BOOKMARK_COLOR}{bm_str.strip()}{_RESET}"
+                bm_str = " " + bm_str.strip()
         else:
-            change_disp = commit.change_id.hex()[:8]
-            commit_disp = commit.id.hex()[:8]
+            bm_str = ""
 
-        bm_names = bm_by_commit.get(commit.id.hex(), [])
-        bm_str = (" " + " ".join(sorted(bm_names))) if bm_names else ""
-
-        # Author + datetime without year (MM-DD HH:MM), like jj but without the 2k year
         try:
             author = commit.author.name or commit.author.email
         except Exception:
             author = ""
+        if use_color and author:
+            author = f"{_AUTHOR_COLOR}{author}{_RESET}"
+
         try:
             ts = commit.author.timestamp if hasattr(commit.author, "timestamp") else commit.committer.timestamp
-            # millis_since_epoch + tz_offset_minutes
             import datetime
 
             millis = ts.millis_since_epoch
             tz_min = ts.tz_offset_minutes
             tz = datetime.timezone(datetime.timedelta(minutes=tz_min))
             dt = datetime.datetime.fromtimestamp(millis / 1000, tz=tz)
-            # No year — MM-DD HH:MM
-            datetime_str = dt.strftime("%m-%d %H:%M")
+            if spans_millennia:
+                datetime_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                datetime_str = dt.strftime("%y-%m-%d %H:%M")
         except Exception:
             datetime_str = ""
+        if use_color and datetime_str:
+            datetime_str = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}"
 
-        # Two-row default like jj: first row has ids+author+datetime, second has description
         first_line = commit.description.splitlines()[0] if commit.description else None
         desc = first_line or "(no description set)"
-        # First row: graph + change + commit + bookmarks + author + datetime
+        if use_color and is_green:
+            desc = f"{_BOOKMARK_COLOR}{desc}{_RESET}"
+
         author_part = f" {author}" if author else ""
         datetime_part = f" {datetime_str}" if datetime_str else ""
         line1 = f"{graph_prefix}{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}"
         print(line1)
-        # Second row: continuation graph + description (no ids)
         if not no_graph:
-            print(f"{cont_prefix}{desc}")
+            cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
+            desc_disp = f"{_BOOKMARK_COLOR}{desc}{_RESET}" if use_color and is_green else desc
+            if use_color and is_green:
+                print(f"{cont_prefix_disp}{desc_disp}")
+            else:
+                print(f"{cont_prefix}{desc}")
         else:
             print(f"  {desc}")
 
