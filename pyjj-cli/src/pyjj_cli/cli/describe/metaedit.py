@@ -14,6 +14,9 @@ def register(sub) -> None:
     p.add_argument("--update-author-timestamp", dest="update_author_timestamp",
                    action="store_true", default=False,
                    help="Set the author date to the current time")
+    p.add_argument("--author-timestamp", dest="author_timestamp", default=None,
+                   metavar="AUTHOR_TIMESTAMP",
+                   help="Set the author date to the given date")
     p.add_argument("--update-change-id", dest="update_change_id",
                    action="store_true", default=False,
                    help="Generate a new change id")

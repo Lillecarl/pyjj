@@ -1410,16 +1410,12 @@ UNIMPLEMENTED_ARGV = [
     # `split_remainder` only knows the chained form.
     ["split", "--parallel", "two.txt", "-m", "half"],
     ["metaedit", "-r", rev("one"), "--force-rewrite"],
-    ["metaedit", "-r", rev("one"), "--author-timestamp",
-     "2001-02-03T04:05:06+00:00"],
     ["op", "diff"],
     ["op", "revert"],
     ["config", "gc"],
     ["log", "--stat"],
-    ["show", "-r", rev("one")],
     ["run", "-r", rev("one"), "true"],
     ["util", "config-schema"],
-    ["help"],
 ]
 
 
@@ -1600,4 +1596,30 @@ def test_config_read_only_command(pair: RepoPair, argv) -> None:
     chain(pair)
     pair.op(jj=["config", "set", "--repo", "user.name", "Bob"])
     pair.op(jj=argv)
+    pair.assert_parity()
+
+
+def test_show_with_the_revision_flag(pair: RepoPair) -> None:
+    """jj takes show's revisions positionally and accepts `-r` too."""
+    chain(pair)
+    pair.op(jj=["show", "-r", rev("one")])
+    pair.assert_parity()
+
+
+def test_help_prints_and_changes_nothing(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["help"])
+    pair.assert_parity()
+
+
+def test_help_for_one_command(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["help", "describe"])
+    pair.assert_parity()
+
+
+def test_metaedit_author_timestamp(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"),
+                "--author-timestamp", "2011-12-13T14:15:16+00:00"])
     pair.assert_parity()

@@ -15,7 +15,9 @@ def add_parsers(sub) -> None:
     p_gerrit = sub.add_parser("gerrit", help="Interact with Gerrit Code Review")
     p_gerrit.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_gerrit")
     p_help = sub.add_parser("help", help="Print this message or the help of the given subcommand(s)")
-    p_help.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_help")
+    p_help.add_argument("topic", nargs="*", metavar="COMMAND",
+                        help="Command to describe")
+    p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
     p_run = sub.add_parser("run", help="Run a command across a set of revisions")
     p_run.add_argument("-r", "--revision", dest="revisions", default=None, help=argparse.SUPPRESS)
     p_run.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_run")
@@ -39,10 +41,27 @@ def _stub_gerrit(args):
     return 2
 
 
-def _stub_help(args):
-    import sys
-    print("Error: help is not yet supported", file=sys.stderr)
-    return 2
+def help_command(args):
+    """`jj help [COMMAND]`: print the top-level help, or one command's."""
+    from pyjj_cli.__main__ import build_parser
+
+    parser = build_parser()
+    for name in getattr(args, "topic", None) or []:
+        parser = _subparser(parser, name)
+        if parser is None:
+            import sys
+            print(f"Error: Unknown command `{name}`", file=sys.stderr)
+            return 2
+    parser.print_help()
+    return 0
+
+
+def _subparser(parser, name):
+    for action in parser._actions:
+        mapping = getattr(action, "_name_parser_map", None)
+        if mapping and name in mapping:
+            return mapping[name]
+    return None
 
 
 def _stub_run(args):

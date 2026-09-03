@@ -73,6 +73,7 @@ def metaedit(args) -> int:
 def _requested_edits(args) -> bool:
     return any((
         args.message is not None,
+        getattr(args, "author_timestamp", None) is not None,
         args.author is not None,
         getattr(args, "update_author", False),
         getattr(args, "update_author_timestamp", False),
@@ -91,7 +92,10 @@ def _new_author(settings, commit, args):
     elif getattr(args, "update_author", False):
         name, email = settings.user_name, settings.user_email
         changed = True
-    if getattr(args, "update_author_timestamp", False):
+    if getattr(args, "author_timestamp", None):
+        timestamp = _parse_timestamp(args.author_timestamp)
+        changed = True
+    elif getattr(args, "update_author_timestamp", False):
         # `settings.signature()` carries the same "now" jj would stamp,
         # including the pinned value when `JJ_TIMESTAMP` is set.
         timestamp = settings.signature().timestamp
@@ -108,3 +112,17 @@ def _parse_author(text: str):
     if not sep or not rest.endswith(">"):
         raise CommandError(f'Invalid author "{text}"; expected "Name <email>"')
     return name.strip(), rest[:-1].strip()
+
+
+def _parse_timestamp(text: str):
+    """An ISO-8601 date, as jj's `--author-timestamp` takes it."""
+    from datetime import datetime
+
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError as e:
+        raise CommandError(f'Invalid timestamp "{text}": {e}') from e
+    if moment.utcoffset() is None:
+        raise CommandError(f'Timestamp "{text}" has no UTC offset')
+    offset_minutes = int(moment.utcoffset().total_seconds() // 60)
+    return pyjj.Timestamp(int(moment.timestamp() * 1000), offset_minutes)

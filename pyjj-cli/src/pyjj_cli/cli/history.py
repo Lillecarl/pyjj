@@ -19,5 +19,8 @@ def add_parsers(sub) -> None:
 
     p_show = sub.add_parser("show", help="Show revision metadata and diff")
     p_show.add_argument("revisions", nargs="*", metavar="REVSETS", help="Revisions to show (default: @)")
+    # jj takes show's revisions positionally and also accepts -r for them.
+    p_show.add_argument("-r", "--revision", dest="revisions", action="append",
+                        metavar="REVSETS", help="Revisions to show")
     add_flags(p_show, [Flag.TEMPLATE, Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY, Flag.GIT, Flag.NO_PATCH])
     p_show.set_defaults(_handler="pyjj_cli.commands.history.show:show")
