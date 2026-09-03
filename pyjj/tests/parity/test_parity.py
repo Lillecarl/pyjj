@@ -1404,13 +1404,16 @@ UNIMPLEMENTED_ARGV = [
     ["metaedit", "-r", rev("one"), "--update-change-id"],
     ["parallelize", rev("one"), rev("two")],
     ["interdiff", "--from", rev("base"), "--to", rev("one")],
+    # `--parallel` needs the remainder tree computed against the
+    # original parent, not against the first half; the bindings'
+    # `split_remainder` only knows the chained form.
+    ["split", "--parallel", "two.txt", "-m", "half"],
     ["op", "diff"],
     ["op", "revert"],
     ["config", "list"],
     ["config", "list", "--repo"],
     ["config", "path", "--repo"],
     ["config", "set", "--repo", "user.name", "Bob"],
-    ["split", "--parallel", "two.txt", "-m", "half"],
     ["log", "--stat"],
     ["show", "-r", rev("one")],
     ["run", "-r", rev("one"), "true"],
@@ -1479,3 +1482,4 @@ def test_squash_keep_emptied_leaves_the_source_behind(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["squash", "--keep-emptied", "-u"])
     pair.assert_parity()
+
