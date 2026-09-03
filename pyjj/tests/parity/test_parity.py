@@ -1121,3 +1121,32 @@ def test_sparse_reset_restores_everything(pair: RepoPair) -> None:
     pair.op(jj=["sparse", "reset"])
     pair.assert_parity()
 
+
+# -- read-only smoke ----------------------------------------------------
+#
+# These render; they must not perturb the repository while doing it.
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["log"],
+        ["diff"],
+        ["show"],
+        ["status"],
+        ["evolog"],
+        ["root"],
+        ["version"],
+        ["git", "root"],
+        ["git", "colocation", "status"],
+        ["workspace", "list"],
+        ["workspace", "root"],
+        ["tag", "list"],
+        ["config", "get", "user.name"],
+    ],
+    ids=lambda a: "_".join(a),
+)
+def test_read_only_command_does_not_perturb_the_repo(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
