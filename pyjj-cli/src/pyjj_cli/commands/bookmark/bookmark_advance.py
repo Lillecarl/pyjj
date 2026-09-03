@@ -31,25 +31,42 @@ from ..common import (
 )
 
 def bookmark_advance(args) -> int:
+    """`jj bookmark advance [NAMES] --to <rev>`: move bookmarks forward.
+
+    Only a named bookmark that already sits on an ancestor of the target
+    moves, and only if it is not there already -- advancing is a
+    fast-forward, never a jump sideways. Without names jj advances the
+    bookmarks that `advance-bookmarks` opts in, which pyjj does not read,
+    so no names means nothing moves.
+    """
     try:
         settings, ws, repo = _load(args)
-        rev = getattr(args, "revision", "@")
-        target = _resolve_one(repo, settings, rev)
-        # Advance closest bookmarks to target: find bookmarks whose target is ancestor of @ and descendant of target?
-        # Simplified: move all bookmarks that are ancestors of @ to target
+        names = list(getattr(args, "names", []) or [])
+        target = _resolve_one(repo, settings, getattr(args, "to", "@") or "@")
+        target_hex = target.id.hex()
+
+        eligible = {
+            c.id.hex()
+            for c in repo.revset(settings, f"::{target_hex}")
+        }
+        moved = []
+        for bookmark in repo.bookmarks():
+            if bookmark.name not in names:
+                continue
+            here = [i.hex() for i in bookmark.target_ids]
+            if here == [target_hex] or not all(h in eligible for h in here):
+                continue
+            moved.append(bookmark.name)
+
+        if not moved:
+            print("No bookmarks to update.")
+            return 0
+
         tx = repo.start_transaction(settings)
-        for bm in repo.bookmarks():
-            # Check if bookmark is ancestor of @ and not already at target
-            try:
-                # Use revset: bookmarks that are ancestors of @
-                # For now, just move all bookmarks that are not at target and are ancestors of current @
-                # We can use revset: ancestors(@) to find
-                pass
-            except Exception:
-                pass
-            # For now, just advance all bookmarks to target if they are not already
-            tx.set_bookmark(bm.name, target.id)
-        _finish(tx, f"advance bookmarks to {target.id.hex()[:8]}", settings, ws, repo)
+        for name in moved:
+            tx.set_bookmark(name, target.id)
+        _finish(tx, f"advance bookmarks to {target_hex[:8]}", settings, ws, repo)
+        print(f"Advanced {len(moved)} bookmarks to {target_hex[:8]}")
         return 0
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

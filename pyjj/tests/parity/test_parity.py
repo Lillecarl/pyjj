@@ -1315,3 +1315,8 @@ def test_bookmark_track_and_untrack_a_remote_bookmark(pair: RepoPair) -> None:
     finally:
         shutil.rmtree(str(base), ignore_errors=True)
 
+
+def test_bookmark_advance_moves_to_the_working_copy_parent(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "advance", "main"])
+    pair.assert_parity()

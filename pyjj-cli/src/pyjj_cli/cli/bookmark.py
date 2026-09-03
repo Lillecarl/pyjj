@@ -61,5 +61,8 @@ def add_parsers(sub) -> None:
     p_bmut.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark_untrack:bookmark_untrack")
 
     p_bma = bm_sub.add_parser("advance", help="Advance the closest bookmarks to a target revision")
-    add_revision_flag(p_bma, dest="revision", default="@", help="Revision to advance to (default: @)")
+    p_bma.add_argument("names", nargs="*", metavar="NAMES",
+                       help="Bookmarks to advance")
+    p_bma.add_argument("-t", "--to", dest="to", default="@", metavar="REVSET",
+                       help="Revision to advance the bookmarks to (default: @)")
     p_bma.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark_advance:bookmark_advance")
