@@ -99,7 +99,10 @@ let
         export PYTHONDONTWRITEBYTECODE=1
         # Isolate HOME like checks.nix does (parity suite suppresses machine config)
         if [ -z "''${HOME:-}" ]; then
-          export HOME="$(mktemp -d)"
+          # Assign before export: shellcheck SC2155 rejects the one-liner,
+          # because it masks mktemp's exit status.
+          HOME="$(mktemp -d)"
+          export HOME
           mkdir -p "$HOME"
         fi
         # Prefer runtime PYTEST_ARGS; fall back to eval-time impure args if present.
