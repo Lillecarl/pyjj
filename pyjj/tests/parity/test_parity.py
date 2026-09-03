@@ -1404,10 +1404,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    # `--parallel` needs the remainder tree computed against the
-    # original parent, not against the first half; the bindings'
-    # `split_remainder` only knows the chained form.
-    ["split", "--parallel", "two.txt", "-m", "half"],
     ["metaedit", "-r", rev("one"), "--force-rewrite"],
     ["op", "diff"],
     ["op", "revert"],
@@ -1645,3 +1641,19 @@ def test_interdiff_needs_from_or_to(pair: RepoPair) -> None:
     pair.op(jj=["interdiff"], may_fail=True)
     pair.assert_parity()
 
+
+def test_split_parallel_makes_siblings(pair: RepoPair) -> None:
+    """`--parallel` puts the two halves side by side, so the second one
+    hangs from the original's parents and loses the first one's changes."""
+    chain(pair)
+    pair.op(jj=["split", "--parallel", "two.txt", "-m", "half"])
+    pair.assert_parity()
+
+
+def test_split_parallel_with_a_descendant(pair: RepoPair) -> None:
+    """A commit below the split point ends up on both halves."""
+    chain(pair)
+    pair.op(jj=["new", "-m", "three"])
+    pair.op(files={"three.txt": b"three\n"}, jj=["status"])
+    pair.op(jj=["split", "--parallel", "-r", rev("two"), "two.txt", "-m", "half"])
+    pair.assert_parity()

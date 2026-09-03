@@ -842,6 +842,18 @@ impl PyTransaction {
         })
     }
 
+    /// `jj split --parallel` equivalent, second half: the remaining
+    /// changes as a *sibling* of `first` rather than its child.
+    fn split_remainder_parallel(
+        &self,
+        target: &PyCommit,
+        first: &PyCommit,
+    ) -> PyResult<PyCommitBuilder> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::split_remainder_parallel(mut_repo, target, first)
+        })
+    }
+
     /// Applies edited conflict-marker text back onto `commit`'s tree at
     /// `path`, returning a `CommitBuilder` for the rewritten commit. See
     /// `Commit.materialize_conflict()` and

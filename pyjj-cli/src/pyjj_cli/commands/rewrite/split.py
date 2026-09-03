@@ -56,7 +56,17 @@ def split(args) -> int:
             first_description = _run_editor(settings, target.description)
 
         first = first_builder.set_description(first_description).write(repo)
-        second = tx.split_remainder(target, first).write(repo)
+        parallel = getattr(args, "parallel", False)
+        if parallel:
+            second = tx.split_remainder_parallel(target, first).write(repo)
+            # Whatever followed the split now sits on both halves, first
+            # one first -- a merge's parent order is part of its id.
+            children = repo.revset(settings, f"children({target.id.hex()})")
+            if children:
+                tx.move_commits([c.id for c in children], [],
+                                [first.id, second.id], [])
+        else:
+            second = tx.split_remainder(target, first).write(repo)
         if target.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, second.id)
         _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)

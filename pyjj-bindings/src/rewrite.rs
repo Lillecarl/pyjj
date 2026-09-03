@@ -310,6 +310,39 @@ pub fn split_remainder(
     Ok(PyCommitBuilder::from_rust(builder))
 }
 
+/// Second half of `jj split --parallel`: the same remaining changes, but
+/// as a *sibling* of `first` rather than its child.
+///
+/// The tree cannot simply be `target`'s, the way the chained form's can.
+/// A child of `first` shows the rest as a diff against `first`; a sibling
+/// hangs from `target`'s own parents, so its tree has to be `target`'s
+/// with the selected changes undone. That is what merging `target`'s tree
+/// with the inverted parent->selected diff produces
+/// (`cli/src/commands/split.rs` builds it the same way).
+pub fn split_remainder_parallel(
+    mut_repo: &mut MutableRepo,
+    target: &PyCommit,
+    first: &PyCommit,
+) -> PyResult<PyCommitBuilder> {
+    let parent_tree = pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+    let target_tree = target.inner.tree();
+    let selected_diff = jj_lib::merge::Diff::new(
+        (parent_tree, "parents of split revision".to_string()),
+        (first.inner.tree(), "selected changes for split".to_string()),
+    );
+    let new_tree = pollster::block_on(MergedTree::merge(Merge::from_diffs(
+        (target_tree, "split revision".to_string()),
+        [selected_diff.invert()],
+    )))
+    .map_err(map_backend_err)?;
+    let builder = mut_repo
+        .rewrite_commit(&target.inner)
+        .set_parents(target.inner.parent_ids().to_vec())
+        .set_tree(new_tree)
+        .generate_new_change_id();
+    Ok(PyCommitBuilder::from_rust(builder))
+}
+
 /// `jj duplicate` equivalent: creates a copy of each commit in `targets`
 /// (same tree/description/author, fresh change id) onto its own original
 /// parents (or other just-duplicated commits, if one target is a parent of
