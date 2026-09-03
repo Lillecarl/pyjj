@@ -134,3 +134,40 @@ pub fn resolve_revset(
         .resolve_user_expression(repo, &symbol_resolver)
         .map_err(map_revset_eval_err)
 }
+
+/// Parses a revset expression *without* resolving its symbols, which is
+/// what `IdPrefixContext::disambiguate_within` wants -- it takes a
+/// `UserRevsetExpression` and resolves it itself, against whichever repo
+/// it is later populated with.
+pub fn parse_revset(
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &PyUserSettings,
+    revision: &str,
+) -> PyResult<Arc<revset::UserRevsetExpression>> {
+    let path_converter = RepoPathUiConverter::Fs {
+        cwd: workspace_root.to_path_buf(),
+        base: workspace_root.to_path_buf(),
+    };
+    let workspace_ctx = RevsetWorkspaceContext {
+        path_converter: &path_converter,
+        workspace_name,
+    };
+    let aliases_map: RevsetAliasesMap = load_aliases_map(settings.0.config(), "revset-aliases");
+    let fileset_aliases_map: FilesetAliasesMap =
+        load_aliases_map(settings.0.config(), "fileset-aliases");
+    let extensions = RevsetExtensions::new();
+    let parse_context = RevsetParseContext {
+        aliases_map: &aliases_map,
+        local_variables: Default::default(),
+        user_email: settings.0.user_email(),
+        date_pattern_context: chrono::Local::now().into(),
+        default_ignored_remote: None,
+        fileset_aliases_map: &fileset_aliases_map,
+        extensions: &extensions,
+        workspace: Some(workspace_ctx),
+    };
+
+    let mut diagnostics = RevsetDiagnostics::new();
+    revset::parse(&mut diagnostics, revision, &parse_context).map_err(map_revset_parse_err)
+}

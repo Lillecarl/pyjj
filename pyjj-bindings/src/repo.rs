@@ -14,11 +14,48 @@ use jj_lib::transaction::Transaction;
 
 use crate::bookmark::PyBookmark;
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::{map_backend_err, map_index_err, map_repo_load_err, map_transaction_err};
+use crate::errors::{map_backend_err, map_index_err, map_py_err, map_repo_load_err, map_transaction_err};
 use crate::ids::{PyChangeId, PyCommitId, PySignature};
 use crate::settings::PyUserSettings;
 
 // ── ReadonlyRepo ────────────────────────────────────────────────────────────
+
+impl PyReadonlyRepo {
+    /// Build the disambiguation context `shortest_*_prefix_len` shortens
+    /// within, following `jj`'s own rule: `revsets.short-prefixes` if
+    /// set, otherwise `revsets.log`, and no narrowing at all when the
+    /// chosen one is empty or no settings were given.
+    fn id_prefix_context(
+        &self,
+        settings: Option<&PyUserSettings>,
+    ) -> PyResult<jj_lib::id_prefix::IdPrefixContext> {
+        use jj_lib::id_prefix::IdPrefixContext;
+        use jj_lib::revset::RevsetExtensions;
+
+        let context = IdPrefixContext::new(std::sync::Arc::new(RevsetExtensions::new()));
+        let Some(settings) = settings else {
+            return Ok(context);
+        };
+        let revset_string = match settings.0.get_string("revsets.short-prefixes") {
+            Ok(value) => value,
+            Err(_) => settings
+                .0
+                .get_string("revsets.log")
+                .unwrap_or_else(|_| String::new()),
+        };
+        if revset_string.is_empty() {
+            return Ok(context);
+        }
+        let expression = crate::revset::parse_revset(
+            &self.workspace_root,
+            &self.workspace_name,
+            settings,
+            &revset_string,
+        )?;
+        Ok(context.disambiguate_within(expression))
+    }
+
+}
 
 #[pymethods]
 impl PyReadonlyRepo {
@@ -229,17 +266,30 @@ impl PyReadonlyRepo {
         crate::operation::PyOperation(self.inner.operation().clone())
     }
 
-    /// The shortest prefix length (in hex characters) of `commit_id` that's
-    /// still unique among every commit in this repo's index -- pass this to
-    /// `CommitId.short()` to get the same "shortest unique prefix" `jj log`
-    /// shows by default. Unlike `jj log`'s own default, this always
-    /// disambiguates against the *whole* repo, not a narrower
-    /// `revsets.short-prefixes` set -- there's no revset-scoped
-    /// disambiguation context here, just the plain index lookup.
-    fn shortest_commit_id_prefix_len(&self, commit_id: &PyCommitId) -> PyResult<usize> {
-        self.inner
-            .index()
-            .shortest_unique_commit_id_prefix_len(&commit_id.0)
+    /// The shortest prefix length (in hex characters) of `commit_id` that
+    /// still resolves to it -- pass this to `CommitId.short()` to get the
+    /// same "shortest unique prefix" `jj log` highlights.
+    ///
+    /// Without `settings`, this disambiguates against every commit in the
+    /// repo. Pass `settings` to narrow it the way `jj` does: the
+    /// `revsets.short-prefixes` revset, or `revsets.log` when that is
+    /// unset, becomes the set ids are shortened within, so a small
+    /// working set gets short ids even in a large repo. An empty string
+    /// for either turns the narrowing off.
+    ///
+    /// Either way the result is widened past any prefix that a bookmark
+    /// or tag name would shadow, since such a prefix would no longer
+    /// resolve to the commit.
+    #[pyo3(signature = (commit_id, settings=None))]
+    fn shortest_commit_id_prefix_len(
+        &self,
+        commit_id: &PyCommitId,
+        settings: Option<&PyUserSettings>,
+    ) -> PyResult<usize> {
+        let context = self.id_prefix_context(settings)?;
+        let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
+        index
+            .shortest_commit_prefix_len(self.inner.as_ref(), &commit_id.0)
             .map_err(map_index_err)
     }
 
@@ -247,9 +297,16 @@ impl PyReadonlyRepo {
     /// the result to `ChangeId.reverse_hex()[:n]` (jj displays change ids
     /// reversed, so the *shortest unique prefix* is the leading `n`
     /// characters of the already-reversed hex string, same as `jj log`).
-    fn shortest_change_id_prefix_len(&self, change_id: &PyChangeId) -> PyResult<usize> {
-        self.inner
-            .shortest_unique_change_id_prefix_len(&change_id.0)
+    #[pyo3(signature = (change_id, settings=None))]
+    fn shortest_change_id_prefix_len(
+        &self,
+        change_id: &PyChangeId,
+        settings: Option<&PyUserSettings>,
+    ) -> PyResult<usize> {
+        let context = self.id_prefix_context(settings)?;
+        let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
+        index
+            .shortest_change_prefix_len(self.inner.as_ref(), &change_id.0)
             .map_err(map_index_err)
     }
 
