@@ -1298,3 +1298,20 @@ def test_git_colocation_enable_then_disable(pair: RepoPair) -> None:
     pair.assert_parity()
     assert_ref_parity(pair)
 
+
+def test_bookmark_track_and_untrack_a_remote_bookmark(pair: RepoPair) -> None:
+    """A fetched bookmark starts untracked; tracking it makes the local
+    name follow the remote one."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remote)])
+        pair.op(jj=["git", "fetch"])
+        pair.op(jj=["bookmark", "untrack", "main@origin"])
+        pair.assert_parity()
+        pair.op(jj=["bookmark", "track", "main@origin"])
+        pair.assert_parity()
+    finally:
+        shutil.rmtree(str(base), ignore_errors=True)
+

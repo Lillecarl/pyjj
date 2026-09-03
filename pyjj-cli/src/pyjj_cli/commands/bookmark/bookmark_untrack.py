@@ -28,15 +28,17 @@ from ..common import (
     _merge_marker_len,
     _run_merge_tool,
     _fix_pattern_matches,
+    _split_remote_ref,
 )
 
 def bookmark_untrack(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        remote = getattr(args, "remote", None) or "origin"
+        default_remote = getattr(args, "remote", None)
         tx = repo.start_transaction(settings)
         for name in getattr(args, "names", []):
-            tx.git_untrack_remote_bookmark(remote, name)
+            bookmark, remote = _split_remote_ref(name, default_remote)
+            tx.git_untrack_remote_bookmark(remote, bookmark)
         _finish(tx, f"untrack {','.join(getattr(args, 'names', []))}", settings, ws, repo)
         return 0
     except (pyjj.JjError, CommandError) as e:

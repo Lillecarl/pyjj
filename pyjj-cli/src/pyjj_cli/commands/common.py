@@ -134,6 +134,22 @@ def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
     if new_wc_hex != old_wc_hex:
         fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
 
+def _split_remote_ref(name: str, default_remote):
+    """`BOOKMARK@REMOTE` -> `("BOOKMARK", "REMOTE")`.
+
+    jj takes the remote in the name itself, and `--remote` only supplies
+    it for names that leave it out. A name with no remote and no
+    `--remote` is an error, not a guess at `origin`.
+    """
+    bookmark, sep, remote = name.rpartition("@")
+    if sep:
+        return bookmark, remote
+    if not default_remote:
+        raise CommandError(
+            f"Bookmark {name} has no remote; use NAME@REMOTE or --remote"
+        )
+    return name, default_remote
+
 def _wants_edit(args) -> bool:
     """`--edit`/`--no-edit` for `jj next`/`jj prev`. The last flag wins in
     jj's parser, and argparse's default store_true/store_false pair gives
