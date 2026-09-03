@@ -323,6 +323,15 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// Hex id of the operation this repo view was loaded at.
+    ///
+    /// `jj` abbreviates this to 12 characters when it prints an
+    /// `jj op restore` hint.
+    #[getter]
+    fn operation_id(&self) -> String {
+        self.inner.operation().id().hex()
+    }
+
     fn __repr__(&self) -> String {
         format!("ReadonlyRepo(op={})", self.inner.operation().id().hex())
     }
@@ -454,6 +463,27 @@ impl PyTransaction {
         let name = WorkspaceNameBuf::from(workspace_name.as_str());
         with_mut_repo(self, |mut_repo| {
             pollster::block_on(mut_repo.edit(name, &commit.inner)).map_err(map_transaction_err)
+        })
+    }
+
+    /// Create a new working-copy commit *on top of* `commit` (carrying its
+    /// tree) and edit that, returning the new commit.
+    ///
+    /// This is `jj_lib`'s `MutableRepo::check_out`, and it differs from
+    /// `edit()`: `edit()` moves the working copy onto `commit` itself,
+    /// while this leaves `commit` untouched and puts a fresh child in
+    /// front of it. `jj bisect run` uses this one, so each candidate is
+    /// tested without rewriting the revision being tested.
+    fn check_out(&self, workspace_name: String, commit: &PyCommit) -> PyResult<PyCommit> {
+        use jj_lib::ref_name::WorkspaceNameBuf;
+        let name = WorkspaceNameBuf::from(workspace_name.as_str());
+        let new_commit = with_mut_repo(self, |mut_repo| {
+            pollster::block_on(mut_repo.check_out(name, &commit.inner))
+                .map_err(map_transaction_err)
+        })?;
+        Ok(PyCommit {
+            inner: new_commit,
+            _repo: None,
         })
     }
 
