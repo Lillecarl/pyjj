@@ -91,6 +91,16 @@ PYTEST_ARGS="--collect-only -q" nix run --file . tests
 nix run --file . tests -- -k test_absorb -xvs   # CLI args also forwarded
 ```
 
+Pass a `-k` expression that contains spaces **after** `--`, not through
+`PYTEST_ARGS`: the wrapper word-splits `PYTEST_ARGS` unquoted, so
+`PYTEST_ARGS="-k 'a or b'"` reaches pytest as three arguments and fails with
+"file or directory not found: or".
+
+```
+nix run --file . tests -- -k "test_tag or test_workspace" -q   # works
+PYTEST_ARGS="-k 'test_tag or test_workspace'" nix run --file . tests  # does not
+```
+
 Pure `nix build --file . checks.pyjj-conformance` (no `PYTEST_ARGS`, no
 `--impure`) stays hermetic — `builtins.getEnv` returns `""` and the default
 `-q` is used. The `tests` app (`default.nix:tests`, `writeShellApplication`)
