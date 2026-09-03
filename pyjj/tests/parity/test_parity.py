@@ -923,3 +923,25 @@ def test_rebase_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- squash and restore variants ----------------------------------------
+
+
+def test_squash_working_copy_into_parent(pair: RepoPair) -> None:
+    """`-u` is `--use-destination-message`: no editor, so no prompt."""
+    chain(pair)
+    pair.op(jj=["squash", "-u"])
+    pair.assert_parity()
+
+
+def test_squash_from_into_named_revisions(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["squash", "--from", rev("two"), "--into", rev("one"), "-u"])
+    pair.assert_parity()
+
+
+def test_restore_into_named_revision(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["restore", "--into", rev("two"), "--from", rev("base")])
+    pair.assert_parity()
+
+
