@@ -217,8 +217,8 @@ def add_use_dest_message_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-u", "--use-destination-message", dest="use_destination_message", action="store_true", help="Keep destination's description unchanged")
 
 
-def add_into_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-t", "--into", dest="into", default=None, metavar="REVSET", help="Destination revision (default: source's parent)")
+def add_into_flag(parser: argparse.ArgumentParser, dest: str = "into", default=None, help: str = "Destination revision (default: source's parent)") -> None:
+    parser.add_argument("-t", "--into", dest=dest, default=default, metavar="REVSET", help=help)
 
 
 def add_remote_flag(parser: argparse.ArgumentParser) -> None:
@@ -314,8 +314,8 @@ def add_clear_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--clear", action="store_true", help="Include no files (combine with --add)")
 
 
-def add_repo_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repo", action="store_true", help="Update repo config")
+def add_repo_flag(parser: argparse.ArgumentParser, help: str = "Update repo config") -> None:
+    parser.add_argument("--repo", action="store_true", help=help)
 
 
 def add_key_flag(parser: argparse.ArgumentParser) -> None:

@@ -37,7 +37,7 @@ def add_parsers(sub) -> None:
 
     p_ftrack = file_sub.add_parser("track", help="Start tracking specified paths in the working copy")
     p_ftrack.add_argument("paths", nargs="+", help="Paths to track")
-    p_ftrack.add_argument("--include-ignored", dest="include_ignored", action="store_true", help="Track ignored or too large files")
+    add_flags(p_ftrack, [Flag.INCLUDE_IGNORED])
     p_ftrack.set_defaults(_handler="pyjj_cli.commands.file.track:file_track")
 
     p_funtrack = file_sub.add_parser("untrack", help="Stop tracking specified paths in the working copy")
