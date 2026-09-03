@@ -1071,3 +1071,21 @@ def test_file_track_is_a_no_op_by_default(pair: RepoPair) -> None:
     pair.op(jj=["file", "track", "two.txt"])
     pair.assert_parity()
 
+
+def test_file_untrack_an_ignored_path(pair: RepoPair) -> None:
+    """`file untrack` drops a path from the tree but leaves it on disk."""
+    chain(pair)
+    pair.op(files={".gitignore": b"two.txt\n"}, jj=["status"])
+    pair.op(jj=["file", "untrack", "two.txt"])
+    pair.assert_parity()
+    for side in ("cli", "py"):
+        assert pair.read_wc_file(side, "two.txt") == b"two\n"
+
+
+def test_file_untrack_refuses_a_tracked_path(pair: RepoPair) -> None:
+    """A path that is not ignored comes straight back, so both sides
+    must refuse rather than silently doing nothing."""
+    chain(pair)
+    pair.op(jj=["file", "untrack", "two.txt"], may_fail=True)
+    pair.assert_parity()
+

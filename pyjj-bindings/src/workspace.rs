@@ -421,6 +421,24 @@ impl PyWorkspace {
         })
     }
 
+    /// `jj file untrack <paths>`: drop `paths` from the working-copy
+    /// commit's tree, leaving the files on disk. Returns
+    /// `(new_repo, added_back)`. When `added_back` is non-empty the paths
+    /// were not ignored and NOTHING was written -- see
+    /// `pyjj_bindings.checkout::untrack_paths`'s docs for why the check
+    /// cannot happen before the write.
+    fn untrack_paths(
+        &self,
+        py: Python<'_>,
+        settings: &PyUserSettings,
+        paths: Vec<String>,
+    ) -> PyResult<(PyReadonlyRepo, Vec<String>)> {
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            crate::checkout::untrack_paths(&mut inner, settings, paths)
+        })
+    }
+
     /// Write `commit`'s tree out to the working-copy files and record
     /// `repo`'s operation as current. Returns a stats dict.
     fn check_out(
