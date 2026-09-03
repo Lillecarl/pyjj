@@ -5,7 +5,7 @@ import sys
 import pyjj
 from pyjj.graph_layout import layout
 
-from ..common import _load
+from ..common import _load, _pyjj_template
 
 # ANSI — match jj's 256-color palette where it matters.
 # Only emitted when stdout is a TTY and NO_COLOR is not set.
@@ -129,21 +129,27 @@ def log(args) -> int:
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
     use_color = _use_color()
+
+    # jj's own builtin template names, mapped to a Jinja equivalent so
+    # `pyjj log -T builtin_log_oneline` keeps working like `jj log` does.
+    builtin_templates = {
+        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }} {{ description }}",
+        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
+        "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
+    }
+
     template_str = getattr(args, "template", None)
-    # pyjj.templates.* with Jinja — if no --template, check config `pyjj.templates.log`
     if not template_str:
-        try:
-            template_str = settings.get_string("pyjj.templates.log")
-        except Exception:
-            template_str = None
-    # If --template is a bare name like `my-cool`, try `pyjj.templates.<name>` before treating as raw Jinja
-    if template_str and "{{" not in template_str and " " not in template_str and "\n" not in template_str:
-        try:
-            from_config = settings.get_string(f"pyjj.templates.{template_str}")
-            if from_config:
-                template_str = from_config
-        except Exception:
-            pass
+        # No -T: fall back to the configured default template, if any.
+        template_str = _pyjj_template(settings, "log", cwd=ws.workspace_root)
+    elif template_str in builtin_templates:
+        template_str = builtin_templates[template_str]
+    elif "{{" not in template_str and " " not in template_str and "\n" not in template_str:
+        # A bare name like `mycool` means `pyjj.templates.mycool`. Anything
+        # else is a raw Jinja template.
+        from_config = _pyjj_template(settings, template_str, cwd=ws.workspace_root)
+        if from_config:
+            template_str = from_config
 
     # Compile Jinja template if --template given. We expose a Pythonic context
     # (commit, change_id, commit_id, author, author_email, description, bookmarks,
@@ -151,14 +157,7 @@ def log(args) -> int:
     # can do `pyjj log -T '{{ author }} {{ description }}'` etc. Builtin jj names
     # like `builtin_log_compact` are mapped to a Jinja equivalent.
     jinja_template = None
-    builtin_templates = {
-        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }} {{ description }}",
-        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
-        "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
-    }
     if template_str:
-        # jj allows `jj log -T builtin_*` — map it, else treat as raw Jinja
-        template_str = builtin_templates.get(template_str, template_str)
         try:
             from jinja2 import Environment, StrictUndefined
 

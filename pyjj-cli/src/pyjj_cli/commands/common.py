@@ -299,3 +299,42 @@ def _fix_pattern_matches(pattern: str, path: str) -> bool:
             continue
     return False
 
+
+def _jj_config_get(key: str, cwd=None) -> str | None:
+    """Read one dotted config key the way `jj` itself does, repo config
+    included.
+
+    `UserSettings` does not load repo config on purpose (see AGENTS.md's
+    Config section). `jj` keeps repo config outside the repo: the id in
+    `.jj/repo/config-id` names a directory under the user's config dir.
+    That indirection is `jj_lib::secure_config`. Do not copy it here --
+    ask `jj` for the value instead, so pyjj follows the same rules.
+
+    `jj config get` prints the raw string with no TOML quotes, so the
+    value needs no unquoting."""
+    try:
+        result = subprocess.run(
+            ["jj", "config", "get", key],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout
+    if value.endswith("\n"):
+        value = value[:-1]
+    return value or None
+
+def _pyjj_template(settings, name: str, cwd=None) -> str | None:
+    """Look up `pyjj.templates.<name>`: user config first, then repo config."""
+    key = f"pyjj.templates.{name}"
+    try:
+        value = settings.get_string(key)
+    except pyjj.JjError:
+        value = None
+    if value is not None:
+        return value
+    return _jj_config_get(key, cwd)
