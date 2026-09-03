@@ -409,13 +409,28 @@ Current state:
   trait) is satisfiable with a plain Rust closure over precomputed data, as
   `RecordingFixer`/`LookupFixer` in `pyjj-bindings/src/fix.rs` do.
 - **Shortest unique id prefix**: `ReadonlyRepo.shortest_commit_id_prefix_len(
-  commit_id) -> int` / `.shortest_change_id_prefix_len(change_id) -> int`
-  are the "shortest unique prefix" `jj log` highlights by default, via
-  `Index::shortest_unique_commit_id_prefix_len`/
-  `Repo::shortest_unique_change_id_prefix_len`. One difference from `jj
-  log`'s own default: this always disambiguates against the *whole* repo,
-  not a narrower `revsets.short-prefixes` set (no `IdPrefixContext`/revset
-  binding for that narrower disambiguation yet).
+  commit_id, settings=None) -> int` /
+  `.shortest_change_id_prefix_len(change_id, settings=None) -> int` are the
+  "shortest unique prefix" `jj log` highlights, via
+  `jj_lib::id_prefix::IdPrefixIndex`.
+
+  With no `settings` they disambiguate against every commit in the repo.
+  Pass `settings` and they narrow the way `jj` does: `revsets.short-prefixes`
+  becomes the set ids are shortened within, falling back to `revsets.log`
+  when it is unset, and an empty string for either turns narrowing off. A
+  small working set therefore gets short ids even in a large repo -- in a
+  60-commit repo with `short-prefixes = "@"`, the working copy needs one
+  character instead of two. `pyjj log` passes its settings, so its
+  highlighting matches `jj log`'s.
+
+  Both paths go through `IdPrefixIndex`, which also widens a prefix past
+  anything a bookmark or tag name would shadow -- an earlier version called
+  the bare `Index::shortest_unique_*_prefix_len` and skipped that step, so
+  it could return a prefix that no longer resolved to the commit.
+
+  `IdPrefixIndex<'_>` borrows the context that produced it, so the context
+  is built and populated inside each call rather than cached on the
+  pyclass -- the same shape the `Bisect` entry above describes.
 - **Signing**: `CommitBuilder.set_sign_behavior("drop" | "keep" | "own" |
   "force")` and `Commit.is_signed -> bool`/`Commit.verification ->
   Verification | None` wrap `jj_lib`'s signing directly
