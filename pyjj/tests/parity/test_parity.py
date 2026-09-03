@@ -1404,12 +1404,14 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["parallelize", rev("one"), rev("two")],
     ["interdiff", "--from", rev("base"), "--to", rev("one")],
     # `--parallel` needs the remainder tree computed against the
     # original parent, not against the first half; the bindings'
     # `split_remainder` only knows the chained form.
     ["split", "--parallel", "two.txt", "-m", "half"],
+    ["metaedit", "-r", rev("one"), "--force-rewrite"],
+    ["metaedit", "-r", rev("one"), "--author-timestamp",
+     "2001-02-03T04:05:06+00:00"],
     ["op", "diff"],
     ["op", "revert"],
     ["config", "list"],
@@ -1540,4 +1542,21 @@ def test_metaedit_several_revisions(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["metaedit", "-r", rev("one"), "-r", rev("two"),
                 "--author", "Bob <bob@example.com>"])
+    pair.assert_parity()
+
+
+# -- parallelize --------------------------------------------------------
+
+
+def test_parallelize_a_two_commit_chain(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["parallelize", rev("one"), rev("two")])
+    pair.assert_parity()
+
+
+def test_parallelize_leaves_a_follower_on_both(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["new", "-m", "three"])
+    pair.op(files={"three.txt": b"three\n"}, jj=["status"])
+    pair.op(jj=["parallelize", rev("one"), rev("two")])
     pair.assert_parity()

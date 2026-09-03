@@ -166,6 +166,11 @@ one:
 - **Anything that names an operation names it per side.** Operation ids
   differ between the two repos, so use `RepoPair.op_id(side, depth)` and
   pass a different value to `jj=` and `py=`.
+- **A merge's parent order is part of its commit id.** The extracted
+  state sorts parents, so a scenario that builds a merge the wrong way
+  round shows up only as a differing commit id, with every other field
+  identical. That shape of diff -- one changed hash and nothing else --
+  almost always means parent order, not content.
 
 ## API coverage
 

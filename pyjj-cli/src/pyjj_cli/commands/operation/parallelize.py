@@ -1,35 +1,78 @@
-"""operation subcommand: parallelize."""
-import json
-import os
-import shlex
-import subprocess
+"""command: parallelize — make a chain of revisions siblings."""
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
-from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
-    _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
-)
+
+from ..common import CommandError, _finish, _load, _reload, _resolve_all
+
 
 def parallelize(args) -> int:
-    print("Error: parallelize is not yet supported", file=sys.stderr)
-    return 2
+    """`jj parallelize [REVSETS]`: turn a chain into siblings.
+
+    Every target ends up on the parents the chain itself hung from, and
+    whatever followed the chain ends up on all of them at once. Content
+    is preserved: a target that used to sit on another loses that one's
+    changes when it moves off it.
+    """
+    try:
+        settings, ws, repo = _load(args)
+        revisions = (list(getattr(args, "revisions", None) or [])
+                     + list(getattr(args, "revisions_pos", None) or []))
+        targets = _resolve_all(repo, settings, revisions or ["@"])
+        if len(targets) < 2:
+            print("Nothing changed.")
+            return 0
+
+        union = "|".join(c.id.hex() for c in targets)
+        # The chain hangs from these; every target moves onto them.
+        outside_parents = repo.revset(settings, f"parents({union}) ~ ({union})")
+        outside_ids = [c.id for c in outside_parents]
+        outside_hexes = {c.id.hex() for c in outside_parents}
+        followers = repo.revset(settings, f"children({union}) ~ ({union})")
+        # Change ids survive a rewrite; commit ids do not, and the
+        # followers have to be reconnected after every target has moved.
+        # Root-first, because a merge's parent order is part of its
+        # commit id and jj keeps the order the chain had.
+        target_changes = [c.change_id.reverse_hex() for c in reversed(targets)]
+        follower_changes = [c.change_id.reverse_hex() for c in followers]
+
+        tx = repo.start_transaction(settings)
+        moved = 0
+        for commit in targets:
+            if {p.hex() for p in commit.parent_ids} == outside_hexes:
+                continue
+            # One target at a time: `move_commits` keeps the edges
+            # *among* its targets, which is exactly what parallelizing
+            # has to break.
+            tx.move_commits([commit.id], [], outside_ids, [])
+            moved += 1
+        if not moved:
+            print("Nothing changed.")
+            return 0
+        _finish(tx, f"parallelize {len(targets)} commits", settings, ws, repo)
+
+        if follower_changes:
+            _reconnect(args, settings, target_changes, follower_changes)
+        return 0
+    except (pyjj.JjError, CommandError) as e:
+        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+
+
+def _reconnect(args, settings, target_changes, follower_changes):
+    """Put every follower on all of the now-parallel targets."""
+    ws, repo = _reload(settings, args)
+    targets = _by_change_id(repo, settings, target_changes)
+    followers = _by_change_id(repo, settings, follower_changes)
+    if not targets or not followers:
+        return
+    tx = repo.start_transaction(settings)
+    tx.move_commits([c.id for c in followers], [], [c.id for c in targets], [])
+    _finish(tx, "parallelize: reconnect descendants", settings, ws, repo)
+
+
+def _by_change_id(repo, settings, change_hexes):
+    commits = []
+    for change_hex in change_hexes:
+        commits.extend(repo.revset(settings, change_hex))
+    return commits
