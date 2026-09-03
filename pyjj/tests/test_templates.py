@@ -195,6 +195,48 @@ def test_log_template_builtin_and_custom(cli):
     assert result.returncode == 0, result.stderr
 
 
+def test_log_template_prints_only_what_it_asks_for(cli):
+    """A template is the whole row, like `jj log -T`.
+
+    `log` used to append a description row whenever the template text did
+    not contain the substring "description", which guessed wrong both ways.
+    """
+    result = cli("log", "-n", "1", "-T", "MARKER")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["@ MARKER"]
+
+    # The old heuristic keyed on the literal word, so static text suppressed
+    # the row that a template without the word still got.
+    result = cli("log", "-n", "1", "-T", "a description of nothing")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["@ a description of nothing"]
+
+
+def test_log_builtin_compact_puts_description_on_its_own_row(cli):
+    """`jj log -T builtin_log_compact` is two rows; ours matches."""
+    result = cli("log", "-n", "1", "-T", "builtin_log_compact")
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert len(lines) == 2
+    assert "(no description set)" not in lines[0]
+    assert lines[1].endswith("(no description set)")
+
+
+def test_log_builtin_full_description_shows_the_body(cli):
+    """`description` is the first line; `description_full` is everything."""
+    assert cli("describe", "-m", "subject line", "-m", "body paragraph").returncode == 0
+
+    compact = cli("log", "-n", "1", "-T", "builtin_log_compact")
+    assert compact.returncode == 0, compact.stderr
+    assert "body paragraph" not in compact.stdout
+    assert compact.stdout.splitlines()[1].endswith("subject line")
+
+    full = cli("log", "-n", "1", "-T", "builtin_log_compact_full_description")
+    assert full.returncode == 0, full.stderr
+    assert "subject line" in full.stdout
+    assert "body paragraph" in full.stdout
+
+
 def test_log_template_rejects_unknown_variable(cli):
     """StrictUndefined makes a bad template fail loudly, not render empty."""
     result = cli("log", "-n", "1", "-T", "{{ nope_not_a_var }}")

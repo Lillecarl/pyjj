@@ -133,8 +133,8 @@ def log(args) -> int:
     # jj's own builtin template names, mapped to a Jinja equivalent so
     # `pyjj log -T builtin_log_oneline` keeps working like `jj log` does.
     builtin_templates = {
-        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }} {{ description }}",
-        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
+        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
+        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description_full }}",
         "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
     }
 
@@ -319,6 +319,7 @@ def log(args) -> int:
                 "author_email": author_email,
                 "author_display": author_disp,
                 "description": desc_raw,
+                "description_full": commit.description.strip() or "(no description set)",
                 "description_display": desc,
                 "bookmarks": bm_names,
                 "bookmarks_str": bm_str_raw,
@@ -334,8 +335,11 @@ def log(args) -> int:
             except Exception as e:
                 print(f"Error: template render failed: {e}", file=sys.stderr)
                 return 1
-            # Template may contain newlines — print with graph prefix on first line,
-            # continuation prefix on subsequent lines.
+            # A template is the whole row, exactly like `jj log -T`. Do not
+            # append a description line: the template says what to print,
+            # and a template that wants the description asks for it. The
+            # two-row default lives in the no-template branch below.
+            # Multi-line output keeps the graph lanes on continuation lines.
             lines = rendered.splitlines() or [""]
             print(f"{graph_prefix}{lines[0]}")
             for extra in lines[1:]:
@@ -343,19 +347,6 @@ def log(args) -> int:
                     print(f"{cont_prefix}{extra}")
                 else:
                     print(f"  {extra}")
-            # Still show second row description if template didn't already include it?
-            # If template was single-line, we already printed second row? No — template replaces line1 only.
-            # Keep our two-row desc unless template explicitly covered it (heuristic: if template contains 'description', skip).
-            if "description" not in (template_str or ""):
-                if not no_graph:
-                    cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
-                    desc_disp = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if use_color and is_green else desc_raw
-                    if use_color and is_green:
-                        print(f"{cont_prefix_disp}{desc_disp}")
-                    else:
-                        print(f"{cont_prefix}{desc_raw}")
-                else:
-                    print(f"  {desc_raw}")
         else:
             # Default two-row like jj but with username (name) not email — user says name is better
             author_part = f" {author_disp}" if author else ""
