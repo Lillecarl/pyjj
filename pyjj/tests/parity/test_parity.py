@@ -1363,3 +1363,20 @@ def test_abandon_restore_descendants(pair: RepoPair) -> None:
     pair.op(jj=["abandon", "--restore-descendants", rev("one")])
     pair.assert_parity()
 
+
+def test_duplicate_onto_another_revision(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["duplicate", rev("two"), "--onto", rev("base")])
+    pair.assert_parity()
+
+
+def test_duplicate_insert_after(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["duplicate", rev("two"), "--insert-after", rev("base")])
+    pair.assert_parity()
+
+
+def test_duplicate_insert_before(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["duplicate", rev("base"), "--insert-before", rev("two")])
+    pair.assert_parity()
