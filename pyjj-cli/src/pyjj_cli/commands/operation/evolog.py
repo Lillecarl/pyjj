@@ -1,50 +1,42 @@
-"""operation subcommand: evolog."""
-import json
-import os
-import shlex
-import subprocess
+"""operation subcommand: evolog — how a change evolved across rewrites."""
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
-from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
-    _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
-)
+
+from ..common import CommandError, _load, _resolve_all
+
 
 def evolog(args) -> int:
     try:
         settings, _ws, repo = _load(args)
-        rev = getattr(args, "revisions", "@")
-        commits = repo.revset(settings, rev)
+        revisions = getattr(args, "revisions", None) or ["@"]
+        if isinstance(revisions, str):
+            revisions = [revisions]
+        commits = _resolve_all(repo, settings, revisions)
         if not commits:
             print("No revisions to show")
             return 0
-        # For now, just show the log for the revision's change id's evolution
-        # Use the commit's change id to find all commits with same change id via revset?
-        # Simplified: just show the single commit
-        for c in commits:
-            desc = c.description.splitlines()[0] if c.description else "(no description)"
-            print(f"{c.change_id.hex()[:12]} {c.id.hex()[:12]} {desc}")
-        return 0
+
+        limit = getattr(args, "limit", None)
+        if limit == 0:
+            limit = None
+        entries = repo.evolution_log([c.id for c in commits], limit=limit)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
+
+    for entry in entries:
+        commit = entry.commit
+        description = (
+            commit.description.splitlines()[0]
+            if commit.description
+            else "(no description set)"
+        )
+        change = commit.change_id.reverse_hex()[:8]
+        print(f"{change} {commit.id.hex()[:8]} {description}")
+        if entry.operation is not None:
+            # Same shape as `jj evolog`'s second line: short op id plus
+            # the operation's own description.
+            op = entry.operation
+            print(f"│ -- operation {op.id[:12]} {op.description}".rstrip())
+    return 0
