@@ -84,12 +84,24 @@ class Entry:
     normalize: tuple[str, ...] = ()
     #: Set when jj legitimately prints nothing here.
     may_be_empty: bool = False
+    #: The bar for the *coloured* rendering, which is a separate job
+    #: from the plain one: `bytes` means the escape sequences must match
+    #: too, `todo` that they do not yet. Only an entry whose plain
+    #: output already matches can have a coloured bar -- where the text
+    #: diverges the colour cannot agree either.
+    colour: str = "todo"
 
     def __post_init__(self) -> None:
         if self.bar not in {"bytes", "facts", "todo", "skip"}:
             raise ValueError(f"{self.id}: unknown bar {self.bar!r}")
         if self.bar in {"todo", "skip"} and not self.reason:
             raise ValueError(f"{self.id}: {self.bar} needs a reason")
+        if self.colour not in {"bytes", "todo"}:
+            raise ValueError(f"{self.id}: unknown colour bar {self.colour!r}")
+        if self.colour == "bytes" and self.bar != "bytes":
+            raise ValueError(
+                f"{self.id}: colour bar needs a `bytes` plain bar"
+            )
 
 
 # -- normalization ------------------------------------------------------

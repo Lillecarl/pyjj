@@ -26,7 +26,8 @@ from pathlib import Path
 import pytest
 
 from parity import cli_surface
-from parity.corpus import GOLDEN_SUFFIX, PLAIN_SUFFIX, normalize
+from parity.corpus import (COLOUR_SUFFIX, GOLDEN_SUFFIX, PLAIN_SUFFIX,
+                          coloured, normalize)
 from parity.corpus.capture import GOLDENS, capture, run_jj
 from parity.corpus.catalogue import CATALOGUE
 from parity.corpus.fixtures import FIXTURES
@@ -142,6 +143,61 @@ def test_pyjj_prints_what_the_corpus_records(entry, corpus_pairs):
         proc.stdout, entry.normalize, _context(pair, "py", ops)
     )
     assert got == _golden(entry, PLAIN_SUFFIX)
+
+
+def _coloured_golden(entry) -> str:
+    """What `--color=always` prints for this entry.
+
+    The debug capture is the coloured rendering with markers in it, and
+    the capture asserts that equality, so stripping the markers gives it
+    back. An entry whose output collides with the marker syntax carries
+    the coloured rendering directly instead.
+    """
+    debug = GOLDENS / f"{entry.id}{GOLDEN_SUFFIX}"
+    if debug.exists():
+        return coloured(debug.read_text())
+    return _golden(entry, COLOUR_SUFFIX)
+
+
+@pytest.mark.parametrize(
+    "entry", _params([e for e in COMPARED if e.colour == "bytes"], claim=False)
+)
+def test_pyjj_colours_what_the_corpus_records(entry, corpus_pairs):
+    """pyjj-cli's coloured output matches the golden's, byte for byte.
+
+    The driver has no terminal, so colour is asked for outright.
+    """
+    pair = corpus_pairs[entry.fixture]
+    ops = _op_ids(pair)
+    proc = _run_pyjj(pair, ("--color=always", *entry.argv))
+    assert proc.returncode == 0, (
+        f"pyjj-cli failed on {list(entry.argv)}\n{proc.stderr}"
+    )
+    got = normalize(proc.stdout, entry.normalize, _context(pair, "py", ops))
+    assert got == _coloured_golden(entry)
+
+
+@pytest.mark.parametrize(
+    "entry",
+    _params([e for e in COMPARED
+             if e.colour == "todo" and e.bar == "bytes"], claim=False),
+)
+def test_the_colour_todos_are_still_todo(entry, corpus_pairs):
+    """A colour gap that closed should be recorded as closed.
+
+    Same strictness as the plain `todo` bar. Some of these close for
+    free -- an output jj does not colour at all is already right -- and
+    this is what says so.
+    """
+    pair = corpus_pairs[entry.fixture]
+    ops = _op_ids(pair)
+    proc = _run_pyjj(pair, ("--color=always", *entry.argv))
+    if proc.returncode != 0:
+        return
+    got = normalize(proc.stdout, entry.normalize, _context(pair, "py", ops))
+    assert got != _coloured_golden(entry), (
+        f"{entry.id!r} now colours like jj; set colour=\"bytes\" on it"
+    )
 
 
 @pytest.mark.parametrize(

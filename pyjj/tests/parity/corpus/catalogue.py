@@ -38,7 +38,7 @@ CATALOGUE: tuple[Entry, ...] = (
     E("diff-stat", ("diff", "--stat", "-r", "@"), fixture="executable",
       claims=("diff", "--stat")),
     E("diff-name-only", ("diff", "--name-only", "-r", "@"), fixture="executable",
-      claims=("diff", "--name-only")),
+      claims=("diff", "--name-only"), colour="bytes"),
     # `-r @` on a merge shows nothing: the merge commit changes nothing
     # against its parents. Diffing across one parent is what surfaces
     # the conflict jj reports.
@@ -95,8 +95,8 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("interdiff", "--summary")),
 
     # -- file -----------------------------------------------------------
-    E("file-list", ("file", "list"), claims=("file list",)),
-    E("file-show", ("file", "show", "one.txt"), claims=("file show",)),
+    E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),
+    E("file-show", ("file", "show", "one.txt"), claims=("file show",), colour="bytes"),
     E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",)),
 
     # -- refs -----------------------------------------------------------
@@ -118,16 +118,16 @@ CATALOGUE: tuple[Entry, ...] = (
       ("bookmark", "list", "--remote", "origin"),
       claims=("bookmark list", "--remote"), **_R),
     E("git-remotes", ("git", "remote", "list"),
-      claims=("git remote list",), **_R),
+      claims=("git remote list",), colour="bytes", **_R),
 
     E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",)),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",)),
 
     # -- paths ----------------------------------------------------------
-    E("root", ("root",), normalize=("root",), claims=("root",)),
+    E("root", ("root",), normalize=("root",), claims=("root",), colour="bytes"),
     E("workspace-root", ("workspace", "root"), normalize=("root",),
-      claims=("workspace root",)),
-    E("git-root", ("git", "root"), normalize=("root",), claims=("git root",)),
+      claims=("workspace root",), colour="bytes"),
+    E("git-root", ("git", "root"), normalize=("root",), claims=("git root",), colour="bytes"),
 
     # -- operations -----------------------------------------------------
     E("op-log", ("op", "log"), claims=("operation log",), **_OP),
