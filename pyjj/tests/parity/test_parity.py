@@ -2492,6 +2492,56 @@ def test_diff_git_format_reads_a_root_commit(pair: RepoPair) -> None:
     pair.assert_output(["diff", "--git", "-r", "@"])
 
 
+@pytest.mark.covers("diff", "--stat")
+def test_diff_stat_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["diff", "--stat", "-r", rev("one")])
+
+
+@pytest.mark.covers("file list")
+def test_file_list_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["file", "list"])
+
+
+@pytest.mark.covers("file show")
+def test_file_show_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["file", "show", "one.txt"])
+
+
+@pytest.mark.covers("tag list")
+def test_tag_list_output_matches(pair: RepoPair) -> None:
+    """Nothing here has a tag, so both sides print nothing -- which is
+    still worth pinning: printing something would be the bug."""
+    chain(pair)
+    pair.assert_output(["tag", "list"])
+
+
+@pytest.mark.covers("util backend name")
+def test_util_backend_name_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["util", "backend", "name"])
+
+
+@pytest.mark.covers("root")
+def test_root_prints_the_workspace_root(pair: RepoPair) -> None:
+    """`jj root` prints a path, and the two workspaces are at different
+    paths by construction, so each side is checked against its own."""
+    chain(pair)
+    cli, py = pair.outputs(["root"])
+    assert cli.strip() == str(pair.cli_repo)
+    assert py.strip() == str(pair.py_repo)
+
+
+@pytest.mark.covers("workspace root")
+def test_workspace_root_prints_the_workspace_root(pair: RepoPair) -> None:
+    chain(pair)
+    cli, py = pair.outputs(["workspace", "root"])
+    assert cli.strip() == str(pair.cli_repo)
+    assert py.strip() == str(pair.py_repo)
+
+
 @pytest.mark.covers("diff", "--summary", "-s")
 def test_diff_summary_output_matches(pair: RepoPair) -> None:
     """`--summary` prints one status letter and the path. pyjj-cli used

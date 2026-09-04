@@ -151,7 +151,6 @@
     "--ignore-all-space",
     "--ignore-space-change",
     "--revisions",
-    "--stat",
     "--template",
     "--to",
     "--tool",
@@ -225,7 +224,6 @@
     "-r"
   ],
   "file list": [
-    "(command)",
     "--revision",
     "--template",
     "-T",
@@ -239,7 +237,6 @@
     "-r"
   ],
   "file show": [
-    "(command)",
     "--revision",
     "--template",
     "-T",
@@ -542,9 +539,6 @@
     "-o",
     "-r"
   ],
-  "root": [
-    "(command)"
-  ],
   "run": [
     "--clean",
     "--jobs",
@@ -633,7 +627,6 @@
     "(command)"
   ],
   "tag list": [
-    "(command)",
     "--all-remotes",
     "--conflicted",
     "--contains",
@@ -660,9 +653,6 @@
     "(command)"
   ],
   "util backend": [
-    "(command)"
-  ],
-  "util backend name": [
     "(command)"
   ],
   "util completion": [
@@ -699,7 +689,6 @@
     "-T"
   ],
   "workspace root": [
-    "(command)",
     "--name"
   ],
   "workspace update-stale": [

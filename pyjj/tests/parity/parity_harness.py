@@ -207,6 +207,35 @@ class RepoPair:
             _copy_tree(src / side, self.root / side)
         self._step = step
 
+    def outputs(self, argv: list[str]) -> tuple[str, str]:
+        """Runs a READ-ONLY argv on both sides and returns both stdouts.
+
+        `assert_output` is the usual tool. This is for the handful of
+        commands whose output *should* differ: `jj root` prints the
+        workspace root, and the two workspaces are at different paths by
+        construction. A test then asserts each side against its own
+        repository rather than against the other.
+        """
+        env = self._env(bump=False)
+        common = ["--no-pager", "--ignore-working-copy", *argv]
+        cli = subprocess.run(
+            [self.jj_bin, "-R", str(self.cli_repo), *common],
+            env=env, capture_output=True, text=True, cwd=str(self.cli_repo),
+            stdin=subprocess.DEVNULL,
+        )
+        py = subprocess.run(
+            [sys.executable, str(DRIVER), str(self.py_repo), *common],
+            env=env, capture_output=True, text=True, cwd=str(self.py_repo),
+            stdin=subprocess.DEVNULL,
+        )
+        for name, proc in (("jj", cli), ("pyjj", py)):
+            if proc.returncode != 0:
+                raise AssertionError(
+                    f"{name} failed ({proc.returncode}) on {argv}\n"
+                    f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+                )
+        return cli.stdout, py.stdout
+
     def assert_output(self, argv: list[str], *, may_fail: bool = False) -> str:
         """Run a READ-ONLY argv on both sides and compare stdout verbatim.
 
