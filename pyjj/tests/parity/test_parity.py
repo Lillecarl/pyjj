@@ -2227,3 +2227,63 @@ def test_op_revert_a_describe(pair: RepoPair) -> None:
     pair.op(jj=["describe", "-m", "renamed"])
     pair.op(jj=["op", "revert"])
     pair.assert_parity()
+
+
+# -- what commands print -------------------------------------------------
+#
+# `assert_parity()` compares repository state, so a command that writes
+# nothing is compared against nothing. `log`, `diff`, `show` and the
+# rest had no coverage at all beyond their exit code. `assert_output()`
+# runs a read-only argv on both sides and compares stdout verbatim,
+# which is a fair bar: the two repos are bit-identical down to commit
+# ids by then, so every id and column should line up.
+#
+# All of these fail today, and they are marked strictly so the count is
+# visible rather than absent. pyjj-cli's read-only commands print their
+# own format: `show` writes "Commit:" where jj writes "Commit ID:", the
+# raw change id rather than jj's reverse-hex spelling, and a one-line
+# file summary where jj writes the diff itself. `--git` is accepted and
+# then ignored.
+#
+# This is the gap the CLI-surface ledger cannot see. That ledger reads
+# argument parsers, so a flag counts as covered once argparse accepts
+# it -- which is why `diff --git` counts as covered and still does
+# nothing. Adding the remaining flags without this half would add more
+# of the same.
+
+OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
+    strict=True,
+    reason="pyjj-cli does not reproduce jj's output format for this command",
+)
+
+
+@OUTPUT_UNIMPLEMENTED
+def test_log_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["log"])
+
+
+@OUTPUT_UNIMPLEMENTED
+def test_diff_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["diff", "-r", rev("one")])
+
+
+@OUTPUT_UNIMPLEMENTED
+def test_diff_git_format_output_matches(pair: RepoPair) -> None:
+    """`--git` is parsed by both, so the coverage ledger counts it as
+    covered. Only comparing what it prints says whether it works."""
+    chain(pair)
+    pair.assert_output(["diff", "--git", "-r", rev("one")])
+
+
+@OUTPUT_UNIMPLEMENTED
+def test_status_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["status"])
+
+
+@OUTPUT_UNIMPLEMENTED
+def test_show_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["show", rev("one")])

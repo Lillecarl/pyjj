@@ -161,6 +161,55 @@ class RepoPair:
             )
         return proc.returncode
 
+    def assert_output(self, argv: list[str], *, may_fail: bool = False) -> str:
+        """Run a READ-ONLY argv on both sides and compare stdout verbatim.
+
+        `assert_parity()` compares repository state, which says nothing
+        about what a command printed -- and for a command that writes
+        nothing, `log`, `diff`, `show` and the rest, it says nothing at
+        all. This is the other half.
+
+        Verbatim is the right bar here: the two repos are bit-identical
+        down to commit ids by the time this runs, and both commands run
+        with the repo as cwd, so every id, path and column should match.
+        A difference is a real difference.
+
+        `--ignore-working-copy` is passed for the reason `_extract_repo`
+        gives: reading must not snapshot, or the act of looking could
+        hide a missing snapshot on the pyjj side.
+        """
+        env = self._env(bump=False)
+        common = ["--no-pager", "--ignore-working-copy", *argv]
+        cli = subprocess.run(
+            [self.jj_bin, "-R", str(self.cli_repo), *common],
+            env=env, capture_output=True, text=True, cwd=str(self.cli_repo),
+            stdin=subprocess.DEVNULL,
+        )
+        py = subprocess.run(
+            [sys.executable, str(DRIVER), str(self.py_repo), *common],
+            env=env, capture_output=True, text=True, cwd=str(self.py_repo),
+            stdin=subprocess.DEVNULL,
+        )
+        if not may_fail:
+            for name, proc in (("jj", cli), ("pyjj", py)):
+                if proc.returncode != 0:
+                    raise AssertionError(
+                        f"{name} failed ({proc.returncode}) on {argv}\n"
+                        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+                    )
+        assert cli.returncode == py.returncode, (
+            f"exit codes differ on {argv}: "
+            f"jj={cli.returncode} pyjj={py.returncode}\n"
+            f"jj stderr:\n{cli.stderr}\npyjj stderr:\n{py.stderr}"
+        )
+        if cli.stdout != py.stdout:
+            diff = "\n".join(difflib.unified_diff(
+                cli.stdout.splitlines(), py.stdout.splitlines(),
+                fromfile="jj", tofile="pyjj", lineterm="",
+            ))
+            raise AssertionError(f"output differs on {argv}:\n{diff}")
+        return cli.stdout
+
     # -- driving -----------------------------------------------------------
 
     def init(self) -> None:
