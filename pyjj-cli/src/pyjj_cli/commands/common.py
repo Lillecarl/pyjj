@@ -1184,14 +1184,28 @@ def _color_words_header(f, to_ui_path) -> str:
     jj names the file by what it is on each side, so a mode change reads
     as a sentence rather than a diff -- `Non-executable file became
     executable at b.txt:`.
+
+    A conflict is one of those names. The content arrives materialized,
+    so the mode says `regular file` on both sides and only the recorded
+    conflict flags can tell that the change created, resolved or moved a
+    conflict.
     """
+    def kind(mode, conflict) -> str:
+        return "conflict" if conflict else _FILE_TYPES[mode]
+
     path = to_ui_path(f.path)
     if f.before_mode is None:
-        return f"Added {_FILE_TYPES[f.after_mode]} {path}:"
+        return f"Added {kind(f.after_mode, f.after_conflict)} {path}:"
     if f.after_mode is None:
-        return f"Removed {_FILE_TYPES[f.before_mode]} {path}:"
+        return f"Removed {kind(f.before_mode, f.before_conflict)} {path}:"
     before, after = f.before_mode, f.after_mode
-    if before == after == "100755":
+    if f.before_conflict and f.after_conflict:
+        description = "Modified conflict in"
+    elif f.before_conflict:
+        description = "Resolved conflict in"
+    elif f.after_conflict:
+        description = "Created conflict in"
+    elif before == after == "100755":
         description = "Modified executable file"
     elif before == "100755" and after == "100644":
         description = "Executable file became non-executable at"

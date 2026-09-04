@@ -43,11 +43,7 @@ CATALOGUE: tuple[Entry, ...] = (
     # against its parents. Diffing across one parent is what surfaces
     # the conflict jj reports.
     E("diff-conflict", ("diff", "--from", 'description(glob:"one*")', "--to", "@"),
-      fixture="conflict", bar="todo",
-      reason="a conflicted path reads as a regular file: git_diff() has "
-             "already materialized the markers, so jj's `Created conflict "
-             "in` heading cannot be reconstructed",
-      claims=("diff",)),
+      fixture="conflict", claims=("diff",)),
     E("diff-context", ("diff", "--context", "1", "-r", "@"), fixture="executable",
       claims=("diff", "--context")),
 
