@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -32,6 +33,7 @@ def abandon(args) -> int:
             return 0
         delete_bookmarks = not getattr(args, "retain_bookmarks", False)
         tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, targets)
         if getattr(args, "restore_descendants", False):
             # The descendants must keep their trees verbatim, so they are
             # reparented rather than rebased -- one call that abandons and

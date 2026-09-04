@@ -22,7 +22,8 @@ from pathlib import Path
 
 import pyjj
 
-from .common import CommandError, _finish, _load, _resolve_all
+from .common import (CommandError, _check_rewritable, _finish, _load,
+                     _resolve_all)
 
 # `revsets.run` in `cli/src/config/revsets.toml`.
 _DEFAULT_REVSET = "reachable(@, mutable())"
@@ -91,10 +92,12 @@ def run(args) -> int:
         argv = [args.command] + extra
         spec = " ".join(argv)
 
+        tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, commits)
+
         subdir = _subdir(ws.workspace_root, args.root)
         pool = pyjj.RunPool(ws.repo_path, jobs, args.clean)
 
-        tx = repo.start_transaction(settings)
         new_trees: dict[str, pyjj.TreeId] = {}
         for commit in commits:
             slot = pool.acquire(commit)

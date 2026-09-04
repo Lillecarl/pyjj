@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -29,6 +30,7 @@ def restore(args) -> int:
         dst = _resolve_one(repo, settings, args.into)
         paths = list(args.paths_pos) or None
         tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, [dst])
         builder = tx.restore(src, dst, paths)
         restored = builder.write(repo)
         if dst.id.hex() == repo.view().get(ws.workspace_name):

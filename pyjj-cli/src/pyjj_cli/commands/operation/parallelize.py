@@ -3,7 +3,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load, _reload, _resolve_all
+from ..common import _check_rewritable, CommandError, _finish, _load, _reload, _resolve_all
 
 
 def parallelize(args) -> int:
@@ -36,19 +36,23 @@ def parallelize(args) -> int:
         target_changes = [c.change_id.reverse_hex() for c in reversed(targets)]
         follower_changes = [c.change_id.reverse_hex() for c in followers]
 
+        # jj checks only the commits whose parent list changes, which is
+        # narrower than the target set: the chain's own root already hangs
+        # from the outside parents, so parallelizing never rewrites it.
+        needs_rewrite = [c for c in targets
+                         if {p.hex() for p in c.parent_ids} != outside_hexes]
+
+        if not needs_rewrite:
+            print("Nothing changed.")
+            return 0
+
         tx = repo.start_transaction(settings)
-        moved = 0
-        for commit in targets:
-            if {p.hex() for p in commit.parent_ids} == outside_hexes:
-                continue
+        _check_rewritable(tx, settings, needs_rewrite)
+        for commit in needs_rewrite:
             # One target at a time: `move_commits` keeps the edges
             # *among* its targets, which is exactly what parallelizing
             # has to break.
             tx.move_commits([commit.id], [], outside_ids, [])
-            moved += 1
-        if not moved:
-            print("Nothing changed.")
-            return 0
         _finish(tx, f"parallelize {len(targets)} commits", settings, ws, repo)
 
         if follower_changes:

@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -28,6 +29,7 @@ def split(args) -> int:
         target = _resolve_one(repo, settings, args.revision or "@")
 
         tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, [target])
         if args.paths_pos:
             first_builder = tx.split_selected(target, list(args.paths_pos))
         else:

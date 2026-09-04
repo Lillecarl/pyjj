@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -72,6 +73,7 @@ def resolve(args) -> int:
         if args.tool in (":ours", ":theirs"):
             side = 0 if args.tool == ":ours" else 1
             tx = repo.start_transaction(settings)
+            _check_rewritable(tx, settings, [commit])
             builder = tx.pick_conflict_sides(commit, conflicts, side)
             new_commit = builder.write(repo)
             if commit.id.hex() == repo.view().get(ws.workspace_name):
@@ -99,6 +101,7 @@ def resolve(args) -> int:
                 resolutions[p] = out
 
             tx = repo.start_transaction(settings)
+            _check_rewritable(tx, settings, [commit])
             if resolutions:
                 builder = tx.resolve_conflicts(commit, resolutions)
             else:

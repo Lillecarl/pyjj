@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pyjj
 from ..common import (
+    _check_rewritable,
     CommandError,
     _finish,
     _load,
@@ -20,6 +21,7 @@ def file_chmod(args) -> int:
         mode = getattr(args, "mode", "x")
         executable = mode in ("x", "executable")
         tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, [commit])
         for path in getattr(args, "paths", []):
             b = tx.set_executable(commit, path, executable)
             b.write(repo)

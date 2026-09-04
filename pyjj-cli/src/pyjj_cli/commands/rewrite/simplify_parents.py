@@ -3,7 +3,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load, _resolve_all
+from ..common import _check_rewritable, CommandError, _finish, _load, _resolve_all
 
 
 def simplify_parents(args) -> int:
@@ -26,6 +26,9 @@ def simplify_parents(args) -> int:
 
         targets = _resolve_all(repo, settings, revisions)
         tx = repo.start_transaction(settings)
+        # jj checks the whole target set, not only the commits that turn
+        # out to have a redundant edge.
+        _check_rewritable(tx, settings, targets)
         simplified = 0
         for commit in targets:
             keep = _essential_parents(repo, settings, commit)

@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -108,6 +109,10 @@ def rebase(args) -> int:
                 return 0
 
         tx = repo.start_transaction(settings)
+        # `-r` moves the targets themselves; `-s` and `-b` move roots and
+        # everything under them. Only one of the two lists is ever set,
+        # and jj checks whichever one it is.
+        _check_rewritable(tx, settings, target_commit_ids + target_root_ids)
         tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
         _finish(tx, "rebase commit", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:

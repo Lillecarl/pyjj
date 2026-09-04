@@ -231,6 +231,23 @@ def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
         current = reached
     return current
 
+def _check_rewritable(tx, settings, commits) -> None:
+    """`jj`'s guard against rewriting shared history: refuse when any of
+    `commits` falls inside `immutable()`.
+
+    Every rewrite command in `jj` runs this before it writes, so pyjj-cli
+    runs it too. `jj` checks before it opens a transaction; here the
+    transaction already exists, which changes nothing: raising before
+    `tx.commit()` leaves the transaction unwritten, so no operation is
+    recorded either way.
+
+    Takes `Commit`s or bare `CommitId`s, because the call sites hold one
+    or the other.
+    """
+    ids = [getattr(commit, "id", commit) for commit in commits]
+    tx.check_rewritable(settings, ids)
+
+
 def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
     """Land `jj next`/`jj prev` on `targets`: edit the target itself, or
     create a new empty commit on top of it."""
@@ -241,6 +258,7 @@ def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
     target = repo.get_commit(pyjj.CommitId(targets[0]))
     tx = repo.start_transaction(settings)
     if edit:
+        _check_rewritable(tx, settings, [target])
         tx.edit(ws.workspace_name, target)
         _finish(tx, f"{name} to {target.id.hex()}", settings, ws, repo)
     else:

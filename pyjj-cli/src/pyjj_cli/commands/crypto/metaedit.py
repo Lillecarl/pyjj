@@ -4,6 +4,7 @@ import sys
 import pyjj
 
 from ..common import (
+    _check_rewritable,
     CommandError,
     _finish,
     _load,
@@ -34,6 +35,7 @@ def metaedit(args) -> int:
             return 0
 
         tx = repo.start_transaction(settings)
+        _check_rewritable(tx, settings, targets)
         modified = 0
         for commit in targets:
             description = None
