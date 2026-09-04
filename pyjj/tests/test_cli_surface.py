@@ -12,9 +12,7 @@ ledger of what is not covered yet, and it only shrinks on purpose.
 
 Regenerate with:
 
-    PYJJ_PARITY_JJ=<jj> python -c 'import json, cli_surface; \\
-        print(json.dumps(cli_surface.compare(), indent=2, sort_keys=True))' \\
-        > pyjj/tests/parity/cli_surface_baseline.json
+    nix run --file . tests -- -k test_no_new_gaps --write-surface-baseline
 """
 
 import json
@@ -32,12 +30,15 @@ def measured():
     return cli_surface.compare()
 
 
-def test_no_new_gaps(measured):
+def test_no_new_gaps(measured, pytestconfig):
     """Every difference between the two CLIs is one the baseline knows.
 
     A failure here means either that pyjj-cli lost coverage, or that jj
     grew a flag -- both worth a look before the baseline moves.
     """
+    if pytestconfig.getoption("--write-surface-baseline"):
+        BASELINE.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
+        pytest.skip(f"baseline rewritten: {BASELINE}")
     expected = json.loads(BASELINE.read_text())
     assert measured == expected, (
         "the CLI surface moved; regenerate the baseline once you have "

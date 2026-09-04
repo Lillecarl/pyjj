@@ -73,6 +73,13 @@ def pytest_addoption(parser):
         help="Re-record the jj output goldens under parity/corpus/goldens",
     )
     parser.addoption(
+        "--write-surface-baseline",
+        action="store_true",
+        default=False,
+        help="rewrite the CLI surface baseline from this run's measurement "
+             "instead of asserting against it",
+    )
+    parser.addoption(
         "--write-coverage-baseline",
         action="store_true",
         default=False,
