@@ -1794,6 +1794,29 @@ def test_absorbing_into_a_tagged_commit_must_fail(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+INSERT_AROUND_TAG_ARGV = [
+    ["new", "-A", rev("one")],
+    ["new", "-B", rev("two")],
+    ["duplicate", rev("base"), "-A", rev("one")],
+    ["revert", "-r", rev("base"), "-A", rev("one")],
+    ["rebase", "-r", rev("three"), "-A", rev("one")],
+]
+
+
+@pytest.mark.parametrize("argv", INSERT_AROUND_TAG_ARGV,
+                         ids=lambda a: "_".join(a)[:40])
+def test_inserting_before_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:
+    """`-A` and `-B` rebase whatever followed the insertion point, so an
+    immutable follower blocks the insertion even though the commit being
+    inserted is brand new."""
+    chain(pair)
+    pair.op(jj=["new", "-m", "three"])
+    pair.op(files={"three.txt": b"three\n"}, jj=["status"])
+    pair.op(jj=["tag", "set", "v1", "-r", rev("two")])
+    assert pair.op(jj=argv, may_fail=True) != 0
+    pair.assert_parity()
+
+
 def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
     """The check must not spread past what `immutable()` covers: `two` is
     a descendant of the tagged commit and stays writable."""
