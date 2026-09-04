@@ -424,10 +424,8 @@
     "--show-changes-in",
     "--stat",
     "--summary",
-    "--template",
     "--tool",
     "--types",
-    "-T",
     "-d",
     "-p",
     "-s"

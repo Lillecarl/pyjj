@@ -2697,6 +2697,25 @@ def test_show_renders_a_jinja_template(pair: RepoPair) -> None:
     assert cli == py
 
 
+@pytest.mark.covers("operation log", "--template", "-T")
+def test_op_log_renders_a_jinja_template(pair: RepoPair) -> None:
+    """A template of one's own, rather than a builtin name.
+
+    The corpus covers the builtin names, whose argv is shared. This
+    covers the other path: a raw template, spelled in each side's own
+    language. It asks for descriptions only, because an operation id is
+    minted per repository and could never agree.
+    """
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["op", "log", "--no-graph", "-T",
+         'self.description().first_line() ++ "\n"'],
+        ["op", "log", "--no-graph", "-T", "{{ description }}"],
+    )
+    assert cli == py
+    assert "snapshot working copy" in cli, f"scenario printed nothing\n{cli}"
+
+
 @pytest.mark.covers("evolog", "--template", "-T")
 def test_evolog_renders_a_jinja_template(pair: RepoPair) -> None:
     """`evolog` takes a template, as jj does, and pyjj-cli's template

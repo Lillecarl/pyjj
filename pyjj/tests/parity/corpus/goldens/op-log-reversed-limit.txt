@@ -1,0 +1,9 @@
+○  «op» «who» default@ «ago», lasted «ago»
+│  create bookmark main pointing to commit 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+│  args: «prog» -R «root» bookmark create main
+○  «op» «who» default@ «ago», lasted «ago»
+│  new empty commit
+│  args: «prog» -R «root» new -m two
+@  «op» «who» default@ «ago», lasted «ago»
+   snapshot working copy
+   args: «prog» -R «root» status

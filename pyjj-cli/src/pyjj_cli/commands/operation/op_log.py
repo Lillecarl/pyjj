@@ -8,16 +8,21 @@ from ..common import CommandError, _ago, _duration, _load, _resolve_template
 
 # jj's own builtin template names, mapped to a Jinja equivalent so
 # `pyjj op log -T builtin_op_log_oneline` keeps working like `jj` does.
+# The root operation has no user, no time and nothing it did, so jj's
+# builtins send it to a one-line form of its own rather than printing a
+# blank description under it. Each of these ends with a newline, the
+# way jj's do, so `builtin_op_log_comfortable` really does leave a blank
+# line between operations.
+_COMPACT = ("{% if is_root %}{{ header }}\n"
+            "{% else %}{{ header }}\n{{ description }}\n"
+            "{% if attributes %}{{ attributes }}\n{% endif %}{% endif %}")
 _BUILTINS = {
-    "builtin_op_log_compact":
-        "{{ header }}\n{{ description }}"
-        "{% if attributes %}\n{{ attributes }}{% endif %}",
-    "builtin_op_log_comfortable":
-        "{{ header }}\n{{ description }}"
-        "{% if attributes %}\n{{ attributes }}{% endif %}\n",
+    "builtin_op_log_compact": _COMPACT,
+    "builtin_op_log_comfortable": _COMPACT + "\n",
     "builtin_op_log_oneline":
-        "{{ header }} {{ description }}"
-        "{% if attributes %} {{ attributes }}{% endif %}",
+        "{% if is_root %}{{ header }}\n"
+        "{% else %}{{ header }} {{ description }}"
+        "{% if attributes %} {{ attributes }}{% endif %}\n{% endif %}",
 }
 
 
@@ -68,7 +73,7 @@ def op_log(args) -> int:
         current = op.id == current_id
         attributes = "\n".join(f"{key}: {value}" for key, value in op.attributes)
         if template is not None:
-            body = template.render({
+            rendered = template.render({
                 "operation": op,
                 "id": op.id,
                 "id_short": op.id[:12],
@@ -85,7 +90,14 @@ def op_log(args) -> int:
                 "attributes": attributes,
                 "is_current": current,
                 "is_root": root,
-            }).splitlines()
+            })
+            # A template's own trailing newline ends its last line
+            # rather than starting an empty one; anything past that is a
+            # blank line the template asked for.
+            lines = rendered.split("\n")
+            if lines and lines[-1] == "":
+                lines.pop()
+            body = lines or [""]
         elif root:
             # The root operation has no user, no time and nothing it
             # did. jj gives it a single line saying just that.

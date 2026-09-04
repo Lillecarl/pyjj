@@ -114,6 +114,13 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("operation log", "--reversed"), **_OP),
     E("op-log-limit", ("op", "log", "-n", "3"),
       claims=("operation log", "--limit", "-n"), **_OP),
+    # `--limit` applies before `--reversed`, so this shows the three
+    # newest operations oldest first, not the three oldest.
+    E("op-log-reversed-limit", ("op", "log", "--reversed", "-n", "3"), **_OP),
+    # A builtin template name means the same thing on both sides, so
+    # this argv is shared even though the template languages differ.
+    E("op-log-oneline", ("op", "log", "-T", "builtin_op_log_oneline"),
+      claims=("operation log", "--template", "-T"), **_OP),
 
     # -- each tool's own identity ---------------------------------------
     E("version", ("version",), bar="skip",
