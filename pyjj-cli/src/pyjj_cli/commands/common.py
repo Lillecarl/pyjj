@@ -793,13 +793,29 @@ def _print_ref(repo, settings, ref, template=None, tracked=(), *,
         fmt.close()
 
 
-def _conflict_lines(commit, to_ui_path) -> list[str]:
+def _write_lines(fmt, lines, base: str = "") -> None:
+    """Each line's spans, then the newline jj writes under no labels.
+
+    jj ends a line in two steps: back to the row's own labels, then the
+    newline under none at all. `render_block` does the same for a
+    buffered row; this is the streaming form.
+    """
+    under = base.split()
+    for line in lines:
+        for text, labels in line:
+            fmt.write(text, *under, *labels.split())
+        fmt.sync(*under)
+        fmt.write("\n")
+
+
+def _conflict_spans(commit, to_ui_path):
     """The paths jj lists under its unresolved-conflicts warning.
 
     Each reads `<path> <n>-sided conflict`, and names anything in the
     conflict that is not a plain file, because those are what stop `jj
-    resolve` and a diff from working. Deletions are counted but not
-    called difficult: they interfere with neither.
+    resolve` and a diff from working. Those parts are `difficult` and
+    print red. Deletions are counted but stay `normal`: they interfere
+    with neither.
 
     The path column is padded to the longest path, capped at 32, plus
     three -- jj's width, so a long path does not push every other line
@@ -813,19 +829,35 @@ def _conflict_lines(commit, to_ui_path) -> list[str]:
     width = min(max(len(p) for p in paths), 32) + 3
     lines = []
     for path, (_, sides, adds, objects) in zip(paths, entries):
-        parts = list(objects)
+        # The path stays plain; everything after it is the description.
+        described = "conflict_description"
+        parts = [(name, f"{described} difficult") for name in objects]
         deletions = sides - adds
         if deletions:
             # Sorted with the objects, and a leading digit sorts first.
-            parts.insert(0, f"{deletions} deletion{'' if deletions == 1 else 's'}")
-        text = f"{sides}-sided conflict"
+            parts.insert(0, (f"{deletions} deletion"
+                             f"{'' if deletions == 1 else 's'}",
+                             f"{described} normal"))
+        spans = [(f"{path:<{width}} ", ""),
+                 (f"{sides}-sided",
+                  f"{described} difficult" if sides > 2
+                  else f"{described} normal"),
+                 (" conflict", described)]
         if parts:
-            if len(parts) == 1:
-                text += f" including {parts[0]}"
-            else:
-                text += " including " + ", ".join(parts[:-1]) + f" and {parts[-1]}"
-        lines.append(f"{path:<{width}} {text}")
+            spans.append((" including ", described))
+            for index, (text, label) in enumerate(parts):
+                if index:
+                    spans.append((", " if index < len(parts) - 1
+                                  else " and ", described))
+                spans.append((text, label))
+        lines.append(spans)
     return lines
+
+
+def _conflict_lines(commit, to_ui_path) -> list[str]:
+    """`_conflict_spans` as plain text."""
+    return ["".join(text for text, _labels in line)
+            for line in _conflict_spans(commit, to_ui_path)]
 
 
 def _commit_context(repo, settings, commit, bookmarks=None) -> dict:

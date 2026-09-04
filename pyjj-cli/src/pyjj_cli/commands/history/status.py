@@ -4,12 +4,14 @@ import sys
 import pyjj
 from ..common import (
     _bookmarks_by_commit,
-    _commit_summary,
-    _conflict_lines,
+    _commit_summary_spans,
+    _conflict_spans,
+    _formatter,
     _load,
-    _summary_lines,
+    _summary_spans,
     _ui_path_formatter,
     _wc_commit,
+    _write_lines,
 )
 
 
@@ -30,24 +32,37 @@ def status(args) -> int:
     # would report everything the others contributed.
     to_ui_path = _ui_path_formatter(ws)
     entries = wc.diff_from_parents(repo, paths)
-    lines = _summary_lines(entries, to_ui_path)
-    if lines:
-        print("Working copy changes:")
-        for line in lines:
-            print(line)
-    else:
-        print("The working copy has no changes.")
-
     bookmarks = _bookmarks_by_commit(repo)
-    print(f"Working copy  (@) : "
-          f"{_commit_summary(repo, settings, wc, bookmarks.get(wc.id.hex(), []))}")
-    for parent in parents:
-        print(f"Parent commit (@-): "
-              f"{_commit_summary(repo, settings, parent, bookmarks.get(parent.id.hex(), []))}")
 
-    conflicts = _conflict_lines(wc, to_ui_path) if wc.has_conflict else []
-    if conflicts:
-        print("Warning: There are unresolved conflicts at these paths:")
-        for line in conflicts:
-            print(line)
+    def summary(commit, working_copy: bool):
+        """One commit, under the labels jj gives a bare summary."""
+        base = "commit working_copy" if working_copy else "commit"
+        return [(text, f"{base} {labels}".strip()) for text, labels
+                in _commit_summary_spans(repo, settings, commit,
+                                         bookmarks.get(commit.id.hex(), []))]
+
+    with _formatter(settings) as fmt:
+        changes = _summary_spans(entries, to_ui_path)
+        if changes:
+            fmt.write("Working copy changes:\n")
+            _write_lines(fmt, changes, "diff summary")
+        else:
+            fmt.write("The working copy has no changes.\n")
+
+        fmt.write("Working copy  (@) : ")
+        _write_lines(fmt, [summary(wc, True)])
+        for parent in parents:
+            fmt.write("Parent commit (@-): ")
+            _write_lines(fmt, [summary(parent, False)])
+
+        conflicts = _conflict_spans(wc, to_ui_path) if wc.has_conflict else []
+        if conflicts:
+            # jj writes a warning's heading as its own span, so the word
+            # `Warning:` is bright while the sentence is only bold.
+            fmt.write("Warning: ", "warning", "heading")
+            fmt.write("There are unresolved conflicts at these paths:",
+                      "warning")
+            fmt.sync()
+            fmt.write("\n")
+            _write_lines(fmt, conflicts)
     return 0

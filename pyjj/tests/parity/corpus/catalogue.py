@@ -25,9 +25,9 @@ _R = dict(fixture="remote", normalize=("remote",))
 
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
-    E("status", ("status",), claims=("status",)),
-    E("status-clean", ("status",), fixture="executable", claims=("status",)),
-    E("status-conflict", ("status",), fixture="conflict", claims=("status",)),
+    E("status", ("status",), claims=("status",), colour="bytes"),
+    E("status-clean", ("status",), fixture="executable", claims=("status",), colour="bytes"),
+    E("status-conflict", ("status",), fixture="conflict", claims=("status",), colour="bytes"),
 
     # -- diff -----------------------------------------------------------
     E("diff", ("diff", "-r", "@"), fixture="executable", claims=("diff",)),

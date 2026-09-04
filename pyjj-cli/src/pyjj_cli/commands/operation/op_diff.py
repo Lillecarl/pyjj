@@ -22,6 +22,7 @@ from ..common import (
     _formatter,
     _load,
     _resolve_operation,
+    _write_lines,
     use_color,
 )
 
@@ -94,14 +95,6 @@ def _target_lines(repo, settings, summary, added: bool, wc_id, prefix: str):
         )
     return [head() + _summary_spans(repo, settings, commit, wc_id, prefix)
             for commit in summary.commits]
-
-
-def _write_lines(fmt, lines) -> None:
-    """Each line's spans, then the newline jj writes under no labels."""
-    for line in lines:
-        for text, labels in line:
-            fmt.write(text, *labels.split())
-        fmt.write("\n")
 
 
 def _ref_section(fmt, repo, settings, heading: str, changes, wc_id,
