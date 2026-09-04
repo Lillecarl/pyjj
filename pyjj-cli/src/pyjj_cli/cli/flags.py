@@ -206,11 +206,13 @@ def add_onto_flag(parser: argparse.ArgumentParser) -> None:
 
 
 def add_insert_after_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-A", "--insert-after", dest="insert_afters", action="append", default=None, metavar="REVSETS", help="Insert after this revision")
+    # jj spells this `-A`, `--insert-after` with `--after` as a visible
+    # alias, and accepts all three.
+    parser.add_argument("-A", "--insert-after", "--after", dest="insert_afters", action="append", default=None, metavar="REVSETS", help="Insert after this revision")
 
 
 def add_insert_before_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-B", "--insert-before", dest="insert_befores", action="append", default=None, metavar="REVSETS", help="Insert before this revision")
+    parser.add_argument("-B", "--insert-before", "--before", dest="insert_befores", action="append", default=None, metavar="REVSETS", help="Insert before this revision")
 
 
 def add_use_dest_message_flag(parser: argparse.ArgumentParser) -> None:
