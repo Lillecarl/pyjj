@@ -47,6 +47,12 @@ MERGE_TOOL = Path(__file__).with_name("merge_tool.py")
 PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
 PIN_TIME = "2001-02-03T04:05:06+00:00"
+# jj renders a timestamp in the offset in force *at run time*, not the
+# one the commit carries, so an unpinned suite reads differently in
+# summer and winter. The value is deliberately neither zero nor any
+# offset this machine uses: a side that ignored the pin and fell back to
+# UTC or to machine-local would still pass a zero pin.
+PIN_TZ_OFFSET = "330"
 SEED_BASE = 1000
 
 
@@ -137,6 +143,7 @@ class RepoPair:
                 "JJ_EMAIL": PIN_EMAIL,
                 "JJ_TIMESTAMP": PIN_TIME,
                 "JJ_OP_TIMESTAMP": PIN_TIME,
+                "JJ_TZ_OFFSET_MINS": PIN_TZ_OFFSET,
                 "JJ_RANDOMNESS_SEED": str(SEED_BASE + self._step),
                 "EDITOR": str(self.editor_bin),
                 "VISUAL": str(self.editor_bin),
