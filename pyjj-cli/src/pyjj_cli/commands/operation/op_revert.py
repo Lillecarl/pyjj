@@ -3,7 +3,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load
+from ..common import CommandError, _finish, _load, _start_transaction
 
 
 def op_revert(args) -> int:
@@ -19,7 +19,7 @@ def op_revert(args) -> int:
         # takes real ids.
         wanted = getattr(args, "operation", None) or "@"
         target = repo.operation if wanted == "@" else repo.load_operation(wanted)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         description = tx.revert_operation(target)
         # Not `_restore_view_command`: merging an operation out records
         # rewrites, and `Transaction.commit` asserts they have been

@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -64,7 +65,7 @@ def describe(args) -> int:
             print("No revisions to describe.")
             return 0
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, targets)
         new_wc_id = None
         wc_id = repo.view().get(ws.workspace_name)

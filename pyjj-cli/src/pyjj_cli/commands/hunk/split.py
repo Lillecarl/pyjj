@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -64,7 +65,7 @@ def hunk_split(args) -> int:
         if not overrides:
             print("No changes selected.")
             return 1
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # Use split_selected_edited with overrides
         first_builder = tx.split_selected_edited(target, overrides)
         first_builder.set_description(complete_newline(message))

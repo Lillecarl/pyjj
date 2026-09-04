@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -45,7 +46,7 @@ def tag_set(args) -> int:
                     print("Hint: Use --allow-move to update existing tags.",
                           file=sys.stderr)
                     return 1
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         for name in names:
             tx.set_tag(name, target.id)
         _finish(tx, f"set tag {','.join(getattr(args, 'names', []))}", settings, ws, repo)

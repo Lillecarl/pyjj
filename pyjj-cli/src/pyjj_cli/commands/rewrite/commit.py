@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -36,7 +37,7 @@ def commit(args) -> int:
             description = complete_newline(args.message)
         else:
             description = _run_editor(settings, wc.description)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         if args.paths_pos:
             # Selected paths stay in @ (same change id); everything else
             # moves to the new child -- the same primitives `split` uses,

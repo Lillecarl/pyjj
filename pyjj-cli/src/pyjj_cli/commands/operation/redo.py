@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -33,7 +34,7 @@ from ..common import (
 def redo(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _redone, _restored_to, description = tx.redo()
         _restore_view_command(tx, description, settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:

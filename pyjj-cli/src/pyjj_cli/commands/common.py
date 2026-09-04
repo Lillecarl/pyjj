@@ -121,8 +121,54 @@ def _open(settings, args):
         return ws, repo.load_at_operation(_resolve_operation(repo, at_op))
     if _IGNORE_WORKING_COPY:
         return ws, ws.load_at_head()
-    repo, _stats = ws.snapshot(settings)
+    repo, _stats = ws.snapshot(settings, _operation_args())
     return ws, repo
+
+
+# The characters jj leaves unquoted when it records a command line on
+# an operation. Anything else makes the whole argument single-quoted.
+_ARG_SAFE = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,-./:@_"
+)
+
+
+# The argv `main()` was given, which is not always `sys.argv`: the
+# parity driver calls `main()` directly. Set once per process.
+_OPERATION_ARGV: list[str] = []
+
+
+def set_operation_args(argv) -> None:
+    global _OPERATION_ARGV
+    _OPERATION_ARGV = list(argv)
+
+
+def _operation_args() -> str:
+    """The command line to record on this run's operations.
+
+    jj writes an `args` attribute on every transaction, and `jj op log`
+    prints it under the description. The program name is a constant
+    rather than `argv[0]`, the same way jj's own is: the recorded line
+    should read as a command anyone can run, not as whatever path this
+    process happened to start from.
+    """
+    parts = ["pyjj"]
+    for arg in _OPERATION_ARGV or sys.argv[1:]:
+        if arg and all(char in _ARG_SAFE for char in arg):
+            parts.append(arg)
+        else:
+            escaped = arg.replace("'", "\\'")
+            parts.append(f"'{escaped}'")
+    return " ".join(parts)
+
+
+def _start_transaction(repo, settings):
+    """Open a transaction with this run's command line recorded on it.
+
+    Every write goes through here rather than through
+    `repo.start_transaction` directly, so no command can quietly leave
+    its operation without provenance.
+    """
+    return repo.start_transaction(settings, _operation_args())
 
 
 def _load(args):
@@ -315,7 +361,7 @@ def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
               f"{', '.join(t[:12] for t in targets)}", file=sys.stderr)
         return 1
     target = repo.get_commit(pyjj.CommitId(targets[0]))
-    tx = repo.start_transaction(settings)
+    tx = _start_transaction(repo, settings)
     if edit:
         _check_rewritable(tx, settings, [target])
         tx.edit(ws.workspace_name, target)

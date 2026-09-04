@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -54,7 +55,7 @@ def diffedit(args) -> int:
             print("Nothing changed.")
             return 0
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, [to_commit])
         builder = tx.edit_commit_tree(to_commit, selections)
         edited = builder.write(repo)

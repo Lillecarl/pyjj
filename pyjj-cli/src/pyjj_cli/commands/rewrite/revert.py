@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     _commit_location,
     _insert_between,
@@ -92,7 +93,7 @@ def revert(args) -> int:
             print("Error: No revisions found to use as parent", file=sys.stderr)
             return 1
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # `-A`/`-B` rebase whatever followed the insertion point.
         _check_rewritable(tx, settings, new_child_ids)
         # Chain reverts in the determined order (which should be reverse topological,

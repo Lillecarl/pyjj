@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -29,7 +30,7 @@ def duplicate(args) -> int:
         revsets = args.revisions_pos or ["@"]
         targets = _resolve_all(repo, settings, revsets)
         parents, children = _placement(repo, settings, args)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # The duplicates themselves are new commits, but `-A`/`-B` rebase
         # whatever followed the insertion point.
         _check_rewritable(tx, settings, children)

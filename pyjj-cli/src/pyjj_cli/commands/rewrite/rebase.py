@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -108,7 +109,7 @@ def rebase(args) -> int:
                 print("Nothing changed.", file=sys.stderr)
                 return 0
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # `-r` moves the targets themselves; `-s` and `-b` move roots and
         # everything under them. Only one of the two lists is ever set,
         # and jj checks whichever one it is.

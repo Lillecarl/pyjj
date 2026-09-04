@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     _commit_location,
     CommandError,
@@ -46,7 +47,7 @@ def split(args) -> int:
 
         target = _resolve_one(repo, settings, args.revision or "@")
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, [target])
         new_parent_ids: list = []
         new_child_ids: list = []

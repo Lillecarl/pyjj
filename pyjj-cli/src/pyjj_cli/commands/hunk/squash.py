@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -67,7 +68,7 @@ def hunk_squash(args) -> int:
         # we can map to hunks indices and call the existing API.
         # For line-level, we need content overrides.
         # Let's try to use the content override path: create a new parent with selected changes.
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # Find which files have changes selected
         # For each file, if selected == after, then the whole file's changes are selected -> use paths
         # For partial, we need to create new file content for parent

@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -35,7 +36,7 @@ def op_restore(args) -> int:
     try:
         settings, ws, repo = _load(args)
         target = repo.load_operation(args.operation_pos)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         tx.restore_operation(target)
         _restore_view_command(
             tx, f"restore operation {args.operation_pos}", settings, ws, repo

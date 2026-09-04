@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -62,7 +63,7 @@ def bookmark_advance(args) -> int:
             print("No bookmarks to update.")
             return 0
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         for name in moved:
             tx.set_bookmark(name, target.id)
         _finish(tx, f"advance bookmarks to {target_hex[:8]}", settings, ws, repo)

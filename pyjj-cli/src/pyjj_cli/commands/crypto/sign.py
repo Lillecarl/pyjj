@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -49,7 +50,7 @@ def sign(args) -> int:
                   file=sys.stderr)
             return 1
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, targets)
         for commit in targets:
             b = tx.rewrite_commit(settings, commit)

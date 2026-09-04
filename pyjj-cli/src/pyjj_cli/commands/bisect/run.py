@@ -12,7 +12,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load, _reload
+from ..common import CommandError, _finish, _load, _reload, _start_transaction
 
 # The exit-status protocol `jj bisect run` documents.
 _SKIP_STATUS = 125
@@ -86,7 +86,7 @@ def bisect_run(args) -> int:
 
         commit_id_hex = commit.id.hex()
         try:
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             tx.check_out(ws.workspace_name, commit)
             _finish(tx, f"Updated to revision {commit_id_hex} for bisection",
                     settings, ws, repo)

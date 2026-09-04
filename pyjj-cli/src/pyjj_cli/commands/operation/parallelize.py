@@ -3,7 +3,7 @@ import sys
 
 import pyjj
 
-from ..common import _check_rewritable, CommandError, _finish, _load, _reload, _resolve_all
+from ..common import CommandError, _check_rewritable, _finish, _load, _reload, _resolve_all, _start_transaction
 
 
 def parallelize(args) -> int:
@@ -46,7 +46,7 @@ def parallelize(args) -> int:
             print("Nothing changed.")
             return 0
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, needs_rewrite)
         for commit in needs_rewrite:
             # One target at a time: `move_commits` keeps the edges
@@ -70,7 +70,7 @@ def _reconnect(args, settings, target_changes, follower_changes):
     followers = _by_change_id(repo, settings, follower_changes)
     if not targets or not followers:
         return
-    tx = repo.start_transaction(settings)
+    tx = _start_transaction(repo, settings)
     tx.move_commits([c.id for c in followers], [], [c.id for c in targets], [])
     _finish(tx, "parallelize: reconnect descendants", settings, ws, repo)
 

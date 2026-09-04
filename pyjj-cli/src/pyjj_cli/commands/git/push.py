@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pyjj
 from ..common import (
+    _start_transaction,
     CommandError,
     _finish,
     _load,
@@ -21,7 +22,7 @@ def git_push(args) -> int:
             try:
                 all_remotes = repo.git_remotes()  # type: ignore
             except Exception:
-                tx = repo.start_transaction(settings)
+                tx = _start_transaction(repo, settings)
                 all_remotes = tx.git_remotes()
             if len(all_remotes) == 1:
                 remote = all_remotes[0]
@@ -34,7 +35,7 @@ def git_push(args) -> int:
         tags = getattr(args, "tags", None) or []
         all_flag = getattr(args, "all_flag", False)
         # For now, handle bookmarks; if --all, push all bookmarks
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         if all_flag:
             # Push all bookmarks
             for bm in repo.bookmarks():

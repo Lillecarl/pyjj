@@ -8,14 +8,15 @@ import sys
 
 import pyjj
 
-from ...commands.common import CommandError, _workspace_path
+from ...commands.common import (CommandError, _operation_args,
+                                _workspace_path)
 
 
 def util_snapshot(args) -> int:
     try:
         settings = pyjj.UserSettings()
         ws = pyjj.Workspace.load(settings, _workspace_path(args))
-        _repo, stats = ws.snapshot(settings)
+        _repo, stats = ws.snapshot(settings, _operation_args())
     except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
             CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

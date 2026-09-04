@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -62,7 +63,7 @@ def squash(args) -> int:
                 )
                 description = _run_editor(settings, combined)
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, [source, dest])
         paths = getattr(args, "filesets", None) or None
         # Normalize empty list to None (means all paths)

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pyjj
 from ..common import (
+    _start_transaction,
     CommandError,
     _finish,
     _load,
@@ -22,7 +23,7 @@ def git_fetch(args) -> int:
                 remotes = repo.git_remotes()  # type: ignore[attr-defined] - on ReadonlyRepo via Transaction?
             except Exception:
                 # Fallback: try via transaction
-                tx = repo.start_transaction(settings)
+                tx = _start_transaction(repo, settings)
                 remotes = tx.git_remotes()
         elif getattr(args, "remote", None):
             remotes = [args.remote]
@@ -31,7 +32,7 @@ def git_fetch(args) -> int:
             try:
                 all_remotes = repo.git_remotes()  # type: ignore
             except Exception:
-                tx = repo.start_transaction(settings)
+                tx = _start_transaction(repo, settings)
                 all_remotes = tx.git_remotes()
             if len(all_remotes) == 1:
                 remotes = all_remotes
@@ -46,7 +47,7 @@ def git_fetch(args) -> int:
         branches = getattr(args, "branches", None) or []
         # For now, handle branches as bookmark names to fetch
         # If no branches specified, fetch all (via git_fetch_all)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         for remote in remotes:
             try:
                 if branches:

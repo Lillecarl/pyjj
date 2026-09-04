@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -36,7 +37,7 @@ def unsign(args) -> int:
         settings, ws, repo = _load(args)
         revs = getattr(args, "revisions", None) or ["@"]
         targets = _resolve_all(repo, settings, revs)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # jj checks the whole target set before it looks at signatures, so
         # an immutable target is an error even when nothing would have
         # been rewritten.

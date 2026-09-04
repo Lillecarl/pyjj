@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pyjj
 from ..common import (
+    _start_transaction,
     CommandError,
     _finish,
     _load,
@@ -15,7 +16,7 @@ def git_export(args) -> int:
     """`jj git export` — update the underlying Git repo with changes from the repo."""
     try:
         settings, ws, repo = _load(args)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         try:
             tx.git_export_refs()
         except pyjj.JjError as e:

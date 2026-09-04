@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pyjj
 from ..common import (
+    _start_transaction,
     CommandError,
     _finish,
     _load,
@@ -20,13 +21,13 @@ def git_remote(args) -> int:
             try:
                 remotes = repo.git_remotes()  # type: ignore
             except Exception:
-                tx = repo.start_transaction(settings)
+                tx = _start_transaction(repo, settings)
                 remotes = tx.git_remotes()
             for name in sorted(remotes):
                 print(name)
             return 0
         elif cmd == "add":
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             try:
                 tx.git_add_remote(args.name, args.url)
             except pyjj.JjError as e:
@@ -35,7 +36,7 @@ def git_remote(args) -> int:
             _finish(tx, f"add git remote {args.name}", settings, ws, repo)
             return 0
         elif cmd == "remove":
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             try:
                 tx.git_remove_remote(args.name)
             except pyjj.JjError as e:
@@ -44,7 +45,7 @@ def git_remote(args) -> int:
             _finish(tx, f"remove git remote {args.name}", settings, ws, repo)
             return 0
         elif cmd == "rename":
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             try:
                 tx.git_rename_remote(args.old, args.new)
             except pyjj.JjError as e:
@@ -53,7 +54,7 @@ def git_remote(args) -> int:
             _finish(tx, f"rename git remote {args.old} to {args.new}", settings, ws, repo)
             return 0
         elif cmd == "set-url":
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             url = getattr(args, "url", None)
             push_url = getattr(args, "push_url", None)
             if url is None and push_url is None:

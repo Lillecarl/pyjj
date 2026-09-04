@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -34,7 +35,7 @@ def absorb(args) -> int:
         paths = getattr(args, "filesets", None) or None
         if paths == []:
             paths = None
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # The destinations are computed inside the binding, so the
         # immutability check has to happen there too.
         stats = tx.absorb(settings, source, destinations=dest_expr, paths=paths,

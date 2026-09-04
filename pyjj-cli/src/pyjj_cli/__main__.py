@@ -154,6 +154,9 @@ def main(argv=None) -> int:
     # out of that path — handlers are not imported yet.
     argcomplete.autocomplete(parser)
     raw = sys.argv[1:] if argv is None else argv
+    # Kept before the globals are stripped: this is the command line the
+    # operation log records, and it should read as what was typed.
+    invocation = list(raw)
     raw, globals_ = _hoist_global_options(_drop_ignored_global_flags(raw))
     args = parser.parse_args(raw)
     args.at_operation = globals_.get("at_operation")
@@ -166,6 +169,7 @@ def main(argv=None) -> int:
     # line sits after `autocomplete()`, which exits during completion.
     from pyjj_cli.commands import common
     common.set_ignore_working_copy(args.ignore_working_copy)
+    common.set_operation_args(invocation)
     if args.command is None:
         parser.print_help()
         return 1

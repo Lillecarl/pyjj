@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -64,7 +65,7 @@ def hunk_commit(args) -> int:
         if not overrides:
             print("No changes selected.")
             return 1
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         # For commit, we want to keep selected changes in the current commit, and leave the rest in a new child
         # This is the same as split, but the current commit is the working copy
         first_builder = tx.split_selected_edited(target, overrides)

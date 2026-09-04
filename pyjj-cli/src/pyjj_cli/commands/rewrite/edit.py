@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _check_rewritable,
     CommandError,
     _checkout_if_moved,
@@ -27,7 +28,7 @@ def edit(args) -> int:
     try:
         settings, ws, repo = _load(args)
         target = _resolve_one(repo, settings, args.revision_pos)
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, [target])
         # MutableRepo::edit abandons a discardable, unreferenced old wc
         # itself; rebase_descendants() in _finish clears the pending map.

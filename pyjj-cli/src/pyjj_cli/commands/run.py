@@ -23,7 +23,7 @@ from pathlib import Path
 import pyjj
 
 from .common import (CommandError, _check_rewritable, _finish, _load,
-                     _resolve_all)
+                     _resolve_all, _start_transaction)
 
 # `revsets.run` in `cli/src/config/revsets.toml`.
 _DEFAULT_REVSET = "reachable(@, mutable())"
@@ -92,7 +92,7 @@ def run(args) -> int:
         argv = [args.command] + extra
         spec = " ".join(argv)
 
-        tx = repo.start_transaction(settings)
+        tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, commits)
 
         subdir = _subdir(ws.workspace_root, args.root)
