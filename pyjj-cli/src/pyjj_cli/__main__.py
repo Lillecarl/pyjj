@@ -23,8 +23,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Jujutsu VCS — Python CLI (pyjj bindings)",
     )
     parser.add_argument(
-        "-R", "--repository", dest="repository", default=".",
-        help="Path to the workspace to operate on (default: .)",
+        "-R", "--repository", dest="repository", default=None,
+        help="Path to the workspace to operate on (default: search up from "
+             "the current directory)",
     )
     sub = parser.add_subparsers(dest="command")
 

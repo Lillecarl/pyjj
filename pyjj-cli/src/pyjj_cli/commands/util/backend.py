@@ -8,13 +8,13 @@ import sys
 
 import pyjj
 
-from ...commands.common import CommandError
+from ...commands.common import CommandError, _workspace_path
 
 
 def util_backend_name(args) -> int:
     try:
         settings = pyjj.UserSettings()
-        ws = pyjj.Workspace.load(settings, args.repository)
+        ws = pyjj.Workspace.load(settings, _workspace_path(args))
         repo = ws.load_at_head()
     except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
             CommandError) as e:

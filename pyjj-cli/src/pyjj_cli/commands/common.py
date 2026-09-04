@@ -86,6 +86,25 @@ def set_ignore_working_copy(value: bool) -> None:
     _IGNORE_WORKING_COPY = bool(value)
 
 
+def _workspace_path(args) -> str:
+    """The workspace directory this command should load.
+
+    `-R` names it outright. Without `-R`, jj walks up from the current
+    directory looking for a `.jj`, so a command works anywhere inside a
+    workspace and not only at its root (`find_workspace_dir` in
+    `cli/src/cli_util.rs`). A search that finds nothing falls back to the
+    current directory, which then fails with the same "no repo here"
+    error as before.
+    """
+    if args.repository is not None:
+        return args.repository
+    cwd = Path(os.getcwd()).resolve()
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / ".jj").is_dir():
+            return str(candidate)
+    return str(cwd)
+
+
 def _open(settings, args):
     """The repo this command should act on.
 
@@ -94,7 +113,7 @@ def _open(settings, args):
     instead, and jj documents that as implying `--ignore-working-copy`:
     a snapshot would write into a view the command is only visiting.
     """
-    ws = pyjj.Workspace.load(settings, args.repository)
+    ws = pyjj.Workspace.load(settings, _workspace_path(args))
     at_op = getattr(args, "at_operation", None)
     if at_op:
         repo = ws.load_at_head()
