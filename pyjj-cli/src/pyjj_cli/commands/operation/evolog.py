@@ -28,31 +28,54 @@ def evolog(args) -> int:
         limit = getattr(args, "limit", None)
         if limit == 0:
             limit = None
-        entries = repo.evolution_log([c.id for c in commits], limit=limit)
+        no_graph = getattr(args, "no_graph", False)
+        # A squash gives a commit two predecessors, so an evolution log
+        # is a graph. jj groups the rows before drawing them and takes
+        # the limit afterwards; without the graph it keeps the raw walk
+        # order instead.
+        start = [c.id for c in commits]
+        entries = (
+            repo.evolution_log(start, limit=limit)
+            if no_graph
+            else repo.evolution_graph(start, limit=limit)
+        )
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
 
-    # jj's builtin name, mapped so `-T builtin_evolog_compact` works.
+    # jj's builtin name, mapped so `-T builtin_evolog_compact` renders
+    # what jj renders: `builtin_log_compact(commit)` -- the change id
+    # with its offset, the author's email, a full timestamp, the commit
+    # id and the markers -- and then the operation line. The default
+    # template below differs from jj on purpose; this one may not.
     builtins = {
         "builtin_evolog_compact":
-            "{{ change_id_short }} {{ author }} {{ datetime }} {{ commit_id_short }}"
-            "{{ hidden_marker }}\n{{ empty_marker }}{{ description }}"
+            "{{ change_id_short }} {{ author_email }} {{ datetime_full }} "
+            "{{ commit_id_short }}{{ hidden_marker }}"
+            "\n{{ empty_marker }}{{ description }}"
             "{% if operation_id %}\n-- operation {{ operation_id }} "
             "{{ operation_description }}{% endif %}",
     }
     jinja_template = _resolve_template(settings, ws, args, "evolog", builtins)
 
-    no_graph = getattr(args, "no_graph", False)
+    # The graph is drawn by jj's own renderer, which takes a row's whole
+    # text at once. Rows arrive in order and it is stateful, so every
+    # row goes through it, including the ones a template renders.
+    renderer = None if no_graph else pyjj.GraphRenderer()
     wc_hexes = set(repo.view().values())
-    for index, entry in enumerate(entries):
+    for entry in entries:
         commit = entry.commit
-        last = index == len(entries) - 1
-        if no_graph:
-            glyph, gutter = "", ""
-        else:
-            glyph = "@" if commit.id.hex() in wc_hexes else "○"
-            gutter = "   " if last else "│  "
+        hex_id = commit.id.hex()
+        glyph = "@" if hex_id in wc_hexes else "○"
+        edges = [(edge.target.hex(), edge.edge_type) for edge in entry.edges]
+
+        def emit(lines) -> None:
+            if no_graph:
+                for line in lines:
+                    print(line)
+                return
+            sys.stdout.write(
+                renderer.next_row(hex_id, edges, glyph, "\n".join(lines)))
 
         change = _short_id(
             commit.change_id.reverse_hex(),
@@ -62,9 +85,11 @@ def evolog(args) -> int:
         if hidden:
             # The offset is how a reader addresses this version: jj
             # resolves `<change id>/2` as a revset. Only a hidden
-            # version carries one, since the visible one is at zero.
+            # version carries one, since the visible one is at zero --
+            # and jj prints a zero offset too, on a change whose only
+            # versions are hidden.
             offset = commit.change_offset(repo)
-            if offset:
+            if offset is not None:
                 change = f"{change}/{offset}"
         commit_id = _short_id(
             commit.id.hex(),
@@ -72,6 +97,7 @@ def evolog(args) -> int:
         )
         author = commit.author.name or commit.author.email or ""
         stamp = _format_timestamp(commit.committer.timestamp, century=False)
+        stamp_full = _format_timestamp(commit.committer.timestamp)
         description = commit.description.splitlines()[0] if commit.description else ""
         empty_marker = "(empty) " if _is_empty(repo, commit) else ""
         operation = entry.operation
@@ -87,6 +113,7 @@ def evolog(args) -> int:
                 "author_name": commit.author.name or "",
                 "author_email": commit.author.email or "",
                 "datetime": stamp,
+                "datetime_full": stamp_full,
                 "description": description or "(no description set)",
                 "description_full": commit.description.strip() or "(no description set)",
                 "hidden": hidden,
@@ -101,20 +128,15 @@ def evolog(args) -> int:
             except Exception as e:
                 print(f"Error: template render failed: {e}", file=sys.stderr)
                 return 1
-            # A template is the whole entry, as it is for `log`: the
-            # first line sits beside the glyph, the rest under it.
-            lines = rendered.splitlines() or [""]
-            print(f"{glyph}  {lines[0]}" if glyph else lines[0])
-            for extra in lines[1:]:
-                print(f"{gutter}{extra}")
+            # A template is the whole entry, as it is for `log`.
+            emit(rendered.splitlines() or [""])
             continue
 
-        row = f"{glyph}  {change}" if glyph else change
-        row += f" {author} {stamp} {commit_id}"
-        if hidden:
-            row += " (hidden)"
-        print(row)
-        print(f"{gutter}{empty_marker}{description or '(no description set)'}")
+        lines = [f"{change} {author} {stamp} {commit_id}"
+                 + (" (hidden)" if hidden else "")]
+        lines.append(f"{empty_marker}{description or '(no description set)'}")
         if operation is not None:
-            print(f"{gutter}-- operation {operation.id[:12]} {operation.description}".rstrip())
+            lines.append(
+                f"-- operation {operation.id[:12]} {operation.description}".rstrip())
+        emit(lines)
     return 0

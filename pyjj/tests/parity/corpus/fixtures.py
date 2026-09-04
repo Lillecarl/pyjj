@@ -58,6 +58,22 @@ def evolution(pair) -> None:
     pair.op(files={"two.txt": b"two once more\n"}, jj=["describe", "-m", "two rewritten twice"])
 
 
+def squashed(pair) -> None:
+    """An evolution that forks.
+
+    A squash gives its destination two predecessors, so the destination's
+    evolution log is a graph rather than a line. `evolution` alone is
+    linear, and a drawing that only ever opens one lane proves nothing
+    about the drawing.
+
+    The squash leaves `@` empty and new, so the fork is at `@-`.
+    """
+    evolution(pair)
+    pair.op(jj=["new", "-m", "sibling"])
+    pair.op(files={"extra.txt": b"extra\n"},
+            jj=["squash", "--use-destination-message"])
+
+
 def executable(pair) -> None:
     """Every file shape a diff has a sentence for: a modification, a
     deletion, an addition, a mode change and a missing trailing
@@ -133,5 +149,6 @@ FIXTURES = {
     "conflict": conflict,
     "tags": tags,
     "evolution": evolution,
+    "squashed": squashed,
     "executable": executable,
 }

@@ -1,0 +1,27 @@
+○    yqymtrmq alice@example.com 2001-02-03 09:35:06 50e11135
+├─╮  two rewritten twice
+│ │  -- operation «op» squash commits into be8720ac2db774e3049251c9bbd3ee448057a1e8
+│ ○  nzkwoxuv/0 alice@example.com 2001-02-03 09:35:06 a24c529b (hidden)
+│ │  sibling
+│ │  -- operation «op» snapshot working copy
+│ ○  nzkwoxuv/1 alice@example.com 2001-02-03 09:35:06 13cd012b (hidden)
+│    (empty) sibling
+│    -- operation «op» new empty commit
+○  yqymtrmq/1 alice@example.com 2001-02-03 09:35:06 be8720ac (hidden)
+│  two rewritten twice
+│  -- operation «op» describe commit ca2efbef90ae94b995ca176d22591d6f3d330169
+○  yqymtrmq/2 alice@example.com 2001-02-03 09:35:06 ca2efbef (hidden)
+│  two rewritten
+│  -- operation «op» snapshot working copy
+○  yqymtrmq/3 alice@example.com 2001-02-03 09:35:06 9dd4ccb3 (hidden)
+│  two rewritten
+│  -- operation «op» describe commit 66c265668c0b1075c4c8fc5b6d6d73ef288672b8
+○  yqymtrmq/4 alice@example.com 2001-02-03 09:35:06 66c26566 (hidden)
+│  two
+│  -- operation «op» snapshot working copy
+○  yqymtrmq/5 alice@example.com 2001-02-03 09:35:06 f966b4d0 (hidden)
+│  two
+│  -- operation «op» snapshot working copy
+○  yqymtrmq/6 alice@example.com 2001-02-03 09:35:06 2430aeeb (hidden)
+   (empty) two
+   -- operation «op» new empty commit

@@ -73,6 +73,14 @@ CATALOGUE: tuple[Entry, ...] = (
       reason="rows share `log`'s divergence, and every row names an "
              "operation, whose id is repo-local",
       normalize=("op_ids",), claims=("evolog",)),
+    # The entry above cannot hold the drawing: its rows diverge on
+    # purpose, so nothing compares them. A shared builtin name is a
+    # template string both engines resolve, which makes the rows agree
+    # and leaves the graph as the only thing that can differ.
+    E("evolog-graph",
+      ("evolog", "-r", "@-", "-T", "builtin_evolog_compact"),
+      fixture="squashed",
+      normalize=("op_ids",), claims=("evolog", "-r", "-T")),
 
     # -- interdiff ------------------------------------------------------
     E("interdiff", ("interdiff", "--from", 'description(glob:"one*")',
