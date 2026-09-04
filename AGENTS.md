@@ -137,7 +137,70 @@ What parity proves depends on the command:
 - a command that only **reads** is proved to exit 0 on both sides and to
   leave the repository untouched -- which still catches a renderer that
   crashes or snapshots differently on its way to printing. Output text is
-  never compared; the two tools format differently on purpose.
+  not compared by default; the two tools format differently on purpose,
+  and byte-identical output is not a goal. `RepoPair.assert_output()`
+  compares stdout verbatim where the formats *are* meant to agree, and
+  the strict `OUTPUT_UNIMPLEMENTED` xfails record where they do not yet.
+
+### The two ledgers
+
+Parity says whether the two agree on argv both accept. It cannot say
+what jj accepts and pyjj-cli does not, so two measured ledgers sit
+beside it. Both read `jj util markdown-help`, which prints clap's whole
+tree in one pass, so neither can drift from the pinned jj.
+
+- **Surface** (`test_cli_surface`): which flags pyjj-cli *parses*. Cheap
+  to satisfy, and easy to satisfy falsely -- `jj diff --git` parsed for a
+  long time while being ignored outright.
+- **Coverage** (`test_cli_coverage`): which flags a test *exercises*. A
+  test claims items with `@pytest.mark.covers("split", "-A")`, and the
+  marks are gathered at collection time, so the ledger is built from real
+  collection data rather than a list kept by hand. Each spelling is its
+  own item: jj takes `-A`, `--insert-after` and `--after` for one option,
+  and pyjj-cli accepted only two of the three until this caught it.
+
+Both compare against a recorded baseline exactly, so they only shrink on
+purpose. `cli_surface_excluded.py` holds what pyjj-cli will not accept,
+with a reason on each entry; "not implemented yet" is never a reason,
+and a test rejects an exclusion that stops naming something jj has.
+
+A read-only command is **not** claimed just because a parity test runs
+it. State comparison proves nothing about a command that writes nothing,
+so those stay unclaimed until something checks what they print. That is
+where the real gap is, and the ledger should say so.
+
+One limitation of the source: jj's Options brackets list only long
+aliases while its Arguments brackets list short ones, so `jj rebase -d`
+does not appear. The list is a lower bound on jj's surface.
+
+### Running the suite
+
+The suite is almost entirely subprocess wait, so `pytest-xdist` is
+available: `nix run --file . tests -- -n 4`. On an idle 4-core box the
+830 tests take 6:15 serially and 2:50 under `-n 4`, for 12% more CPU.
+Fixtures are safe for it: `pair` is function-scoped on `tmp_path`, and
+`HOME`/`XDG_CONFIG_HOME` live inside that directory, so each test has its
+own repos, config root and scripted editor.
+
+Measure on an idle machine. A timing run taken while anything else builds
+reads 2x slow, and two figures taken under different load do not compare.
+
+Parallelism paid only after startup stopped dominating. Two changes did
+that, and both are worth keeping in mind before adding a scenario:
+
+- **The shared starting state is built once per session, then copied.**
+  `chain_template` builds the standard commit chain in a session-scoped
+  directory; `pair.load_template()` clones it with `cp -a
+  --reflink=auto`, which is copy-on-write on btrfs and xfs. Restoring
+  costs about 34ms against 3.7s to rebuild. Only the repositories are
+  templatable: the scratch `home/` holds a jj config with absolute tool
+  paths, so it is rebuilt per test. The step counter travels with the
+  template, or the two sides draw different `JJ_RANDOMNESS_SEED` values
+  and every comparison fails.
+- **`assert_parity()` compares in one `jj log` per side.** A jj commit id
+  hashes the commit's root tree, so equal commit ids already prove equal
+  file contents. The detailed per-file extraction still runs, but only
+  after a mismatch, to name the file that differs.
 
 Three kinds of state sit outside a commit id and are compared explicitly:
 bookmarks and tags (extracted per commit by the harness), workspace names
