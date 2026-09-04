@@ -13,6 +13,7 @@ mod errors;
 mod evolution;
 mod file;
 mod fix;
+mod gc;
 mod git;
 mod graph;
 mod hunks;

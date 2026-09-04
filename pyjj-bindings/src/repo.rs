@@ -405,6 +405,22 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// `jj util gc`: collects garbage in the operation store and the
+    /// commit store.
+    ///
+    /// `max_age_secs` keeps anything written more recently than that,
+    /// reachable or not, because a concurrent process may not have
+    /// referenced its new objects yet. `jj util gc` defaults to two
+    /// weeks; `--expire=now` passes 0.
+    ///
+    /// Sweeps from this repo's own operation, so a repo loaded at a past
+    /// operation would delete everything the newer ones added. `jj`
+    /// refuses that; the caller must make the same check.
+    #[pyo3(signature = (max_age_secs=0.0))]
+    fn gc(&self, max_age_secs: f64) -> PyResult<()> {
+        crate::gc::gc(self, max_age_secs)
+    }
+
     /// Folds `operations` into the single operation their merge
     /// represents, ready to hand back to `load_at_operation()`.
     ///
