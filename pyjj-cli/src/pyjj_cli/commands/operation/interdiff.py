@@ -39,5 +39,5 @@ def interdiff(args) -> int:
         _description_diff_bytes(args, source.description, target.description)
     )
     sys.stdout.buffer.flush()
-    _print_diff_files(args, ws, files)
+    _print_diff_files(args, ws, files, settings)
     return 0

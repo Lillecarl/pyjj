@@ -193,7 +193,8 @@ def log(args) -> int:
             parent = (repo.get_commit(commit.parent_ids[0])
                       if commit.parent_ids else None)
             if parent is not None:
-                _print_diff_stats(parent.diff_stats(commit, settings))
+                _print_diff_stats(parent.diff_stats(commit, settings),
+                                  settings)
 
         if show_patch:
             if commit.parent_ids:

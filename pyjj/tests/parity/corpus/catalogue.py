@@ -34,9 +34,9 @@ CATALOGUE: tuple[Entry, ...] = (
     E("diff-git", ("diff", "--git", "-r", "@"), fixture="executable",
       claims=("diff", "--git")),
     E("diff-summary", ("diff", "--summary", "-r", "@"), fixture="executable",
-      claims=("diff", "--summary", "-s")),
+      claims=("diff", "--summary", "-s"), colour="bytes"),
     E("diff-stat", ("diff", "--stat", "-r", "@"), fixture="executable",
-      claims=("diff", "--stat")),
+      claims=("diff", "--stat"), colour="bytes"),
     E("diff-name-only", ("diff", "--name-only", "-r", "@"), fixture="executable",
       claims=("diff", "--name-only"), colour="bytes"),
     # `-r @` on a merge shows nothing: the merge commit changes nothing
@@ -99,7 +99,7 @@ CATALOGUE: tuple[Entry, ...] = (
     E("interdiff-summary", ("interdiff", "--summary",
                             "--from", 'description(glob:"one*")',
                             "--to", 'description(glob:"two*")'),
-      claims=("interdiff", "--summary")),
+      claims=("interdiff", "--summary"), colour="bytes"),
 
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),

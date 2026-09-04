@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 
-from ..formatter import Formatter, separate
+from ..formatter import Formatter, render_block, separate
 
 
 def complete_newline(s: str) -> str:
@@ -942,15 +942,39 @@ _SUMMARY_STATUS_CHARS = {
 }
 
 
-def _summary_lines(entries, to_ui_path=None) -> list[str]:
+# jj labels a summary row by its status, and colours it from that.
+_SUMMARY_STATUS_LABELS = {
+    "added": "added",
+    "removed": "removed",
+    "modified": "modified",
+    "executable": "modified",
+    "copied": "copied",
+    "renamed": "renamed",
+}
+
+
+def _summary_spans(entries, to_ui_path=None):
     """`jj diff --summary`'s lines: one status letter, a space, the path.
 
     jj has no separate letter for a mode-only change, so an
     `"executable"` entry reads as modified, which is what jj prints for
-    it.
+    it -- and colours it as.
     """
     to_ui_path = to_ui_path or (lambda path: path)
-    return [f"{_SUMMARY_STATUS_CHARS[e.status]} {to_ui_path(e.path)}" for e in entries]
+    return [[(f"{_SUMMARY_STATUS_CHARS[e.status]} {to_ui_path(e.path)}",
+              _SUMMARY_STATUS_LABELS[e.status])] for e in entries]
+
+
+def _summary_lines(entries, to_ui_path=None) -> list[str]:
+    """`_summary_spans` as plain text."""
+    return ["".join(text for text, _labels in line)
+            for line in _summary_spans(entries, to_ui_path)]
+
+
+def _print_summary(entries, to_ui_path=None, settings=None) -> None:
+    """The summary listing, coloured the way jj colours it."""
+    print(render_block(_summary_spans(entries, to_ui_path), "diff summary",
+                       use_color(settings)))
 
 
 def _relative_path(from_dir: Path, to: Path) -> str:
@@ -1661,21 +1685,30 @@ def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3) -> 
     sys.stdout.buffer.flush()
 
 
-def _print_diff_stats(stats) -> None:
+def _print_diff_stats(stats, settings=None) -> None:
     """`--stat`'s output, in the shape `jj diff --stat` prints it.
 
     Each file gets its changed-line count and a `+`/`-` bar; a binary
     file gets its byte delta instead, since it has no lines to count.
     The summary line counts every file, binary ones included.
+
+    The `-` run is written even when it is empty, because jj writes it
+    with the line's newline: a file that only gained lines still pays
+    for the escape sequence that would have coloured its `-` marks.
     """
     paths = [stat.path for stat in stats]
     width = max((len(path) for path in paths), default=0)
     total_added = 0
     total_removed = 0
+    lines = []
     for stat in stats:
         if stat.added is None:
-            delta = f" {stat.bytes_delta:+} bytes" if stat.bytes_delta else ""
-            print(f"{stat.path:<{width}} | (binary){delta}")
+            lines.append([(f"{stat.path:<{width}} | ", ""),
+                          ("(binary)", "binary")])
+            if stat.bytes_delta:
+                side = "removed" if stat.bytes_delta < 0 else "added"
+                lines[-1].append((f" {stat.bytes_delta:+}", side))
+                lines[-1].append((" bytes", ""))
             continue
         total_added += stat.added
         total_removed += stat.removed
@@ -1686,13 +1719,20 @@ def _print_diff_stats(stats) -> None:
             scale = min(1.0, _STAT_BAR_WIDTH / changed)
             bar_added = max(1, round(stat.added * scale)) if stat.added else 0
             bar_removed = max(1, round(stat.removed * scale)) if stat.removed else 0
-            bar = " " + "+" * bar_added + "-" * bar_removed
         else:
-            bar = ""
-        print(f"{stat.path:<{width}} | {changed}{bar}")
-    print(f"{len(stats)} file{'' if len(stats) == 1 else 's'} changed, "
-          f"{total_added} insertion{'' if total_added == 1 else 's'}(+), "
-          f"{total_removed} deletion{'' if total_removed == 1 else 's'}(-)")
+            bar_added = bar_removed = 0
+        gap = " " if bar_added or bar_removed else ""
+        line = [(f"{stat.path:<{width}} | {changed}{gap}", "")]
+        if bar_added:
+            line.append(("+" * bar_added, "added"))
+        line.append(("-" * bar_removed, "removed"))
+        lines.append(line)
+    lines.append([(
+        f"{len(stats)} file{'' if len(stats) == 1 else 's'} changed, "
+        f"{total_added} insertion{'' if total_added == 1 else 's'}(+), "
+        f"{total_removed} deletion{'' if total_removed == 1 else 's'}(-)",
+        "stat-summary")])
+    print(render_block(lines, "diff stat", use_color(settings)))
 
 
 def _diff_base(repo, settings, commit):
@@ -1768,7 +1808,7 @@ class _FileStat:
                     self.removed += 1
 
 
-def _print_diff_files(args, ws, files) -> None:
+def _print_diff_files(args, ws, files, settings=None) -> None:
     """The same format choice as `_print_diff`, from file content alone.
 
     `jj interdiff` diffs a rebased tree that has no commit id, so the
@@ -1782,7 +1822,7 @@ def _print_diff_files(args, ws, files) -> None:
         sys.stdout.buffer.flush()
         return
     if getattr(args, "stat", False):
-        _print_diff_stats([_FileStat(f) for f in files])
+        _print_diff_stats([_FileStat(f) for f in files], settings)
         return
     to_ui_path = _ui_path_formatter(ws)
     if getattr(args, "name_only", False):
@@ -1790,8 +1830,7 @@ def _print_diff_files(args, ws, files) -> None:
             print(to_ui_path(f.path))
         return
     if getattr(args, "summary", False):
-        for line in _summary_lines([_FileStat(f) for f in files], to_ui_path):
-            print(line)
+        _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
         return
     sys.stdout.flush()
     sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context))
@@ -1812,7 +1851,7 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
         _print_git_diff(base, target, settings, paths, context)
         return
     if getattr(args, "stat", False):
-        _print_diff_stats(base.diff_stats(target, settings, paths))
+        _print_diff_stats(base.diff_stats(target, settings, paths), settings)
         return
     to_ui_path = _ui_path_formatter(ws)
     if getattr(args, "name_only", False):
@@ -1820,7 +1859,6 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
             print(to_ui_path(entry.path))
         return
     if getattr(args, "summary", False):
-        for line in _summary_lines(base.diff(target, paths), to_ui_path):
-            print(line)
+        _print_summary(base.diff(target, paths), to_ui_path, settings)
         return
     _print_color_words_diff(base, target, settings, ws, paths, context)

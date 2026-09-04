@@ -377,7 +377,14 @@ def render_block(lines, base=(), enabled: bool = True) -> str:
             spans, under = line if isinstance(line, Line) else (line, ())
             under = base + _labels(under)
             for text, labels in spans:
-                fmt.write(text, *under, *_labels(labels))
+                if text:
+                    fmt.write(text, *under, *_labels(labels))
+                else:
+                    # jj computes the style even for an empty write, so
+                    # a span that lands empty still costs its escape
+                    # sequence -- `diff --stat` writes an empty `-` run
+                    # on a file that only gained lines.
+                    fmt.sync(*under, *_labels(labels))
             fmt.sync(*under)
             if index < last:
                 fmt.write("\n")
