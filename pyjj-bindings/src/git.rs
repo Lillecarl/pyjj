@@ -109,6 +109,13 @@ pub fn reset_head(mut_repo: &mut MutableRepo, workspace_name: &str) -> PyResult<
 
 /// Reflect bookmark/tag changes made in the jj view into the underlying
 /// (colocated) Git repo's refs. Returns a summary dict.
+/// `export_refs` without the Python summary, for callers already inside
+/// `py.detach()` that only need the side effect.
+pub fn export_refs_only(mut_repo: &mut MutableRepo) -> PyResult<()> {
+    git::export_refs(mut_repo).map_err(map_git_export_err)?;
+    Ok(())
+}
+
 pub fn export_refs(mut_repo: &mut MutableRepo) -> PyResult<Py<PyAny>> {
     let stats = git::export_refs(mut_repo).map_err(map_git_export_err)?;
     Python::attach(|py| {

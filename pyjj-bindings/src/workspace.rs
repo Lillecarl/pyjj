@@ -293,6 +293,12 @@ impl PyWorkspace {
                 }
                 None => None,
             };
+            // A colocated clone has to leave the git side consistent, the
+            // way jj's own transaction finish does: the tracked bookmarks
+            // it just created must exist as git refs too.
+            if colocate {
+                crate::git::export_refs_only(&mut mut_repo)?;
+            }
             let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit("fetch from git remote into empty repo"))
                 .map_err(map_transaction_err)?;
@@ -319,6 +325,11 @@ impl PyWorkspace {
                 pollster::block_on(mut_repo.check_out(new_ws.workspace_name().to_owned(), &commit))
                     .map_err(|err| JjError::new_err(err.to_string()))?;
             pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
+            if colocate {
+                let name = new_ws.workspace_name().to_owned();
+                crate::git::reset_head(&mut mut_repo, name.as_str())?;
+                crate::git::export_refs_only(&mut mut_repo)?;
+            }
             let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit(format!(
                 "check out git remote's branch: {}",
