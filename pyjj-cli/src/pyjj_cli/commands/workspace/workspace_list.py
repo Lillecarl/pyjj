@@ -9,10 +9,11 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
+from ...formatter import render_block
 from ..common import (
     _bookmarks_by_commit,
     _commit_context,
-    _commit_summary,
+    _commit_summary_spans,
     _resolve_template,
     CommandError,
     _checkout_if_moved,
@@ -32,6 +33,7 @@ from ..common import (
     _merge_marker_len,
     _run_merge_tool,
     _fix_pattern_matches,
+    use_color,
 )
 
 def workspace_list(args) -> int:
@@ -48,8 +50,17 @@ def workspace_list(args) -> int:
                 context["name"] = name
                 print(template.render(context))
                 continue
-            summary = _commit_summary(repo, settings, commit, refs)
-            print(f"{name}: {summary}")
+            # jj wraps the whole summary in `working_copy` when the
+            # commit is the one *this* workspace sits on, not the one
+            # the row names, so every other row stays plain.
+            under = "target"
+            if commit_id == view.get(ws.workspace_name):
+                under = "working_copy target"
+            spans = [(name, "name"), (": ", "")]
+            spans += [(text, f"{under} {labels}".strip()) for text, labels
+                      in _commit_summary_spans(repo, settings, commit, refs)]
+            print(render_block([spans], "workspace_list",
+                               use_color(settings)))
         return 0
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
