@@ -150,10 +150,8 @@
     "--from",
     "--ignore-all-space",
     "--ignore-space-change",
-    "--name-only",
     "--revisions",
     "--stat",
-    "--summary",
     "--template",
     "--to",
     "--tool",
@@ -162,7 +160,6 @@
     "-b",
     "-f",
     "-r",
-    "-s",
     "-t",
     "-w"
   ],

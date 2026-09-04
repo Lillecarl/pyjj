@@ -2492,6 +2492,30 @@ def test_diff_git_format_reads_a_root_commit(pair: RepoPair) -> None:
     pair.assert_output(["diff", "--git", "-r", "@"])
 
 
+@pytest.mark.covers("diff", "--summary", "-s")
+def test_diff_summary_output_matches(pair: RepoPair) -> None:
+    """`--summary` prints one status letter and the path. pyjj-cli used
+    to print the status word instead, padded to a column."""
+    chain(pair)
+    pair.assert_output(["diff", "--summary", "-r", rev("one")])
+    pair.assert_output(["diff", "-s", "-r", rev("one")])
+
+
+@pytest.mark.covers("diff", "--name-only")
+def test_diff_name_only_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["diff", "--name-only", "-r", rev("one")])
+
+
+@pytest.mark.covers("diff", "--summary")
+def test_diff_summary_reads_a_root_commit(pair: RepoPair) -> None:
+    """A parentless commit diffs against the root commit, so every file
+    in it reads as added."""
+    pair.init()
+    pair.op(files={"first.txt": b"first\n"}, jj=["describe", "-m", "root child"])
+    pair.assert_output(["diff", "--summary", "-r", "@"])
+
+
 @pytest.mark.covers("status")
 def test_status_output_matches(pair: RepoPair) -> None:
     chain(pair)
