@@ -104,7 +104,7 @@ CATALOGUE: tuple[Entry, ...] = (
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),
     E("file-show", ("file", "show", "one.txt"), claims=("file show",), colour="bytes"),
-    E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",)),
+    E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",), colour="bytes"),
 
     # -- refs -----------------------------------------------------------
     E("bookmark-list", ("bookmark", "list"), claims=("bookmark list",), colour="bytes"),
@@ -128,7 +128,7 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("git remote list",), colour="bytes", **_R),
 
     E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",), colour="bytes"),
-    E("workspace-list", ("workspace", "list"), claims=("workspace list",)),
+    E("workspace-list", ("workspace", "list"), claims=("workspace list",), colour="bytes"),
 
     # -- paths ----------------------------------------------------------
     E("root", ("root",), normalize=("root",), claims=("root",), colour="bytes"),
