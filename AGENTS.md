@@ -911,6 +911,20 @@ Current state:
   The result names its two sides `before`/`after`, not jj's `from`/`to`,
   because `from` is a Python keyword and an attribute called that would
   be unreachable.
+- **Garbage collection**: `ReadonlyRepo.gc(max_age_secs=0.0)` is
+  `jj util gc`. Two stores hold garbage and both are swept -- the
+  operation store drops operations unreachable from the current head,
+  the commit store drops objects no commit in the index refers to -- and
+  what "drop" means is the backend's business, so the Git backend runs
+  `git gc`. Anything newer than the cutoff survives whether reachable or
+  not, because a concurrent process may not have referenced its new
+  objects yet. Two traps. The sweep starts from the repo's *own*
+  operation, so collecting from a repo loaded at a past operation would
+  delete everything the newer operations added; `jj` refuses that, and
+  the caller must make the same check because the binding cannot tell.
+  And its effect is invisible through the repo's own API -- what it
+  removes was unreachable by definition -- so no test can assert an
+  object went, only that the sweep ran and the repo still works.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
