@@ -4,7 +4,7 @@ import sys
 import pyjj
 from pyjj.graph_layout import reverse_graph
 
-from ...formatter import render_block
+from ...formatter import render_block, separate
 from ..common import (
     CommandError,
     _ago,
@@ -63,19 +63,7 @@ def _fields(op) -> list[tuple[str, tuple[str, ...]]]:
         (_duration(op.start_time.millis_since_epoch,
                    op.end_time.millis_since_epoch), ("time", "duration")),
     ])
-    return _separate(parts)
-
-
-def _separate(parts) -> list[tuple[str, tuple[str, ...]]]:
-    """jj's `separate(" ", ...)`: a space between the non-empty parts."""
-    spans: list[tuple[str, tuple[str, ...]]] = []
-    for part in parts:
-        if not any(text for text, _labels in part):
-            continue
-        if spans:
-            spans.append((" ", ()))
-        spans.extend(part)
-    return spans
+    return separate(parts)
 
 
 def _op_lines(op, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
@@ -90,7 +78,7 @@ def _op_lines(op, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
     attributes = [[(f"{key}: {value}", ("attributes",))]
                   for key, value in op.attributes]
     if shape == "oneline":
-        return [_separate([_fields(op), *description, *attributes])]
+        return [separate([_fields(op), *description, *attributes])]
     lines = [_fields(op), *description, *attributes]
     if shape == "comfortable":
         lines.append([])

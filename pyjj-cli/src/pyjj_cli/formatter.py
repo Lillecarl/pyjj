@@ -317,6 +317,32 @@ def formatter(out, settings=None) -> Formatter:
     return Formatter(out, use_color(settings))
 
 
+def _labels(labels) -> tuple[str, ...]:
+    """Labels as a tuple, whether written as one or as a string.
+
+    A span carries `"bookmark name"` in some callers and
+    `("bookmark", "name")` in others. Both say the same thing.
+    """
+    return tuple(labels.split()) if isinstance(labels, str) else tuple(labels)
+
+
+def separate(parts, gap: str = " ", labels=()):
+    """jj's `separate(sep, ...)`: a gap between the non-empty parts.
+
+    Each part is a list of spans. A part with no text drops, and so
+    does the gap that would have led it -- a commit that carries no
+    bookmarks prints no double space.
+    """
+    spans = []
+    for part in parts:
+        if not any(text for text, _labels in part):
+            continue
+        if spans:
+            spans.append((gap, labels))
+        spans.extend(part)
+    return spans
+
+
 def render_block(lines, base=(), enabled: bool = True) -> str:
     """Rows of labelled spans, rendered into one string.
 
@@ -329,11 +355,12 @@ def render_block(lines, base=(), enabled: bool = True) -> str:
     newline: the caller adds it, either as a graph row or as a print.
     """
     out = io.StringIO()
+    base = _labels(base)
     with Formatter(out, enabled) as fmt:
         last = len(lines) - 1
         for index, line in enumerate(lines):
             for text, labels in line:
-                fmt.write(text, *base, *labels)
+                fmt.write(text, *base, *_labels(labels))
             fmt.sync(*base)
             if index < last:
                 fmt.write("\n")

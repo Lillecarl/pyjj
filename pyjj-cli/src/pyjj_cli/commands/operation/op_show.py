@@ -26,8 +26,8 @@ def op_show(args) -> int:
             return 0
         # An operation's diff is against its parents, which is what
         # `op diff` computes when given no --from/--to.
-        return print_operation_diff(args, settings, repo, op.parents(), op,
-                                    heading=False)
+        return print_operation_diff(args, settings, ws, repo, op.parents(),
+                                    op, heading=False, prefix="op_show")
     except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
             CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
