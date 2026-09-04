@@ -1476,6 +1476,13 @@ def test_show_stat(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def test_config_gc_with_nothing_to_collect(pair: RepoPair) -> None:
+    """Both repos still exist, so neither side has a leftover config."""
+    chain(pair)
+    pair.op(jj=["config", "gc"])
+    pair.assert_parity()
+
+
 # -- behaviour-changing global options -----------------------------------
 
 
@@ -1612,7 +1619,6 @@ def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["config", "gc"],
     ["run", "-r", rev("one"), "true"],
     ["util", "config-schema"],
 ]

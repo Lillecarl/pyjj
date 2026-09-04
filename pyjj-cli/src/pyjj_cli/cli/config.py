@@ -32,7 +32,7 @@ def add_parsers(sub) -> None:
     p_cfg_edit = config_sub.add_parser("edit", help="Start an editor on a jj config file")
     p_cfg_edit.set_defaults(_handler="pyjj_cli.cli.config:_stub_edit")
     p_cfg_gc = config_sub.add_parser("gc", help="Find and optionally delete repo-level config")
-    p_cfg_gc.set_defaults(_handler="pyjj_cli.cli.config:_stub_gc")
+    p_cfg_gc.set_defaults(_handler="pyjj_cli.commands.config.config_gc:config_gc")
     p_cfg_path = config_sub.add_parser("path", help="Print the paths to the config files")
     add_config_scope_flags(p_cfg_path)
     p_cfg_path.set_defaults(_handler="pyjj_cli.commands.config.config_path:config_path_command")
@@ -41,12 +41,6 @@ def add_parsers(sub) -> None:
 def _stub_edit(args):
     import sys
     print("Error: config edit is not yet supported", file=sys.stderr)
-    return 2
-
-
-def _stub_gc(args):
-    import sys
-    print("Error: config gc is not yet supported", file=sys.stderr)
     return 2
 
 
