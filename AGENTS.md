@@ -430,11 +430,12 @@ Current state:
   (`jj_lib::graph::TopoGroupedGraph` wrapping `Revset::stream_graph()`, the
   same primitives `cli/src/commands/log.rs` itself is built on — children
   before parents, with a branch's commits kept contiguous rather than
-  interleaving with unrelated branches). No ASCII-art rendering is included
-  — jj's own graph glyph layout lives behind an external Rust-only crate
-  (`renderdag`) the CLI uses; a caller wanting to *draw* the graph does its
-  own lane/column layout from this edge data (well-understood technique,
-  same one most git TUIs use).
+  interleaving with unrelated branches). The drawing is bound too:
+  `GraphRenderer` wraps the same `renderdag` crate jj uses, at the version
+  jj pins. It never measures the glyph -- it writes the string and follows
+  it with a space, and the lane width comes from the lane count -- so a
+  glyph carrying escape sequences stays aligned, which is how jj colours
+  its own `@` and `◆`.
 - **Evolution**: `ReadonlyRepo.evolution_log(start_commits, limit=None) ->
   list[EvolutionEntry]` is `jj evolog`'s history
   (`jj_lib::evolution::walk_predecessors`): every earlier version of a
@@ -442,6 +443,9 @@ Current state:
   (the operation that created or rewrote it, `None` once that operation
   has left the op log) and `.predecessor_ids` (empty for the first
   version, several where versions were squashed together).
+  `evolution_graph()` is the same walk topologically grouped and carrying
+  `.edges`, which is what `jj evolog` draws; the plain `evolution_log()`
+  keeps the raw order, which is what `--no-graph` prints.
 
   It walks the *operation* log rather than the commit graph, so it finds
   versions that are hidden and no longer reachable in any revset. Unlike
