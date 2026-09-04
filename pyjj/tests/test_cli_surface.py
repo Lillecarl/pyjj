@@ -57,6 +57,15 @@ def test_the_measurement_itself_works(measured):
     assert "--at-operation" in jj[""]
 
 
+def test_no_stale_exclusions():
+    """Every documented exclusion still names something jj has.
+
+    An exclusion outlives the flag it excuses if nobody checks, and the
+    ledger then quietly under-reports.
+    """
+    assert cli_surface.stale_exclusions() == []
+
+
 def test_pyjj_surface_covers_its_own_commands():
     """The `argparse` walk must descend into subcommand groups, or the
     comparison would report every nested command as missing."""

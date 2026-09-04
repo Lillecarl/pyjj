@@ -75,6 +75,18 @@ _HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
                            "--at-op": "at_operation"}
 
 
+# The global options above never reach `argparse`, so a walk of the
+# parser tree cannot see them. Publish them for `cli_surface`, which
+# measures pyjj-cli's argument surface against jj's and would otherwise
+# report every one of them as missing.
+GLOBAL_FLAGS_OUTSIDE_ARGPARSE = frozenset(
+    _IGNORED_GLOBAL_FLAGS
+    | _IGNORED_GLOBAL_OPTIONS
+    | set(_HOISTED_GLOBAL_FLAGS)
+    | set(_HOISTED_GLOBAL_OPTIONS)
+)
+
+
 def _hoist_global_options(argv):
     """Pull the behaviour-changing globals out of `argv`.
 

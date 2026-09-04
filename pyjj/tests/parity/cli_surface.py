@@ -31,6 +31,9 @@ import subprocess
 
 from markdown_it import MarkdownIt
 
+from cli_surface_excluded import (EXCLUDED_COMMANDS, EXCLUDED_FLAGS,
+                                  excluded_flags)
+
 # jj writes the help text after an em dash, and the alias list before it.
 _EM_DASH = "—"
 
@@ -118,7 +121,7 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
 
 def pyjj_surface() -> dict[str, set[str]]:
     """The same shape, walked out of pyjj-cli's own `argparse` tree."""
-    from pyjj_cli.__main__ import build_parser
+    from pyjj_cli.__main__ import GLOBAL_FLAGS_OUTSIDE_ARGPARSE, build_parser
 
     surface: dict[str, set[str]] = {}
 
@@ -133,6 +136,11 @@ def pyjj_surface() -> dict[str, set[str]]:
         surface[path] = flags
 
     walk(build_parser(), "")
+    # jj takes its global options on either side of the subcommand, which
+    # argparse cannot express, so pyjj-cli strips or hoists those out of
+    # argv before parsing. They are real, accepted flags; the parser tree
+    # just never sees them.
+    surface[""] |= set(GLOBAL_FLAGS_OUTSIDE_ARGPARSE)
     return surface
 
 
@@ -151,14 +159,36 @@ def compare(jj_bin: str | None = None) -> dict[str, object]:
     ignore = {"-h", "--help"}
     missing_flags = {}
     for name in sorted(set(jj) & set(py)):
-        gap = (jj[name] - py[name]) - ignore
+        gap = (jj[name] - py[name]) - ignore - excluded_flags(name)
         if gap:
             missing_flags[name] = sorted(gap)
     return {
-        "missing_commands": sorted(set(jj) - set(py)),
+        "missing_commands": sorted(set(jj) - set(py) - set(EXCLUDED_COMMANDS)),
         "extra_commands": sorted(set(py) - set(jj)),
         "missing_flags": missing_flags,
     }
+
+
+def stale_exclusions(jj_bin: str | None = None) -> list[str]:
+    """Exclusions that no longer name anything jj has.
+
+    An exclusion outlives the flag it excuses if nobody checks, and then
+    the ledger quietly under-reports. Every entry has to keep pointing at
+    something real.
+    """
+    jj = jj_surface(jj_bin)
+    stale = []
+    for command in EXCLUDED_COMMANDS:
+        if command not in jj:
+            stale.append(f"jj {command}")
+    for command, flags in EXCLUDED_FLAGS.items():
+        if command not in jj:
+            stale.append(f"jj {command} (whole command)")
+            continue
+        for flag in flags:
+            if flag not in jj[command]:
+                stale.append(f"jj {command} {flag}")
+    return sorted(stale)
 
 
 def report(jj_bin: str | None = None) -> str:

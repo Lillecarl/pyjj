@@ -26,22 +26,12 @@
     "templates set",
     "templates unset"
   ],
-  "missing_commands": [
-    "gerrit upload"
-  ],
+  "missing_commands": [],
   "missing_flags": {
     "": [
-      "--at-op",
-      "--at-operation",
-      "--color",
       "--config",
       "--config-file",
-      "--debug",
-      "--ignore-immutable",
-      "--ignore-working-copy",
-      "--no-integrate-operation",
-      "--no-pager",
-      "--quiet"
+      "--ignore-immutable"
     ],
     "bookmark create": [
       "--to"
@@ -164,10 +154,6 @@
       "--fetch",
       "--push"
     ],
-    "help": [
-      "--keyword",
-      "-k"
-    ],
     "interdiff": [
       "--color-words",
       "--context",
@@ -279,12 +265,10 @@
     ],
     "restore": [
       "--changes-in",
-      "--interactive",
       "--restore-descendants",
       "--to",
       "--tool",
-      "-c",
-      "-i"
+      "-c"
     ],
     "show": [
       "--color-words",
@@ -298,9 +282,7 @@
       "-w"
     ],
     "split": [
-      "--editor",
-      "--interactive",
-      "-i"
+      "--editor"
     ],
     "squash": [
       "--after",
@@ -309,13 +291,11 @@
       "--editor",
       "--insert-after",
       "--insert-before",
-      "--interactive",
       "--onto",
       "--to",
       "--tool",
       "-A",
       "-B",
-      "-i",
       "-o"
     ],
     "tag list": [
