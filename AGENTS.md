@@ -884,6 +884,27 @@ Current state:
   `split_remainder()` can keep `target`'s tree, because a child of `first`
   shows the rest as a diff against it; a *sibling* hangs from `target`'s
   own parents, so its tree is `target`'s with the selected changes undone.
+- **Placing a split**: `jj split --onto/-A/-B` extracts the selected
+  changes into a commit somewhere else and leaves the rest where the
+  revision was. jj gives `target`'s change id to whichever half stays
+  put, so `split_remainder(target, first, new_change_id=False)` is the
+  placement form -- the opposite of a plain split -- and
+  `CommitBuilder.clear_rewrite_source()` on the moving half keeps one
+  commit claiming to rewrite `target`, so descendants and bookmarks
+  follow the right one. The order is jj's and does not commute: settle
+  the descendants onto the remainder first, then move the selected half,
+  which pulls the remainder back onto the revision's old parents. A
+  placement revision can itself be a descendant of the split target, so
+  its commit id changes in between -- `Transaction.revset()` re-resolves
+  it by change id, which a rebase preserves.
+- **Inserting between two revisions**: `-A` and `-B` together name both
+  sides of an insertion point, and jj then keeps the child's other
+  parents rather than replacing them, so the child becomes a merge.
+  `_insert_between` in pyjj-cli's `commands/common.py` holds the rule for
+  `new` and `revert`; `rebase` and `duplicate` get it from `jj_lib`'s
+  `move_commits`, which they already hand the children to. The children
+  are rebased, not re-parented: their trees have to be re-merged against
+  the parents they now have.
 - **Reverting one operation**: `Transaction.revert_operation(op, what=None)`
   is `jj op revert`, and it is not `restore_operation` with an older
   target. Restoring makes the view *be* a past view and drops everything
