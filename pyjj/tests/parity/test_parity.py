@@ -2429,10 +2429,53 @@ def test_log_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["log"])
 
 
-@OUTPUT_UNIMPLEMENTED
+@pytest.mark.covers("diff")
 def test_diff_output_matches(pair: RepoPair) -> None:
     chain(pair)
     pair.assert_output(["diff", "-r", rev("one")])
+
+
+@pytest.mark.covers("diff")
+def test_diff_color_words_trims_context(pair: RepoPair) -> None:
+    """The default format keeps three unchanged lines around a change
+    and replaces the rest with `    ...`. This file is long enough for
+    the rule to bite at the start, in the middle and at the end.
+    """
+    lines = [f"line{n}\n".encode() for n in range(1, 41)]
+    pair.init()
+    pair.op(files={"long.txt": b"".join(lines)}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "change"])
+    changed = list(lines)
+    changed[14] = b"LINE15\n"
+    changed[34] = b"LINE35\n"
+    pair.op(files={"long.txt": b"".join(changed)}, jj=["status"])
+    pair.assert_output(["diff", "-r", "@"])
+
+
+@pytest.mark.covers("diff")
+def test_diff_color_words_prints_every_file_shape(pair: RepoPair) -> None:
+    """Each shape gets its own sentence: a mode change reads as one, and
+    an added empty file reads as `(empty)` rather than no lines."""
+    pair.init()
+    pair.op(
+        files={
+            "edited.txt": b"one\ntwo\n",
+            "removed.txt": b"gone\n",
+            "mode.txt": b"same content\n",
+        },
+        jj=["describe", "-m", "base"],
+    )
+    pair.op(jj=["new", "-m", "every shape"])
+    pair.op(
+        files={
+            "edited.txt": b"one\nTWO\n",
+            "removed.txt": None,
+            "added.txt": b"brand new\n",
+            "empty.txt": b"",
+        },
+        jj=["file", "chmod", "x", "mode.txt"],
+    )
+    pair.assert_output(["diff", "-r", "@"])
 
 
 @pytest.mark.covers("diff", "--git")

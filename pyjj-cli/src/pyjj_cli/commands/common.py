@@ -640,12 +640,22 @@ def _ui_path_formatter(ws):
     return lambda path: _relative_path(cwd, root / path)
 
 
-def _bookmarks_by_commit(repo) -> dict[str, list[str]]:
-    """Local bookmark names per commit, keyed by hex commit id."""
+def _bookmarks_by_commit(repo, remotes: bool = False) -> dict[str, list[str]]:
+    """Bookmark names per commit, keyed by hex commit id.
+
+    `remotes` adds the remote-tracking bookmarks as `name@remote`, which
+    is what jj lists in a commit's header. A colocated repository has a
+    `git` remote, so an exported bookmark appears twice there -- `main`
+    and `main@git`.
+    """
     by_commit: dict[str, list[str]] = {}
     for bookmark in repo.bookmarks():
         for target in bookmark.target_ids:
             by_commit.setdefault(target.hex(), []).append(bookmark.name)
+    if remotes:
+        for bookmark in repo.remote_bookmarks():
+            for target in bookmark.target_ids:
+                by_commit.setdefault(target.hex(), []).append(bookmark.symbol)
     return by_commit
 
 
@@ -665,6 +675,10 @@ def _is_empty(repo, commit) -> bool:
     if not commit.parent_ids:
         return not commit.list_files()
     return commit.is_empty(repo)
+
+
+
+
 
 
 def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
@@ -768,6 +782,158 @@ def _git_diff_bytes(files, context: int = 3) -> bytes:
     return bytes(out)
 
 
+
+_FILE_TYPES = {
+    "100644": "regular file",
+    "100755": "executable file",
+    "120000": "symlink",
+    "040000": "Git submodule",
+}
+
+# `unified_hunks` trims context; the color-words format trims its own,
+# with different rules at the start and the end of a file. Asking for
+# every line keeps the classification and the numbering and leaves the
+# trimming here.
+_ALL_CONTEXT = 1 << 30
+
+
+def _color_words_header(f, to_ui_path) -> str:
+    """The line jj writes above a file's color-words diff.
+
+    jj names the file by what it is on each side, so a mode change reads
+    as a sentence rather than a diff -- `Non-executable file became
+    executable at b.txt:`.
+    """
+    path = to_ui_path(f.path)
+    if f.before_mode is None:
+        return f"Added {_FILE_TYPES[f.after_mode]} {path}:"
+    if f.after_mode is None:
+        return f"Removed {_FILE_TYPES[f.before_mode]} {path}:"
+    before, after = f.before_mode, f.after_mode
+    if before == after == "100755":
+        description = "Modified executable file"
+    elif before == "100755" and after == "100644":
+        description = "Executable file became non-executable at"
+    elif before == "100644" and after == "100755":
+        description = "Non-executable file became executable at"
+    elif before == after == "120000":
+        description = "Symlink target changed at"
+    elif before == after == "100644":
+        description = "Modified regular file"
+    else:
+        left, right = _FILE_TYPES[before], _FILE_TYPES[after]
+        description = f"{left[0].upper()}{left[1:]} became {right} at"
+    if f.source_path != f.path:
+        source = to_ui_path(f.source_path)
+        return f"{description} {path} ({source} => {path}):"
+    return f"{description} {path}:"
+
+
+def _color_words_line(left, right, content: bytes) -> bytes:
+    """One numbered line. A missing number leaves its column blank."""
+    prefix = f"{left:>4} " if left is not None else "     "
+    prefix += f"{right:>4}: " if right is not None else "    : "
+    return prefix.encode() + content
+
+
+def _color_words_hunks(before: bytes, after: bytes, context: int = 3) -> list[bytes]:
+    """The numbered body of a color-words diff.
+
+    jj keeps `context` unchanged lines after a change and `context`
+    before the next one, and replaces what is left with `    ...`. It
+    keeps nothing before the first change and nothing after the last.
+
+    A run that would lose exactly one line prints that line instead: the
+    ellipsis costs the same row, so eliding it gains nothing. That is
+    the `num_after + num_before + 1` below, and it is jj's rule, not a
+    rounding choice.
+    """
+    hunks = pyjj.unified_hunks(before, after, _ALL_CONTEXT)
+    if not hunks:
+        return []
+    out: list[bytes] = []
+    left = right = 1
+    run: list[bytes] = []
+    emitted = False
+
+    def flush(num_after: int, num_before: int) -> None:
+        nonlocal left, right, run
+        total = len(run)
+        if total > num_after + num_before + 1:
+            head, tail = run[:num_after], run[total - num_before:]
+            skipped = total - num_after - num_before
+        else:
+            head, tail, skipped = run, [], 0
+        for content in head:
+            out.append(_color_words_line(left, right, content))
+            left += 1
+            right += 1
+        if skipped:
+            out.append(b"    ...\n")
+            left += skipped
+            right += skipped
+        for content in tail:
+            out.append(_color_words_line(left, right, content))
+            left += 1
+            right += 1
+        run = []
+
+    for kind, content in hunks[0].lines:
+        if kind == "context":
+            run.append(content)
+            continue
+        flush(context if emitted else 0, context)
+        emitted = True
+        if kind == "removed":
+            out.append(_color_words_line(left, None, content))
+            left += 1
+        else:
+            out.append(_color_words_line(None, right, content))
+            right += 1
+    flush(context if emitted else 0, 0)
+    return out
+
+
+def _color_words_bytes(files, to_ui_path, context: int = 3) -> bytes:
+    """`jj diff`'s default output for a list of `Commit.git_diff()` files.
+
+    A conflicted path reads as a regular file here. jj names it a
+    conflict and says whether the change created, resolved or moved it;
+    `git_diff()` has already materialized the markers by this point, so
+    that distinction is gone. The status scenarios mark the gap.
+    """
+    out = bytearray()
+    for f in files:
+        out.extend(_color_words_header(f, to_ui_path).encode())
+        out.extend(b"\n")
+        added = f.before_mode is None
+        removed = f.after_mode is None
+        content = f.after_content if added else f.before_content
+        if (added or removed) and not content:
+            out.extend(b"    (empty)\n")
+            continue
+        if f.is_binary:
+            out.extend(b"    (binary)\n")
+            continue
+        before = b"" if added else f.before_content
+        after = b"" if removed else f.after_content
+        if before == after:
+            continue
+        for line in _color_words_hunks(before, after, context):
+            out.extend(line)
+            if not line.endswith(b"\n"):
+                out.extend(b"\n")
+    return bytes(out)
+
+
+def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None) -> None:
+    """Writes `jj diff`'s default output to stdout."""
+    files = from_commit.git_diff(to_commit, settings, paths)
+    sys.stdout.flush()
+    sys.stdout.buffer.write(_color_words_bytes(files, _ui_path_formatter(ws)))
+    sys.stdout.buffer.flush()
+
+
 _DIFF_SIGILS = {"context": b" ", "removed": b"-", "added": b"+"}
 
 
@@ -811,3 +977,42 @@ def _print_diff_stats(stats) -> None:
     print(f"{len(stats)} file{'' if len(stats) == 1 else 's'} changed, "
           f"{total_added} insertion{'' if total_added == 1 else 's'}(+), "
           f"{total_removed} deletion{'' if total_removed == 1 else 's'}(-)")
+
+
+def _diff_base(repo, settings, commit):
+    """What a one-revision diff compares against: the first parent, or
+    the root commit when there is none.
+
+    jj diffs a parentless commit against the root commit, whose tree is
+    empty, so every file in it reads as added. Every format goes through
+    here, so none of them needs a branch for the case.
+    """
+    if commit.parent_ids:
+        return repo.get_commit(commit.parent_ids[0])
+    return repo.revset(settings, "root()")[0]
+
+
+def _print_diff(args, ws, settings, base, target, paths) -> None:
+    """One place that decides which format `jj diff` prints.
+
+    jj's default is the color-words diff, not a file listing. The flags
+    that replace it are `--git`, `--stat`, `--summary` and
+    `--name-only`, and every path through `diff` reaches this with the
+    same two commits, so they behave the same everywhere.
+    """
+    if getattr(args, "git", False):
+        _print_git_diff(base, target, settings, paths)
+        return
+    if getattr(args, "stat", False):
+        _print_diff_stats(base.diff_stats(target, settings, paths))
+        return
+    to_ui_path = _ui_path_formatter(ws)
+    if getattr(args, "name_only", False):
+        for entry in base.diff(target, paths):
+            print(to_ui_path(entry.path))
+        return
+    if getattr(args, "summary", False):
+        for line in _summary_lines(base.diff(target, paths), to_ui_path):
+            print(line)
+        return
+    _print_color_words_diff(base, target, settings, ws, paths)
