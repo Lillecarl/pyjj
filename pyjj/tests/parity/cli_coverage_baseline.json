@@ -325,16 +325,13 @@
     "(command)"
   ],
   "interdiff": [
-    "(command)",
     "--color-words",
     "--context",
     "--from",
-    "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
     "--stat",
-    "--summary",
     "--to",
     "--tool",
     "--types",

@@ -2610,6 +2610,34 @@ def test_file_list_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["file", "list"])
 
 
+@pytest.mark.covers("interdiff")
+def test_interdiff_output_matches(pair: RepoPair) -> None:
+    """`interdiff` compares two commits' patches, and their
+    descriptions, so its output leads with a description block."""
+    chain(pair)
+    pair.assert_output(["interdiff", "--from", rev("one"), "--to", rev("two")])
+
+
+@pytest.mark.covers("interdiff", "--git")
+def test_interdiff_git_format_output_matches(pair: RepoPair) -> None:
+    """In `--git` format the description diff gets a dummy path, so the
+    whole output stays a parsable patch."""
+    chain(pair)
+    pair.assert_output(
+        ["interdiff", "--git", "--from", rev("one"), "--to", rev("two")]
+    )
+
+
+@pytest.mark.covers("interdiff", "--summary")
+def test_interdiff_summary_omits_the_description(pair: RepoPair) -> None:
+    """The short formats leave the description out: a summary line is
+    only a path, and the description has none."""
+    chain(pair)
+    pair.assert_output(
+        ["interdiff", "--summary", "--from", rev("one"), "--to", rev("two")]
+    )
+
+
 @pytest.mark.covers("file annotate")
 def test_file_annotate_output_matches(pair: RepoPair) -> None:
     """Each line names the change that last touched it, not the commit:

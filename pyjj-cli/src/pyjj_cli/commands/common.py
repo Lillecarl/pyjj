@@ -818,14 +818,27 @@ def _git_diff_bytes(files, context: int = 3) -> bytes:
             continue
         line(f"--- {left_name}")
         line(f"+++ {right_name}")
-        for hunk in pyjj.unified_hunks(f.before_content, f.after_content, context):
-            line(f"@@ -{hunk.left_start},{hunk.left_len} "
-                 f"+{hunk.right_start},{hunk.right_len} @@")
-            for kind, content in hunk.lines:
-                out.extend(_DIFF_SIGILS[kind])
-                out.extend(content)
-                if not content.endswith(b"\n"):
-                    out.extend(b"\n\\ No newline at end of file\n")
+        out.extend(_unified_hunk_bytes(f.before_content, f.after_content, context))
+    return bytes(out)
+
+
+def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3) -> bytes:
+    """The `@@` headers and their lines, without any file header.
+
+    jj prints these for a file and, in `--git` format, for a commit
+    description as well, under a dummy path.
+    """
+    out = bytearray()
+    for hunk in pyjj.unified_hunks(before, after, context):
+        out.extend(
+            f"@@ -{hunk.left_start},{hunk.left_len} "
+            f"+{hunk.right_start},{hunk.right_len} @@\n".encode()
+        )
+        for kind, content in hunk.lines:
+            out.extend(_DIFF_SIGILS[kind])
+            out.extend(content)
+            if not content.endswith(b"\n"):
+                out.extend(b"\n\\ No newline at end of file\n")
     return bytes(out)
 
 
@@ -1045,6 +1058,94 @@ def _diff_base(repo, settings, commit):
     if commit.parent_ids:
         return repo.get_commit(commit.parent_ids[0])
     return repo.revset(settings, "root()")[0]
+
+
+# jj gives a commit description a dummy path so a `--git` diff of one
+# stays a parsable patch.
+_DESCRIPTION_PATH = "JJ-COMMIT-DESCRIPTION"
+
+
+def _description_diff_bytes(args, before: str, after: str) -> bytes:
+    """What jj prints when two commits' descriptions differ.
+
+    `jj interdiff` compares descriptions as well as trees. The short
+    formats omit the block: jj's reasoning is that a dummy file path
+    tells the reader nothing, and a summary line is only a path.
+    """
+    if before == after:
+        return b""
+    if any(getattr(args, flag, False) for flag in ("stat", "summary", "name_only")):
+        return b""
+    left, right = before.encode(), after.encode()
+    if getattr(args, "git", False):
+        header = (
+            f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}\n"
+            f"--- {_DESCRIPTION_PATH}\n"
+            f"+++ {_DESCRIPTION_PATH}\n"
+        ).encode()
+        return header + _unified_hunk_bytes(left, right)
+    out = bytearray(b"Modified commit description:\n")
+    for line in _color_words_hunks(left, right):
+        out.extend(line)
+        if not line.endswith(b"\n"):
+            out.extend(b"\n")
+    return bytes(out)
+
+
+class _FileStat:
+    """The shape `_print_diff_stats` reads, computed from file content.
+
+    `Commit.diff_stats()` needs two commits. An interdiff has only one,
+    since its left side is a tree that was never committed.
+    """
+
+    def __init__(self, f):
+        self.path = f.path
+        self.status = (
+            "added" if f.before_mode is None
+            else "removed" if f.after_mode is None
+            else "modified"
+        )
+        self.binary = f.is_binary
+        self.bytes_delta = len(f.after_content) - len(f.before_content)
+        if f.is_binary:
+            self.added = self.removed = None
+            return
+        self.added = self.removed = 0
+        for hunk in pyjj.unified_hunks(f.before_content, f.after_content, 0):
+            for kind, _ in hunk.lines:
+                if kind == "added":
+                    self.added += 1
+                elif kind == "removed":
+                    self.removed += 1
+
+
+def _print_diff_files(args, ws, files) -> None:
+    """The same format choice as `_print_diff`, from file content alone.
+
+    `jj interdiff` diffs a rebased tree that has no commit id, so the
+    commit-based helpers cannot serve it.
+    """
+    if getattr(args, "git", False):
+        sys.stdout.flush()
+        sys.stdout.buffer.write(_git_diff_bytes(files))
+        sys.stdout.buffer.flush()
+        return
+    if getattr(args, "stat", False):
+        _print_diff_stats([_FileStat(f) for f in files])
+        return
+    to_ui_path = _ui_path_formatter(ws)
+    if getattr(args, "name_only", False):
+        for f in files:
+            print(to_ui_path(f.path))
+        return
+    if getattr(args, "summary", False):
+        for line in _summary_lines([_FileStat(f) for f in files], to_ui_path):
+            print(line)
+        return
+    sys.stdout.flush()
+    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path))
+    sys.stdout.buffer.flush()
 
 
 def _print_diff(args, ws, settings, base, target, paths) -> None:

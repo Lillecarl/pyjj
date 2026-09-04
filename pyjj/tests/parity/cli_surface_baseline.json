@@ -169,16 +169,11 @@
     "interdiff": [
       "--color-words",
       "--context",
-      "--git",
       "--ignore-all-space",
       "--ignore-space-change",
-      "--name-only",
-      "--stat",
-      "--summary",
       "--tool",
       "--types",
       "-b",
-      "-s",
       "-w"
     ],
     "log": [

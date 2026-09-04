@@ -3,7 +3,13 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _load, _resolve_one
+from ..common import (
+    CommandError,
+    _description_diff_bytes,
+    _load,
+    _print_diff_files,
+    _resolve_one,
+)
 
 
 def interdiff(args) -> int:
@@ -18,15 +24,20 @@ def interdiff(args) -> int:
         print("Error: --from or --to is required", file=sys.stderr)
         return 2
     try:
-        settings, _ws, repo = _load(args)
+        settings, ws, repo = _load(args)
         source = _resolve_one(repo, settings, args.from_ or "@")
         target = _resolve_one(repo, settings, args.to or "@")
         paths = list(getattr(args, "paths", None) or []) or None
-        entries = repo.interdiff(source, target, paths)
+        files = repo.interdiff_files(source, target, settings, paths)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
 
-    for entry in entries:
-        print(f"{entry.status:8} {entry.path}")
+    # jj compares the descriptions too, and prints that block first.
+    sys.stdout.flush()
+    sys.stdout.buffer.write(
+        _description_diff_bytes(args, source.description, target.description)
+    )
+    sys.stdout.buffer.flush()
+    _print_diff_files(args, ws, files)
     return 0
