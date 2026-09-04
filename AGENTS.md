@@ -213,9 +213,10 @@ implemented yet" is never a `skip` reason; that is what `todo` is for.
 **Normalization** is declared per entry, and the goldens store
 normalized text. `root` replaces the workspace path, `op_ids` the
 operation ids, `ago` the relative times, `host` the machine's user and
-hostname. Without these, output that is correct on both sides still
-differs -- and with them, commands like `op log` become comparable
-instead of needing a per-side test.
+hostname, `prog` the program name in a recorded command line. Without
+these, output that is correct on both sides still differs -- and with
+them, commands like `op log` become comparable instead of needing a
+per-side test.
 
 **Three things the corpus enforces that a live comparison cannot.**
 jj is checked against its own golden too, so a failure says whether
@@ -224,6 +225,15 @@ may not be empty unless its entry says so -- `tag list` kept a wrong
 format for weeks behind a scenario where both sides printed nothing.
 And every read-only command must have an entry or a reasoned refusal, so
 a flag cannot be left out by not thinking about it.
+
+**The corpus finds gaps that are not about rendering.** `op log` was
+added expecting a formatting job. Two of the three fixes were not:
+pyjj-cli recorded no workspace and no command line on its operations,
+so the log had nothing to print, and its bookmark operations described
+themselves in their own words rather than jj's. Neither is visible from
+either ledger -- both read argument parsers -- and neither shows up in a
+state comparison, because the operation log is not part of the state
+those compare. Expect an entry to point past the command it names.
 
 **Two facts about jj's output that cost time to find.**
 
@@ -263,6 +273,23 @@ A templated command cannot share one argv with jj, since the two
 template languages differ. `RepoPair.outputs_asymmetric()` sends each
 side the same request in its own language and compares the output. It is
 the only place in the suite where the two argv differ on purpose.
+
+### Operation metadata
+
+Every write goes through `_start_transaction(repo, settings)` in
+`common.py`, never `repo.start_transaction` directly. It records this
+run's command line on the transaction, which `jj op log` prints under
+the description; the binding stamps the workspace name on its own. A
+command that opens a transaction any other way produces an operation
+with no provenance, and nothing else will notice.
+
+The recorded program name is a constant, `pyjj`, the same way jj's own
+is `jj` regardless of `argv[0]`. The corpus normalizes it away with the
+`prog` normalizer, so the arguments still have to agree.
+
+Operation descriptions are output too. They are read by people in
+`jj op log`, so they follow jj's wording rather than pyjj-cli's own --
+see `cli/src/commands/**` for the exact strings.
 
 ### Running the suite
 
