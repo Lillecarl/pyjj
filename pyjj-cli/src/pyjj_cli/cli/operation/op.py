@@ -15,8 +15,17 @@ def register(sub) -> None:
     p_op_abandon2.add_argument("operations", nargs="+", help="Operations to abandon")
     p_op_abandon2.set_defaults(_handler="pyjj_cli.commands.operation.op_abandon:op_abandon")
     p_op_diff2 = op_sub.add_parser("diff", help="Compare changes to the repository between two operations")
-    p_op_diff2.add_argument("from", help="From operation")
-    p_op_diff2.add_argument("to", help="To operation")
+    p_op_diff2.add_argument("--operation", "--op", dest="operation", default=None,
+                          metavar="OPERATION",
+                          help="Show repository changes in this operation, compared to its parent")
+    p_op_diff2.add_argument("-f", "--from", dest="from_", default=None, metavar="OPERATION",
+                          help="Show repository changes from this operation")
+    p_op_diff2.add_argument("-t", "--to", dest="to", default=None, metavar="OPERATION",
+                          help="Show repository changes to this operation")
+    p_op_diff2.add_argument("-G", "--no-graph", action="store_true",
+                          help="Don't show the graph, show a flat list of modified changes")
+    p_op_diff2.add_argument("--show-changes-in", default=None, metavar="REVSETS",
+                          help="Show only changed revisions matching this revset")
     p_op_diff2.set_defaults(_handler="pyjj_cli.commands.operation.op_diff:op_diff")
     p_op_integrate2 = op_sub.add_parser("integrate", help="Make an operation part of the operation log")
     p_op_integrate2.add_argument("operation", help="Operation to integrate")
@@ -39,8 +48,17 @@ def register(sub) -> None:
     p_oplog_abandon.add_argument("operations", nargs="+", help="Operations to abandon")
     p_oplog_abandon.set_defaults(_handler="pyjj_cli.commands.operation.op_abandon:op_abandon")
     p_oplog_diff = oplog_sub.add_parser("diff", help="Compare changes to the repository between two operations")
-    p_oplog_diff.add_argument("from", help="From operation")
-    p_oplog_diff.add_argument("to", help="To operation")
+    p_oplog_diff.add_argument("--operation", "--op", dest="operation", default=None,
+                          metavar="OPERATION",
+                          help="Show repository changes in this operation, compared to its parent")
+    p_oplog_diff.add_argument("-f", "--from", dest="from_", default=None, metavar="OPERATION",
+                          help="Show repository changes from this operation")
+    p_oplog_diff.add_argument("-t", "--to", dest="to", default=None, metavar="OPERATION",
+                          help="Show repository changes to this operation")
+    p_oplog_diff.add_argument("-G", "--no-graph", action="store_true",
+                          help="Don't show the graph, show a flat list of modified changes")
+    p_oplog_diff.add_argument("--show-changes-in", default=None, metavar="REVSETS",
+                          help="Show only changed revisions matching this revset")
     p_oplog_diff.set_defaults(_handler="pyjj_cli.commands.operation.op_diff:op_diff")
     p_oplog_restore2 = oplog_sub.add_parser("restore", help="Restore to the state of an operation")
     p_oplog_restore2.add_argument("operation", help="Operation to restore to")

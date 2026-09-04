@@ -844,6 +844,43 @@ def test_op_show_named_operation(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def test_op_diff_leaves_the_repo_alone(pair: RepoPair) -> None:
+    """With no arguments, the diff is the newest operation against its
+    parent."""
+    chain(pair)
+    pair.op(jj=["op", "diff"])
+    pair.assert_parity()
+
+
+def test_op_diff_named_operation(pair: RepoPair) -> None:
+    """Op ids differ between the repos, so each side names its own."""
+    chain(pair)
+    pair.op(
+        jj=["op", "diff", "--operation", pair.op_id("cli", 1)],
+        py=["op", "diff", "--operation", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
+def test_op_diff_from_and_to(pair: RepoPair) -> None:
+    """A range of operations, not just one against its parent."""
+    chain(pair)
+    pair.op(
+        jj=["op", "diff", "--from", pair.op_id("cli", 3),
+            "--to", pair.op_id("cli", 1)],
+        py=["op", "diff", "--from", pair.op_id("py", 3),
+            "--to", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
+def test_operation_long_form_diff(pair: RepoPair) -> None:
+    """`jj operation diff` is the same command as `jj op diff`."""
+    chain(pair)
+    pair.op(jj=["operation", "diff"])
+    pair.assert_parity()
+
+
 def test_operation_long_form_log(pair: RepoPair) -> None:
     """`jj operation` is the same command as `jj op`."""
     chain(pair)
@@ -1421,7 +1458,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 UNIMPLEMENTED_ARGV = [
     ["metaedit", "-r", rev("one"), "--force-rewrite"],
-    ["op", "diff"],
     ["config", "gc"],
     ["log", "--stat"],
     ["run", "-r", rev("one"), "true"],

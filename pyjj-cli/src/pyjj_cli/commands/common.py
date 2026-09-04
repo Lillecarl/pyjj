@@ -414,3 +414,15 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     if value is not None:
         return value
     return _jj_config_get(key, cwd)
+
+
+def _resolve_operation(repo, name: str | None):
+    """Resolve an operation the way `jj` names them on the command line.
+
+    `@` means the operation the repo is loaded at. Anything else is a
+    full hex id, which is what the binding takes. `None` means `@` too,
+    so a command can pass an absent argument straight through.
+    """
+    if not name or name == "@":
+        return repo.operation
+    return repo.load_operation(name)
