@@ -934,6 +934,16 @@ Current state:
   writing when the walk found the same tree; the flag just says which
   path it took. `jj util snapshot` reports exactly this, as the
   difference between "Snapshot complete." and "No snapshot needed."
+- **Diff stats**: `Commit.diff_stats(other, settings, paths=None)` is what
+  `--stat` needs, mirroring `DiffStats::calculate`. Each side is
+  materialized first, so a conflict counts its marker lines the way jj
+  counts them, and every differing hunk gives its left lines to `removed`
+  and its right lines to `added` -- a replaced line counts once on each
+  side. Binary is jj's (and git's) heuristic, a NUL byte in the first 8000
+  bytes, and such a file reports `None` for both counts with only
+  `bytes_delta` meaning anything. Kept separate from `diff()` rather than
+  added as fields on `DiffEntry`, because it reads file content and
+  `diff()` does not.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
