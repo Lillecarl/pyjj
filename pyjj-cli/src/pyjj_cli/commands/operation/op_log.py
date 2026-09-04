@@ -43,6 +43,55 @@ def _header(op, root: bool) -> str:
     return " ".join(part for part in parts if part)
 
 
+def _body(op, current: bool, template) -> list[str]:
+    """The lines one operation prints, without the graph column."""
+    root = not op.parent_ids
+    attributes = "\n".join(f"{key}: {value}" for key, value in op.attributes)
+    if template is None:
+        if root:
+            # The root operation has no user, no time and nothing it
+            # did. jj gives it a single line saying just that.
+            return [_header(op, root)]
+        first_line = op.description.splitlines()[0] if op.description else ""
+        return [_header(op, root), first_line, *attributes.splitlines()]
+
+    rendered = template.render({
+        "operation": op,
+        "id": op.id,
+        "id_short": op.id[:12],
+        "header": _header(op, root),
+        "user": f"{op.username}@{op.hostname}",
+        "username": op.username,
+        "hostname": op.hostname,
+        "workspace_name": op.workspace_name,
+        "time_ago": _ago(op.end_time.millis_since_epoch),
+        "duration": _duration(op.start_time.millis_since_epoch,
+                              op.end_time.millis_since_epoch),
+        "description": op.description.splitlines()[0] if op.description else "",
+        "description_full": op.description,
+        "attributes": attributes,
+        "is_current": current,
+        "is_root": root,
+    })
+    # A template's own trailing newline ends its last line rather than
+    # starting an empty one; anything past that is a blank line the
+    # template asked for.
+    lines = rendered.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines or [""]
+
+
+def render_operation(settings, ws, args, repo, op, name: str) -> list[str]:
+    """One operation's lines, for a command that prints just the one.
+
+    `op show` renders its header with the same template `op log` does,
+    so it comes from here rather than from a second copy.
+    """
+    template = _resolve_template(settings, ws, args, name, _BUILTINS)
+    return _body(op, op.id == repo.operation.id, template)
+
+
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
     try:
@@ -67,46 +116,8 @@ def op_log(args) -> int:
     no_graph = getattr(args, "no_graph", False)
     reversed_order = getattr(args, "reversed", False)
 
-    blocks = []
-    for op, row in zip(ops, rows):
-        root = not op.parent_ids
-        current = op.id == current_id
-        attributes = "\n".join(f"{key}: {value}" for key, value in op.attributes)
-        if template is not None:
-            rendered = template.render({
-                "operation": op,
-                "id": op.id,
-                "id_short": op.id[:12],
-                "header": _header(op, root),
-                "user": f"{op.username}@{op.hostname}",
-                "username": op.username,
-                "hostname": op.hostname,
-                "workspace_name": op.workspace_name,
-                "time_ago": _ago(op.end_time.millis_since_epoch),
-                "duration": _duration(op.start_time.millis_since_epoch,
-                                      op.end_time.millis_since_epoch),
-                "description": op.description.splitlines()[0] if op.description else "",
-                "description_full": op.description,
-                "attributes": attributes,
-                "is_current": current,
-                "is_root": root,
-            })
-            # A template's own trailing newline ends its last line
-            # rather than starting an empty one; anything past that is a
-            # blank line the template asked for.
-            lines = rendered.split("\n")
-            if lines and lines[-1] == "":
-                lines.pop()
-            body = lines or [""]
-        elif root:
-            # The root operation has no user, no time and nothing it
-            # did. jj gives it a single line saying just that.
-            body = [_header(op, root)]
-        else:
-            first_line = op.description.splitlines()[0] if op.description else ""
-            body = [_header(op, root), first_line]
-            body.extend(attributes.splitlines())
-        blocks.append((row, current, body))
+    blocks = [(row, op.id == current_id, _body(op, op.id == current_id, template))
+              for op, row in zip(ops, rows)]
 
     if reversed_order:
         blocks = list(reversed(blocks))

@@ -1,46 +1,33 @@
-"""operation subcommand: op_show."""
-import json
-import os
-import shlex
-import subprocess
+"""operation subcommand: op show — one operation, and what it changed.
+
+Mirrors `cli/src/commands/operation/show.rs`. jj renders the header
+with the same `builtin_op_log_compact` template `op log` uses, without
+the graph, and then prints the operation's own diff below it -- so this
+is `op log`'s header plus `op diff`'s body, and both come from there.
+"""
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
-from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
-    _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
-)
+
+from ..common import CommandError, _load, _resolve_operation
+from .op_diff import print_operation_diff
+from .op_log import render_operation
+
 
 def op_show(args) -> int:
+    """`jj op show` — an operation's header, then what it changed."""
     try:
-        _settings, _ws, repo = _load(args)
-        op_id = getattr(args, "operation", None)
-        if op_id:
-            op = repo.load_operation(op_id)
-        else:
-            op = repo.operation
-        print(f"Operation: {op.id}")
-        print(f"Description: {op.description}")
-        return 0
-    except (pyjj.JjError, CommandError) as e:
+        settings, ws, repo = _load(args)
+        op = _resolve_operation(repo, getattr(args, "operation", None))
+        for line in render_operation(settings, ws, args, repo, op, "op_show"):
+            print(line)
+        if getattr(args, "no_op_diff", False):
+            return 0
+        # An operation's diff is against its parents, which is what
+        # `op diff` computes when given no --from/--to.
+        return print_operation_diff(args, settings, repo, op.parents(), op,
+                                    heading=False)
+    except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
+            CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

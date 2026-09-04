@@ -385,7 +385,6 @@
     "(command)"
   ],
   "operation diff": [
-    "(command)",
     "--color-words",
     "--context",
     "--from",
@@ -393,7 +392,6 @@
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
-    "--no-graph",
     "--op",
     "--operation",
     "--patch",
@@ -403,7 +401,6 @@
     "--to",
     "--tool",
     "--types",
-    "-G",
     "-f",
     "-p",
     "-s",
@@ -439,24 +436,18 @@
     "--what"
   ],
   "operation show": [
-    "(command)",
     "--color-words",
     "--context",
     "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
-    "--no-graph",
-    "--no-op-diff",
     "--patch",
     "--show-changes-in",
     "--stat",
     "--summary",
-    "--template",
     "--tool",
     "--types",
-    "-G",
-    "-T",
     "-p",
     "-s"
   ],

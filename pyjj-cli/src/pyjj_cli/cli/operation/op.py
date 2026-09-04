@@ -21,6 +21,10 @@ def register(sub) -> None:
     p_op_log2.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_op_show2 = op_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_op_show2.add_argument("operation", nargs="?", help="Operation to show")
+    p_op_show2.add_argument("--no-op-diff", action="store_true",
+                       help="Do not show operation diff")
+    add_no_graph_flag(p_op_show2)
+    add_template_flag(p_op_show2)
     p_op_show2.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")
     p_op_abandon2 = op_sub.add_parser("abandon", help="Abandon operation history")
     p_op_abandon2.add_argument("operations", nargs="+", help="Operations to abandon")
@@ -62,6 +66,10 @@ def register(sub) -> None:
     p_oplog_log.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_oplog_show = oplog_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_oplog_show.add_argument("operation", nargs="?", help="Operation to show")
+    p_oplog_show.add_argument("--no-op-diff", action="store_true",
+                       help="Do not show operation diff")
+    add_no_graph_flag(p_oplog_show)
+    add_template_flag(p_oplog_show)
     p_oplog_show.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")
     p_oplog_abandon = oplog_sub.add_parser("abandon", help="Abandon operation history")
     p_oplog_abandon.add_argument("operations", nargs="+", help="Operations to abandon")

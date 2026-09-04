@@ -1,0 +1,11 @@
+«op» «who» default@ «ago», lasted «ago»
+snapshot working copy
+args: «prog» -R «root» status
+
+Changed commits:
++ yqymtrmq f966b4d0 two
+- yqymtrmq/1 2430aeeb (hidden) (empty) two
+
+Changed working copy default@:
++ yqymtrmq f966b4d0 two
+- yqymtrmq/1 2430aeeb (hidden) (empty) two

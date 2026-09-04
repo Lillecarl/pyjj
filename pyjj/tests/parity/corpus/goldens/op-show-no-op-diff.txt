@@ -1,0 +1,3 @@
+«op» «who» default@ «ago», lasted «ago»
+snapshot working copy
+args: «prog» -R «root» status
