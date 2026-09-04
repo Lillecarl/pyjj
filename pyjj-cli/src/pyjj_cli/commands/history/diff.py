@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _print_diff_stats,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -45,6 +46,9 @@ def diff(args) -> int:
                 c = revs[0]
                 if c.parent_ids:
                     parent = repo.get_commit(c.parent_ids[0])
+                    if getattr(args, "stat", False):
+                        _print_diff_stats(parent.diff_stats(c, settings, paths))
+                        return 0
                     entries = parent.diff(c, paths)
                     name_only = getattr(args, "name_only", False)
                     summary = getattr(args, "summary", False)
@@ -68,6 +72,9 @@ def diff(args) -> int:
             last = revs[0]
             if first.parent_ids:
                 base = repo.get_commit(first.parent_ids[0])
+                if getattr(args, "stat", False):
+                    _print_diff_stats(base.diff_stats(last, settings, paths))
+                    return 0
                 entries = base.diff(last, paths)
                 for e in entries:
                     print(f"{e.status:8} {e.path}")
@@ -80,12 +87,14 @@ def diff(args) -> int:
         if from_rev is not None or to_rev is not None:
             from_commit = _resolve_one(repo, settings, from_rev) if from_rev else _wc_commit(repo, _ws)
             to_commit = _resolve_one(repo, settings, to_rev) if to_rev else _wc_commit(repo, _ws)
+            stat_base, stat_target = from_commit, to_commit
             entries = from_commit.diff(to_commit, paths)
         else:
             # Default -r @
             wc = _wc_commit(repo, _ws)
             if wc.parent_ids:
                 parent = repo.get_commit(wc.parent_ids[0])
+                stat_base, stat_target = parent, wc
                 entries = parent.diff(wc, paths)
             else:
                 for p in wc.list_files(paths):
@@ -94,6 +103,9 @@ def diff(args) -> int:
                     else:
                         print(f"added    {p}")
                 return 0
+        if getattr(args, "stat", False):
+            _print_diff_stats(stat_base.diff_stats(stat_target, settings, paths))
+            return 0
         name_only = getattr(args, "name_only", False)
         for e in entries:
             if name_only:

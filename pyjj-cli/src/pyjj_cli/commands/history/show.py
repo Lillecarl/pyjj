@@ -23,6 +23,7 @@ from ..common import (
     join_message_paragraphs,
     _run_editor,
     _changed_files,
+    _print_diff_stats,
     _run_diff_tool,
     _selection_is_empty,
     _merge_marker_len,
@@ -46,6 +47,9 @@ def show(args) -> int:
                 continue
             if commit.parent_ids:
                 parent = repo.get_commit(commit.parent_ids[0])
+                if getattr(args, "stat", False):
+                    _print_diff_stats(parent.diff_stats(commit, settings))
+                    continue
                 entries = parent.diff(commit)
             else:
                 entries = []
@@ -55,8 +59,6 @@ def show(args) -> int:
             for e in entries:
                 if getattr(args, "name_only", False):
                     print(e.path)
-                elif getattr(args, "summary", False) or getattr(args, "stat", False):
-                    print(f"{e.status:8} {e.path}")
                 else:
                     print(f"{e.status:8} {e.path}")
     except (pyjj.JjError, CommandError) as e:

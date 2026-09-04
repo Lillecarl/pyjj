@@ -1458,6 +1458,24 @@ def test_log_stat_over_a_binary_file(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def test_diff_stat(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["diff", "--stat"])
+    pair.assert_parity()
+
+
+def test_diff_stat_from_and_to(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["diff", "--stat", "--from", rev("base"), "--to", rev("two")])
+    pair.assert_parity()
+
+
+def test_show_stat(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["show", "--stat", rev("one")])
+    pair.assert_parity()
+
+
 # -- behaviour-changing global options -----------------------------------
 
 
