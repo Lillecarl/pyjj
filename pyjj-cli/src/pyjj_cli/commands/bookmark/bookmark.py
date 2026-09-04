@@ -1,4 +1,5 @@
 """bookmark subcommand: bookmark."""
+import fnmatch
 import json
 import os
 import shlex
@@ -33,6 +34,90 @@ from ..common import (
     _fix_pattern_matches,
 )
 
+
+class _DeletedBookmark:
+    """A bookmark whose local target is gone but whose remotes remain.
+
+    `repo.bookmarks()` lists the bookmarks that are present, so a name
+    that survives on a remote alone has nothing to stand for it. jj
+    still heads the item with `name (deleted)`.
+    """
+
+    has_conflict = False
+    removed_ids = ()
+    target_ids = ()
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def _list_items(repo, args):
+    """The items `jj bookmark list` prints, in jj's order.
+
+    This is `collect_items` from jj's `cli/src/commit_ref_list.rs`,
+    driven by the same three predicates its `bookmark list` builds:
+
+      * a local ref appears on its own only without `--tracked` and
+        without `--remote`;
+      * a tracked remote ref appears only when its target differs from
+        the local one, unless `--tracked`, `--all-remotes` or
+        `--remote` asks for the synced ones too;
+      * an untracked remote ref appears as an item of its own under
+        `--all-remotes` or `--remote`, never under `--tracked`.
+
+    A name with no local ref still heads an item when a tracked remote
+    survives under it, which is how a deleted bookmark stays visible.
+
+    Items sort by name. jj sorts the whole list, and its sort is
+    stable, so a name's own item comes before the untracked remotes
+    that share its name.
+    """
+    all_remotes = getattr(args, "all_remotes", False)
+    tracked_only = getattr(args, "tracked", False)
+    patterns = getattr(args, "remotes", None)
+
+    include_local_only = not tracked_only and patterns is None
+    include_synced = tracked_only or all_remotes or patterns is not None
+    include_untracked = not tracked_only and (all_remotes or patterns is not None)
+
+    def matches(remote: str) -> bool:
+        if patterns is not None:
+            return any(fnmatch.fnmatchcase(remote, p) for p in patterns)
+        # `--tracked` on its own means `--remote=~git`: the local
+        # Git-tracking remote is noise in a listing about remotes.
+        return not (tracked_only and remote == "git")
+
+    def synced(local, remote_ref) -> bool:
+        return (
+            local is not None
+            and list(remote_ref.target_ids) == list(local.target_ids)
+            and list(remote_ref.removed_ids) == list(local.removed_ids)
+        )
+
+    locals_ = {bm.name: bm for bm in repo.bookmarks()}
+    by_name: dict[str, list] = {}
+    for remote_ref in repo.remote_bookmarks():
+        by_name.setdefault(remote_ref.name, []).append(remote_ref)
+
+    items = []
+    for name in sorted(set(locals_) | set(by_name)):
+        local = locals_.get(name)
+        refs = sorted(
+            (r for r in by_name.get(name, []) if matches(r.remote)),
+            key=lambda r: r.remote,
+        )
+        tracked = [r for r in refs if r.tracked]
+        if not include_synced:
+            tracked = [r for r in tracked if not synced(local, r)]
+        if (include_local_only and local is not None and local.target_ids) or tracked:
+            local_ids = list(local.target_ids) if local is not None else []
+            items.append((local or _DeletedBookmark(name),
+                          [(r, local_ids) for r in tracked]))
+        if include_untracked:
+            items.extend((r, ()) for r in refs if not r.tracked)
+    return items
+
+
 def bookmark(args) -> int:
     """`jj bookmark` dispatch — create/set/delete/forget/list/move/rename."""
     cmd = getattr(args, "bookmark_command", None)
@@ -42,17 +127,10 @@ def bookmark(args) -> int:
             _settings, ws, repo = _load(args)
             template = _resolve_template(_settings, ws, args, "bookmark_list")
             names = getattr(args, "names", None) or []
-            bms = repo.bookmarks()
-            # Filter by names if given (exact match for now)
-            if names:
-                bms = [b for b in bms if b.name in names]
-            remotes = (
-                sorted(repo.remote_bookmarks(), key=lambda b: (b.name, b.remote))
-                if getattr(args, "all_remotes", False)
-                else ()
-            )
-            for bm in sorted(bms, key=lambda b: b.name):
-                _print_ref(repo, _settings, bm, template, remotes)
+            for ref, tracked in _list_items(repo, args):
+                if names and ref.name not in names:
+                    continue
+                _print_ref(repo, _settings, ref, template, tracked)
             return 0
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

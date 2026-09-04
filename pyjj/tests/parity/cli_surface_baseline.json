@@ -47,13 +47,10 @@
     ],
     "bookmark list": [
       "--conflicted",
-      "--remote",
       "--revision",
       "--sort",
-      "--tracked",
       "-c",
-      "-r",
-      "-t"
+      "-r"
     ],
     "bookmark move": [
       "--allow-backwards",

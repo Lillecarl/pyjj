@@ -104,23 +104,15 @@ CATALOGUE: tuple[Entry, ...] = (
     # On `chain` these print what their absence prints: with no remote,
     # `--all-remotes` and `--tracked` change nothing. The entries above
     # keep the no-remote case; these hold the flags to their job.
-    E("bookmark-list-remote", ("bookmark", "list"), bar="todo",
-      reason="the default listing drops the tracked remotes under a "
-             "bookmark, and the distance to each",
-      **_R),
+    E("bookmark-list-remote", ("bookmark", "list"), **_R),
     E("bookmark-list-all-remotes-fetched",
       ("bookmark", "list", "--all-remotes"),
-      claims=("bookmark list", "--all-remotes", "-a"), bar="todo",
-      reason="a remote line carries no distance: jj writes "
-             "`@origin (behind by 2 commits)`",
-      **_R),
+      claims=("bookmark list", "--all-remotes", "-a"), **_R),
     E("bookmark-list-tracked", ("bookmark", "list", "--tracked"),
-      claims=("bookmark list", "--tracked", "-t"), bar="todo",
-      reason="`--tracked` is not parsed", **_R),
+      claims=("bookmark list", "--tracked", "-t"), **_R),
     E("bookmark-list-one-remote",
       ("bookmark", "list", "--remote", "origin"),
-      claims=("bookmark list", "--remote"), bar="todo",
-      reason="`--remote` is not parsed", **_R),
+      claims=("bookmark list", "--remote"), **_R),
     E("git-remotes", ("git", "remote", "list"),
       claims=("git remote list",), **_R),
 

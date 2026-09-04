@@ -35,6 +35,9 @@ def add_parsers(sub) -> None:
     p_bml = bm_sub.add_parser("list", help="List bookmarks")
     p_bml.add_argument("names", nargs="*", metavar="NAMES", help="Bookmark names to list")
     p_bml.add_argument("-a", "--all-remotes", action="store_true", help=argparse.SUPPRESS)
+    p_bml.add_argument("-t", "--tracked", action="store_true", help=argparse.SUPPRESS)
+    p_bml.add_argument("--remote", dest="remotes", action="append",
+                       metavar="REMOTE", help=argparse.SUPPRESS)
     # jj drives this from `templates.bookmark_list`; pyjj-cli uses Jinja
     # under `pyjj.templates.bookmark_list`.
     p_bml.add_argument("-T", "--template", default=None, metavar="TEMPLATE",

@@ -615,19 +615,53 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
-def _print_ref(repo, settings, ref, template=None, remotes=()) -> None:
-    """One bookmark or tag, as jj's `format_commit_ref` renders it.
+def _tracking_distances(repo, remote_ids, local_ids) -> str:
+    """jj's `format_tracked_remote_ref_distances`, as one bracketed part.
 
-    jj uses the same template for both, so this serves both listings. A
-    plain ref is `name: <commit summary>`. A deleted one is `name
-    (deleted)`, with no colon. A conflicted one heads a block, then
-    lists the commits it moved away from with `-` and the ones it moved
-    to with `+`.
+    Ahead counts the commits the remote ref reaches and the local one
+    does not. Behind counts the other way. jj drops a zero count, drops
+    the brackets when both are zero, and never singularizes "commits".
+
+    A count is a size hint: exact when its bounds meet, and a lower
+    bound otherwise. jj says "at least N" for the second case.
+    """
+    if not local_ids:
+        # The local ref is gone, so there is nothing to measure against.
+        return ""
+    parts = []
+    for word, wanted, unwanted in (
+        ("ahead", remote_ids, local_ids),
+        ("behind", local_ids, remote_ids),
+    ):
+        lower, upper = repo.walk_revs_count(wanted, unwanted)
+        if upper == 0:
+            continue
+        if upper == lower:
+            parts.append(f"{word} by {lower} commits")
+        else:
+            parts.append(f"{word} by at least {lower} commits")
+    return f"({', '.join(parts)})" if parts else ""
+
+
+def _print_ref(repo, settings, ref, template=None, tracked=()) -> None:
+    """One listing item: a ref, then the remote refs that follow it.
+
+    jj renders bookmarks and tags from the same `format_commit_ref`, so
+    this serves both listings. A plain ref is `name: <commit summary>`.
+    A deleted one is `name (deleted)`, with no colon. A conflicted one
+    heads a block, then lists the commits it moved away from with `-`
+    and the ones it moved to with `+`. A remote ref that no local ref
+    follows heads its own item, named `name@remote`.
+
+    Each tracked remote ref follows its local ref, indented, named by
+    the remote alone, and carrying how far it sits from that local ref.
+    A tracked remote that the local ref has not reached yet reads
+    `(not created yet)` rather than `(deleted)`.
 
     The summaries carry no ref names of their own: jj passes an empty
     ref list, since the name is already the line's subject.
     """
-    def render(commit_id, prefix: str = "") -> None:
+    def render(commit_id, prefix: str = "", head: str = "") -> None:
         commit = repo.get_commit(commit_id)
         if template is not None:
             context = _commit_context(repo, settings, commit, [])
@@ -635,25 +669,28 @@ def _print_ref(repo, settings, ref, template=None, remotes=()) -> None:
             print(prefix + template.render(context))
             return
         summary = _commit_summary(repo, settings, commit, [])
-        print(f"{prefix}{summary}" if prefix else f"{ref.name}: {summary}")
+        print(f"{prefix}{summary}" if prefix else f"{head}: {summary}")
 
-    if ref.has_conflict:
-        print(f"{ref.name} (conflicted):")
-        for commit_id in ref.removed_ids:
-            render(commit_id, "  - ")
-        for commit_id in ref.target_ids:
-            render(commit_id, "  + ")
-    elif ref.target_ids:
-        render(ref.target_ids[0])
-    else:
-        print(f"{ref.name} (deleted)")
-    # `--all-remotes` adds each remote-tracking counterpart under its
-    # local bookmark, indented, named by the remote alone.
-    for remote in remotes:
-        if remote.name != ref.name:
-            continue
-        for commit_id in remote.target_ids:
-            render(commit_id, f"  @{remote.remote}: ")
+    def targets(item, head: str, absent: str = " (deleted)") -> None:
+        if getattr(item, "has_conflict", False):
+            print(f"{head} (conflicted):")
+            for commit_id in item.removed_ids:
+                render(commit_id, "  - ")
+            for commit_id in item.target_ids:
+                render(commit_id, "  + ")
+        elif item.target_ids:
+            render(item.target_ids[0], head=head)
+        else:
+            print(f"{head}{absent}")
+
+    remote = getattr(ref, "remote", None)
+    targets(ref, f"{ref.name}@{remote}" if remote else ref.name)
+    for remote_ref, local_ids in tracked:
+        head = f"  @{remote_ref.remote}"
+        distances = _tracking_distances(repo, remote_ref.target_ids, local_ids)
+        if distances:
+            head = f"{head} {distances}"
+        targets(remote_ref, head, absent=" (not created yet)")
 
 
 def _conflict_lines(commit, to_ui_path) -> list[str]:
