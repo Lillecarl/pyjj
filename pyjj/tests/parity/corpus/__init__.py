@@ -130,8 +130,17 @@ def _normalize_op_ids(text: str, context: dict) -> str:
     return text
 
 
+# A word boundary does not see an escape sequence. `\x1b[38;5;14m`
+# ends in a letter, so `\b25 years ago` never matches right after one,
+# and coloured output would keep a time the plain output replaced.
+# Escape sequences carry no words, so splitting them out costs nothing.
+_ESCAPE = re.compile(r"(\x1b\[[0-9;]*m)")
+
+
 def _normalize_ago(text: str, context: dict) -> str:
-    return _AGO.sub("«ago»", text)
+    parts = _ESCAPE.split(text)
+    parts[::2] = [_AGO.sub("«ago»", part) for part in parts[::2]]
+    return "".join(parts)
 
 
 def _normalize_remote(text: str, context: dict) -> str:
