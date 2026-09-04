@@ -32,6 +32,8 @@ let
       # `cli_surface` reads `jj util markdown-help` with a real
       # CommonMark parser rather than by matching lines.
       ps.markdown-it-py
+      # The suite is almost all subprocess wait, so it parallelises well.
+      ps.pytest-xdist
     ]
   );
 
