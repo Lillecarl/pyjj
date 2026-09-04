@@ -8,7 +8,7 @@ module compares the two.
 The distinction from `test_cli_surface` matters. That one asks whether
 pyjj-cli *parses* a flag, which is cheap to satisfy and easy to satisfy
 falsely -- `jj diff --git` parsed for a long time while being ignored
-outright. This one asks whether anything *exercises* it. A flag is only
+outright, until a test compared what it printed. This one asks whether anything *exercises* it. A flag is only
 really covered when a test would notice it breaking.
 
 Byte-identical output is deliberately not the bar. A test claims a flag
