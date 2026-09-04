@@ -3,7 +3,7 @@ import os
 import sys
 
 import pyjj
-from pyjj.graph_layout import layout
+from pyjj.graph_layout import lane_prefixes, layout
 
 from ..common import _load, _print_diff_stats, _resolve_template
 
@@ -60,29 +60,6 @@ def _color_commit_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
     if hl == len(shown):
         return f"{_COMMIT_PREFIX}{shown}{_RESET}"
     return f"{_COMMIT_PREFIX}{shown[:hl]}{_COMMIT_REST}{shown[hl:]}{_RESET}"
-
-
-def _render_glyphs_plain(row) -> str:
-    """Plain-text version of pyjjui.widgets.log_view._render_glyphs."""
-    lanes = {row.column}
-    for edge in row.edges:
-        lanes.add(edge.from_column)
-        lanes.add(edge.to_column)
-    width = max(lanes) + 1 if lanes else 1
-    chars = [" "] * width
-    for edge in row.edges:
-        lo, hi = sorted((edge.from_column, edge.to_column))
-        if lo == hi:
-            chars[lo] = "│"
-            continue
-        for col in range(lo + 1, hi):
-            chars[col] = "─"
-        if edge.from_column == row.column:
-            chars[edge.to_column] = "╮" if edge.to_column > edge.from_column else "╭"
-        else:
-            chars[edge.from_column] = "╯" if edge.from_column > edge.to_column else "╰"
-    # glyph for this row's own commit — will be overwritten below with @/○/◆
-    return "".join(chars)
 
 
 def log(args) -> int:
@@ -200,29 +177,11 @@ def log(args) -> int:
             graph_prefix = ""
             cont_prefix = ""
         else:
-            glyphs = _render_glyphs_plain(row)
-            chars = list(glyphs)
-            if row.column >= len(chars):
-                chars.extend([" "] * (row.column - len(chars) + 1))
-            chars[row.column] = raw_glyph
-            graph_prefix = "".join(chars) + " "
+            graph_prefix, cont_prefix = lane_prefixes(row, raw_glyph)
             if use_color:
                 # Color the glyph like jj does (bold green for @)
                 if is_wc:
                     graph_prefix = graph_prefix.replace(raw_glyph, f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}", 1)
-            # Second row (description) — vertical continuation of lanes
-            cont_chars = []
-            for i in range(row.width):
-                if i == row.column:
-                    cont_chars.append("│")
-                elif i < len(glyphs) and glyphs[i] != " ":
-                    cont_chars.append("│")
-                else:
-                    active = any(e.from_column == i or e.to_column == i for e in row.edges)
-                    cont_chars.append("│" if active else " ")
-            while cont_chars and cont_chars[-1] == " " and len(cont_chars) > row.column + 1:
-                cont_chars.pop()
-            cont_prefix = "".join(cont_chars) + " "
             if reversed_order:
                 # Reversed, a row's lanes lead down to the row after it,
                 # and the last row leads nowhere.

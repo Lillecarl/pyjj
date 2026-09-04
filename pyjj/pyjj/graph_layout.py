@@ -125,7 +125,14 @@ def lane_prefixes(row, glyph: str) -> tuple[str, str]:
     strings returned already carry that trailing pair, so the caller
     concatenates and prints.
     """
-    width = max(row.width, row.column + 1)
+    # A row can draw into a lane it also retires -- a second child
+    # reaching the same ancestor -- and `width` counts only the lanes
+    # still open after the row. So the drawing is sized from every
+    # column the row actually mentions.
+    columns = [row.width, row.column + 1]
+    columns += [edge.from_column + 1 for edge in row.edges]
+    columns += [edge.to_column + 1 for edge in row.edges]
+    width = max(columns)
     cells = [" "] * max(2 * width - 1, 1)
     for edge in row.edges:
         lo, hi = sorted((edge.from_column, edge.to_column))

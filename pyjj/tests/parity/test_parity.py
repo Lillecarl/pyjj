@@ -2447,6 +2447,46 @@ def test_log_reversed_puts_the_root_first(pair: RepoPair) -> None:
     assert "root()" in rows(backward)[0]
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="jj draws a fork on the line below its node, pyjj-cli on the "
+           "node's own line; matching needs jj's renderdag row model",
+)
+@pytest.mark.covers("log")
+def test_log_draws_the_same_graph(pair: RepoPair) -> None:
+    """`log`'s rows diverge from jj's on purpose. Its graph does not.
+
+    The choice recorded in `log`'s `facts` bar is about what each row
+    says -- the author's name, a timestamp without the century. The
+    column of lanes to the left of it is jj's drawing, and a reader
+    following a merge back to its parents needs it to be the same
+    drawing. So this compares that column alone, on a history with a
+    merge in it, where lanes actually branch and rejoin.
+
+    A linear graph already matches, and the `op log` corpus entries pin
+    it. A merge does not: jj hands its rows to `renderdag`, which puts
+    the node alone on its line and draws the fork on the line below --
+
+        @
+        ├─╮  merge
+
+    where pyjj-cli draws `@─╮` on the node's own line. Both are
+    readable; only one is jj's.
+    """
+    conflict_pair(pair)
+    cli, py = pair.outputs(["log"])
+    lanes = lambda text: [
+        re.match(r"[@\u25cb\u25c6\u25cf~\u2502\u2500\u256d\u256e\u256f\u2570 ]*",
+                 line).group(0).rstrip() or None
+        for line in text.splitlines()
+    ]
+    cli_lanes, py_lanes = lanes(cli), lanes(py)
+    assert any(lane and len(lane) > 1 for lane in cli_lanes), (
+        f"scenario drew no branching graph\njj:\n{cli}"
+    )
+    assert cli_lanes == py_lanes, f"graph columns differ\njj:\n{cli}\npyjj:\n{py}"
+
+
 @pytest.mark.covers("log")
 def test_log_carries_the_facts_jj_shows(pair: RepoPair) -> None:
     """`log` is the one command where byte parity is not the goal.

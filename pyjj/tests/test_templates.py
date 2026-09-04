@@ -200,16 +200,19 @@ def test_log_template_prints_only_what_it_asks_for(cli):
 
     `log` used to append a description row whenever the template text did
     not contain the substring "description", which guessed wrong both ways.
+
+    The two spaces after the glyph are jj's: it puts one lane every two
+    characters and leaves two before the text.
     """
     result = cli("log", "-n", "1", "-T", "MARKER")
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == ["@ MARKER"]
+    assert result.stdout.splitlines() == ["@  MARKER"]
 
     # The old heuristic keyed on the literal word, so static text suppressed
     # the row that a template without the word still got.
     result = cli("log", "-n", "1", "-T", "a description of nothing")
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == ["@ a description of nothing"]
+    assert result.stdout.splitlines() == ["@  a description of nothing"]
 
 
 def test_log_builtin_compact_puts_description_on_its_own_row(cli):
