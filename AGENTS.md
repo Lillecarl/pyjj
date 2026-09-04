@@ -925,6 +925,15 @@ Current state:
   And its effect is invisible through the repo's own API -- what it
   removes was unreachable by definition -- so no test can assert an
   object went, only that the sweep ran and the repo still works.
+- **Backend name**: `ReadonlyRepo.backend_name` is `jj util backend
+  name` -- the string written to `.jj/repo/store/type` when the repo was
+  created. It names the storage format, not the remote or the working
+  copy.
+- **Whether a snapshot did anything**: `Workspace.snapshot()`'s stats
+  dict carries `changed`. The binding already returned early without
+  writing when the walk found the same tree; the flag just says which
+  path it took. `jj util snapshot` reports exactly this, as the
+  difference between "Snapshot complete." and "No snapshot needed."
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
