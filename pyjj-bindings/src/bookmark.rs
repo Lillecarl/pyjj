@@ -14,8 +14,16 @@ use crate::ids::PyCommitId;
 pub struct PyBookmark {
     #[pyo3(get)]
     pub name: String,
+    /// The commits the bookmark points at. More than one means it is
+    /// conflicted.
     #[pyo3(get)]
     pub target_ids: Vec<PyCommitId>,
+    /// The commits a conflicted bookmark moved *away* from. Empty
+    /// unless `has_conflict`. jj prints these as the `-` side when it
+    /// lists a conflicted bookmark, against `target_ids` as the `+`
+    /// side.
+    #[pyo3(get)]
+    pub removed_ids: Vec<PyCommitId>,
     #[pyo3(get)]
     pub has_conflict: bool,
 }
@@ -25,6 +33,7 @@ impl PyBookmark {
         Self {
             name: name.as_str().to_string(),
             target_ids: target.added_ids().map(PyCommitId::from).collect(),
+            removed_ids: target.removed_ids().map(PyCommitId::from).collect(),
             has_conflict: target.has_conflict(),
         }
     }
