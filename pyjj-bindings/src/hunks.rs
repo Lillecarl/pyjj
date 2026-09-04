@@ -110,11 +110,16 @@ pub struct PyUnifiedHunk {
     pub right_start: usize,
     #[pyo3(get)]
     pub right_len: usize,
-    /// `(kind, content)` per line, where kind is `"context"`, `"removed"`
-    /// or `"added"`. `content` keeps its trailing newline, and lacks one
-    /// exactly when the file does.
+    /// `(kind, tokens)` per line, where kind is `"context"`, `"removed"`
+    /// or `"added"`.
+    ///
+    /// `tokens` splits the line where jj's word diff found a change:
+    /// each is `(kind, content)` with kind `"matching"` or `"different"`,
+    /// and `jj diff --git` underlines the different ones. Joining the
+    /// contents gives the whole line, which keeps its trailing newline
+    /// and lacks one exactly when the file does.
     #[pyo3(get)]
-    pub lines: Vec<(String, Vec<u8>)>,
+    pub lines: Vec<(String, Vec<(String, Vec<u8>)>)>,
 }
 
 #[pymethods]
@@ -144,6 +149,7 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
     use bstr::BStr;
     use jj_lib::diff_presentation::LineCompareMode;
     use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
+    use jj_lib::diff_presentation::DiffTokenType;
     use jj_lib::merge::Diff;
 
     // "If the chunk size is 0, the first number is one lower than one
@@ -173,11 +179,17 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
                         DiffLineType::Removed => "removed",
                         DiffLineType::Added => "added",
                     };
-                    let mut content = Vec::new();
-                    for (_, token) in tokens {
-                        content.extend_from_slice(token);
-                    }
-                    (kind.to_owned(), content)
+                    let tokens = tokens
+                        .into_iter()
+                        .map(|(token_type, content)| {
+                            let token_kind = match token_type {
+                                DiffTokenType::Matching => "matching",
+                                DiffTokenType::Different => "different",
+                            };
+                            (token_kind.to_owned(), content.to_vec())
+                        })
+                        .collect();
+                    (kind.to_owned(), tokens)
                 })
                 .collect(),
         })
