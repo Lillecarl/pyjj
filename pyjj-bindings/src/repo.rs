@@ -1139,7 +1139,7 @@ impl PyTransaction {
                 self.workspace_root(),
                 self.workspace_name(),
                 settings,
-                commits,
+                commits.into_iter().map(|id| id.0).collect(),
             )
         })
     }

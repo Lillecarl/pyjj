@@ -64,6 +64,16 @@ pub fn absorb(
         matcher.as_ref(),
     ))
     .map_err(map_py_err)?;
+    // The destinations that actually receive a hunk, which is narrower
+    // than the candidate set: a candidate nothing lands in is never
+    // rewritten, so jj does not check it either.
+    crate::rewrite::check_rewritable(
+        mut_repo,
+        tx.workspace_root(),
+        tx.workspace_name(),
+        settings,
+        selected_trees.target_commits.keys().cloned().collect(),
+    )?;
     let stats = pollster::block_on(absorb_hunks(
         mut_repo,
         &source,

@@ -534,11 +534,10 @@ pub fn check_rewritable(
     workspace_root: &std::path::Path,
     workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
     settings: &crate::settings::PyUserSettings,
-    commits: Vec<PyCommitId>,
+    ids: Vec<CommitId>,
 ) -> PyResult<()> {
     use futures::TryStreamExt as _;
 
-    let ids: Vec<CommitId> = commits.into_iter().map(|id| id.0).collect();
     if ids.is_empty() {
         return Ok(());
     }
