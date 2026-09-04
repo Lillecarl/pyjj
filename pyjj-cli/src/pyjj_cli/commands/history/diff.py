@@ -11,6 +11,7 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _print_diff_stats,
+    _print_git_diff,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -31,6 +32,19 @@ from ..common import (
     _fix_pattern_matches,
 )
 
+def _diff_base(repo, settings, commit):
+    """What a one-revision diff compares against: the first parent, or
+    the root commit when there is none.
+
+    jj diffs a parentless commit against the root commit, whose tree is
+    empty, so every file reads as added -- the same answer the
+    summary paths reach by listing the files.
+    """
+    if commit.parent_ids:
+        return repo.get_commit(commit.parent_ids[0])
+    return repo.revset(settings, "root()")[0]
+
+
 def diff(args) -> int:
     """`jj diff` — compare file contents between revisions."""
     try:
@@ -44,6 +58,9 @@ def diff(args) -> int:
                 return 0
             if len(revs) == 1:
                 c = revs[0]
+                if getattr(args, "git", False):
+                    _print_git_diff(_diff_base(repo, settings, c), c, settings, paths)
+                    return 0
                 if c.parent_ids:
                     parent = repo.get_commit(c.parent_ids[0])
                     if getattr(args, "stat", False):
@@ -70,6 +87,9 @@ def diff(args) -> int:
             # Multiple revs: diff from first's parent to last (simplified)
             first = revs[-1]
             last = revs[0]
+            if getattr(args, "git", False):
+                _print_git_diff(_diff_base(repo, settings, first), last, settings, paths)
+                return 0
             if first.parent_ids:
                 base = repo.get_commit(first.parent_ids[0])
                 if getattr(args, "stat", False):
@@ -88,10 +108,16 @@ def diff(args) -> int:
             from_commit = _resolve_one(repo, settings, from_rev) if from_rev else _wc_commit(repo, _ws)
             to_commit = _resolve_one(repo, settings, to_rev) if to_rev else _wc_commit(repo, _ws)
             stat_base, stat_target = from_commit, to_commit
+            if getattr(args, "git", False):
+                _print_git_diff(from_commit, to_commit, settings, paths)
+                return 0
             entries = from_commit.diff(to_commit, paths)
         else:
             # Default -r @
             wc = _wc_commit(repo, _ws)
+            if getattr(args, "git", False):
+                _print_git_diff(_diff_base(repo, settings, wc), wc, settings, paths)
+                return 0
             if wc.parent_ids:
                 parent = repo.get_commit(wc.parent_ids[0])
                 stat_base, stat_target = parent, wc

@@ -145,11 +145,9 @@
     "--message"
   ],
   "diff": [
-    "(command)",
     "--color-words",
     "--context",
     "--from",
-    "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",

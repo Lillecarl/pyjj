@@ -587,6 +587,75 @@ def _resolve_operation(repo, name: str | None):
 _STAT_BAR_WIDTH = 32
 
 
+def _git_diff_bytes(files, context: int = 3) -> bytes:
+    """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
+
+    The layout follows jj's `show_git_diff`. Two details differ from what
+    `git diff` prints, and both are jj's: the `@@` header always carries
+    both counts, even a count of one, and the abbreviated hashes are ten
+    characters wide.
+
+    File content is bytes, and may not be text at all, so this returns
+    bytes rather than printing.
+    """
+    out = bytearray()
+
+    def line(text: str) -> None:
+        out.extend(text.encode())
+        out.extend(b"\n")
+
+    for f in files:
+        left = f"a/{f.source_path}"
+        right = f"b/{f.path}"
+        line(f"diff --git {left} {right}")
+        if f.before_mode is None:
+            line(f"new file mode {f.after_mode}")
+            line(f"index {f.before_hash}..{f.after_hash}")
+        elif f.after_mode is None:
+            line(f"deleted file mode {f.before_mode}")
+            line(f"index {f.before_hash}..{f.after_hash}")
+        else:
+            if f.copy_operation is not None:
+                line(f"{f.copy_operation} from {f.source_path}")
+                line(f"{f.copy_operation} to {f.path}")
+            if f.before_mode != f.after_mode:
+                line(f"old mode {f.before_mode}")
+                line(f"new mode {f.after_mode}")
+                if f.before_hash != f.after_hash:
+                    line(f"index {f.before_hash}..{f.after_hash}")
+            elif f.before_hash != f.after_hash:
+                line(f"index {f.before_hash}..{f.after_hash} {f.before_mode}")
+        if f.before_content == f.after_content:
+            continue
+        left_name = left if f.before_mode is not None else "/dev/null"
+        right_name = right if f.after_mode is not None else "/dev/null"
+        if f.is_binary:
+            line(f"Binary files {left_name} and {right_name} differ")
+            continue
+        line(f"--- {left_name}")
+        line(f"+++ {right_name}")
+        for hunk in pyjj.unified_hunks(f.before_content, f.after_content, context):
+            line(f"@@ -{hunk.left_start},{hunk.left_len} "
+                 f"+{hunk.right_start},{hunk.right_len} @@")
+            for kind, content in hunk.lines:
+                out.extend(_DIFF_SIGILS[kind])
+                out.extend(content)
+                if not content.endswith(b"\n"):
+                    out.extend(b"\n\\ No newline at end of file\n")
+    return bytes(out)
+
+
+_DIFF_SIGILS = {"context": b" ", "removed": b"-", "added": b"+"}
+
+
+def _print_git_diff(from_commit, to_commit, settings, paths=None) -> None:
+    """Writes `jj diff --git`'s output to stdout."""
+    files = from_commit.git_diff(to_commit, settings, paths)
+    sys.stdout.flush()
+    sys.stdout.buffer.write(_git_diff_bytes(files))
+    sys.stdout.buffer.flush()
+
+
 def _print_diff_stats(stats) -> None:
     """`--stat`'s output, in the shape `jj diff --stat` prints it.
 

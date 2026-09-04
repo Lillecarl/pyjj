@@ -265,10 +265,10 @@ class RepoPair:
         self,
         jj: list[str],
         py: list[str] | None = None,
-        files: dict[str, bytes] | None = None,
+        files: dict[str, bytes | None] | None = None,
         stdin: str | None = None,
-        cli_files: dict[str, bytes] | None = None,
-        py_files: dict[str, bytes] | None = None,
+        cli_files: dict[str, bytes | None] | None = None,
+        py_files: dict[str, bytes | None] | None = None,
         editor_spec: dict | tuple[dict, dict] | None = None,
         diff_spec: dict | None = None,
         merge_spec: dict | None = None,
@@ -325,9 +325,18 @@ class RepoPair:
             )
         return rc
 
-    def _write_files(self, files: dict[str, bytes], ws: Path) -> None:
+    def _write_files(self, files: dict[str, bytes | None], ws: Path) -> None:
+        """Writes each file into a working copy. `None` deletes instead.
+
+        Deletion is a file shape of its own -- a git-format diff prints
+        `deleted file mode` for it -- and a scenario has no other way to
+        produce one.
+        """
         for name, content in files.items():
             path = ws / name
+            if content is None:
+                path.unlink()
+                continue
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
 

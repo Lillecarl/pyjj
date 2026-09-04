@@ -2430,12 +2430,61 @@ def test_diff_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["diff", "-r", rev("one")])
 
 
-@OUTPUT_UNIMPLEMENTED
+@pytest.mark.covers("diff", "--git")
 def test_diff_git_format_output_matches(pair: RepoPair) -> None:
-    """`--git` is parsed by both, so the coverage ledger counts it as
-    covered. Only comparing what it prints says whether it works."""
+    """`--git` is parsed by both, so the surface ledger counted it as
+    present while it printed nothing. Only comparing what it prints says
+    whether it works.
+
+    Byte parity is the right bar here, unlike the human-readable
+    formats: a git-format diff is a machine format, and a patch that
+    differs from jj's is a patch some other tool may refuse.
+    """
     chain(pair)
     pair.assert_output(["diff", "--git", "-r", rev("one")])
+
+
+@pytest.mark.covers("diff", "--git")
+def test_diff_git_format_prints_every_file_shape(pair: RepoPair) -> None:
+    """The chain fixture holds plain additions only. A git-format diff
+    has five other shapes, and each prints its own header lines:
+    a modification, a deletion, a new file, a mode-only change, and a
+    file with no trailing newline.
+
+    The last one is the reason the hunks come from a binding rather than
+    from Python's `difflib`: jj prints `\\ No newline at end of file`
+    under both sides, and its hunk boundaries are its own.
+    """
+    pair.init()
+    pair.op(
+        files={
+            "edited.txt": b"one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n",
+            "removed.txt": b"gone\n",
+            "mode.txt": b"same content\n",
+            "nonewline.txt": b"no trailing newline",
+        },
+        jj=["describe", "-m", "base"],
+    )
+    pair.op(jj=["new", "-m", "every shape"])
+    pair.op(
+        files={
+            "edited.txt": b"one\nTWO\nthree\nfour\nfive\nsix\nseven\nEIGHT\n",
+            "removed.txt": None,
+            "added.txt": b"brand new\n",
+            "nonewline.txt": b"no trailing newline, now longer",
+        },
+        jj=["file", "chmod", "x", "mode.txt"],
+    )
+    pair.assert_output(["diff", "--git", "-r", "@"])
+
+
+@pytest.mark.covers("diff", "--git")
+def test_diff_git_format_reads_a_root_commit(pair: RepoPair) -> None:
+    """A commit with no parent diffs against the root commit, whose tree
+    is empty, so every file reads as a new file."""
+    pair.init()
+    pair.op(files={"first.txt": b"first\n"}, jj=["describe", "-m", "root child"])
+    pair.assert_output(["diff", "--git", "-r", "@"])
 
 
 @OUTPUT_UNIMPLEMENTED
