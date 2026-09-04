@@ -108,6 +108,20 @@ impl PyUserSettings {
         }
     }
 
+    /// Reads an arbitrary dotted config key as an integer (e.g.
+    /// `run.jobs`). Returns `None` if unset anywhere; raises `JjError` if
+    /// present but not an integer.
+    fn get_int(&self, key: &str) -> PyResult<Option<i64>> {
+        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
+            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+        })?;
+        match self.0.config().get::<i64>(path) {
+            Ok(value) => Ok(Some(value)),
+            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
+            Err(err) => Err(crate::errors::map_py_err(err)),
+        }
+    }
+
     /// Lists the tool names under `fix.tools` (e.g. `["clang-format", "black"]`
     /// for `fix.tools.clang-format` / `fix.tools.black`). Returns an empty
     /// list if the table is not set anywhere. Used by `jj fix` to discover
