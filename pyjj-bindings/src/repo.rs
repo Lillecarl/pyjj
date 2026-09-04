@@ -244,6 +244,29 @@ impl PyReadonlyRepo {
             .collect()
     }
 
+    /// `revset::walk_revs(wanted, unwanted).count_estimate()`: how many
+    /// commits `wanted` reaches that `unwanted` does not.
+    ///
+    /// A bookmark listing calls this twice for every tracked remote
+    /// ref, once each way, to say how far the remote sits from the
+    /// local bookmark. The result is jj's own size hint: a lower bound,
+    /// and an upper bound when the count is exact. jj prints "ahead by
+    /// N commits" for an exact count and "ahead by at least N commits"
+    /// otherwise.
+    fn walk_revs_count(
+        &self,
+        wanted: Vec<PyCommitId>,
+        unwanted: Vec<PyCommitId>,
+    ) -> PyResult<(usize, Option<usize>)> {
+        let wanted: Vec<CommitId> = wanted.into_iter().map(|id| id.0).collect();
+        let unwanted: Vec<CommitId> = unwanted.into_iter().map(|id| id.0).collect();
+        let revset = jj_lib::revset::walk_revs(self.inner.as_ref(), &wanted, &unwanted)
+            .map_err(crate::errors::map_revset_eval_err)?;
+        revset
+            .count_estimate()
+            .map_err(crate::errors::map_revset_eval_err)
+    }
+
     /// `jj interdiff --from A --to B`: how the changes `from` makes
     /// differ from the changes `to` makes. Unlike a plain diff, this
     /// leaves out whatever changed between the two commits' parents.
