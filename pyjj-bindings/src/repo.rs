@@ -284,6 +284,11 @@ impl PyReadonlyRepo {
         crate::git::list_remotes(self.inner.store())
     }
 
+    /// Every configured Git remote as `(name, fetch_url, push_url)`.
+    fn git_remote_urls(&self) -> PyResult<Vec<(String, String, String)>> {
+        crate::git::remote_urls(self.inner.store())
+    }
+
     /// The named local bookmark, or `None` if it doesn't exist.
     fn get_bookmark(&self, name: &str) -> Option<PyBookmark> {
         let ref_name = RefName::new(name);

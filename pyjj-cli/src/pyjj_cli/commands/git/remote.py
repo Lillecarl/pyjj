@@ -23,8 +23,21 @@ def git_remote(args) -> int:
             except Exception:
                 tx = _start_transaction(repo, settings)
                 remotes = tx.git_remotes()
+            # jj prints the URL beside each name, and says so when the
+            # fetch and push URLs differ.
+            try:
+                urls = {name: (fetch, push)
+                        for name, fetch, push in repo.git_remote_urls()}
+            except Exception:
+                urls = {}
             for name in sorted(remotes):
-                print(name)
+                fetch, push = urls.get(name, ("", ""))
+                if push and push != fetch:
+                    print(f"{name} {fetch} (push: {push})")
+                elif fetch:
+                    print(f"{name} {fetch}")
+                else:
+                    print(name)
             return 0
         elif cmd == "add":
             tx = _start_transaction(repo, settings)

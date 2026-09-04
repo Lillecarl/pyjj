@@ -299,9 +299,6 @@
     "--fetch-tags",
     "--push-url"
   ],
-  "git remote list": [
-    "(command)"
-  ],
   "git remote rename": [
     "(command)"
   ],

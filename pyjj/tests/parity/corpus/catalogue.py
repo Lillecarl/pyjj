@@ -122,8 +122,7 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("bookmark list", "--remote"), bar="todo",
       reason="`--remote` is not parsed", **_R),
     E("git-remotes", ("git", "remote", "list"),
-      claims=("git remote list",), bar="todo",
-      reason="the listing names each remote but not its URL", **_R),
+      claims=("git remote list",), **_R),
 
     E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",)),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",)),

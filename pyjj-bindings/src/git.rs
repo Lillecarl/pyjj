@@ -149,6 +149,38 @@ pub fn list_remotes(store: &jj_lib::store::Store) -> PyResult<Vec<String>> {
         .collect())
 }
 
+/// Every configured Git remote, as `(name, fetch_url, push_url)`.
+///
+/// `jj git remote list` prints the URL beside each name, and says so
+/// when fetch and push differ. A remote with an empty `[remote "..."]`
+/// section is skipped, the way jj skips it.
+pub fn remote_urls(store: &jj_lib::store::Store) -> PyResult<Vec<(String, String, String)>> {
+    let git_repo = git::get_git_repo(store).map_err(map_py_err)?;
+    let mut out = Vec::new();
+    for name in git_repo.remote_names() {
+        let Some(remote) = git_repo.try_find_remote(&*name) else {
+            continue; // an empty [remote "<name>"] section
+        };
+        let remote = remote.map_err(|err| {
+            crate::errors::JjError::new_err(format!(
+                "Failed to load configured remote {name}: {err}"
+            ))
+        })?;
+        let url = |direction| {
+            remote
+                .url(direction)
+                .map(|url| url.to_bstring().to_string())
+                .unwrap_or_default()
+        };
+        out.push((
+            name.to_string(),
+            url(gix::remote::Direction::Fetch),
+            url(gix::remote::Direction::Push),
+        ));
+    }
+    Ok(out)
+}
+
 /// Add a Git remote. Runs `git remote add` under the hood (via the Git
 /// backend's on-disk repo), not just an in-memory record.
 pub fn add_remote(mut_repo: &mut MutableRepo, name: &str, url: &str) -> PyResult<()> {
