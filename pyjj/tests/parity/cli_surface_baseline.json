@@ -33,6 +33,12 @@
       "--config-file",
       "--ignore-immutable"
     ],
+    "abandon": [
+      "-r"
+    ],
+    "arrange": [
+      "-r"
+    ],
     "bookmark create": [
       "--to"
     ],
@@ -96,6 +102,12 @@
     "diffedit": [
       "--restore-descendants",
       "--revision",
+      "-r"
+    ],
+    "duplicate": [
+      "-r"
+    ],
+    "edit": [
       "-r"
     ],
     "evolog": [
@@ -183,6 +195,10 @@
       "--tool",
       "--types",
       "-s"
+    ],
+    "new": [
+      "-o",
+      "-r"
     ],
     "next": [
       "--conflict"

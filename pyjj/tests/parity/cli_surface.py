@@ -21,12 +21,19 @@ pyjj-cli parses at all.
 Hidden commands are absent by construction: clap leaves them out of
 `markdown-help`, the same way it leaves them out of `--help`. So `bench`
 and `debug` show up as pyjj-only here, and that is not a divergence.
+
+One known under-report: `markdown-help` prints only an option's long
+aliases, so a short alias like `jj rebase -d` (for `--destination`) does
+not appear. The list is therefore a lower bound on jj's surface. It is
+still authoritative for what it does list, which is what the baselines
+and the coverage checklist are measured against.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 
 from markdown_it import MarkdownIt
@@ -38,34 +45,60 @@ from cli_surface_excluded import (EXCLUDED_COMMANDS, EXCLUDED_FLAGS,
 _EM_DASH = "—"
 
 
-def _flags_from_item(children) -> set[str]:
-    """The flag spellings a single Options list item declares.
+# jj lists an option's other spellings in a trailing bracket, and writes
+# it two ways: `[alias: `destination`]` beside an option, and
+# `[aliases: -r]` after the description of a positional. Both are jj's
+# own convention, not markdown, which is why they are read from the text
+# the parser hands back rather than by re-parsing the document.
+# `alias(?:es)?`, not `aliases?`: the latter binds the `?` to the final
+# `s` alone, so it matches "aliase" and never "alias".
+_ALIAS_BRACKET = re.compile(r"\[alias(?:es)?:\s*([^\]]+)\]")
 
-    An item reads `` `-r`, `--revision <REVSET>` [alias: `revisions`] —
-    help ``. Everything up to the em dash names the option; after it is
-    prose. Code spans before an `[alias` marker are the flags themselves,
-    and those after it are extra spellings jj also accepts. jj writes
-    short aliases with their dash and long ones without.
 
-    Some options are spelled as one token, `--branch/-b`, so each code
-    span can carry more than one flag.
+def _spelling(word: str) -> str | None:
+    """One alias token as the flag jj would accept for it.
+
+    jj writes short aliases with their dash (`-r`) and long ones without
+    (`destination`), and wraps them in backticks in some sections but
+    not others.
+    """
+    word = word.strip().strip("`,")
+    if not word:
+        return None
+    if word.startswith("-"):
+        return word
+    return f"--{word}"
+
+
+def _flags_from_item(token) -> set[str]:
+    """Every flag spelling a single list item declares.
+
+    An Options item reads `` `-r`, `--revision <REVSET>` [alias:
+    `revisions`] — help ``: the code spans up to the em dash are the
+    flags, and the bracket adds more spellings.
+
+    An Arguments item reads ``` `<REVSETS>` — The revision(s)... [aliases:
+    -r] ```. The positional itself is not a flag, but the bracket still
+    is: `jj describe -r` and `jj metaedit -r` exist only this way, which
+    is why the Arguments sections have to be read too.
+
+    Some options are spelled as one token, `--branch/-b`, so a single
+    code span can carry more than one flag.
     """
     flags: set[str] = set()
-    in_aliases = False
-    for child in children:
-        if child.type == "text":
-            if _EM_DASH in child.content:
-                break
-            if "[alias" in child.content:
-                in_aliases = True
-            continue
+    for child in token.children or []:
+        if child.type == "text" and _EM_DASH in child.content:
+            break
         if child.type != "code_inline":
             continue
         for word in child.content.replace("/", " ").split():
             if word.startswith("-"):
                 flags.add(word)
-            elif in_aliases:
-                flags.add(f"--{word}")
+    for bracket in _ALIAS_BRACKET.findall(token.content):
+        for word in bracket.split(","):
+            spelling = _spelling(word)
+            if spelling:
+                flags.add(spelling)
     return flags
 
 
@@ -115,7 +148,7 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
             previous = tokens[index - 1]
             if previous.type == "paragraph_open" and index >= 2 \
                     and tokens[index - 2].type == "list_item_open":
-                surface[current] |= _flags_from_item(token.children or [])
+                surface[current] |= _flags_from_item(token)
     return surface
 
 
@@ -167,6 +200,62 @@ def compare(jj_bin: str | None = None) -> dict[str, object]:
         "extra_commands": sorted(set(py) - set(jj)),
         "missing_flags": missing_flags,
     }
+
+
+def checklist(jj_bin: str | None = None) -> dict[str, set[str]]:
+    """Everything a test could claim: jj's surface, minus the exclusions.
+
+    `{subcommand: {flag spellings}}`. A subcommand with no flags still
+    appears, with an empty set, because the subcommand itself is an item
+    to check off.
+    """
+    jj = jj_surface(jj_bin)
+    return {
+        name: (flags - {"-h", "--help"}) - excluded_flags(name)
+        for name, flags in jj.items()
+        if name not in EXCLUDED_COMMANDS
+    }
+
+
+def unclaimed(covered: dict[str, set[str]],
+              jj_bin: str | None = None) -> dict[str, list[str]]:
+    """What the checklist holds that no test has claimed.
+
+    A subcommand appears under the key `"<name>"` with `"(command)"` in
+    its list when the subcommand itself is unclaimed, so an entry always
+    reads as the thing that needs a test.
+    """
+    result: dict[str, list[str]] = {}
+    for name, flags in checklist(jj_bin).items():
+        claimed = covered.get(name)
+        missing = sorted(flags - (claimed or set()))
+        if claimed is None:
+            missing.insert(0, "(command)")
+        if missing:
+            result[name] = missing
+    return result
+
+
+def stale_claims(covered: dict[str, set[str]],
+                 jj_bin: str | None = None) -> list[str]:
+    """Claims that name something jj does not have, or something
+    excluded. A mark for a flag jj dropped is a mark that checks off
+    nothing, and it would quietly shrink the ledger."""
+    jj = jj_surface(jj_bin)
+    stale = []
+    for name, flags in covered.items():
+        if name not in jj:
+            stale.append(f"jj {name} (no such subcommand)")
+            continue
+        if name in EXCLUDED_COMMANDS:
+            stale.append(f"jj {name} (excluded)")
+            continue
+        for flag in sorted(flags):
+            if flag not in jj[name]:
+                stale.append(f"jj {name} {flag} (no such flag)")
+            elif flag in excluded_flags(name):
+                stale.append(f"jj {name} {flag} (excluded)")
+    return sorted(stale)
 
 
 def stale_exclusions(jj_bin: str | None = None) -> list[str]:
