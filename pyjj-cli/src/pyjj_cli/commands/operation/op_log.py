@@ -2,7 +2,7 @@
 import sys
 
 import pyjj
-from pyjj.graph_layout import lane_prefixes, layout_keyed
+from pyjj.graph_layout import reverse_graph
 
 from ..common import CommandError, _ago, _duration, _load, _resolve_template
 
@@ -108,33 +108,27 @@ def op_log(args) -> int:
     if limit:
         ops = ops[:limit]
 
-    rows = layout_keyed(
-        [(op.id, [(parent, "direct") for parent in op.parent_ids]) for op in ops]
-    )
     current_id = repo.operation.id
     template = _resolve_template(settings, ws, args, "op_log", _BUILTINS)
-    no_graph = getattr(args, "no_graph", False)
-    reversed_order = getattr(args, "reversed", False)
+    by_id = {op.id: op for op in ops}
+    items = [(op.id, [(parent, "direct") for parent in op.parent_ids])
+             for op in ops]
+    if getattr(args, "reversed", False):
+        items = reverse_graph(items)
 
-    blocks = [(row, op.id == current_id, _body(op, op.id == current_id, template))
-              for op, row in zip(ops, rows)]
-
-    if reversed_order:
-        blocks = list(reversed(blocks))
-
-    for index, (row, current, body) in enumerate(blocks):
-        if no_graph:
-            for line in body:
+    if getattr(args, "no_graph", False):
+        for op_id, _edges in items:
+            for line in _body(by_id[op_id], op_id == current_id, template):
                 print(line)
-            continue
-        header, cont = lane_prefixes(row, "@" if current else "○")
-        if reversed_order:
-            # Reversed, the line below a row leads to the row displayed
-            # after it, which is that row's child rather than its
-            # parent. The newest operation is displayed last and has no
-            # child, so nothing continues below it.
-            cont = "   " if index == len(blocks) - 1 else "│  "
-        print(f"{header}{body[0]}")
-        for line in body[1:]:
-            print(f"{cont}{line}")
+        return 0
+
+    renderer = pyjj.GraphRenderer()
+    for op_id, edges in items:
+        op = by_id[op_id]
+        # An edge to an operation outside the set is not drawn: under
+        # `--limit` the oldest row shown still has a parent, and jj
+        # leaves its lane running rather than closing it.
+        text = "\n".join(_body(op, op_id == current_id, template))
+        sys.stdout.write(renderer.next_row(
+            op_id, edges, "@" if op_id == current_id else "○", text))
     return 0

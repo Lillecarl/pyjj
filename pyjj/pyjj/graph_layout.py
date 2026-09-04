@@ -117,46 +117,19 @@ def layout(nodes: list[GraphNode]) -> list[GraphRow]:
     ]
 
 
-def lane_prefixes(row, glyph: str) -> tuple[str, str]:
-    """The graph column for a row's first line, and for its body lines.
+def reverse_graph(items):
+    """The same DAG walked the other way.
 
-    jj puts one lane every two characters and leaves two spaces before
-    the text, so a single-lane row reads `@  text`, not `@ text`. Both
-    strings returned already carry that trailing pair, so the caller
-    concatenates and prints.
+    Each node's parents become its children and the order flips, which
+    is what `jj log --reversed` does (`jj_lib::graph::reverse_graph`).
+    Reversing the drawn rows instead would leave a merge's fork
+    pointing the wrong way.
     """
-    # A row can draw into a lane it also retires -- a second child
-    # reaching the same ancestor -- and `width` counts only the lanes
-    # still open after the row. So the drawing is sized from every
-    # column the row actually mentions.
-    columns = [row.width, row.column + 1]
-    columns += [edge.from_column + 1 for edge in row.edges]
-    columns += [edge.to_column + 1 for edge in row.edges]
-    width = max(columns)
-    cells = [" "] * max(2 * width - 1, 1)
-    for edge in row.edges:
-        lo, hi = sorted((edge.from_column, edge.to_column))
-        if lo == hi:
-            cells[2 * lo] = "│"
-            continue
-        for col in range(2 * lo + 1, 2 * hi):
-            cells[col] = "─"
-        if edge.from_column == row.column:
-            cells[2 * edge.to_column] = (
-                "╮" if edge.to_column > edge.from_column else "╭")
-        else:
-            cells[2 * edge.from_column] = (
-                "╯" if edge.from_column > edge.to_column else "╰")
-
-    header = list(cells)
-    header[2 * row.column] = glyph
-    # A body line continues every lane that is still open below this
-    # row. A lane is open when its own column carries anything at all;
-    # the horizontal fill between lanes sits on odd columns and never
-    # continues downwards.
-    body = ["│" if i % 2 == 0 and cell != " " else " "
-            for i, cell in enumerate(cells)]
-    return "".join(header) + "  ", "".join(body) + "  "
+    children: dict = {}
+    for key, parents in items:
+        for target, edge_type in parents:
+            children.setdefault(target, []).append((key, edge_type))
+    return [(key, children.get(key, [])) for key, _ in reversed(items)]
 
 
 def _allocate_lane(lanes: list[tuple[CommitId, str] | None]) -> int:

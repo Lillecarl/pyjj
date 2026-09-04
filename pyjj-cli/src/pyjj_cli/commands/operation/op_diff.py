@@ -12,7 +12,6 @@ drawn yet.
 import sys
 
 import pyjj
-from pyjj.graph_layout import lane_prefixes, layout
 
 from ..common import (
     CommandError,
@@ -104,13 +103,12 @@ def _print_changed_commits(repo, settings, changes, no_graph: bool) -> None:
     # The graph is over the changed commits alone, so its order is its
     # own -- topologically grouped -- rather than the flat order above.
     by_id = {_change_key(change).hex(): change for change in changes}
-    nodes = repo.commits_graph([_change_key(change) for change in changes])
-    for node, row in zip(nodes, layout(nodes)):
-        lines = summary_lines(by_id[node.commit.id.hex()])
-        header, cont = lane_prefixes(row, "○")
-        print(f"{header}{lines[0]}")
-        for line in lines[1:]:
-            print(f"{cont}{line}")
+    renderer = pyjj.GraphRenderer()
+    for node in repo.commits_graph([_change_key(change) for change in changes]):
+        node_id = node.commit.id.hex()
+        edges = [(edge.target.hex(), edge.edge_type) for edge in node.edges]
+        text = "\n".join(summary_lines(by_id[node_id]))
+        sys.stdout.write(renderer.next_row(node_id, edges, "○", text))
 
 
 def _elided_count(estimate) -> str | None:

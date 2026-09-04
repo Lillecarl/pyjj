@@ -1,9 +1,9 @@
-"""history subcommand: log — now backed by log_graph + shared graph_layout."""
+"""history subcommand: log — backed by log_graph, drawn by jj's renderer."""
 import os
 import sys
 
 import pyjj
-from pyjj.graph_layout import lane_prefixes, layout
+from pyjj.graph_layout import reverse_graph
 
 from ..common import _load, _print_diff_stats, _resolve_template
 
@@ -113,16 +113,19 @@ def log(args) -> int:
     except Exception:
         bm_by_commit = {}
 
-    rows = layout(nodes)
-    # `--reversed` puts the oldest commit first. The graph is laid out
-    # before reversing, not after: `layout` needs descendants before
-    # ancestors, and handing it a reversed list produces no graph at
-    # all. A reversed row therefore continues to the row now below it,
-    # which is why the continuation is taken from display position
-    # rather than from the row's own edges.
+    # `--reversed` walks the same DAG the other way: each commit's
+    # parents become its children and the order flips, which is what
+    # jj's own `reverse_graph` does. Reversing the drawn rows instead
+    # would leave a merge's fork pointing the wrong way.
+    by_id = {node.commit.id.hex(): node for node in nodes}
+    items = [
+        (node.commit.id.hex(),
+         [(edge.target.hex(), edge.edge_type) for edge in node.edges])
+        for node in nodes
+    ]
     reversed_order = getattr(args, "reversed", False)
     if reversed_order:
-        rows = list(reversed(rows))
+        items = reverse_graph(items)
 
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
@@ -143,15 +146,15 @@ def log(args) -> int:
     # (e.g. 1999 and 2026 are 1xxx vs 2xxx → show 4-digit to disambiguate).
     # Ignore root() (1970 epoch) — it's synthetic and would force 4-digit forever.
     spans_millennia = False
-    if rows:
+    if nodes:
         try:
             import datetime
 
             years = []
-            for r in rows:
-                if not r.node.commit.parent_ids:  # root
+            for node in nodes:
+                if not node.commit.parent_ids:  # root
                     continue
-                ts = r.node.commit.author.timestamp
+                ts = node.commit.author.timestamp
                 tz = datetime.timezone(datetime.timedelta(minutes=ts.tz_offset_minutes))
                 dt = datetime.datetime.fromtimestamp(ts.millis_since_epoch / 1000, tz=tz)
                 years.append(dt.year)
@@ -160,9 +163,9 @@ def log(args) -> int:
         except Exception:
             spans_millennia = False
 
-    for row_index, row in enumerate(rows):
-        commit = row.node.commit
-        hex_id = commit.id.hex()
+    renderer = pyjj.GraphRenderer() if not no_graph else None
+    for hex_id, edges in items:
+        commit = by_id[hex_id].commit
         is_wc = hex_id in wc_ids
         is_current_wc = current_wc_hex is not None and hex_id == current_wc_hex
         is_root = not commit.parent_ids  # root() has no parents
@@ -172,21 +175,17 @@ def log(args) -> int:
         is_green = is_current_wc
         glyph = f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}" if use_color and is_green else raw_glyph
 
-        # Graph prefix for first row (commit line)
-        if no_graph:
-            graph_prefix = ""
-            cont_prefix = ""
-        else:
-            graph_prefix, cont_prefix = lane_prefixes(row, raw_glyph)
-            if use_color:
-                # Color the glyph like jj does (bold green for @)
-                if is_wc:
-                    graph_prefix = graph_prefix.replace(raw_glyph, f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}", 1)
-            if reversed_order:
-                # Reversed, a row's lanes lead down to the row after it,
-                # and the last row leads nowhere.
-                last = row_index == len(rows) - 1
-                cont_prefix = ("   " if last else "│  ")
+        # The graph is drawn by jj's own renderer, which takes the whole
+        # row's text at once and decides where it sits among the lines it
+        # draws. So each branch below builds its lines and emits one row.
+        def emit(lines):
+            if no_graph:
+                print(lines[0])
+                for extra in lines[1:]:
+                    print(f"  {extra}")
+                return
+            sys.stdout.write(
+                renderer.next_row(hex_id, edges, raw_glyph, "\n".join(lines)))
 
         # IDs with shortest-prefix highlight — magenta for change, blue for commit, rest grey
         try:
@@ -290,34 +289,20 @@ def log(args) -> int:
             # append a description line: the template says what to print,
             # and a template that wants the description asks for it. The
             # two-row default lives in the no-template branch below.
-            # Multi-line output keeps the graph lanes on continuation lines.
-            lines = rendered.splitlines() or [""]
-            print(f"{graph_prefix}{lines[0]}")
-            for extra in lines[1:]:
-                if not no_graph:
-                    print(f"{cont_prefix}{extra}")
-                else:
-                    print(f"  {extra}")
+            emit(rendered.splitlines() or [""])
         elif is_root:
             # jj gives the root commit a row of its own: it has no author
             # and no timestamp worth printing, and the epoch reads as a
             # 1970 commit that nobody made. `root()` says what it is.
-            print(f"{graph_prefix}{change_disp} root() {commit_disp}{bm_str}")
+            emit([f"{change_disp} root() {commit_disp}{bm_str}"])
         else:
             # Default two-row like jj but with username (name) not email — user says name is better
             author_part = f" {author_disp}" if author else ""
             datetime_part = f" {datetime_disp}" if datetime_str else ""
-            line1 = f"{graph_prefix}{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}"
-            print(line1)
-            if not no_graph:
-                cont_prefix_disp = f"{_BOOKMARK_COLOR}{cont_prefix.rstrip()}{_RESET} " if use_color and is_green and cont_prefix.strip() else cont_prefix
-                desc_disp = f"{_BOOKMARK_COLOR}{desc}{_RESET}" if use_color and is_green else desc
-                if use_color and is_green:
-                    print(f"{cont_prefix_disp}{desc_disp}")
-                else:
-                    print(f"{cont_prefix}{desc}")
-            else:
-                print(f"  {desc_raw}")
+            emit([
+                f"{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}",
+                desc if not no_graph else desc_raw,
+            ])
 
         if show_stat:
             # `--stat` reads file content, so it only runs when asked.

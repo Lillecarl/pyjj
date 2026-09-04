@@ -2447,11 +2447,6 @@ def test_log_reversed_puts_the_root_first(pair: RepoPair) -> None:
     assert "root()" in rows(backward)[0]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="jj draws a fork on the line below its node, pyjj-cli on the "
-           "node's own line; matching needs jj's renderdag row model",
-)
 @pytest.mark.covers("log")
 def test_log_draws_the_same_graph(pair: RepoPair) -> None:
     """`log`'s rows diverge from jj's on purpose. Its graph does not.
@@ -2463,15 +2458,9 @@ def test_log_draws_the_same_graph(pair: RepoPair) -> None:
     drawing. So this compares that column alone, on a history with a
     merge in it, where lanes actually branch and rejoin.
 
-    A linear graph already matches, and the `op log` corpus entries pin
-    it. A merge does not: jj hands its rows to `renderdag`, which puts
-    the node alone on its line and draws the fork on the line below --
-
-        @
-        ├─╮  merge
-
-    where pyjj-cli draws `@─╮` on the node's own line. Both are
-    readable; only one is jj's.
+    Both sides draw with the same renderer -- jj's own `renderdag` --
+    so a merge's fork lands on the line below its node, where jj puts
+    it, rather than on the node's own line.
     """
     conflict_pair(pair)
     cli, py = pair.outputs(["log"])
