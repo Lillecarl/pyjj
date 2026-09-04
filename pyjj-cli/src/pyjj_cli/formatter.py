@@ -26,6 +26,7 @@ and is not the same as leaving the attribute alone.
 from __future__ import annotations
 
 import contextlib
+import io
 
 # The eight names and their bright forms, as 256-colour indices. jj
 # writes these as `38;5;N` rather than the 30-37 range, so a terminal
@@ -274,6 +275,22 @@ class Formatter:
             self._style = wanted
             self._out.write(text)
 
+    def sync(self, *labels: str) -> None:
+        """Move to the style of `labels` without writing any text.
+
+        jj's templates write empty strings through the formatter, and
+        its emitter computes the style even for those. So a row whose
+        last span is coloured still steps back to the row's own style
+        before the newline, which costs one escape sequence. This is
+        that step.
+        """
+        if not self._enabled:
+            return
+        with self.labeled(*labels):
+            wanted = style_for(tuple(self._labels))
+            self._out.write(transition(self._style, wanted))
+            self._style = wanted
+
     def close(self) -> None:
         if self._enabled and self._style:
             self._out.write(transition(self._style, {}))
@@ -298,3 +315,26 @@ def formatter(out, settings=None) -> Formatter:
     from .commands.common import use_color
 
     return Formatter(out, use_color(settings))
+
+
+def render_block(lines, base=(), enabled: bool = True) -> str:
+    """Rows of labelled spans, rendered into one string.
+
+    `lines` is a list of lines. Each line is a list of `(text, labels)`
+    pairs, and every `labels` sits under `base`.
+
+    jj ends a line in two steps. It steps back to `base`, then writes
+    the newline under no labels at all, so a line that ends in a
+    coloured span costs two escape sequences. The last line has no
+    newline: the caller adds it, either as a graph row or as a print.
+    """
+    out = io.StringIO()
+    with Formatter(out, enabled) as fmt:
+        last = len(lines) - 1
+        for index, line in enumerate(lines):
+            for text, labels in line:
+                fmt.write(text, *base, *labels)
+            fmt.sync(*base)
+            if index < last:
+                fmt.write("\n")
+    return out.getvalue()

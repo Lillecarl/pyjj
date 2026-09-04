@@ -9,9 +9,9 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _load, _resolve_operation
+from ..common import CommandError, _load, _resolve_operation, use_color
 from .op_diff import print_operation_diff
-from .op_log import render_operation
+from .op_log import _shape, render_operation
 
 
 def op_show(args) -> int:
@@ -19,8 +19,9 @@ def op_show(args) -> int:
     try:
         settings, ws, repo = _load(args)
         op = _resolve_operation(repo, getattr(args, "operation", None))
-        for line in render_operation(settings, ws, args, repo, op, "op_show"):
-            print(line)
+        shape, template = _shape(settings, ws, args, "op_show")
+        print(render_operation(op, op.id == repo.operation.id, shape,
+                               template, "op_show", use_color(settings)))
         if getattr(args, "no_op_diff", False):
             return 0
         # An operation's diff is against its parents, which is what

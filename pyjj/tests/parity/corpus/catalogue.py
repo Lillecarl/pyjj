@@ -130,20 +130,21 @@ CATALOGUE: tuple[Entry, ...] = (
     E("git-root", ("git", "root"), normalize=("root",), claims=("git root",), colour="bytes"),
 
     # -- operations -----------------------------------------------------
-    E("op-log", ("op", "log"), claims=("operation log",), **_OP),
+    E("op-log", ("op", "log"), claims=("operation log",), colour="bytes", **_OP),
     E("op-log-no-graph", ("op", "log", "--no-graph"),
-      claims=("operation log", "--no-graph", "-G"), **_OP),
+      claims=("operation log", "--no-graph", "-G"), colour="bytes", **_OP),
     E("op-log-reversed", ("op", "log", "--reversed"),
-      claims=("operation log", "--reversed"), **_OP),
+      claims=("operation log", "--reversed"), colour="bytes", **_OP),
     E("op-log-limit", ("op", "log", "-n", "3"),
-      claims=("operation log", "--limit", "-n"), **_OP),
+      claims=("operation log", "--limit", "-n"), colour="bytes", **_OP),
     # `--limit` applies before `--reversed`, so this shows the three
     # newest operations oldest first, not the three oldest.
-    E("op-log-reversed-limit", ("op", "log", "--reversed", "-n", "3"), **_OP),
+    E("op-log-reversed-limit", ("op", "log", "--reversed", "-n", "3"),
+      colour="bytes", **_OP),
     # A builtin template name means the same thing on both sides, so
     # this argv is shared even though the template languages differ.
     E("op-log-oneline", ("op", "log", "-T", "builtin_op_log_oneline"),
-      claims=("operation log", "--template", "-T"), **_OP),
+      claims=("operation log", "--template", "-T"), colour="bytes", **_OP),
     E("op-diff", ("op", "diff"), claims=("operation diff",),
       normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-diff-no-graph", ("op", "diff", "--no-graph"),
@@ -163,9 +164,9 @@ CATALOGUE: tuple[Entry, ...] = (
       normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show-oneline",
       ("op", "show", "--no-op-diff", "-T", "builtin_op_log_oneline"),
-      claims=("operation show", "--template", "-T"),
+      claims=("operation show", "--template", "-T"), colour="bytes",
       normalize=("op_ids", "ago", "root", "host", "prog")),
-    E("op-show-no-op-diff", ("op", "show", "--no-op-diff"),
+    E("op-show-no-op-diff", ("op", "show", "--no-op-diff"), colour="bytes",
       claims=("operation show", "--no-op-diff"),
       normalize=("op_ids", "ago", "root", "host", "prog")),
 
