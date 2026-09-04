@@ -34,6 +34,7 @@ import difflib
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,22 @@ PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
 PIN_TIME = "2001-02-03T04:05:06+00:00"
 SEED_BASE = 1000
+
+
+def _copy_tree(src: Path, dst: Path) -> None:
+    """Copy a directory, sharing extents where the filesystem can.
+
+    `cp --reflink=auto` is a copy-on-write clone on btrfs and xfs and a
+    plain copy everywhere else, so this is fast where it can be and
+    correct where it cannot. `cp` is used rather than `shutil.copytree`
+    because Python has no portable reflink call.
+    """
+    result = subprocess.run(
+        ["cp", "-a", "--reflink=auto", str(src), str(dst)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:  # pragma: no cover - fallback path
+        shutil.copytree(src, dst, symlinks=True)
 
 
 class RepoPair:
@@ -160,6 +177,35 @@ class RepoPair:
                 f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
             )
         return proc.returncode
+
+    # -- templating ---------------------------------------------------
+    #
+    # Building a scenario's starting state costs two CLI runs per step,
+    # and the common `chain` prefix is five steps: ~3.7s per test, on a
+    # suite where 164 tests start from it. Building it once and copying
+    # the result costs ~34ms, because /tmp is btrfs and `cp --reflink`
+    # shares the extents rather than reading and writing them.
+    #
+    # Only the two repository trees are copied. `home/` holds a jj config
+    # naming the scripted tools by ABSOLUTE path, and `bin/` holds the
+    # tools themselves, so both have to be rebuilt per test -- which
+    # `__init__` already does without spawning anything.
+
+    def save_template(self, dest: Path) -> int:
+        """Copy both repositories into `dest`. Returns the step counter,
+        which the restoring pair has to resume from so the two sides keep
+        drawing the same `JJ_RANDOMNESS_SEED` sequence."""
+        dest.mkdir(parents=True, exist_ok=True)
+        for side in ("cli", "py"):
+            _copy_tree(self.root / side, dest / side)
+        return self._step
+
+    def load_template(self, src: Path, step: int) -> None:
+        """Replace both repositories with a copy of `src`."""
+        for side in ("cli", "py"):
+            shutil.rmtree(self.root / side, ignore_errors=True)
+            _copy_tree(src / side, self.root / side)
+        self._step = step
 
     def assert_output(self, argv: list[str], *, may_fail: bool = False) -> str:
         """Run a READ-ONLY argv on both sides and compare stdout verbatim.
