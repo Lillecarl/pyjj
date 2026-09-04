@@ -974,9 +974,15 @@ Current state:
   assertion inside a native extension aborts the interpreter instead of
   raising something Python can catch. `jj` never reaches them because
   its CLI runs `check_rewritable` first. pyjj has no equivalent, so the
-  guard sits in the bindings and uses jj's own wording. Still missing:
-  the wider `immutable()` check, so a commit made immutable by a tag or
-  a pushed trunk is rewritten where `jj` would refuse.
+  guard sits in the bindings and uses jj's own wording.
+- **The wider immutability check**: `Transaction.check_rewritable(settings,
+  commits)` is jj's own guard -- it intersects `commits` with whatever
+  `immutable()` resolves to and raises on the first hit, naming it the
+  way jj does. Policy, not safety, so it lives beside `reject_root`
+  rather than replacing it: a caller who skips this check must still not
+  be able to crash the interpreter. It needs the `immutable()` alias
+  from jj's bundled `revsets.toml`, so `UserSettings(load_config=False)`
+  cannot run it, and the error says so.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
