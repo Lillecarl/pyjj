@@ -252,9 +252,13 @@ class RepoPair:
     def _op_id(self, repo: Path, depth: int) -> str:
         """The operation id `depth` steps back from the head op (depth 0 =
         current head). Op ids differ between the two repos (hostnames,
-        snapshot-op folding), so scenarios address them PER SIDE."""
+        snapshot-op folding), so scenarios address them PER SIDE.
+
+        Reads with `--ignore-working-copy` for the reason `_extract_repo`
+        gives -- and here it also keeps the depth honest, since a
+        snapshot taken while looking would itself become the head op."""
         out = self._out(
-            [self.jj_bin, "-R", str(repo), "--no-pager", "op", "log",
+            [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy", "op", "log",
              "--no-graph", "--limit", str(depth + 1), "-T", 'self.id() ++ "\\n"'],
             repo,
         )
@@ -275,9 +279,18 @@ class RepoPair:
         )
 
     def _extract_repo(self, repo: Path) -> dict:
-        """Canonical state of one repository, read through the pinned jj."""
+        """Canonical state of one repository, read through the pinned jj.
+
+        Every read here passes `--ignore-working-copy`, so extraction
+        observes and never mutates. Without it, reading snapshots -- and
+        that hides a whole class of bug: if pyjj failed to snapshot
+        where jj does, the extractor would fold the file in on the pyjj
+        side, and with pinned timestamps it could rebuild the identical
+        commit id. It also makes `--ignore-working-copy` itself testable,
+        since a harness that snapshots cannot see a command that didn't.
+        """
         out = self._out(
-            [self.jj_bin, "-R", str(repo), "--no-pager", "log", "-r", "all()",
+            [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy", "log", "-r", "all()",
              "--no-graph", "-T", 'commit_id.short(40) ++ "\\n"'],
             repo,
         )
@@ -287,7 +300,7 @@ class RepoPair:
                 continue
             meta = self._out(
                 [
-                    self.jj_bin, "-R", str(repo), "--no-pager", "log", "-r", cid,
+                    self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy", "log", "-r", cid,
                     "--no-graph", "-T",
                     'description ++ "\x1f" ++ author.name() ++ "\x1f"'
                     ' ++ author.email() ++ "\x1f" ++ committer.name() ++ "\x1f"'
@@ -303,11 +316,11 @@ class RepoPair:
             )
             files = {}
             for path in self._out(
-                [self.jj_bin, "-R", str(repo), "--no-pager", "file", "list", "-r", cid],
+                [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy", "file", "list", "-r", cid],
                 repo,
             ).splitlines():
                 content = subprocess.run(
-                    [self.jj_bin, "-R", str(repo), "--no-pager", "file", "show",
+                    [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy", "file", "show",
                      "-r", cid, path],
                     env=self._env(bump=False),
                     capture_output=True,
