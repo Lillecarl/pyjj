@@ -415,6 +415,29 @@ pub struct PyGitDiffFile {
     /// of hunks for these.
     #[pyo3(get)]
     pub is_binary: bool,
+    /// Whether the path held an unresolved conflict before the change,
+    /// and whether it holds one after.
+    ///
+    /// The content is already materialized, so a conflict reads as a
+    /// plain file with markers in it and the mode says nothing. jj
+    /// names the file by what it was on each side -- `Created conflict
+    /// in`, `Resolved conflict in`, `Modified conflict in` -- so the
+    /// two sides have to be recorded before the materialization loses
+    /// them.
+    #[pyo3(get)]
+    pub before_conflict: bool,
+    #[pyo3(get)]
+    pub after_conflict: bool,
+}
+
+/// Whether a materialized tree value was an unresolved conflict, by the
+/// same match `jj`'s `basic_diff_file_type` uses.
+fn is_conflict(value: &jj_lib::conflicts::MaterializedTreeValue) -> bool {
+    use jj_lib::conflicts::MaterializedTreeValue;
+    matches!(
+        value,
+        MaterializedTreeValue::FileConflict(_) | MaterializedTreeValue::OtherConflict { .. }
+    )
 }
 
 #[pymethods]
@@ -491,7 +514,6 @@ fn git_diff_trees(
     paths: Option<Vec<String>>,
     copy_ids: Option<(jj_lib::backend::CommitId, jj_lib::backend::CommitId)>,
 ) -> PyResult<Vec<PyGitDiffFile>> {
-    use jj_lib::conflict_labels::ConflictLabels;
     use jj_lib::conflicts::{
         ConflictMarkerStyle, ConflictMaterializeOptions, materialized_diff_stream,
     };
@@ -519,17 +541,21 @@ fn git_diff_trees(
         copy_records.add_records(records);
     }
     let tree_diff = from_tree.diff_stream_with_copies(to_tree, matcher.as_ref(), &copy_records);
-    let labels = ConflictLabels::unlabeled();
-
     pollster::block_on(async {
+        // A conflicted tree carries the labels its conflict was created
+        // with, and jj names the sides of a materialized conflict from
+        // them: `%%%%%%% diff from: <commit> "base"`. Unlabeled markers
+        // would print `side #1` instead.
         let mut stream = Box::pin(materialized_diff_stream(
             store,
             Box::pin(tree_diff),
-            Diff::new(&labels, &labels),
+            Diff::new(from_tree.labels(), to_tree.labels()),
         ));
         let mut out = Vec::new();
         while let Some(entry) = stream.next().await {
             let values = entry.values.map_err(map_backend_err)?;
+            let before_conflict = is_conflict(&values.before);
+            let after_conflict = is_conflict(&values.after);
             let before = git_diff_part(entry.path.source(), values.before, &materialize_options)
                 .await
                 .map_err(crate::errors::map_py_err)?;
@@ -554,6 +580,8 @@ fn git_diff_trees(
                 is_binary: before.content.is_binary || after.content.is_binary,
                 before_content: before.content.contents.into(),
                 after_content: after.content.contents.into(),
+                before_conflict,
+                after_conflict,
             });
         }
         Ok(out)
