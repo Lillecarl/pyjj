@@ -21,6 +21,12 @@ pub struct PyTag {
     pub name: String,
     #[pyo3(get)]
     pub target_ids: Vec<PyCommitId>,
+    /// The commits a conflicted tag moved *away* from. Empty unless
+    /// `has_conflict`. jj lists these as the `-` side, against
+    /// `target_ids` as the `+` side, with the same template it uses for
+    /// a bookmark.
+    #[pyo3(get)]
+    pub removed_ids: Vec<PyCommitId>,
     #[pyo3(get)]
     pub has_conflict: bool,
 }
@@ -30,6 +36,7 @@ impl PyTag {
         Self {
             name: name.as_str().to_string(),
             target_ids: target.added_ids().map(PyCommitId::from).collect(),
+            removed_ids: target.removed_ids().map(PyCommitId::from).collect(),
             has_conflict: target.has_conflict(),
         }
     }
