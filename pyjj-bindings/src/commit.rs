@@ -172,6 +172,23 @@ impl PyCommit {
         crate::tree::diff_stats(self, other, settings, paths)
     }
 
+    /// The per-file halves of `jj diff --git`: mode, abbreviated hash and
+    /// materialized content for both sides of every changed path.
+    ///
+    /// Pair it with `pyjj.unified_hunks()` to format a git-style diff.
+    /// What this settles is the part that has to agree with jj; the
+    /// formatting is the caller's.
+    #[pyo3(signature = (other, settings, paths=None, copies=true))]
+    fn git_diff(
+        &self,
+        other: &Self,
+        settings: &crate::settings::PyUserSettings,
+        paths: Option<Vec<String>>,
+        copies: bool,
+    ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
+        crate::tree::git_diff_files(self, other, settings, paths, copies)
+    }
+
     /// Async sibling of `diff()`. Runs on tokio's blocking thread pool (see
     /// the `aio` module docs) rather than on the calling thread.
     #[pyo3(signature = (other, paths=None))]

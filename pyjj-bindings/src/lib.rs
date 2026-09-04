@@ -45,7 +45,7 @@ use errors::{
 };
 use fix::{PyFileToFix, PyFixSummary};
 use graph::{PyGraphEdge, PyGraphNode};
-use hunks::{PyHunk, diff_hunks};
+use hunks::{PyHunk, PyUnifiedHunk, diff_hunks, unified_hunks};
 use ids::{PyChangeId, PyCommitId, PyFileId, PySignature, PyTimestamp, PyTreeId};
 use operation::PyOperation;
 use oplog::PyOpAbandonStats;
@@ -102,6 +102,8 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCommitBuilder>()?;
     m.add_class::<PyWorkspace>()?;
     m.add_class::<PyHunk>()?;
+    m.add_class::<PyUnifiedHunk>()?;
+    m.add_class::<crate::tree::PyGitDiffFile>()?;
     m.add_class::<PyAnnotationLine>()?;
     m.add_class::<PyAbsorbStats>()?;
     m.add_class::<PyFileToFix>()?;
@@ -120,6 +122,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::run::PyRunPool>()?;
     m.add_class::<crate::run::PyRunSlot>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
+    m.add_function(wrap_pyfunction!(unified_hunks, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_config_repo_path, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::remove_repo_config_dir, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_configs_root_dir, m)?)?;

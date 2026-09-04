@@ -91,3 +91,95 @@ pub(crate) fn apply_hunk_selection(
     }
     result
 }
+
+/// One hunk of a unified (Git-style) diff: the `@@` header numbers plus
+/// the lines under it.
+///
+/// `left_start`/`right_start` are already the numbers a `@@` header
+/// prints, so they are 1-based, except that an empty range prints the
+/// line before it (0 at the start of a file). `left_len`/`right_len` are
+/// line counts, and jj prints both unconditionally -- unlike `git diff`,
+/// which omits a count of 1.
+#[pyclass(name = "UnifiedHunk", frozen)]
+pub struct PyUnifiedHunk {
+    #[pyo3(get)]
+    pub left_start: usize,
+    #[pyo3(get)]
+    pub left_len: usize,
+    #[pyo3(get)]
+    pub right_start: usize,
+    #[pyo3(get)]
+    pub right_len: usize,
+    /// `(kind, content)` per line, where kind is `"context"`, `"removed"`
+    /// or `"added"`. `content` keeps its trailing newline, and lacks one
+    /// exactly when the file does.
+    #[pyo3(get)]
+    pub lines: Vec<(String, Vec<u8>)>,
+}
+
+#[pymethods]
+impl PyUnifiedHunk {
+    fn __repr__(&self) -> String {
+        format!(
+            "UnifiedHunk(@@ -{},{} +{},{} @@, {} lines)",
+            self.left_start,
+            self.left_len,
+            self.right_start,
+            self.right_len,
+            self.lines.len()
+        )
+    }
+}
+
+/// Computes the hunks of a unified diff between `before` and `after`,
+/// with `context` unchanged lines around each change.
+///
+/// This is `jj_lib`'s own `unified_diff_hunks`, which is what `jj diff
+/// --git` prints. Line splitting, hunk boundaries and the merging of
+/// nearby changes therefore match jj exactly -- a diff built with a
+/// different algorithm would not, however the output was formatted.
+#[pyfunction]
+#[pyo3(signature = (before, after, context=3))]
+pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifiedHunk> {
+    use bstr::BStr;
+    use jj_lib::diff_presentation::LineCompareMode;
+    use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
+    use jj_lib::merge::Diff;
+
+    // "If the chunk size is 0, the first number is one lower than one
+    // would expect" -- the POSIX rule jj follows in `diff_util.rs`.
+    fn to_line_number(range: &std::ops::Range<usize>) -> usize {
+        if range.is_empty() {
+            range.start
+        } else {
+            range.start + 1
+        }
+    }
+
+    let contents = Diff::new(before, after).map(BStr::new);
+    unified_diff_hunks(contents, context, LineCompareMode::Exact)
+        .into_iter()
+        .map(|hunk| PyUnifiedHunk {
+            left_start: to_line_number(&hunk.left_line_range),
+            left_len: hunk.left_line_range.len(),
+            right_start: to_line_number(&hunk.right_line_range),
+            right_len: hunk.right_line_range.len(),
+            lines: hunk
+                .lines
+                .into_iter()
+                .map(|(line_type, tokens)| {
+                    let kind = match line_type {
+                        DiffLineType::Context => "context",
+                        DiffLineType::Removed => "removed",
+                        DiffLineType::Added => "added",
+                    };
+                    let mut content = Vec::new();
+                    for (_, token) in tokens {
+                        content.extend_from_slice(token);
+                    }
+                    (kind.to_owned(), content)
+                })
+                .collect(),
+        })
+        .collect()
+}

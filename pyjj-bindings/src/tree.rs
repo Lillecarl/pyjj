@@ -366,3 +366,137 @@ async fn read_side(
         },
     })
 }
+
+/// One changed path with both sides materialized the way `jj diff --git`
+/// needs them: the octal mode, the abbreviated blob hash and the content.
+///
+/// `before_mode` is `None` for an added path and `after_mode` is `None`
+/// for a removed one; jj prints `new file mode` / `deleted file mode`
+/// from exactly that. The hashes are jj's, truncated to ten characters
+/// as jj truncates them, and are `"0000000000"` where there is no file.
+#[pyclass(name = "GitDiffFile", frozen)]
+pub struct PyGitDiffFile {
+    /// The path after the change.
+    #[pyo3(get)]
+    pub path: String,
+    /// The path before the change. Differs from `path` only for a copy
+    /// or a rename.
+    #[pyo3(get)]
+    pub source_path: String,
+    /// `"copy"`, `"rename"`, or `None` when the path did not move.
+    #[pyo3(get)]
+    pub copy_operation: Option<String>,
+    #[pyo3(get)]
+    pub before_mode: Option<String>,
+    #[pyo3(get)]
+    pub after_mode: Option<String>,
+    #[pyo3(get)]
+    pub before_hash: String,
+    #[pyo3(get)]
+    pub after_hash: String,
+    #[pyo3(get)]
+    pub before_content: Vec<u8>,
+    #[pyo3(get)]
+    pub after_content: Vec<u8>,
+    /// True when either side looks binary, by jj's rule: a NUL byte in
+    /// the first 8000 bytes. jj prints "Binary files ... differ" instead
+    /// of hunks for these.
+    #[pyo3(get)]
+    pub is_binary: bool,
+}
+
+#[pymethods]
+impl PyGitDiffFile {
+    fn __repr__(&self) -> String {
+        format!("GitDiffFile({})", self.path)
+    }
+}
+
+/// The per-file halves of `jj diff --git`, straight from `jj_lib`'s
+/// `git_diff_part`.
+///
+/// Formatting is left to the caller; what this settles is the part that
+/// has to agree with jj -- which mode string, which hash, and what the
+/// content is once conflicts are materialized. Pair it with
+/// `unified_hunks()` for the hunks.
+///
+/// `copies` turns on the backend's copy and rename detection, as `jj
+/// diff --git` does by default.
+pub fn git_diff_files(
+    from: &PyCommit,
+    to: &PyCommit,
+    settings: &crate::settings::PyUserSettings,
+    paths: Option<Vec<String>>,
+    copies: bool,
+) -> PyResult<Vec<PyGitDiffFile>> {
+    use jj_lib::conflict_labels::ConflictLabels;
+    use jj_lib::conflicts::{
+        ConflictMarkerStyle, ConflictMaterializeOptions, materialized_diff_stream,
+    };
+    use jj_lib::diff_presentation::unified::git_diff_part;
+    use jj_lib::merge::Diff;
+
+    let store = from.inner.store();
+    let marker_style: ConflictMarkerStyle = settings
+        .0
+        .get("ui.conflict-marker-style")
+        .map_err(crate::errors::map_py_err)?;
+    let materialize_options = ConflictMaterializeOptions {
+        marker_style,
+        marker_len: None,
+        merge: store.merge_options().clone(),
+    };
+
+    let from_tree = from.inner.tree();
+    let to_tree = to.inner.tree();
+    let matcher = crate::rewrite::paths_matcher(paths)?;
+    let mut copy_records = CopyRecords::default();
+    if copies {
+        let record_stream = store
+            .get_copy_records(None, from.inner.id(), to.inner.id())
+            .map_err(map_backend_err)?;
+        let records: Vec<_> =
+            pollster::block_on(record_stream.try_collect()).map_err(map_backend_err)?;
+        copy_records.add_records(records);
+    }
+    let tree_diff = from_tree.diff_stream_with_copies(&to_tree, matcher.as_ref(), &copy_records);
+    let labels = ConflictLabels::unlabeled();
+
+    pollster::block_on(async {
+        let mut stream = Box::pin(materialized_diff_stream(
+            store,
+            Box::pin(tree_diff),
+            Diff::new(&labels, &labels),
+        ));
+        let mut out = Vec::new();
+        while let Some(entry) = stream.next().await {
+            let values = entry.values.map_err(map_backend_err)?;
+            let before = git_diff_part(entry.path.source(), values.before, &materialize_options)
+                .await
+                .map_err(crate::errors::map_py_err)?;
+            let after = git_diff_part(entry.path.target(), values.after, &materialize_options)
+                .await
+                .map_err(crate::errors::map_py_err)?;
+            let copy_operation = entry.path.copy_operation().map(|op| {
+                match op {
+                    CopyOperation::Copy => "copy",
+                    CopyOperation::Rename => "rename",
+                }
+                .to_owned()
+            });
+            out.push(PyGitDiffFile {
+                path: entry.path.target().as_internal_file_string().to_string(),
+                source_path: entry.path.source().as_internal_file_string().to_string(),
+                copy_operation,
+                before_mode: before.mode.map(|m| m.to_owned()),
+                after_mode: after.mode.map(|m| m.to_owned()),
+                before_hash: before.hash,
+                after_hash: after.hash,
+                is_binary: before.content.is_binary || after.content.is_binary,
+                before_content: before.content.contents.into(),
+                after_content: after.content.contents.into(),
+            });
+        }
+        Ok(out)
+    })
+}
