@@ -632,9 +632,6 @@
     "-r",
     "-t"
   ],
-  "status": [
-    "(command)"
-  ],
   "tag": [
     "(command)"
   ],

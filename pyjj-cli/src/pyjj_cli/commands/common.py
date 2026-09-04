@@ -587,6 +587,129 @@ def _resolve_operation(repo, name: str | None):
 _STAT_BAR_WIDTH = 32
 
 
+_SUMMARY_STATUS_CHARS = {
+    "added": "A",
+    "removed": "D",
+    "modified": "M",
+    "executable": "M",
+    "copied": "C",
+    "renamed": "R",
+}
+
+
+def _summary_lines(entries, to_ui_path=None) -> list[str]:
+    """`jj diff --summary`'s lines: one status letter, a space, the path.
+
+    jj has no separate letter for a mode-only change, so an
+    `"executable"` entry reads as modified, which is what jj prints for
+    it.
+    """
+    to_ui_path = to_ui_path or (lambda path: path)
+    return [f"{_SUMMARY_STATUS_CHARS[e.status]} {to_ui_path(e.path)}" for e in entries]
+
+
+def _relative_path(from_dir: Path, to: Path) -> str:
+    """jj's `file_util::relative_path`.
+
+    `os.path.relpath` is not the same function. It walks up with `..`
+    however far it has to; jj gives up and prints the absolute path when
+    the two share no prefix at all, which happens when `-R` names a
+    workspace the current directory is nowhere near.
+    """
+    for i, base in enumerate([from_dir, *from_dir.parents]):
+        if not to.is_relative_to(base):
+            continue
+        suffix = to.relative_to(base)
+        if i == 0:
+            return "." if str(suffix) == "." else str(suffix)
+        return str(Path(*([".."] * i), suffix))
+    return str(to)
+
+
+def _ui_path_formatter(ws):
+    """How this invocation spells a repo-relative path back to the user.
+
+    jj prints paths relative to the current directory, not to the
+    workspace root, so `jj status` run in a subdirectory names a file
+    there by its bare name. The parity harness always runs at the
+    workspace root, where the two spellings agree, so it cannot see this
+    -- the repo-discovery tests are what catch it.
+    """
+    cwd = Path.cwd()
+    root = Path(ws.workspace_root)
+    return lambda path: _relative_path(cwd, root / path)
+
+
+def _bookmarks_by_commit(repo) -> dict[str, list[str]]:
+    """Local bookmark names per commit, keyed by hex commit id."""
+    by_commit: dict[str, list[str]] = {}
+    for bookmark in repo.bookmarks():
+        for target in bookmark.target_ids:
+            by_commit.setdefault(target.hex(), []).append(bookmark.name)
+    return by_commit
+
+
+def _short_id(hex_str: str, shortest_len: int) -> str:
+    """jj's `shortest(8)`: the unique prefix, but never under 8."""
+    return hex_str[: max(8, shortest_len)]
+
+
+def _is_empty(repo, commit) -> bool:
+    """Whether a commit changes nothing, the way jj's `empty()` decides.
+
+    `Commit.is_empty()` answers `False` for a parentless commit, since
+    there is nothing to compare against. jj compares against an empty
+    tree there instead, so the root commit reads as empty -- and jj
+    prints `(empty)` for it.
+    """
+    if not commit.parent_ids:
+        return not commit.list_files()
+    return commit.is_empty(repo)
+
+
+def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
+    """One commit as jj's `commit_summary` template renders it.
+
+    jj builds this from `format_commit_summary_with_refs`, and several
+    commands print it -- `status` names the working copy and its parents
+    with it, and so do many hints. The shape is
+
+        <change id> <commit id> [<bookmarks> | ][(conflict) ][(empty) ]<description>
+
+    with each absent part dropped along with its separator, and `(no
+    description set)` standing in for an empty description.
+
+    Two details are jj's and not obvious. The change id prints in jj's
+    reverse-hex spelling, not the raw hex the id carries. Both ids print
+    their shortest unique prefix, with a floor of eight characters, so
+    the width grows only when a repository needs it to.
+
+    A hidden or divergent commit also gets a marker and a change offset;
+    neither is produced here yet.
+    """
+    if bookmarks is None:
+        bookmarks = _bookmarks_by_commit(repo).get(commit.id.hex(), [])
+    change = _short_id(
+        commit.change_id.reverse_hex(),
+        repo.shortest_change_id_prefix_len(commit.change_id, settings),
+    )
+    commit_id = _short_id(
+        commit.id.hex(),
+        repo.shortest_commit_id_prefix_len(commit.id, settings),
+    )
+    rest = []
+    if commit.has_conflict:
+        rest.append("(conflict)")
+    if _is_empty(repo, commit):
+        rest.append("(empty)")
+    first_line = commit.description.splitlines()[0] if commit.description else ""
+    rest.append(first_line if first_line else "(no description set)")
+    tail = " ".join(rest)
+    if bookmarks:
+        tail = " ".join(bookmarks) + " | " + tail
+    return f"{change} {commit_id} {tail}"
+
+
 def _git_diff_bytes(files, context: int = 3) -> bytes:
     """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
 

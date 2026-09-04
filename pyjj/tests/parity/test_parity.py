@@ -2399,18 +2399,23 @@ def test_op_revert_a_describe(pair: RepoPair) -> None:
 # which is a fair bar: the two repos are bit-identical down to commit
 # ids by then, so every id and column should line up.
 #
-# All of these fail today, and they are marked strictly so the count is
-# visible rather than absent. pyjj-cli's read-only commands print their
-# own format: `show` writes "Commit:" where jj writes "Commit ID:", the
-# raw change id rather than jj's reverse-hex spelling, and a one-line
-# file summary where jj writes the diff itself. `--git` is accepted and
-# then ignored.
+# The ones marked below fail today, and they are marked strictly so the
+# count is visible rather than absent. pyjj-cli's read-only commands
+# print their own format: `show` writes "Commit:" where jj writes
+# "Commit ID:", the raw change id rather than jj's reverse-hex spelling,
+# and a one-line file summary where jj writes the diff itself.
 #
 # This is the gap the CLI-surface ledger cannot see. That ledger reads
 # argument parsers, so a flag counts as covered once argparse accepts
-# it -- which is why `diff --git` counts as covered and still does
-# nothing. Adding the remaining flags without this half would add more
-# of the same.
+# it. `diff --git` was the case in point: parsed for a long time, and
+# ignored for just as long, until comparing its output caught it.
+# Adding the remaining flags without this half would add more of the
+# same.
+#
+# Byte parity is the bar only where the format is a machine format --
+# `--git` above. For what a person reads, equal or better is the bar,
+# so a test there asserts the facts the output carries rather than its
+# columns.
 
 OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
     strict=True,
@@ -2487,9 +2492,26 @@ def test_diff_git_format_reads_a_root_commit(pair: RepoPair) -> None:
     pair.assert_output(["diff", "--git", "-r", "@"])
 
 
-@OUTPUT_UNIMPLEMENTED
+@pytest.mark.covers("status")
 def test_status_output_matches(pair: RepoPair) -> None:
     chain(pair)
+    pair.assert_output(["status"])
+
+
+@pytest.mark.covers("status")
+def test_status_reports_a_clean_working_copy(pair: RepoPair) -> None:
+    """A working copy with nothing in it prints one sentence instead of
+    a change list, and its parent is the root commit."""
+    pair.init()
+    pair.assert_output(["status"])
+
+
+@pytest.mark.covers("status")
+def test_status_names_a_bookmark_on_the_parent(pair: RepoPair) -> None:
+    """The commit summary puts bookmarks before the description, with
+    ` | ` between them."""
+    chain(pair)
+    pair.op(jj=["new", rev("one")])
     pair.assert_output(["status"])
 
 

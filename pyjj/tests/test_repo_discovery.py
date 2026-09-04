@@ -60,10 +60,12 @@ def run_pyjj(cwd, env, *args):
 
 
 def test_finds_the_repo_from_a_subdirectory(nested_repo):
+    """The changed file is named relative to the current directory, as
+    jj names it -- so this checks the search and the spelling at once."""
     root, _outside, env = nested_repo
     result = run_pyjj(root / "sub" / "deep", env, "--no-pager", "status")
     assert result.returncode == 0, result.stderr
-    assert str(root) in result.stdout
+    assert "A f.txt" in result.stdout
 
 
 def test_finds_the_repo_from_the_root_too(nested_repo):
@@ -95,7 +97,10 @@ def test_dash_R_wins_over_the_search(nested_repo):
     root, outside, env = nested_repo
     result = run_pyjj(outside, env, "--no-pager", "-R", str(root), "status")
     assert result.returncode == 0, result.stderr
-    assert str(root) in result.stdout
+    # The path is still spelled relative to the current directory, which
+    # is outside the workspace, so it walks back out with `..` -- jj
+    # prints exactly this.
+    assert f"A ../{root.name}/sub/deep/f.txt" in result.stdout
 
 
 def test_dash_R_does_not_search_upward(nested_repo):
