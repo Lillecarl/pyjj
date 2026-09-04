@@ -44,7 +44,7 @@ use errors::{
     TransactionError, WorkingCopyError, WorkspaceInitError, WorkspaceLoadError,
 };
 use fix::{PyFileToFix, PyFixSummary};
-use graph::{PyGraphEdge, PyGraphNode};
+use graph::{PyGraphEdge, PyGraphNode, PyGraphRenderer};
 use hunks::{PyHunk, PyUnifiedHunk, diff_hunks, unified_hunks};
 use ids::{PyChangeId, PyCommitId, PyFileId, PySignature, PyTimestamp, PyTreeId};
 use operation::PyOperation;
@@ -112,6 +112,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOpAbandonStats>()?;
     m.add_class::<PyGraphEdge>()?;
     m.add_class::<PyGraphNode>()?;
+    m.add_class::<PyGraphRenderer>()?;
     m.add_class::<PyBisector>()?;
     m.add_class::<PyBisectStep>()?;
     m.add_class::<PyEvolutionEntry>()?;
