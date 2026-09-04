@@ -72,6 +72,41 @@ def _copy_tree(src: Path, dst: Path) -> None:
         shutil.copytree(src, dst, symlinks=True)
 
 
+def make_bare_remote(base: Path) -> Path:
+    """Create a bare git remote with a single branch 'main' seeded with one commit."""
+    remote_dir = base / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(remote_dir)], check=True, capture_output=True)
+    seed_dir = base / "seed"
+    subprocess.run(["git", "init", "-b", "main", str(seed_dir)], check=True, capture_output=True)
+    (seed_dir / "file.txt").write_text("hello\n")
+    # The seed commit's hash has to be the same on every run and on
+    # every machine, or the corpus goldens that name it would be
+    # rewritten each capture. Two things decide that. Git takes the
+    # timestamp from the environment, so it is pinned to the same
+    # instant as everything else here. And a machine configured to sign
+    # commits would embed a signature -- which carries its own clock --
+    # so signing is turned off explicitly rather than inherited.
+    env = {
+        **os.environ,
+        "GIT_EDITOR": "true",
+        "EDITOR": "true",
+        "GIT_AUTHOR_DATE": PIN_TIME,
+        "GIT_COMMITTER_DATE": PIN_TIME,
+    }
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A",
+         "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false", "add", "file.txt"],
+        cwd=str(seed_dir), check=True, capture_output=True, env=env,
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A",
+         "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false", "commit", "-m", "seed"],
+        cwd=str(seed_dir), check=True, capture_output=True, env=env,
+    )
+    subprocess.run(["git", "push", str(remote_dir), "main"], cwd=str(seed_dir), check=True, capture_output=True, env=env)
+    return remote_dir
+
+
 class RepoPair:
     """One scenario's worth of parallel repos: `cli/repo` driven by the jj
     binary, `py/repo` driven by pyjj through driver.py subprocesses."""

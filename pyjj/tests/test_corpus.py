@@ -91,6 +91,16 @@ def corpus_pairs(tmp_path_factory):
     return built
 
 
+def _context(pair, side: str, ops) -> dict:
+    """What the normalizers substitute, for one side of a pair."""
+    return {
+        "repo": pair.cli_repo if side == "cli" else pair.py_repo,
+        "op_ids": ops[side],
+        # Set by a fixture that builds a remote; both sides share it.
+        "remote": getattr(pair, "remote", None),
+    }
+
+
 def _op_ids(pair) -> list[str]:
     from parity.corpus.capture import _op_ids as read
 
@@ -110,7 +120,7 @@ def test_the_corpus_still_describes_jj(entry, corpus_pairs):
     """
     pair = corpus_pairs[entry.fixture]
     ops = _op_ids(pair)
-    context = {"repo": pair.cli_repo, "op_ids": ops["cli"]}
+    context = _context(pair, "cli", ops)
     got = normalize(run_jj(pair, entry.argv, "never"), entry.normalize, context)
     assert got == _golden(entry, PLAIN_SUFFIX), (
         f"jj no longer prints what the golden for {entry.id!r} recorded"
@@ -129,7 +139,7 @@ def test_pyjj_prints_what_the_corpus_records(entry, corpus_pairs):
         f"pyjj-cli failed on {list(entry.argv)}\n{proc.stderr}"
     )
     got = normalize(
-        proc.stdout, entry.normalize, {"repo": pair.py_repo, "op_ids": ops["py"]}
+        proc.stdout, entry.normalize, _context(pair, "py", ops)
     )
     assert got == _golden(entry, PLAIN_SUFFIX)
 
@@ -149,7 +159,7 @@ def test_the_todo_entries_are_still_todo(entry, corpus_pairs):
     if proc.returncode != 0:
         return  # not implemented at all; still a todo
     got = normalize(
-        proc.stdout, entry.normalize, {"repo": pair.py_repo, "op_ids": ops["py"]}
+        proc.stdout, entry.normalize, _context(pair, "py", ops)
     )
     assert got != _golden(entry, PLAIN_SUFFIX), (
         f"{entry.id!r} now matches jj; change its bar from todo to bytes"

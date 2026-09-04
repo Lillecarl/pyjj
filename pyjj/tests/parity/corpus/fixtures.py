@@ -9,6 +9,8 @@ entries conjures one.
 
 from __future__ import annotations
 
+from parity_harness import make_bare_remote
+
 
 def chain(pair) -> None:
     """base <- one (bookmark `main`) <- two. The standard history."""
@@ -94,8 +96,27 @@ def rewritten_stack(pair) -> None:
                 "-m", "base rewritten"])
 
 
+def remote(pair) -> None:
+    """A chain with a fetched remote.
+
+    Every flag about a remote -- `--all-remotes`, `--tracked`, the
+    remote listings -- prints the same thing as its absence on a
+    repository that has none. Those entries were passing on `chain`,
+    which is the `tag list` failure again.
+    """
+    chain(pair)
+    pair.remote = make_bare_remote(pair.root)
+    pair.op(jj=["git", "remote", "add", "origin", str(pair.remote)])
+    pair.op(jj=["git", "fetch"])
+    # A fetched bookmark starts untracked, so `--tracked` would list
+    # nothing and pass on empty. Tracking one gives it something to
+    # show -- and gives the listings a tracked remote to render.
+    pair.op(jj=["bookmark", "track", "main@origin"])
+
+
 FIXTURES = {
     "chain": chain,
+    "remote": remote,
     "rewritten_stack": rewritten_stack,
     "conflict": conflict,
     "tags": tags,

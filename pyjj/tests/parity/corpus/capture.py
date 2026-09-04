@@ -71,6 +71,8 @@ def capture(pair_factory) -> dict:
         context = {
             "repo": pair.cli_repo,
             "op_ids": _op_ids(pair.jj_bin, pair.cli_repo, env),
+            # Set by a fixture that builds one; see `_normalize_remote`.
+            "remote": getattr(pair, "remote", None),
         }
         for entry in CATALOGUE:
             if entry.fixture != name:

@@ -122,6 +122,16 @@ def _normalize_ago(text: str, context: dict) -> str:
     return _AGO.sub("«ago»", text)
 
 
+def _normalize_remote(text: str, context: dict) -> str:
+    """Replaces the path of the fixture's bare git remote.
+
+    `root` covers the repository; a remote sits outside it and prints
+    its own path in `git remote list` and in a fetch's output.
+    """
+    remote = context.get("remote")
+    return text.replace(str(remote), "«remote»") if remote else text
+
+
 def _normalize_prog(text: str, context: dict) -> str:
     """Replaces the program name in a recorded command line.
 
@@ -151,6 +161,7 @@ NORMALIZERS = {
     "ago": _normalize_ago,
     "host": _normalize_host,
     "prog": _normalize_prog,
+    "remote": _normalize_remote,
 }
 
 

@@ -19,6 +19,10 @@ E = Entry
 # is to move. Every `op log` entry normalizes the same set.
 _OP = dict(normalize=("op_ids", "ago", "root", "host", "prog"))
 
+# A remote's path lies outside the repository, so `root` does not cover
+# it: the remote listing prints it, and so does a fetch.
+_R = dict(fixture="remote", normalize=("remote",))
+
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",)),
@@ -97,6 +101,30 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("bookmark list", "--all-remotes", "-a")),
     E("bookmark-list-a", ("bookmark", "list", "-a"),
       claims=("bookmark list", "-a")),
+    # On `chain` these print what their absence prints: with no remote,
+    # `--all-remotes` and `--tracked` change nothing. The entries above
+    # keep the no-remote case; these hold the flags to their job.
+    E("bookmark-list-remote", ("bookmark", "list"), bar="todo",
+      reason="the default listing drops the tracked remotes under a "
+             "bookmark, and the distance to each",
+      **_R),
+    E("bookmark-list-all-remotes-fetched",
+      ("bookmark", "list", "--all-remotes"),
+      claims=("bookmark list", "--all-remotes", "-a"), bar="todo",
+      reason="a remote line carries no distance: jj writes "
+             "`@origin (behind by 2 commits)`",
+      **_R),
+    E("bookmark-list-tracked", ("bookmark", "list", "--tracked"),
+      claims=("bookmark list", "--tracked", "-t"), bar="todo",
+      reason="`--tracked` is not parsed", **_R),
+    E("bookmark-list-one-remote",
+      ("bookmark", "list", "--remote", "origin"),
+      claims=("bookmark list", "--remote"), bar="todo",
+      reason="`--remote` is not parsed", **_R),
+    E("git-remotes", ("git", "remote", "list"),
+      claims=("git remote list",), bar="todo",
+      reason="the listing names each remote but not its URL", **_R),
+
     E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",)),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",)),
 

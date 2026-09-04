@@ -23,7 +23,7 @@ import re
 
 import pytest
 
-from parity_harness import DRIVER, RepoPair
+from parity_harness import DRIVER, RepoPair, make_bare_remote
 
 pytestmark = pytest.mark.skipif(
     shutil.which(os.environ.get("PYJJ_PARITY_JJ", "jj")) is None,
@@ -743,24 +743,10 @@ def test_revert_insert_after(pair: RepoPair) -> None:
 
 # -- git ----------------------------------------------------------------------
 
-def _make_bare_remote(base: Path) -> Path:
-    """Create a bare git remote with a single branch 'main' seeded with one commit."""
-    remote_dir = base / "remote.git"
-    subprocess.run(["git", "init", "--bare", "-b", "main", str(remote_dir)], check=True, capture_output=True)
-    seed_dir = base / "seed"
-    subprocess.run(["git", "init", "-b", "main", str(seed_dir)], check=True, capture_output=True)
-    (seed_dir / "file.txt").write_text("hello\n")
-    env = {**os.environ, "GIT_EDITOR": "true", "EDITOR": "true"}
-    subprocess.run(
-        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "tag.gpgsign=false", "add", "file.txt"],
-        cwd=str(seed_dir), check=True, capture_output=True, env=env,
-    )
-    subprocess.run(
-        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A", "-c", "tag.gpgsign=false", "commit", "-m", "seed"],
-        cwd=str(seed_dir), check=True, capture_output=True, env=env,
-    )
-    subprocess.run(["git", "push", str(remote_dir), "main"], cwd=str(seed_dir), check=True, capture_output=True, env=env)
-    return remote_dir
+# The helper lives in the harness now, so the corpus fixtures can build
+# a remote too. Read-only listings that mention one need a repository
+# that has one, and no catalogue entry conjures it.
+_make_bare_remote = make_bare_remote
 
 
 def test_git_clone(pair: RepoPair) -> None:
