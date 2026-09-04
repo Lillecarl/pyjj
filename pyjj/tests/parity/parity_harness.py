@@ -338,7 +338,24 @@ class RepoPair:
                 "tags": sorted(tags.split()),
                 "files": files,
             }
-        return {"commits": commits}
+        # Remote-tracking refs live outside the commit graph, so nothing
+        # above reads them. Without this, a command that moves a bookmark
+        # but never exports it to git compares equal: the local bookmark
+        # moves on both sides and only `<name>@git` stays behind.
+        tracking = self._out(
+            [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy",
+             "bookmark", "list", "--all-remotes", "-T",
+             'name ++ "@" ++ remote ++ "\x1f"'
+             ' ++ normal_target.commit_id().short(40) ++ "\n"'],
+            repo,
+        )
+        remote_refs = {}
+        for line in tracking.splitlines():
+            if not line:
+                continue
+            symbol, target = line.split("\x1f")
+            remote_refs[symbol] = target
+        return {"commits": commits, "remote_refs": remote_refs}
 
     def _out(self, argv: list[str], repo: Path | None = None) -> str:
         # With cwd at the repo root, `jj file list` prints workspace-relative
