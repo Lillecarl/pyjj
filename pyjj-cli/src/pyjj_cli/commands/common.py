@@ -1007,8 +1007,11 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
     their shortest unique prefix, with a floor of eight characters, so
     the width grows only when a repository needs it to.
 
-    A hidden or divergent commit also gets a marker and a change offset;
-    neither is produced here yet.
+    A hidden or divergent commit carries a marker, and its change id
+    carries the offset that addresses it -- `yqymtrmq/1` resolves as a
+    revset where the bare change id would be ambiguous or resolve to
+    something else. jj prints the offset only for those two, because
+    only then does the change id alone fail to name the commit.
     """
     if bookmarks is None:
         bookmarks = _bookmarks_by_commit(repo).get(commit.id.hex(), [])
@@ -1016,11 +1019,22 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
         commit.change_id.reverse_hex(),
         repo.shortest_change_id_prefix_len(commit.change_id, settings),
     )
+    hidden = commit.is_hidden(repo)
+    divergent = not hidden and commit.is_divergent(repo)
+    if hidden or divergent:
+        offset = commit.change_offset(repo)
+        if offset is not None:
+            change = f"{change}/{offset}"
     commit_id = _short_id(
         commit.id.hex(),
         repo.shortest_commit_id_prefix_len(commit.id, settings),
     )
     rest = []
+    # jj's order: whichever of hidden/divergent applies, then conflict.
+    if hidden:
+        rest.append("(hidden)")
+    elif divergent:
+        rest.append("(divergent)")
     if commit.has_conflict:
         rest.append("(conflict)")
     if _is_empty(repo, commit):

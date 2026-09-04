@@ -137,6 +137,22 @@ impl PyCommit {
             .map_err(crate::errors::map_py_err)
     }
 
+    /// Whether more than one visible commit shares this commit's change
+    /// id.
+    ///
+    /// A rewrite that lands twice, or a `duplicate` that keeps the
+    /// change id, leaves the change addressing several commits at once.
+    /// jj marks every one of them `(divergent)`.
+    fn is_divergent(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        use jj_lib::repo::Repo as _;
+
+        let targets = repo
+            .inner
+            .resolve_change_id(self.inner.change_id())
+            .map_err(crate::errors::map_py_err)?;
+        Ok(targets.is_some_and(|targets| targets.is_divergent()))
+    }
+
     /// This commit's position among the commits sharing its change id,
     /// or `None` if the change does not resolve.
     ///
