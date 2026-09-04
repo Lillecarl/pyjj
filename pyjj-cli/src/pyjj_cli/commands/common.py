@@ -1182,6 +1182,19 @@ def _commit_kind(repo, commit, wc_ids=(), immutable_ids=()) -> str:
     return " ".join(parts)
 
 
+def _commit_glyph(kind: str) -> str:
+    """jj's `builtin_log_node`: the glyph says what kind of commit it is.
+
+    It reads the same labels `_commit_kind` builds, so the drawing and
+    the colours never disagree.
+    """
+    for name, glyph in (("working_copy", "@"), ("immutable", "◆"),
+                        ("conflicted", "×")):
+        if name in kind.split():
+            return glyph
+    return "○"
+
+
 def _commit_header_spans(repo, settings, commit, *, kw: str = "",
                          bookmarks=(), tags=(), working_copies=(),
                          author=None, timestamp=None):
@@ -1254,6 +1267,30 @@ def _commit_header_spans(repo, settings, commit, *, kw: str = "",
             repo.shortest_commit_id_prefix_len(commit.id, settings),
             "commit_id")],
         *labels,
+    ])
+
+
+def _commit_root_spans(repo, settings, commit, *, kw: str = ""):
+    """jj's `format_root_commit`: the row the root commit gets.
+
+    It has no author and no timestamp worth printing -- the epoch reads
+    as a 1970 commit that nobody made -- so `root()` stands where they
+    would go. The whole row is `immutable`, whatever the immutable
+    revset says.
+    """
+    def under(*names) -> str:
+        return " ".join(part for part in (kw, *names) if part)
+
+    return separate([
+        [(text, under(labels)) for text, labels in _short_id_spans(
+            commit.change_id.reverse_hex(),
+            repo.shortest_change_id_prefix_len(commit.change_id, settings),
+            "change_id")],
+        [("root()", "root")],
+        [(text, under(labels)) for text, labels in _short_id_spans(
+            commit.id.hex(),
+            repo.shortest_commit_id_prefix_len(commit.id, settings),
+            "commit_id")],
     ])
 
 

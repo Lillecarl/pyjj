@@ -1,58 +1,73 @@
-"""history subcommand: log — backed by log_graph, drawn by jj's renderer."""
+"""history subcommand: log — backed by log_graph, drawn by jj's renderer.
+
+The rows are labelled spans, so the palette decides the colours rather
+than a table of one escape sequence per field. jj's colours compose
+along the label stack -- a change id's prefix is one colour, and the
+same field under the working copy is another, with the row bold -- and
+a per-field table cannot say that.
+
+pyjj-cli's own default row diverges from jj's on purpose: the author's
+name instead of an email, and a timestamp without the century. It is
+the same fields in the same shape otherwise, so `-T builtin_log_compact`
+prints exactly what `jj log -T builtin_log_compact` prints.
+"""
+import datetime
 import sys
 
 import pyjj
 from pyjj.graph_layout import reverse_graph
 
-from ..common import _load, _print_diff_stats, _resolve_template, use_color
+from ...formatter import Line, render_block, separate
+from ..common import (
+    _commit_body_spans,
+    _commit_glyph,
+    _commit_header_spans,
+    _commit_kind,
+    _commit_root_spans,
+    _immutable_ids,
+    _load,
+    _print_diff_stats,
+    _pyjj_template,
+    _resolve_template,
+    _short_id,
+    _short_id_spans,
+    use_color,
+)
 
-# ANSI — match jj's 256-color palette where it matters.
-# `use_color()` decides when these are emitted.
-_RESET = "\033[0m"
-_BOLD = "\033[1m"
-# jj log: change prefix magenta(13) bold, rest grey(8); commit prefix blue(12), rest grey; author yellow(3); timestamp cyan(14); bookmark/graph green(2)
-_CHANGE_PREFIX = "\033[1m\033[38;5;13m"
-_CHANGE_REST = "\033[38;5;8m"
-_COMMIT_PREFIX = "\033[38;5;12m"
-_COMMIT_REST = "\033[38;5;8m"
-_AUTHOR_COLOR = "\033[38;5;3m"
-_TIMESTAMP_COLOR = "\033[38;5;14m"
-_BOOKMARK_COLOR = "\033[38;5;2m"
-_GRAPH_GREEN_BOLD = "\033[1m\033[38;5;2m"
+# jj's own builtin template names. `builtin_log_compact` builds its
+# spans directly, because a Jinja render carries no labels and a label
+# is what decides a colour. The other two still map to Jinja, so they
+# print jj's fields in jj's order but without its colours.
+_COMPACT = "builtin_log_compact"
+_BUILTINS = {
+    "builtin_log_compact_full_description":
+        "{{ change_id_short }} {{ author_email }} {{ datetime_full }} "
+        "{{ commit_id_short }}\n{{ description_full }}",
+    "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
+}
 
 
+def _local(timestamp, fmt: str) -> str:
+    """A timestamp in the zone it was stamped in."""
+    tz = datetime.timezone(
+        datetime.timedelta(minutes=timestamp.tz_offset_minutes))
+    return datetime.datetime.fromtimestamp(
+        timestamp.millis_since_epoch / 1000, tz=tz).strftime(fmt)
 
 
-def _color_change_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
-    """A change id, highlighted at its shortest unique prefix.
+def _spans_millennia(nodes) -> bool:
+    """Whether two rows sit in different millennia.
 
-    `hex_str` must be jj's reverse-hex spelling, not the raw hex the id
-    carries. jj resolves only the reverse-hex form as a revset, so a
-    listing that prints raw hex prints something the reader cannot paste
-    back.
-
-    Eight characters is a floor, not a width: a repository large enough
-    to need nine gets nine, the way jj's `shortest(8)` does.
+    The default row prints a two-digit year, which reads as `26` for
+    2026. That is only ambiguous when the rows straddle a millennium,
+    and the root commit does not count: its epoch stamp is synthetic
+    and would force four digits forever.
     """
-    shown = hex_str[:max(8, prefix_len)]
-    if not use_color:
-        return shown
-    hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
-    if hl == len(shown):
-        return f"{_CHANGE_PREFIX}{shown}{_RESET}"
-    return f"{_CHANGE_PREFIX}{shown[:hl]}{_CHANGE_REST}{shown[hl:]}{_RESET}"
-
-
-def _color_commit_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
-    """A commit id, highlighted at its shortest unique prefix, with the
-    same eight-character floor as `_color_change_id`."""
-    shown = hex_str[:max(8, prefix_len)]
-    if not use_color:
-        return shown
-    hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
-    if hl == len(shown):
-        return f"{_COMMIT_PREFIX}{shown}{_RESET}"
-    return f"{_COMMIT_PREFIX}{shown[:hl]}{_COMMIT_REST}{shown[hl:]}{_RESET}"
+    years = [_local(node.commit.author.timestamp, "%Y") for node in nodes
+             if node.commit.parent_ids]
+    if not years:
+        return False
+    return (min(years)[:1]) != (max(years)[:1])
 
 
 def log(args) -> int:
@@ -62,17 +77,10 @@ def log(args) -> int:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    revset_expr = getattr(args, "revisions", None)
-    # Fall back to revsets.log from config (pyjjui does same), else show all
-    if not revset_expr:
-        revset_expr = settings.get_string("revsets.log")
-    if not revset_expr:
-        revset_expr = "all()"
+    revset_expr = (getattr(args, "revisions", None)
+                   or settings.get_string("revsets.log") or "all()")
 
     limit = getattr(args, "limit", None)
-    # pyjj's log -n default is 10 via Flag.LIMIT; 0 means unlimited?
-    # Pass through as-is; log_graph handles None as no limit.
-    # If limit is 0, treat as None (show all) to match jj.
     if limit == 0:
         limit = None
 
@@ -82,29 +90,23 @@ def log(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
 
-    # Working-copy commits for glyph/description color — support multiple workspaces
-    try:
-        view = repo.view()
-        wc_ids = set(view.values())
-        wc_names_by_hex = {hex_id: name for name, hex_id in view.items()}
-        # Also handle current workspace explicitly for @ vs ○ distinction if needed
-        current_wc_hex = view.get(ws.workspace_name)
-    except Exception:
-        wc_ids = set()
-        wc_names_by_hex = {}
-        current_wc_hex = None
+    view = repo.view()
+    # jj's `current_working_copy` asks about this workspace alone, which
+    # is what makes a row bold. Another workspace's commit is named in
+    # the row instead, and only when there is more than one.
+    current_wc = view.get(ws.workspace_name)
+    wc_ids = {current_wc} if current_wc else set()
+    all_wc_ids = set(view.values())
+    names_by_hex = {hex_id: name for name, hex_id in view.items()}
+    many_workspaces = len(view) > 1
 
-    # Bookmarks for summary
-    try:
-        bookmarks = repo.bookmarks()
-        bm_by_commit: dict[str, list[str]] = {}
-        for bm in bookmarks:
-            for tid in bm.target_ids:
-                # target_ids are CommitId objects; hex for key
-                key = tid.hex() if hasattr(tid, "hex") else str(tid)
-                bm_by_commit.setdefault(key, []).append(bm.name)
-    except Exception:
-        bm_by_commit = {}
+    bookmarks_by_commit: dict[str, list[str]] = {}
+    for bookmark in repo.bookmarks():
+        for target in bookmark.target_ids:
+            bookmarks_by_commit.setdefault(target.hex(), []).append(
+                bookmark.name)
+    immutable = _immutable_ids(repo, settings,
+                              [node.commit for node in nodes])
 
     # `--reversed` walks the same DAG the other way: each commit's
     # parents become its children and the order flips, which is what
@@ -116,8 +118,7 @@ def log(args) -> int:
          [(edge.target.hex(), edge.edge_type) for edge in node.edges])
         for node in nodes
     ]
-    reversed_order = getattr(args, "reversed", False)
-    if reversed_order:
+    if getattr(args, "reversed", False):
         items = reverse_graph(items)
 
     no_graph = getattr(args, "no_graph", False)
@@ -125,177 +126,67 @@ def log(args) -> int:
     show_stat = getattr(args, "stat", False)
     coloured = use_color(settings)
 
-    # jj's own builtin template names, mapped to a Jinja equivalent so
-    # `pyjj log -T builtin_log_oneline` keeps working like `jj log` does.
-    builtin_templates = {
-        "builtin_log_compact": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description }}",
-        "builtin_log_compact_full_description": "{{ change_id_short }} {{ commit_id_short }} {{ author }} {{ datetime }}\n{{ description_full }}",
-        "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
-    }
+    given = (getattr(args, "template", None)
+             or _pyjj_template(settings, "log", cwd=ws.workspace_root))
+    builtin = given == _COMPACT
+    jinja_template = (None if builtin or not given
+                      else _resolve_template(settings, ws, args, "log",
+                                             _BUILTINS))
+    short_year = not _spans_millennia(nodes)
 
-    jinja_template = _resolve_template(settings, ws, args, "log", builtin_templates)
-
-    # Decide year display: 26 not 2026, unless visible range spans two millennia
-    # (e.g. 1999 and 2026 are 1xxx vs 2xxx → show 4-digit to disambiguate).
-    # Ignore root() (1970 epoch) — it's synthetic and would force 4-digit forever.
-    spans_millennia = False
-    if nodes:
-        try:
-            import datetime
-
-            years = []
-            for node in nodes:
-                if not node.commit.parent_ids:  # root
-                    continue
-                ts = node.commit.author.timestamp
-                tz = datetime.timezone(datetime.timedelta(minutes=ts.tz_offset_minutes))
-                dt = datetime.datetime.fromtimestamp(ts.millis_since_epoch / 1000, tz=tz)
-                years.append(dt.year)
-            if years:
-                spans_millennia = (min(years) // 1000) != (max(years) // 1000)
-        except Exception:
-            spans_millennia = False
-
-    renderer = pyjj.GraphRenderer() if not no_graph else None
+    renderer = None if no_graph else pyjj.GraphRenderer()
     for hex_id, edges in items:
         commit = by_id[hex_id].commit
-        is_wc = hex_id in wc_ids
-        is_current_wc = current_wc_hex is not None and hex_id == current_wc_hex
-        is_root = not commit.parent_ids  # root() has no parents
-        # Only current workspace is @; other workspaces are ○ but still show workspace name
-        raw_glyph = "@" if is_current_wc else ("◆" if is_root else "○")
-        # Only current wc gets green glyph/description — matches jj
-        is_green = is_current_wc
-        glyph = f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}" if coloured and is_green else raw_glyph
+        root = not commit.parent_ids
+        kind = _commit_kind(repo, commit, wc_ids, immutable)
+        names = sorted(bookmarks_by_commit.get(hex_id, []))
 
-        # The graph is drawn by jj's own renderer, which takes the whole
-        # row's text at once and decides where it sits among the lines it
-        # draws. So each branch below builds its lines and emits one row.
-        def emit(lines):
+        def emit(lines, indent: bool = True) -> None:
+            """One row, buffered: renderdag takes a finished string."""
+            text = render_block(lines, "log commit", coloured)
             if no_graph:
-                print(lines[0])
-                for extra in lines[1:]:
-                    print(f"  {extra}")
+                head, _, rest = text.partition("\n")
+                print(head)
+                for line in rest.splitlines():
+                    print(f"  {line}" if indent else line)
                 return
-            sys.stdout.write(
-                renderer.next_row(hex_id, edges, raw_glyph, "\n".join(lines)))
+            glyph = render_block([[(_commit_glyph(kind), kind)]],
+                                 "log commit node", coloured)
+            sys.stdout.write(renderer.next_row(hex_id, edges, glyph, text))
 
-        # IDs with shortest-prefix highlight — magenta for change, blue for commit, rest grey
-        try:
-            c_len = repo.shortest_change_id_prefix_len(commit.change_id, settings)
-        except Exception:
-            c_len = 8
-        try:
-            k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
-        except Exception:
-            k_len = 8
-        change_disp = _color_change_id(commit.change_id.reverse_hex(), c_len, coloured)
-        commit_disp = _color_commit_id(commit.id.hex(), k_len, coloured)
-
-        bm_names = bm_by_commit.get(hex_id, [])
-        ws_name = wc_names_by_hex.get(hex_id) if is_wc else None
-        if ws_name and ws_name not in bm_names:
-            bm_names = bm_names + [f"{ws_name}@"]
-        # Keep raw for template context, and colored for default rendering
-        bm_str_raw = " ".join(sorted(bm_names))
-        if bm_names:
-            bm_str = " " + bm_str_raw
-            if coloured:
-                bm_str = f" {_BOOKMARK_COLOR}{bm_str.strip()}{_RESET}"
-                bm_str = " " + bm_str.strip()
-        else:
-            bm_str = ""
-
-        # Author: username (name) is default like we do (jj shows email, we think name is better);
-        # template can pick either via {{ author }} vs {{ author_email }}.
-        try:
-            author_name = commit.author.name or ""
-            author_email = commit.author.email or ""
-            author = author_name or author_email
-        except Exception:
-            author_name = author_email = author = ""
-        author_disp = f"{_AUTHOR_COLOR}{author}{_RESET}" if coloured and author else author
-
-        try:
-            ts = commit.author.timestamp if hasattr(commit.author, "timestamp") else commit.committer.timestamp
-            import datetime
-
-            millis = ts.millis_since_epoch
-            tz_min = ts.tz_offset_minutes
-            tz = datetime.timezone(datetime.timedelta(minutes=tz_min))
-            dt = datetime.datetime.fromtimestamp(millis / 1000, tz=tz)
-            if spans_millennia:
-                datetime_str = dt.strftime("%Y-%m-%d %H:%M")
-            else:
-                datetime_str = dt.strftime("%y-%m-%d %H:%M")
-        except Exception:
-            datetime_str = ""
-            dt = None
-        datetime_disp = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}" if coloured and datetime_str else datetime_str
-
-        first_line = commit.description.splitlines()[0] if commit.description else None
-        desc_raw = first_line or "(no description set)"
-        desc = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if coloured and is_green else desc_raw
-
-        # If --template given, render it via Jinja2. Context exposes both raw and
-        # colored short ids, plus author/email/description/bookmarks.
         if jinja_template is not None:
-            # Build colored and raw shorts for template to pick
             try:
-                c_len = repo.shortest_change_id_prefix_len(commit.change_id, settings)
-            except Exception:
-                c_len = 8
-            try:
-                k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
-            except Exception:
-                k_len = 8
-            ctx = {
-                "commit": commit,
-                "change_id": commit.change_id.reverse_hex(),
-                "commit_id": commit.id.hex(),
-                "change_id_short": _color_change_id(commit.change_id.reverse_hex(), c_len, coloured),
-                "commit_id_short": _color_commit_id(commit.id.hex(), k_len, coloured),
-                "change_id_short_raw": commit.change_id.reverse_hex()[:8],
-                "commit_id_short_raw": commit.id.hex()[:8],
-                "author": author,
-                "author_name": author_name,
-                "author_email": author_email,
-                "author_display": author_disp,
-                "description": desc_raw,
-                "description_full": commit.description.strip() or "(no description set)",
-                "description_display": desc,
-                "bookmarks": bm_names,
-                "bookmarks_str": bm_str_raw,
-                "bookmarks_display": bm_str.strip() if bm_str else "",
-                "datetime": datetime_str,
-                "datetime_display": datetime_disp,
-                "is_wc": is_wc,
-                "is_current_wc": is_current_wc,
-                "is_root": is_root,
-            }
-            try:
-                rendered = jinja_template.render(ctx)
+                rendered = jinja_template.render(_context(
+                    repo, settings, commit, names, short_year,
+                    hex_id in all_wc_ids, hex_id in wc_ids))
             except Exception as e:
                 print(f"Error: template render failed: {e}", file=sys.stderr)
                 return 1
-            # A template is the whole row, exactly like `jj log -T`. Do not
-            # append a description line: the template says what to print,
-            # and a template that wants the description asks for it. The
-            # two-row default lives in the no-template branch below.
-            emit(rendered.splitlines() or [""])
-        elif is_root:
-            # jj gives the root commit a row of its own: it has no author
-            # and no timestamp worth printing, and the epoch reads as a
-            # 1970 commit that nobody made. `root()` says what it is.
-            emit([f"{change_disp} root() {commit_disp}{bm_str}"])
+            # A template is the whole row, exactly like `jj log -T`.
+            emit([Line([(line, "")], kind)
+                  for line in rendered.splitlines() or [""]])
+        elif builtin:
+            # jj names another workspace's working copy in the row, and
+            # only when the repository has more than one.
+            workspaces = ([f"{names_by_hex[hex_id]}@"]
+                          if many_workspaces and hex_id in all_wc_ids else [])
+            if root:
+                emit([Line(_commit_root_spans(repo, settings, commit),
+                           "immutable")], indent=False)
+            else:
+                emit([Line(_commit_header_spans(repo, settings, commit,
+                                                bookmarks=names,
+                                                working_copies=workspaces),
+                           kind),
+                      Line(_commit_body_spans(repo, settings, commit), kind)],
+                     indent=False)
         else:
-            # Default two-row like jj but with username (name) not email — user says name is better
-            author_part = f" {author_disp}" if author else ""
-            datetime_part = f" {datetime_disp}" if datetime_str else ""
-            emit([
-                f"{change_disp} {commit_disp}{bm_str}{author_part}{datetime_part}",
-                desc if not no_graph else desc_raw,
-            ])
+            # pyjj-cli names the workspace on any working-copy row,
+            # whether or not the repository has a second one.
+            own = names + ([f"{names_by_hex[hex_id]}@"]
+                           if hex_id in all_wc_ids else [])
+            emit(_default_lines(repo, settings, commit, kind, sorted(own),
+                                root, short_year))
 
         if show_stat:
             # `--stat` reads file content, so it only runs when asked.
@@ -306,17 +197,94 @@ def log(args) -> int:
 
         if show_patch:
             if commit.parent_ids:
-                try:
-                    parent = repo.get_commit(commit.parent_ids[0])
-                    for e in parent.diff(commit):
-                        print(f"  {e.status:8} {e.path}")
-                except Exception:
-                    pass
+                parent = repo.get_commit(commit.parent_ids[0])
+                for entry in parent.diff(commit):
+                    print(f"  {entry.status:8} {entry.path}")
             else:
-                try:
-                    for p in commit.list_files():
-                        print(f"  added    {p}")
-                except Exception:
-                    pass
+                for path in commit.list_files():
+                    print(f"  added    {path}")
 
     return 0
+
+
+def _default_lines(repo, settings, commit, kind, names, root: bool,
+                   short_year: bool):
+    """pyjj-cli's own row: the author's name, and a two-digit year.
+
+    The fields are jj's, so the labels are jj's too and the palette
+    colours them the same way. The order is this project's: the two ids
+    together, then who and when.
+    """
+    change = _short_id_spans(
+        commit.change_id.reverse_hex(),
+        repo.shortest_change_id_prefix_len(commit.change_id, settings),
+        "change_id")
+    ids = _short_id_spans(
+        commit.id.hex(),
+        repo.shortest_commit_id_prefix_len(commit.id, settings),
+        "commit_id")
+    refs = [[(name, "bookmarks name")] for name in names]
+    if root:
+        # The root commit has no author and no timestamp worth
+        # printing: the epoch reads as a 1970 commit nobody made.
+        return [Line(separate([change, [("root()", "root")], ids, *refs]),
+                     "immutable")]
+
+    author = commit.author.name or commit.author.email or ""
+    stamp = _local(commit.author.timestamp,
+                   "%y-%m-%d %H:%M" if short_year else "%Y-%m-%d %H:%M")
+    first_line = (commit.description.splitlines()[0]
+                  if commit.description else "")
+    return [
+        Line(separate([change, ids, *refs, [(author, "author")],
+                       [(stamp, "author timestamp local format")]]), kind),
+        Line([(first_line, "description first_line")] if first_line
+             else [("(no description set)", "description placeholder")],
+             kind),
+    ]
+
+
+def _context(repo, settings, commit, names, short_year, is_wc: bool,
+             is_current_wc: bool) -> dict:
+    """What a user's own Jinja template can name.
+
+    `templates set` validates against this set of names, so a name that
+    goes away here breaks a template a user already saved. The
+    `_display` names once carried escape sequences of their own; the
+    formatter colours a row now, so they are the plain text.
+    """
+    change = _short_id(
+        commit.change_id.reverse_hex(),
+        repo.shortest_change_id_prefix_len(commit.change_id, settings))
+    commit_id = _short_id(
+        commit.id.hex(),
+        repo.shortest_commit_id_prefix_len(commit.id, settings))
+    first_line = (commit.description.splitlines()[0]
+                  if commit.description else "")
+    fmt = "%y-%m-%d %H:%M" if short_year else "%Y-%m-%d %H:%M"
+    return {
+        "commit": commit,
+        "change_id": commit.change_id.reverse_hex(),
+        "commit_id": commit.id.hex(),
+        "change_id_short": change,
+        "commit_id_short": commit_id,
+        "change_id_short_raw": commit.change_id.reverse_hex()[:8],
+        "commit_id_short_raw": commit.id.hex()[:8],
+        "author": commit.author.name or commit.author.email or "",
+        "author_name": commit.author.name or "",
+        "author_email": commit.author.email or "",
+        "author_display": commit.author.name or commit.author.email or "",
+        "description": first_line or "(no description set)",
+        "description_full": commit.description.strip() or "(no description set)",
+        "description_display": first_line or "(no description set)",
+        "bookmarks": names,
+        "bookmarks_str": " ".join(names),
+        "bookmarks_display": " ".join(names),
+        "datetime": _local(commit.author.timestamp, fmt),
+        "datetime_display": _local(commit.author.timestamp, fmt),
+        "datetime_full": _local(commit.committer.timestamp,
+                                "%Y-%m-%d %H:%M:%S"),
+        "is_wc": is_wc,
+        "is_current_wc": is_current_wc,
+        "is_root": not commit.parent_ids,
+    }

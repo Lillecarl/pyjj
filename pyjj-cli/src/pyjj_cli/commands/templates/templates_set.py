@@ -12,7 +12,7 @@ _ALLOWED_VARS = {
     "author", "author_name", "author_email", "author_display",
     "description", "description_full", "description_display",
     "bookmarks", "bookmarks_str", "bookmarks_display",
-    "datetime", "datetime_display",
+    "datetime", "datetime_display", "datetime_full",
     "is_wc", "is_current_wc", "is_root",
     "commit",
 }

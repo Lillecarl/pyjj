@@ -7,6 +7,7 @@ from ...formatter import Line, render_block, separate
 from ..common import (
     CommandError,
     _commit_body_spans,
+    _commit_glyph,
     _commit_header_spans,
     _commit_kind,
     _format_timestamp,
@@ -79,7 +80,10 @@ def evolog(args) -> int:
     # row goes through it, including the ones a template renders.
     renderer = None if no_graph else pyjj.GraphRenderer()
     coloured = use_color(settings)
-    wc_hexes = set(repo.view().values())
+    # jj's `current_working_copy` asks about this workspace alone,
+    # which is what makes a row bold and its glyph an `@`.
+    current_wc = repo.view().get(ws.workspace_name)
+    wc_hexes = {current_wc} if current_wc else set()
     immutable = _immutable_ids(repo, settings,
                                [entry.commit for entry in entries])
     for entry in entries:
@@ -95,7 +99,7 @@ def evolog(args) -> int:
             if no_graph:
                 print(text)
                 return
-            glyph = render_block([[(_glyph(kind), kind)]],
+            glyph = render_block([[(_commit_glyph(kind), kind)]],
                                  "evolog commit node", coloured)
             sys.stdout.write(renderer.next_row(hex_id, edges, glyph, text))
 
@@ -125,15 +129,6 @@ def evolog(args) -> int:
             lines.append(Line(_operation_spans(operation)))
         emit(lines)
     return 0
-
-
-def _glyph(kind: str) -> str:
-    """jj's `builtin_log_node`: the glyph says what kind of commit it is."""
-    for name, glyph in (("working_copy", "@"), ("immutable", "◆"),
-                        ("conflicted", "×")):
-        if name in kind.split():
-            return glyph
-    return "○"
 
 
 def _context(repo, settings, commit, operation) -> dict:
