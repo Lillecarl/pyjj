@@ -944,6 +944,28 @@ Current state:
   `bytes_delta` meaning anything. Kept separate from `diff()` rather than
   added as fields on `DiffEntry`, because it reads file content and
   `diff()` does not.
+- **Scratch checkouts**: `RunPool(repo_path, size, clean=False)` and the
+  `RunSlot` it hands back are what `jj run` executes commands in. A slot
+  is a bare `TreeState` under `.jj/run/default/<n>/`, so it has no
+  workspace and no entry in the repository view -- a real workspace would
+  show up in `working_copies` and change what every reader sees. Slots
+  persist between invocations so a build tree survives, and the file
+  `state/tree_state` doubles as a dirty marker: it is deleted before the
+  checkout and only written back by `finish()`/`discard()`, so a crashed
+  job leaves a slot the next acquisition wipes instead of trusting.
+  `finish(success)` snapshots and returns `(dirty, tree_id)`, with no
+  tree when `success` is false. The tree-state settings and the 64 kB
+  `max_new_file_size` are hardcoded, copied from
+  `cli/src/commands/run.rs`, not read from the user's config.
+- **Writing a run's results back**: `Transaction.run_rewrite(targets,
+  new_trees, restore_descendants=False)` takes `{commit_id_hex: TreeId}`
+  and drives `transform_descendants` with jj's four cases. By default a
+  target gets the *merge* of command result, original tree and rebased
+  tree, so an ancestor's rewrite and the command's own edit both land,
+  and outside descendants rebase normally. With `restore_descendants` a
+  target gets the command result verbatim and outside descendants are
+  reparented, so their trees do not move. Returns
+  `(rewritten, reparented)`.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
