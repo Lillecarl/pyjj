@@ -19,6 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import re
+
 import pytest
 
 from parity_harness import DRIVER, RepoPair
@@ -2423,10 +2425,32 @@ OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
 )
 
 
-@OUTPUT_UNIMPLEMENTED
-def test_log_output_matches(pair: RepoPair) -> None:
+@pytest.mark.covers("log")
+def test_log_carries_the_facts_jj_shows(pair: RepoPair) -> None:
+    """`log` is the one command where byte parity is not the goal.
+
+    pyjj-cli prints the author's name where jj prints the email, and a
+    timestamp without the century, because that was asked for. Equal or
+    better is the bar, so this asserts that nothing jj shows goes
+    missing: the same rows, the same ids, the same descriptions, the
+    same bookmark, and `root()` on the root commit.
+
+    The change ids have to match exactly, though, and not as a matter of
+    taste. jj resolves only its reverse-hex spelling as a revset, so an
+    id printed any other way is one the reader cannot paste back.
+    """
     chain(pair)
-    pair.assert_output(["log"])
+    cli, py = pair.outputs(["log"])
+    cli_rows = [line for line in cli.splitlines() if line[:1] in "@\u25cb\u25c6\u25cf"]
+    py_rows = [line for line in py.splitlines() if line[:1] in "@\u25cb\u25c6\u25cf"]
+    assert len(cli_rows) == len(py_rows), f"row counts differ\njj:\n{cli}\npyjj:\n{py}"
+
+    ids = set(re.findall(r"\b[0-9a-f]{8}\b", cli)) | set(re.findall(r"\b[k-z]{8}\b", cli))
+    missing = sorted(i for i in ids if i not in py)
+    assert not missing, f"pyjj's log drops {missing}\njj:\n{cli}\npyjj:\n{py}"
+
+    for fact in ("base", "one", "two", "main", "root()"):
+        assert fact in py, f"pyjj's log drops {fact!r}\npyjj:\n{py}"
 
 
 @pytest.mark.covers("diff")

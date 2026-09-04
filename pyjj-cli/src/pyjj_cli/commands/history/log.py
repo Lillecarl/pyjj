@@ -31,7 +31,17 @@ def _use_color() -> bool:
 
 
 def _color_change_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
-    shown = hex_str[:8]
+    """A change id, highlighted at its shortest unique prefix.
+
+    `hex_str` must be jj's reverse-hex spelling, not the raw hex the id
+    carries. jj resolves only the reverse-hex form as a revset, so a
+    listing that prints raw hex prints something the reader cannot paste
+    back.
+
+    Eight characters is a floor, not a width: a repository large enough
+    to need nine gets nine, the way jj's `shortest(8)` does.
+    """
+    shown = hex_str[:max(8, prefix_len)]
     if not use_color:
         return shown
     hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
@@ -41,7 +51,9 @@ def _color_change_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
 
 
 def _color_commit_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
-    shown = hex_str[:8]
+    """A commit id, highlighted at its shortest unique prefix, with the
+    same eight-character floor as `_color_change_id`."""
+    shown = hex_str[:max(8, prefix_len)]
     if not use_color:
         return shown
     hl = min(prefix_len if prefix_len > 0 else len(shown), len(shown))
@@ -247,7 +259,7 @@ def log(args) -> int:
             k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
         except Exception:
             k_len = 8
-        change_disp = _color_change_id(commit.change_id.hex(), c_len, use_color)
+        change_disp = _color_change_id(commit.change_id.reverse_hex(), c_len, use_color)
         commit_disp = _color_commit_id(commit.id.hex(), k_len, use_color)
 
         bm_names = bm_by_commit.get(hex_id, [])
@@ -309,11 +321,11 @@ def log(args) -> int:
                 k_len = 8
             ctx = {
                 "commit": commit,
-                "change_id": commit.change_id.hex(),
+                "change_id": commit.change_id.reverse_hex(),
                 "commit_id": commit.id.hex(),
-                "change_id_short": _color_change_id(commit.change_id.hex(), c_len, use_color),
+                "change_id_short": _color_change_id(commit.change_id.reverse_hex(), c_len, use_color),
                 "commit_id_short": _color_commit_id(commit.id.hex(), k_len, use_color),
-                "change_id_short_raw": commit.change_id.hex()[:8],
+                "change_id_short_raw": commit.change_id.reverse_hex()[:8],
                 "commit_id_short_raw": commit.id.hex()[:8],
                 "author": author,
                 "author_name": author_name,
@@ -348,6 +360,11 @@ def log(args) -> int:
                     print(f"{cont_prefix}{extra}")
                 else:
                     print(f"  {extra}")
+        elif is_root:
+            # jj gives the root commit a row of its own: it has no author
+            # and no timestamp worth printing, and the epoch reads as a
+            # 1970 commit that nobody made. `root()` says what it is.
+            print(f"{graph_prefix}{change_disp} root() {commit_disp}{bm_str}")
         else:
             # Default two-row like jj but with username (name) not email — user says name is better
             author_part = f" {author_disp}" if author else ""
