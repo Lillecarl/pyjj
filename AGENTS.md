@@ -215,9 +215,15 @@ holds pyjj-cli to it. This is the queue to work through; the loop is:
    escapes in `log.py` currently are.
 4. **Implement**, then flip the entry from `todo` to `bytes`. A `todo`
    entry that starts matching fails the suite until you do -- the same
-   strictness as the xfails.
+   strictness as the xfails. Colour is a second bar on the same entry,
+   flipped the same way once the escape sequences match too.
 
-**The bars.** `bytes` is the default: normalized output must match.
+**The bars.** Each entry carries two: one for the text and one for the
+colour. The colour bar is `bytes` or `todo` only, and it needs a `bytes`
+text bar under it -- where the text diverges the colour cannot agree
+either.
+
+For the text, `bytes` is the default: normalized output must match.
 `facts` is for a deliberate divergence, and needs a reason; the `log`
 family is the only one so far. `todo` means not implemented, and the
 golden is the specification to build against. `skip` needs a reason
