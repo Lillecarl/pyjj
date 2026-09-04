@@ -51,6 +51,9 @@ from pyjj_bindings import (
     BisectStep,
     EvolutionEntry,
     diff_hunks,
+    remove_repo_config_dir,
+    repo_config_repo_path,
+    repo_configs_root_dir,
     VERSION,
     __version__,
 )
@@ -103,6 +106,9 @@ __all__ = [
     "BisectStep",
     "EvolutionEntry",
     "diff_hunks",
+    "remove_repo_config_dir",
+    "repo_config_repo_path",
+    "repo_configs_root_dir",
     "hunk",
     "__version__",
 ]
