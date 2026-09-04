@@ -199,8 +199,16 @@ holds pyjj-cli to it. This is the queue to work through; the loop is:
    same with jj's semantic labels, which is the specification for
    colouring pyjj-cli later. It carries the escape sequences as well as
    the labels, so the mapping from a label stack to a style is there to
-   be read off rather than guessed -- `bookmark_list conflict` is
-   `38;5;1`, a `change_id shortest prefix` is `1;38;5;5`, and so on.
+   be read off rather than guessed. Across the whole corpus each stack
+   resolves to exactly one style, which makes the goldens a complete
+   specification rather than a sample.
+
+   Read the *stack*, not the last label. Styles compose: a change id's
+   prefix is `1;38;5;5`, and the same field under the working copy is
+   `1;38;5;13` -- the outer `working_copy` label changes the colour of
+   the fields inside it and makes the whole row bold. A per-field
+   palette cannot express that, which is what pyjj-cli's hand-written
+   escapes in `log.py` currently are.
 4. **Implement**, then flip the entry from `todo` to `bytes`. A `todo`
    entry that starts matching fails the suite until you do -- the same
    strictness as the xfails.
