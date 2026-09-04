@@ -9,6 +9,8 @@ entries conjures one.
 
 from __future__ import annotations
 
+import subprocess
+
 from parity_harness import make_bare_remote
 
 
@@ -106,6 +108,16 @@ def remote(pair) -> None:
     """
     chain(pair)
     pair.remote = make_bare_remote(pair.root)
+    # A second bookmark on the remote that nothing follows. A fetch
+    # imports it untracked, so it is the line `--all-remotes` and
+    # `--remote` add and `--tracked` leaves out. Without it those three
+    # listings print the same block, and each one passes on the others'
+    # work.
+    subprocess.run(
+        ["git", "--git-dir", str(pair.remote), "update-ref",
+         "refs/heads/feature", "refs/heads/main"],
+        check=True, capture_output=True,
+    )
     pair.op(jj=["git", "remote", "add", "origin", str(pair.remote)])
     pair.op(jj=["git", "fetch"])
     # A fetched bookmark starts untracked, so `--tracked` would list
