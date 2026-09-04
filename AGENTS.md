@@ -153,6 +153,15 @@ tree in one pass, so neither can drift from the pinned jj.
   to satisfy, and easy to satisfy falsely -- `jj diff --git` parsed for a
   long time while being ignored outright, and only comparing what it
   printed caught that.
+  Read-only commands are the half state comparison cannot reach, and
+  which bar applies to one is a decision, not a default. A machine
+  format has to match jj byte for byte. A human-readable one has to
+  carry the same facts, and `log` deliberately does not match: it
+  prints the author's name and a century-less timestamp on request. The
+  note above the strict xfails in `test_parity.py` lists where each bar
+  applies. Where parity was reachable it came from binding jj's own
+  presentation code -- `unified_hunks`, `git_diff_part` -- rather than
+  from imitating its output, which is why the bytes agree at all.
 - **Coverage** (`test_cli_coverage`): which flags a test *exercises*. A
   test claims items with `@pytest.mark.covers("split", "-A")`, and the
   marks are gathered at collection time, so the ledger is built from real

@@ -2401,12 +2401,6 @@ def test_op_revert_a_describe(pair: RepoPair) -> None:
 # which is a fair bar: the two repos are bit-identical down to commit
 # ids by then, so every id and column should line up.
 #
-# The ones marked below fail today, and they are marked strictly so the
-# count is visible rather than absent. pyjj-cli's read-only commands
-# print their own format: `show` writes "Commit:" where jj writes
-# "Commit ID:", the raw change id rather than jj's reverse-hex spelling,
-# and a one-line file summary where jj writes the diff itself.
-#
 # This is the gap the CLI-surface ledger cannot see. That ledger reads
 # argument parsers, so a flag counts as covered once argparse accepts
 # it. `diff --git` was the case in point: parsed for a long time, and
@@ -2414,10 +2408,26 @@ def test_op_revert_a_describe(pair: RepoPair) -> None:
 # Adding the remaining flags without this half would add more of the
 # same.
 #
-# Byte parity is the bar only where the format is a machine format --
-# `--git` above. For what a person reads, equal or better is the bar,
-# so a test there asserts the facts the output carries rather than its
-# columns.
+# Which bar applies is a per-command decision, and there are three:
+#
+# - **Bytes.** A machine format has to match jj exactly, because a tool
+#   downstream may refuse anything else: `diff --git`, `--stat`,
+#   `--summary`, `--name-only`, `file list`, `file show`.
+# - **Bytes, because matching came free.** `status`, `show` and the
+#   default `diff` reached parity by binding jj's own presentation code
+#   rather than by imitating its output, so the bytes agree and the
+#   tests may as well say so.
+# - **Facts.** `log` prints the author's name where jj prints the
+#   email, and a timestamp without the century, both on request. Its
+#   scenario asserts that nothing jj shows goes missing, not that the
+#   columns line up. Adding a flag here means adding a fact to check,
+#   not a column to match.
+#
+# `outputs()` covers the fourth case: a command whose output *should*
+# differ per side, like `root`, which prints a path.
+#
+# What is still marked below fails today, strictly, so the count stays
+# visible rather than absent.
 
 OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
     strict=True,
