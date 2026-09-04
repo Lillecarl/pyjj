@@ -973,8 +973,9 @@ Current state:
   `CommitBuilder::set_parents` and `MutableRepo::new_parents`, and an
   assertion inside a native extension aborts the interpreter instead of
   raising something Python can catch. `jj` never reaches them because
-  its CLI runs `check_rewritable` first. pyjj has no equivalent, so the
-  guard sits in the bindings and uses jj's own wording.
+  its CLI runs `check_rewritable` first, but the bindings are a library:
+  a caller can skip that check, so the guard sits here too and uses jj's
+  own wording.
 - **The wider immutability check**: `Transaction.check_rewritable(settings,
   commits)` is jj's own guard -- it intersects `commits` with whatever
   `immutable()` resolves to and raises on the first hit, naming it the
@@ -983,6 +984,24 @@ Current state:
   be able to crash the interpreter. It needs the `immutable()` alias
   from jj's bundled `revsets.toml`, so `UserSettings(load_config=False)`
   cannot run it, and the error says so.
+  pyjj-cli calls it from every rewrite command, through
+  `_check_rewritable` in `commands/common.py`, with the target set jj's
+  own call site uses. Two commands compute their targets in Rust, so the
+  check happens there instead: `Transaction.absorb()` checks the
+  destinations a hunk actually lands in, and `Transaction.fix_enumerate()`
+  checks its source roots. Both take `check_immutable`, off by default:
+  the check needs loaded config, and a primitive must not impose policy
+  the caller did not ask for. pyjj-cli passes `True`. The target sets
+  are not all obvious -- `parallelize` checks only the commits whose
+  parent list changes, `rebase` checks targets under `-r` and roots
+  under `-s`/`-b`, `squash` checks source and destination, and
+  `simplify-parents` and `unsign` check the whole target set rather than
+  the subset they would go on to rewrite. Read jj's call site before
+  changing one.
+  `-A`/`-B` add a second check: those flags rebase whatever followed the
+  insertion point, so `new`, `duplicate`, `revert` and `rebase` check
+  the followers as well. The commit being inserted is new, and needs no
+  check of its own.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
