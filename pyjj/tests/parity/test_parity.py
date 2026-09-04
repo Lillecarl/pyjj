@@ -1723,13 +1723,83 @@ ROOT_REWRITE_ARGV = [
     ["split", "-r", "root()", "base.txt"],
     ["rebase", "-r", "root()", "-d", "@"],
     ["metaedit", "-r", "root()", "--author", "Someone <someone@example.com>"],
+    ["edit", "root()"],
+    ["restore", "--into", "root()"],
+    ["run", "-r", "root()", "true"],
+    ["simplify-parents", "-r", "root()"],
+    ["fix", "-s", "root()"],
+    ["unsign", "-r", "root()"],
 ]
+#
+# `parallelize root()` is missing on purpose: the pinned jj panics on it.
+# `parallelize` is the one rewrite command whose check covers only the
+# commits whose parents change, and the root has none, so the argv
+# reaches a `jj_lib` assertion. There is nothing to compare against.
 
 
 @pytest.mark.parametrize("argv", ROOT_REWRITE_ARGV, ids=lambda a: "_".join(a)[:40])
 def test_rewriting_the_root_commit_must_fail(pair: RepoPair, argv) -> None:
     chain(pair)
-    pair.op(jj=argv, may_fail=True)
+    # State parity alone would pass a command that changed nothing and
+    # still exited 0, which is exactly the bug this guards. `op()` returns
+    # the pyjj-cli side's exit code; jj's side stays covered by the state
+    # comparison.
+    assert pair.op(jj=argv, may_fail=True) != 0
+    pair.assert_parity()
+
+
+# -- immutable commits ---------------------------------------------------
+#
+# `immutable()` is `present(trunk()) | tags() | untracked_remote_bookmarks()`.
+# In a local repo with no remote, `trunk()` collapses to the root, so a
+# tag is the only way to make a real commit immutable. Every scenario
+# below tags `one`, which puts `base` and `one` out of reach and leaves
+# `two` writable.
+
+
+TAGGED_REWRITE_ARGV = [
+    ["describe", "-r", rev("one"), "-m", "nope"],
+    ["abandon", rev("one")],
+    ["squash", "--into", rev("one")],
+    ["squash", "--from", rev("one")],
+    ["rebase", "-r", rev("one"), "-d", "root()"],
+    ["rebase", "-s", rev("one"), "-d", "root()"],
+    ["edit", rev("one")],
+    ["restore", "--into", rev("one")],
+    ["metaedit", "-r", rev("one"), "--author", "Someone <someone@example.com>"],
+    ["run", "-r", rev("one"), "true"],
+]
+
+
+@pytest.mark.parametrize("argv", TAGGED_REWRITE_ARGV, ids=lambda a: "_".join(a)[:40])
+def test_rewriting_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:
+    """A tag makes a commit immutable, so every rewrite that targets it
+    must refuse and leave the repository alone."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    assert pair.op(jj=argv, may_fail=True) != 0
+    pair.assert_parity()
+
+
+def test_absorbing_into_a_tagged_commit_must_fail(pair: RepoPair) -> None:
+    """`absorb` checks the destinations a hunk actually lands in, so the
+    scenario has to produce one: the working copy edits `one.txt`, whose
+    lines the tagged commit wrote. `--into` is needed too, because the
+    default destination set is `mutable()`, which already excludes the
+    tag."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(files={"one.txt": b"one edited\n"}, jj=["status"])
+    assert pair.op(jj=["absorb", "--into", rev("one")], may_fail=True) != 0
+    pair.assert_parity()
+
+
+def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
+    """The check must not spread past what `immutable()` covers: `two` is
+    a descendant of the tagged commit and stays writable."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(jj=["describe", "-r", rev("two"), "-m", "two rewritten"])
     pair.assert_parity()
 
 
