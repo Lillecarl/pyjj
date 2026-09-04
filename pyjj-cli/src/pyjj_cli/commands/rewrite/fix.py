@@ -33,7 +33,10 @@ def fix(args) -> int:
             paths = None
 
         tx = repo.start_transaction(settings)
-        files = tx.fix_enumerate(settings, revset=revset, paths=paths, include_unchanged_files=include_unchanged)
+        # Same as absorb: the source roots resolve inside the binding.
+        files = tx.fix_enumerate(settings, revset=revset, paths=paths,
+                                 include_unchanged_files=include_unchanged,
+                                 check_immutable=True)
         if not files:
             # No files to fix — matches real jj's quiet no-op.
             return 0

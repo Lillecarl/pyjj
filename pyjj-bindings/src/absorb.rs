@@ -35,6 +35,11 @@ pub struct PyAbsorbStats {
 /// restricts which files are considered (default: all of them). Hunks that
 /// can't be unambiguously attributed to a single destination are left
 /// alone in `source`.
+///
+/// `check_immutable` adds jj's own policy check on the destinations a
+/// hunk actually lands in. It is off by default, because it needs the
+/// `immutable()` alias from jj's bundled `revsets.toml` and this is a
+/// primitive, not the CLI. pyjj-cli turns it on.
 pub fn absorb(
     tx: &PyTransaction,
     mut_repo: &mut MutableRepo,
@@ -42,6 +47,7 @@ pub fn absorb(
     source_commit: &PyCommit,
     destinations: &str,
     paths: Option<Vec<String>>,
+    check_immutable: bool,
 ) -> PyResult<PyAbsorbStats> {
     let matcher = paths_matcher(paths)?;
     let destinations_expr = crate::revset::resolve_revset(
@@ -64,16 +70,18 @@ pub fn absorb(
         matcher.as_ref(),
     ))
     .map_err(map_py_err)?;
-    // The destinations that actually receive a hunk, which is narrower
-    // than the candidate set: a candidate nothing lands in is never
-    // rewritten, so jj does not check it either.
-    crate::rewrite::check_rewritable(
-        mut_repo,
-        tx.workspace_root(),
-        tx.workspace_name(),
-        settings,
-        selected_trees.target_commits.keys().cloned().collect(),
-    )?;
+    if check_immutable {
+        // The destinations that actually receive a hunk, which is
+        // narrower than the candidate set: a candidate nothing lands in
+        // is never rewritten, so jj does not check it either.
+        crate::rewrite::check_rewritable(
+            mut_repo,
+            tx.workspace_root(),
+            tx.workspace_name(),
+            settings,
+            selected_trees.target_commits.keys().cloned().collect(),
+        )?;
+    }
     let stats = pollster::block_on(absorb_hunks(
         mut_repo,
         &source,

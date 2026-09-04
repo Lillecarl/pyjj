@@ -105,8 +105,10 @@ pub fn fix_enumerate(
     revset: Option<&str>,
     paths: Option<Vec<String>>,
     include_unchanged_files: bool,
+    check_immutable: bool,
 ) -> PyResult<Vec<PyFileToFix>> {
-    let root_commits = resolve_root_commits(tx, mut_repo, settings, revset)?;
+    let root_commits =
+        resolve_root_commits(tx, mut_repo, settings, revset, check_immutable)?;
     let matcher = paths_matcher(paths)?;
     let mut fixer = RecordingFixer { files: Vec::new() };
     pollster::block_on(lib_fix_files(
@@ -156,7 +158,8 @@ pub fn fix_apply(
     fixes: HashMap<String, Vec<u8>>,
     include_unchanged_files: bool,
 ) -> PyResult<PyFixSummary> {
-    let root_commits = resolve_root_commits(tx, mut_repo, settings, revset)?;
+    // No immutability check here: jj runs it once, before it enumerates.
+    let root_commits = resolve_root_commits(tx, mut_repo, settings, revset, false)?;
     let matcher = paths_matcher(paths)?;
     let mut fixer = LookupFixer { fixes: &fixes };
     let summary = pollster::block_on(lib_fix_files(
@@ -184,6 +187,7 @@ fn resolve_root_commits(
     mut_repo: &mut MutableRepo,
     settings: &PyUserSettings,
     revset: Option<&str>,
+    check_immutable: bool,
 ) -> PyResult<Vec<jj_lib::backend::CommitId>> {
     use futures::TryStreamExt as _;
 
@@ -200,15 +204,17 @@ fn resolve_root_commits(
     for id in &commits {
         crate::rewrite::reject_root(mut_repo, id)?;
     }
-    // jj checks the source roots, not their descendants: fixing a
-    // mutable commit rewrites its descendants too, and those are mutable
-    // by definition once the root is.
-    crate::rewrite::check_rewritable(
-        mut_repo,
-        tx.workspace_root(),
-        tx.workspace_name(),
-        settings,
-        commits.clone(),
-    )?;
+    if check_immutable {
+        // jj checks the source roots, not their descendants: fixing a
+        // mutable commit rewrites its descendants too, and those are
+        // mutable by definition once the root is.
+        crate::rewrite::check_rewritable(
+            mut_repo,
+            tx.workspace_root(),
+            tx.workspace_name(),
+            settings,
+            commits.clone(),
+        )?;
+    }
     Ok(commits)
 }

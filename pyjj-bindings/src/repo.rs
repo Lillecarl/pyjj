@@ -1052,13 +1052,14 @@ impl PyTransaction {
     /// empirically: omitting it panics with "Descendants have not been
     /// rebased after the last rewrites", same assertion every other
     /// rewrite-registering call here is subject to).
-    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None))]
+    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None, check_immutable=false))]
     fn absorb(
         &self,
         settings: &PyUserSettings,
         source_commit: &PyCommit,
         destinations: Option<&str>,
         paths: Option<Vec<String>>,
+        check_immutable: bool,
     ) -> PyResult<crate::absorb::PyAbsorbStats> {
         with_mut_repo(self, |mut_repo| {
             crate::absorb::absorb(
@@ -1068,6 +1069,7 @@ impl PyTransaction {
                 source_commit,
                 destinations.unwrap_or("mutable()"),
                 paths,
+                check_immutable,
             )
         })
     }
@@ -1088,16 +1090,19 @@ impl PyTransaction {
     /// subprocesses itself, see `cli/src/commands/fix.rs`), but the trait
     /// itself is satisfied here by a plain Rust closure over
     /// already-computed data, not by calling back into Python.
-    #[pyo3(signature = (settings, revset=None, paths=None, include_unchanged_files=false))]
+    #[pyo3(signature = (settings, revset=None, paths=None, include_unchanged_files=false, check_immutable=false))]
     fn fix_enumerate(
         &self,
         settings: &PyUserSettings,
         revset: Option<&str>,
         paths: Option<Vec<String>>,
         include_unchanged_files: bool,
+        check_immutable: bool,
     ) -> PyResult<Vec<crate::fix::PyFileToFix>> {
         with_mut_repo(self, |mut_repo| {
-            crate::fix::fix_enumerate(self, mut_repo, settings, revset, paths, include_unchanged_files)
+            crate::fix::fix_enumerate(
+                self, mut_repo, settings, revset, paths, include_unchanged_files,
+                check_immutable)
         })
     }
 

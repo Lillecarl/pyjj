@@ -35,7 +35,10 @@ def absorb(args) -> int:
         if paths == []:
             paths = None
         tx = repo.start_transaction(settings)
-        stats = tx.absorb(settings, source, destinations=dest_expr, paths=paths)
+        # The destinations are computed inside the binding, so the
+        # immutability check has to happen there too.
+        stats = tx.absorb(settings, source, destinations=dest_expr, paths=paths,
+                          check_immutable=True)
         _finish(tx, f"absorb from {source.id.hex()[:12]} into {dest_expr or 'mutable()'}", settings, ws, repo)
         # Minimal feedback like jj (number of destinations)
         if stats.source is None:

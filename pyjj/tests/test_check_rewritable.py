@@ -101,3 +101,30 @@ def test_without_bundled_config_it_says_so(tmp_path):
     tx = repo.start_transaction(settings)
     with pytest.raises(pyjj.JjError, match="load_config=False"):
         tx.check_rewritable(settings, [wc.id])
+
+
+def test_fix_enumerate_does_not_check_by_default(tmp_path):
+    """The check is policy, so the primitives keep it off. `fix_enumerate`
+    must still run on settings that never loaded jj's config."""
+    settings = pyjj.UserSettings(load_config=False)
+    root_dir = tmp_path / "repo"
+    root_dir.mkdir()
+    ws, repo = pyjj.Workspace.init_internal_git(settings, str(root_dir))
+    (root_dir / "a.txt").write_bytes(b"a\n")
+    repo, _ = ws.snapshot(settings)
+    tx = repo.start_transaction(settings)
+    assert [f.path for f in tx.fix_enumerate(settings, revset="@")] == ["a.txt"]
+
+
+def test_fix_enumerate_checks_when_asked(tmp_path):
+    """`check_immutable=True` is what pyjj-cli passes, and it needs the
+    alias the same way `check_rewritable` does."""
+    settings = pyjj.UserSettings(load_config=False)
+    root_dir = tmp_path / "repo"
+    root_dir.mkdir()
+    ws, repo = pyjj.Workspace.init_internal_git(settings, str(root_dir))
+    (root_dir / "a.txt").write_bytes(b"a\n")
+    repo, _ = ws.snapshot(settings)
+    tx = repo.start_transaction(settings)
+    with pytest.raises(pyjj.JjError, match="load_config=False"):
+        tx.fix_enumerate(settings, revset="@", check_immutable=True)
