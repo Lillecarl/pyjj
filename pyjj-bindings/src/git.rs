@@ -87,6 +87,25 @@ pub fn import_refs(mut_repo: &mut MutableRepo) -> PyResult<Py<PyAny>> {
         Ok(dict.unbind().into_any())
     })
 }
+/// `jj`'s colocated-repo HEAD update: point git's `HEAD` at the first
+/// parent of `workspace_name`'s working-copy commit, which is what
+/// `finish_transaction` does just before it exports refs. jj keeps HEAD
+/// one step behind `@`, because `@` is the commit being written, not a
+/// checked-out one. Does nothing when the workspace has no working-copy
+/// commit in this transaction.
+pub fn reset_head(mut_repo: &mut MutableRepo, workspace_name: &str) -> PyResult<()> {
+    use jj_lib::ref_name::WorkspaceNameBuf;
+    let name = WorkspaceNameBuf::from(workspace_name);
+    let Some(id) = mut_repo.view().get_wc_commit_id(&name).cloned() else {
+        return Ok(());
+    };
+    let commit = pollster::block_on(mut_repo.store().get_commit_async(&id))
+        .map_err(crate::errors::map_backend_err)?;
+    pollster::block_on(git::reset_head(mut_repo, &commit))
+        .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
+    Ok(())
+}
+
 
 /// Reflect bookmark/tag changes made in the jj view into the underlying
 /// (colocated) Git repo's refs. Returns a summary dict.

@@ -777,6 +777,18 @@ impl PyTransaction {
         with_mut_repo(self, crate::git::export_refs)
     }
 
+    /// Point the colocated Git repo's `HEAD` at the first parent of
+    /// `workspace_name`'s working-copy commit. jj does this on every
+    /// transaction it finishes in a colocated repo, just before it
+    /// exports refs, and it keeps `HEAD` one step behind `@` because `@`
+    /// is the commit being written rather than a checked-out one. Does
+    /// nothing when the workspace has no working-copy commit here.
+    fn git_reset_head(&self, workspace_name: &str) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            crate::git::reset_head(mut_repo, workspace_name)
+        })
+    }
+
     /// Names of all configured Git remotes.
     fn git_remotes(&self) -> PyResult<Vec<String>> {
         with_mut_repo(self, |mut_repo| crate::git::list_remotes(mut_repo.store()))
