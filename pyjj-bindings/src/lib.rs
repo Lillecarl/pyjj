@@ -23,6 +23,7 @@ mod operation;
 mod oplog;
 mod repo;
 mod revert;
+mod run;
 mod revset;
 mod rewrite;
 mod secure_config;
@@ -116,6 +117,8 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::opdiff::PyModifiedChange>()?;
     m.add_class::<crate::opdiff::PyRefChange>()?;
     m.add_class::<crate::opdiff::PyRefTargetSummary>()?;
+    m.add_class::<crate::run::PyRunPool>()?;
+    m.add_class::<crate::run::PyRunSlot>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_config_repo_path, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::remove_repo_config_dir, m)?)?;

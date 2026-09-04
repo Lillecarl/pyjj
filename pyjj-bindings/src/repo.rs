@@ -1133,6 +1133,34 @@ impl PyTransaction {
         })
     }
 
+    /// `jj run`'s rewrite half: put each command's resulting tree onto
+    /// its commit and carry the change into the descendants.
+    ///
+    /// `targets` is the revset `jj run` was given. `new_trees` maps a
+    /// target's commit id (hex) to the tree its command produced; a
+    /// target whose command changed nothing is simply absent.
+    ///
+    /// `restore_descendants` picks between propagating the diff (the
+    /// default: a rewritten commit gets the merge of command result,
+    /// original tree and rebased tree, and outside descendants are
+    /// rebased) and keeping the content (the command result verbatim,
+    /// with outside descendants reparented so their trees do not move).
+    ///
+    /// Returns `(rewritten, reparented)`. Still needs
+    /// `rebase_descendants()` before `commit()`, same as every other
+    /// rewrite here.
+    #[pyo3(signature = (targets, new_trees, restore_descendants=false))]
+    fn run_rewrite(
+        &self,
+        targets: Vec<PyCommitId>,
+        new_trees: std::collections::HashMap<String, crate::ids::PyTreeId>,
+        restore_descendants: bool,
+    ) -> PyResult<(u32, u32)> {
+        with_mut_repo(self, |mut_repo| {
+            crate::run::run_rewrite(mut_repo, targets, new_trees, restore_descendants)
+        })
+    }
+
     /// `jj rebase -r <rev> -d <dest>` equivalent for a single commit --
     /// `commit`'s own descendants are *not* moved along; call
     /// `rebase_descendants()` afterward for that (matching every other
