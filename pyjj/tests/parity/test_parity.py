@@ -2103,6 +2103,54 @@ def test_split_parallel_makes_siblings(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+SPLIT_PLACEMENT_ARGV = [
+    ["-A", "root()"],
+    ["-B", rev("two")],
+    ["--onto", "root()"],
+    ["-d", rev("base")],
+    ["-A", rev("base"), "-B", rev("two")],
+]
+
+
+@pytest.mark.parametrize("placement", SPLIT_PLACEMENT_ARGV,
+                         ids=lambda a: "_".join(a)[:40])
+def test_split_places_the_selected_half(pair: RepoPair, placement) -> None:
+    """`--onto`/`-A`/`-B` send the selected changes elsewhere and leave
+    the rest where the revision was. The half that stays keeps the
+    original change id, which is the opposite of a plain split."""
+    chain(pair)
+    pair.op(jj=["split", "-r", rev("one"), *placement, "-m", "sel", "one.txt"])
+    pair.assert_parity()
+
+
+SPLIT_PLACEMENT_CONFLICTS = [
+    ["--parallel", "-A", "root()"],
+    ["--onto", "root()", "-A", "root()"],
+    ["--onto", "root()", "-B", rev("two")],
+]
+
+
+@pytest.mark.parametrize("placement", SPLIT_PLACEMENT_CONFLICTS,
+                         ids=lambda a: "_".join(a)[:40])
+def test_split_rejects_conflicting_placement(pair: RepoPair, placement) -> None:
+    """`--parallel` makes siblings and a placement flag moves one half
+    away; `--onto` names the parents outright and `-A`/`-B` derive them.
+    Neither pair can hold at once."""
+    chain(pair)
+    assert pair.op(jj=["split", "-r", rev("one"), *placement, "-m", "sel",
+                       "one.txt"], may_fail=True) != 0
+    pair.assert_parity()
+
+
+def test_split_before_the_root_commit_must_fail(pair: RepoPair) -> None:
+    """`-B root()` would rebase the root, so the follower check refuses
+    it before anything is written."""
+    chain(pair)
+    assert pair.op(jj=["split", "-r", rev("one"), "-B", "root()", "-m", "sel",
+                       "one.txt"], may_fail=True) != 0
+    pair.assert_parity()
+
+
 def test_split_parallel_with_a_descendant(pair: RepoPair) -> None:
     """A commit below the split point ends up on both halves."""
     chain(pair)
