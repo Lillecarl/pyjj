@@ -156,6 +156,22 @@ impl PyCommit {
         crate::tree::diff_commits(self, other, paths)
     }
 
+    /// `jj diff --stat`'s numbers: lines added and removed at each
+    /// changed path, plus the byte delta.
+    ///
+    /// Unlike `diff()`, this reads file content, so it costs more. A
+    /// binary file reports `None` for both counts, decided the way jj
+    /// and git decide it -- a NUL byte in the first 8000 bytes.
+    #[pyo3(signature = (other, settings, paths=None))]
+    fn diff_stats(
+        &self,
+        other: &Self,
+        settings: &crate::settings::PyUserSettings,
+        paths: Option<Vec<String>>,
+    ) -> PyResult<Vec<crate::tree::PyDiffStat>> {
+        crate::tree::diff_stats(self, other, settings, paths)
+    }
+
     /// Async sibling of `diff()`. Runs on tokio's blocking thread pool (see
     /// the `aio` module docs) rather than on the calling thread.
     #[pyo3(signature = (other, paths=None))]

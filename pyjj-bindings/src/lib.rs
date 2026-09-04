@@ -93,6 +93,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCommit>()?;
     m.add_class::<PyVerification>()?;
     m.add_class::<PyDiffEntry>()?;
+    m.add_class::<crate::tree::PyDiffStat>()?;
     m.add_class::<PyOperation>()?;
     m.add_class::<PyReadonlyRepo>()?;
     m.add_class::<PyTransaction>()?;

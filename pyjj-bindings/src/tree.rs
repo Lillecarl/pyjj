@@ -199,3 +199,170 @@ pub fn diff_commits_with_copies(
         })
         .collect()
 }
+
+/// Lines and bytes changed at one path, from `Commit.diff_stats()`.
+///
+/// `added`/`removed` are line counts, and `None` for a binary file --
+/// jj counts neither, and prints the byte delta instead. A conflicted
+/// file is materialized with markers first, so its markers count as
+/// lines the same way they do in `jj diff --stat`.
+#[pyclass(name = "DiffStat", frozen, get_all, skip_from_py_object)]
+#[derive(Clone)]
+pub struct PyDiffStat {
+    pub path: String,
+    /// Same vocabulary as `DiffEntry.status`, minus `"executable"`: a
+    /// mode-only change moves no lines, so it reads as `"modified"`.
+    pub status: String,
+    pub added: Option<usize>,
+    pub removed: Option<usize>,
+    /// Size change in bytes, negative when the file shrank.
+    pub bytes_delta: isize,
+    pub binary: bool,
+}
+
+#[pymethods]
+impl PyDiffStat {
+    fn __repr__(&self) -> String {
+        match (self.added, self.removed) {
+            (Some(added), Some(removed)) => {
+                format!("DiffStat({}, +{added} -{removed})", self.path)
+            }
+            _ => format!("DiffStat({}, binary {:+})", self.path, self.bytes_delta),
+        }
+    }
+}
+
+/// `jj diff --stat`'s numbers: lines added and removed per path.
+///
+/// This mirrors `DiffStats::calculate` in `cli/src/diff_util.rs`. Each
+/// side is materialized -- so a conflict becomes its marker text -- and
+/// the two are compared line by line; every differing hunk contributes
+/// its left lines to `removed` and its right lines to `added`.
+///
+/// Binary is decided the way jj (and git) decide it: a NUL byte in the
+/// first 8000 bytes. Such a file reports `None` for both counts.
+pub fn diff_stats(
+    from: &PyCommit,
+    to: &PyCommit,
+    settings: &crate::settings::PyUserSettings,
+    paths: Option<Vec<String>>,
+) -> PyResult<Vec<PyDiffStat>> {
+    use jj_lib::conflict_labels::ConflictLabels;
+    use jj_lib::conflicts::{
+        ConflictMarkerStyle, ConflictMaterializeOptions, materialized_diff_stream,
+    };
+    use jj_lib::diff::DiffHunkKind;
+    use jj_lib::diff_presentation::{diff_by_line, LineCompareMode};
+    use jj_lib::merge::Diff;
+
+    let store = from.inner.store();
+    let marker_style: ConflictMarkerStyle = settings
+        .0
+        .get("ui.conflict-marker-style")
+        .map_err(crate::errors::map_py_err)?;
+    let materialize_options = ConflictMaterializeOptions {
+        marker_style,
+        marker_len: None,
+        merge: store.merge_options().clone(),
+    };
+
+    let from_tree = from.inner.tree();
+    let to_tree = to.inner.tree();
+    let matcher = crate::rewrite::paths_matcher(paths)?;
+    // No copy detection: `jj diff --stat` only runs it when asked, and a
+    // rename then reads as a removal plus an addition, which is what the
+    // plain `diff()` binding reports too.
+    let copy_records = CopyRecords::default();
+    let tree_diff = from_tree.diff_stream_with_copies(&to_tree, matcher.as_ref(), &copy_records);
+    let labels = ConflictLabels::unlabeled();
+
+    pollster::block_on(async {
+        let mut stream = Box::pin(materialized_diff_stream(
+            store,
+            Box::pin(tree_diff),
+            Diff::new(&labels, &labels),
+        ));
+        let mut out = Vec::new();
+        while let Some(entry) = stream.next().await {
+            let values = entry.values.map_err(map_backend_err)?;
+            let status = match (values.before.is_present(), values.after.is_present()) {
+                (false, true) => "added",
+                (true, false) => "removed",
+                _ => "modified",
+            };
+            let before = read_side(
+                entry.path.source(),
+                values.before,
+                &materialize_options,
+            )
+            .await?;
+            let after = read_side(
+                entry.path.target(),
+                values.after,
+                &materialize_options,
+            )
+            .await?;
+
+            let (added, removed) = if before.is_binary || after.is_binary {
+                (None, None)
+            } else {
+                let diff = diff_by_line([&before.contents, &after.contents], &LineCompareMode::Exact);
+                let mut added = 0usize;
+                let mut removed = 0usize;
+                for hunk in diff.hunks() {
+                    if hunk.kind == DiffHunkKind::Different {
+                        let [left, right] = hunk.contents[..].try_into().unwrap();
+                        removed += left.split_inclusive(|b| *b == b'\n').count();
+                        added += right.split_inclusive(|b| *b == b'\n').count();
+                    }
+                }
+                (Some(added), Some(removed))
+            };
+
+            out.push(PyDiffStat {
+                path: entry.path.target().as_internal_file_string().to_string(),
+                status: status.to_string(),
+                added,
+                removed,
+                bytes_delta: after.contents.len() as isize - before.contents.len() as isize,
+                binary: before.is_binary || after.is_binary,
+            });
+        }
+        Ok(out)
+    })
+}
+
+/// One side of a stat entry as bytes, with jj's binary verdict.
+///
+/// Anything that is not a plain file reads as empty and non-binary,
+/// which is how `DiffStats` treats it: a symlink or a submodule moves
+/// no lines.
+async fn read_side(
+    path: &jj_lib::repo_path::RepoPath,
+    value: jj_lib::conflicts::MaterializedTreeValue,
+    options: &jj_lib::conflicts::ConflictMaterializeOptions,
+) -> PyResult<jj_lib::diff_presentation::FileContent<bstr::BString>> {
+    use bstr::BString;
+    use jj_lib::conflicts::{materialize_merge_result_to_bytes, MaterializedTreeValue};
+    use jj_lib::diff_presentation::{file_content_for_diff, FileContent};
+
+    Ok(match value {
+        MaterializedTreeValue::File(mut file) => {
+            file_content_for_diff(path, &mut file, |content| content)
+                .await
+                .map_err(map_backend_err)?
+        }
+        MaterializedTreeValue::FileConflict(conflict) => FileContent {
+            is_binary: false,
+            contents: BString::from(materialize_merge_result_to_bytes(
+                &conflict.contents,
+                &conflict.labels,
+                options,
+            )),
+        },
+        _ => FileContent {
+            is_binary: false,
+            contents: BString::default(),
+        },
+    })
+}
