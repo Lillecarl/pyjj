@@ -325,6 +325,24 @@ def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
         _finish(tx, "new empty commit", settings, ws, repo)
     return 0
 
+def _export_git_refs(tx, ws) -> None:
+    """Write the transaction's bookmarks and tags out to the git repo.
+
+    jj does this on every transaction it finishes, but only when the
+    working copy is shared with git -- see the
+    `working_copy_shared_with_git` guard in `cli/src/cli_util.rs`. The
+    pinned `jj git init` colocates by default, so this is the common
+    case, and without it every bookmark move leaves `<name>@git` behind
+    on the commit the bookmark used to point at.
+
+    A non-colocated repo keeps its git refs inside `.jj`, and jj never
+    exports there, so neither does this.
+    """
+    if not (Path(ws.workspace_root) / ".git").exists():
+        return
+    tx.git_export_refs()
+
+
 def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
@@ -332,6 +350,7 @@ def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookma
     working copy to match."""
     old_wc_hex = base_repo.view()[ws.workspace_name]
     tx.rebase_descendants(delete_abandoned_bookmarks)
+    _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
 
@@ -341,6 +360,7 @@ def _restore_view_command(tx, description, settings, ws, repo):
     verbatim from the binding -- for undo/redo it encodes the target op so
     future stack jumps keep working."""
     old_wc_hex = repo.view()[ws.workspace_name]
+    _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
 
