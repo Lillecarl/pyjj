@@ -873,6 +873,30 @@ Current state:
   actual submodule checkout/update/clone machinery in `jj_lib` to bind to
   yet, experimental or otherwise — nothing for pyjj to expose here until
   upstream builds it.
+- **Interdiff**: `ReadonlyRepo.interdiff(from, to, paths=None)` is
+  `jj interdiff` -- how the changes `from` makes differ from the changes
+  `to` makes. It rebases `from`'s tree onto `to`'s parents
+  (`jj_lib::rewrite::rebase_to_dest_parent`) and diffs that against `to`'s
+  tree, so unlike a plain diff it leaves out whatever changed between the
+  two commits' *parents*.
+- **Parallel split**: `Transaction.split_remainder_parallel(target, first)`
+  is `jj split --parallel`'s second half. The chained
+  `split_remainder()` can keep `target`'s tree, because a child of `first`
+  shows the rest as a diff against it; a *sibling* hangs from `target`'s
+  own parents, so its tree is `target`'s with the selected changes undone.
+- **Reverting one operation**: `Transaction.revert_operation(op, what=None)`
+  is `jj op revert`, and it is not `restore_operation` with an older
+  target. Restoring makes the view *be* a past view and drops everything
+  after it; reverting merges the target operation back out, so only its
+  own changes disappear. It records rewrites, so the caller must
+  `rebase_descendants()` before `commit()` -- restoring records none.
+- **Abandoning without touching descendants**:
+  `Transaction.abandon_restoring_descendants(targets, delete_abandoned_bookmarks=False)`
+  is `jj abandon --restore-descendants`. A plain abandon rebases the
+  descendants and their content can change; this reparents them, keeping
+  each tree verbatim. The choice is made per commit inside the rewrite
+  callback, so there is no `RebaseOptions` equivalent and this drives
+  `transform_descendants` directly.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
