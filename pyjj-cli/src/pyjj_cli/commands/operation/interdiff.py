@@ -9,6 +9,7 @@ from ..common import (
     _load,
     _print_diff_files,
     _resolve_one,
+    use_color,
 )
 
 
@@ -36,7 +37,8 @@ def interdiff(args) -> int:
     # jj compares the descriptions too, and prints that block first.
     sys.stdout.flush()
     sys.stdout.buffer.write(
-        _description_diff_bytes(args, source.description, target.description)
+        _description_diff_bytes(args, source.description,
+                                target.description, use_color(settings))
     )
     sys.stdout.buffer.flush()
     _print_diff_files(args, ws, files, settings)

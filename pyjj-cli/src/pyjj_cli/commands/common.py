@@ -1458,7 +1458,7 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
     )
 
 
-def _git_diff_bytes(files, context: int = 3) -> bytes:
+def _git_diff_lines(files, context: int = 3):
     """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
 
     The layout follows jj's `show_git_diff`. Two details differ from what
@@ -1466,14 +1466,13 @@ def _git_diff_bytes(files, context: int = 3) -> bytes:
     both counts, even a count of one, and the abbreviated hashes are ten
     characters wide.
 
-    File content is bytes, and may not be text at all, so this returns
-    bytes rather than printing.
+    File content is bytes, and may not be text at all, so the spans
+    carry it decoded with `surrogateescape`.
     """
-    out = bytearray()
+    lines = []
 
     def line(text: str) -> None:
-        out.extend(text.encode())
-        out.extend(b"\n")
+        lines.append([(text, "file_header")])
 
     for f in files:
         left = f"a/{f.source_path}"
@@ -1501,32 +1500,73 @@ def _git_diff_bytes(files, context: int = 3) -> bytes:
         left_name = left if f.before_mode is not None else "/dev/null"
         right_name = right if f.after_mode is not None else "/dev/null"
         if f.is_binary:
-            line(f"Binary files {left_name} and {right_name} differ")
+            lines.append([(f"Binary files {left_name} and {right_name} differ",
+                           "")])
             continue
         line(f"--- {left_name}")
         line(f"+++ {right_name}")
-        out.extend(_unified_hunk_bytes(f.before_content, f.after_content, context))
-    return bytes(out)
+        lines.extend(_unified_hunk_lines(f.before_content, f.after_content,
+                                         context))
+    return lines
 
 
-def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3) -> bytes:
-    """The `@@` headers and their lines, without any file header.
+def _git_diff_bytes(files, context: int = 3, coloured: bool = False) -> bytes:
+    """`_git_diff_lines` as bytes, ready to write to stdout."""
+    return _render_diff(_git_diff_lines(files, context), coloured)
+
+
+def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3):
+    """The `@@` headers and their lines, as labelled spans.
 
     jj prints these for a file and, in `--git` format, for a commit
     description as well, under a dummy path.
+
+    A changed line carries its word diff: jj marks only the words that
+    moved, and underlines those. The line's trailing newline is not part
+    of any token -- jj writes it outside every label -- so the last
+    token can land empty, and the escape sequence that closes the
+    underline is written all the same.
     """
-    out = bytearray()
+    lines = []
     for hunk in pyjj.unified_hunks(before, after, context):
-        out.extend(
-            f"@@ -{hunk.left_start},{hunk.left_len} "
-            f"+{hunk.right_start},{hunk.right_len} @@\n".encode()
-        )
-        for kind, content in hunk.lines:
-            out.extend(_DIFF_SIGILS[kind])
-            out.extend(content)
+        lines.append([(f"@@ -{hunk.left_start},{hunk.left_len} "
+                       f"+{hunk.right_start},{hunk.right_len} @@",
+                       "hunk_header")])
+        for kind, tokens in hunk.lines:
+            content = b"".join(token for _token_kind, token in tokens)
+            tokens = list(tokens)
+            if content.endswith(b"\n"):
+                last_kind, last = tokens[-1]
+                tokens[-1] = (last_kind, last[:-1])
+            spans = [(_DIFF_SIGILS[kind], kind)]
+            spans += [(token.decode("utf-8", "surrogateescape"),
+                       f"{kind} token" if token_kind == "different" else kind)
+                      for token_kind, token in tokens]
+            lines.append(spans)
             if not content.endswith(b"\n"):
-                out.extend(b"\n\\ No newline at end of file\n")
-    return bytes(out)
+                lines.append([("\\ No newline at end of file", "")])
+    return lines
+
+
+def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3) -> bytes:
+    """`_unified_hunk_lines` as plain bytes."""
+    return _render_diff(_unified_hunk_lines(before, after, context), False)
+
+
+def _render_diff(lines, coloured: bool, base: str = "diff git") -> bytes:
+    """A diff's lines as bytes, coloured or not.
+
+    File content is bytes and may not be text at all, so the spans carry
+    it decoded with `surrogateescape` and this puts it back.
+
+    The description diff is `diff` alone rather than `diff git`: jj
+    renders it outside the format's own label, so its file header is
+    bold but nothing else about it says `git`.
+    """
+    if not lines:
+        return b""
+    rendered = render_block(lines, base, coloured)
+    return rendered.encode("utf-8", "surrogateescape") + b"\n"
 
 
 def _tags_by_commit(repo) -> dict[str, list[str]]:
@@ -1647,7 +1687,8 @@ def _color_words_hunks(before: bytes, after: bytes, context: int = 3) -> list[by
             right += 1
         run = []
 
-    for kind, content in hunks[0].lines:
+    for kind, tokens in hunks[0].lines:
+        content = b"".join(token for _token_kind, token in tokens)
         if kind == "context":
             run.append(content)
             continue
@@ -1706,14 +1747,15 @@ def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
     sys.stdout.buffer.flush()
 
 
-_DIFF_SIGILS = {"context": b" ", "removed": b"-", "added": b"+"}
+_DIFF_SIGILS = {"context": " ", "removed": "-", "added": "+"}
 
 
 def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3) -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
-    sys.stdout.buffer.write(_git_diff_bytes(files, context))
+    sys.stdout.buffer.write(_git_diff_bytes(files, context,
+                                            use_color(settings)))
     sys.stdout.buffer.flush()
 
 
@@ -1785,7 +1827,8 @@ def _diff_base(repo, settings, commit):
 _DESCRIPTION_PATH = "JJ-COMMIT-DESCRIPTION"
 
 
-def _description_diff_bytes(args, before: str, after: str) -> bytes:
+def _description_diff_bytes(args, before: str, after: str,
+                            coloured: bool = False) -> bytes:
     """What jj prints when two commits' descriptions differ.
 
     `jj interdiff` compares descriptions as well as trees. The short
@@ -1798,12 +1841,14 @@ def _description_diff_bytes(args, before: str, after: str) -> bytes:
         return b""
     left, right = before.encode(), after.encode()
     if getattr(args, "git", False):
-        header = (
-            f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}\n"
-            f"--- {_DESCRIPTION_PATH}\n"
-            f"+++ {_DESCRIPTION_PATH}\n"
-        ).encode()
-        return header + _unified_hunk_bytes(left, right)
+        lines = [
+            [(f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}",
+              "file_header")],
+            [(f"--- {_DESCRIPTION_PATH}", "file_header")],
+            [(f"+++ {_DESCRIPTION_PATH}", "file_header")],
+        ]
+        lines += _unified_hunk_lines(left, right)
+        return _render_diff(lines, coloured, "diff")
     out = bytearray(b"Modified commit description:\n")
     for line in _color_words_hunks(left, right):
         out.extend(line)
@@ -1850,7 +1895,8 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
     context = 3 if context is None else context
     if getattr(args, "git", False):
         sys.stdout.flush()
-        sys.stdout.buffer.write(_git_diff_bytes(files, context))
+        sys.stdout.buffer.write(_git_diff_bytes(files, context,
+                                                use_color(settings)))
         sys.stdout.buffer.flush()
         return
     if getattr(args, "stat", False):

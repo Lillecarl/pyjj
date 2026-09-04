@@ -32,7 +32,7 @@ CATALOGUE: tuple[Entry, ...] = (
     # -- diff -----------------------------------------------------------
     E("diff", ("diff", "-r", "@"), fixture="executable", claims=("diff",)),
     E("diff-git", ("diff", "--git", "-r", "@"), fixture="executable",
-      claims=("diff", "--git")),
+      claims=("diff", "--git"), colour="bytes"),
     E("diff-summary", ("diff", "--summary", "-r", "@"), fixture="executable",
       claims=("diff", "--summary", "-s"), colour="bytes"),
     E("diff-stat", ("diff", "--stat", "-r", "@"), fixture="executable",
@@ -95,7 +95,7 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("interdiff",)),
     E("interdiff-git", ("interdiff", "--git", "--from", 'description(glob:"one*")',
                         "--to", 'description(glob:"two*")'),
-      claims=("interdiff", "--git")),
+      claims=("interdiff", "--git"), colour="bytes"),
     E("interdiff-summary", ("interdiff", "--summary",
                             "--from", 'description(glob:"one*")',
                             "--to", 'description(glob:"two*")'),
