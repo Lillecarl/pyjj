@@ -185,6 +185,18 @@ impl PyReadonlyRepo {
         crate::evolution::evolution_log(self, start_commits, limit)
     }
 
+    /// The same walk, topologically grouped and carrying graph edges --
+    /// what `jj evolog` draws. `evolution_log()` keeps the raw order,
+    /// which is what `--no-graph` prints.
+    #[pyo3(signature = (start_commits, limit=None))]
+    fn evolution_graph(
+        &self,
+        start_commits: Vec<PyCommitId>,
+        limit: Option<usize>,
+    ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
+        crate::evolution::evolution_graph(self, start_commits, limit)
+    }
+
     /// Async sibling of `log_graph()`. See `get_commit_async()`'s docs for
     /// why this runs on tokio's blocking thread pool rather than directly.
     #[pyo3(signature = (settings, revision, limit=None))]

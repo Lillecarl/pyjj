@@ -21,8 +21,8 @@ use crate::settings::PyUserSettings;
 #[pyclass(name = "GraphEdge", frozen, get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyGraphEdge {
-    target: PyCommitId,
-    edge_type: String,
+    pub(crate) target: PyCommitId,
+    pub(crate) edge_type: String,
 }
 
 /// One row of `ReadonlyRepo.log_graph()`: a commit plus its edges to
@@ -33,7 +33,7 @@ pub struct PyGraphNode {
     edges: Vec<PyGraphEdge>,
 }
 
-fn edge_type_str(edge_type: GraphEdgeType) -> &'static str {
+pub(crate) fn edge_type_str(edge_type: GraphEdgeType) -> &'static str {
     match edge_type {
         GraphEdgeType::Direct => "direct",
         GraphEdgeType::Indirect => "indirect",
