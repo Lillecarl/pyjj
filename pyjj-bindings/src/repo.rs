@@ -192,6 +192,21 @@ impl PyReadonlyRepo {
             .collect()
     }
 
+    /// The interdiff of two commits, per file, in the same shape
+    /// `Commit.git_diff()` returns. `interdiff()` says which paths
+    /// differ; this says what their content is, so `jj interdiff` can
+    /// print every format `jj diff` can.
+    #[pyo3(signature = (from, to, settings, paths=None))]
+    fn interdiff_files(
+        &self,
+        from: &PyCommit,
+        to: &PyCommit,
+        settings: &crate::settings::PyUserSettings,
+        paths: Option<Vec<String>>,
+    ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
+        crate::tree::interdiff_files(self, from, to, settings, paths)
+    }
+
     /// All remote-tracking bookmarks, in lexicographical order.
     ///
     /// A colocated repository has a `git` remote, so a bookmark that

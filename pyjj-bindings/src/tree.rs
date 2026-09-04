@@ -429,6 +429,56 @@ pub fn git_diff_files(
     paths: Option<Vec<String>>,
     copies: bool,
 ) -> PyResult<Vec<PyGitDiffFile>> {
+    git_diff_trees(
+        &from.inner.tree(),
+        &to.inner.tree(),
+        from.inner.store(),
+        settings,
+        paths,
+        copies.then(|| (from.inner.id().clone(), to.inner.id().clone())),
+    )
+}
+
+/// The interdiff of two commits, in the same per-file shape as
+/// `git_diff_files`.
+///
+/// `interdiff_commits` answers which paths differ; this answers what
+/// their content is, so every format `jj interdiff` can print has the
+/// same source as the corresponding `jj diff` format.
+pub fn interdiff_files(
+    repo: &PyReadonlyRepo,
+    from: &PyCommit,
+    to: &PyCommit,
+    settings: &crate::settings::PyUserSettings,
+    paths: Option<Vec<String>>,
+) -> PyResult<Vec<PyGitDiffFile>> {
+    let from_tree = pollster::block_on(jj_lib::rewrite::rebase_to_dest_parent(
+        repo.inner.as_ref(),
+        std::slice::from_ref(&from.inner),
+        &to.inner,
+    ))
+    .map_err(map_backend_err)?;
+    // No copy detection: the rebased tree has no commit id to ask the
+    // backend about, and `jj interdiff` does not detect copies either.
+    git_diff_trees(
+        &from_tree,
+        &to.inner.tree(),
+        to.inner.store(),
+        settings,
+        paths,
+        None,
+    )
+}
+
+/// The shared half: two trees in, per-file git-diff parts out.
+fn git_diff_trees(
+    from_tree: &MergedTree,
+    to_tree: &MergedTree,
+    store: &std::sync::Arc<jj_lib::store::Store>,
+    settings: &crate::settings::PyUserSettings,
+    paths: Option<Vec<String>>,
+    copy_ids: Option<(jj_lib::backend::CommitId, jj_lib::backend::CommitId)>,
+) -> PyResult<Vec<PyGitDiffFile>> {
     use jj_lib::conflict_labels::ConflictLabels;
     use jj_lib::conflicts::{
         ConflictMarkerStyle, ConflictMaterializeOptions, materialized_diff_stream,
@@ -436,7 +486,6 @@ pub fn git_diff_files(
     use jj_lib::diff_presentation::unified::git_diff_part;
     use jj_lib::merge::Diff;
 
-    let store = from.inner.store();
     let marker_style: ConflictMarkerStyle = settings
         .0
         .get("ui.conflict-marker-style")
@@ -447,19 +496,17 @@ pub fn git_diff_files(
         merge: store.merge_options().clone(),
     };
 
-    let from_tree = from.inner.tree();
-    let to_tree = to.inner.tree();
     let matcher = crate::rewrite::paths_matcher(paths)?;
     let mut copy_records = CopyRecords::default();
-    if copies {
+    if let Some((from_id, to_id)) = copy_ids {
         let record_stream = store
-            .get_copy_records(None, from.inner.id(), to.inner.id())
+            .get_copy_records(None, &from_id, &to_id)
             .map_err(map_backend_err)?;
         let records: Vec<_> =
             pollster::block_on(record_stream.try_collect()).map_err(map_backend_err)?;
         copy_records.add_records(records);
     }
-    let tree_diff = from_tree.diff_stream_with_copies(&to_tree, matcher.as_ref(), &copy_records);
+    let tree_diff = from_tree.diff_stream_with_copies(to_tree, matcher.as_ref(), &copy_records);
     let labels = ConflictLabels::unlabeled();
 
     pollster::block_on(async {
