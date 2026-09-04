@@ -17,6 +17,7 @@ mod git;
 mod graph;
 mod hunks;
 mod ids;
+mod opdiff;
 mod operation;
 mod oplog;
 mod repo;
@@ -108,6 +109,10 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBisectStep>()?;
     m.add_class::<PyEvolutionEntry>()?;
     m.add_class::<PyMoveCommitsStats>()?;
+    m.add_class::<crate::opdiff::PyOperationDiff>()?;
+    m.add_class::<crate::opdiff::PyModifiedChange>()?;
+    m.add_class::<crate::opdiff::PyRefChange>()?;
+    m.add_class::<crate::opdiff::PyRefTargetSummary>()?;
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
 
     Ok(())

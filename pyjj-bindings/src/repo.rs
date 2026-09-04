@@ -405,6 +405,39 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// Folds `operations` into the single operation their merge
+    /// represents, ready to hand back to `load_at_operation()`.
+    ///
+    /// `jj op diff` needs this. The "from" side of a merge operation is
+    /// its several parents, and they must become one repo view before
+    /// the two sides can be compared.
+    fn merge_operations(
+        &self,
+        operations: Vec<crate::operation::PyOperation>,
+    ) -> PyResult<crate::operation::PyOperation> {
+        crate::opdiff::merge_operations(self, operations)
+    }
+
+    /// `jj op diff`: what changed in the repository between the
+    /// operation `other` was loaded at and this one.
+    ///
+    /// Both repos come from `load_at_operation()`. `changes_in` limits
+    /// which revisions are listed one by one; the rest are only counted,
+    /// in the result's `elided_*` fields. It defaults to the
+    /// `revsets.op-diff-changes-in` setting.
+    ///
+    /// Read-only. The index merge this needs happens in a transaction
+    /// that is dropped, never committed.
+    #[pyo3(signature = (other, settings, changes_in=None))]
+    fn operation_diff(
+        &self,
+        other: &PyReadonlyRepo,
+        settings: &PyUserSettings,
+        changes_in: Option<&str>,
+    ) -> PyResult<crate::opdiff::PyOperationDiff> {
+        crate::opdiff::operation_diff(other, self, settings, changes_in)
+    }
+
     /// Hex id of the operation this repo view was loaded at.
     ///
     /// `jj` abbreviates this to 12 characters when it prints an
