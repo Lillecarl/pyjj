@@ -569,7 +569,7 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
-def _print_ref(repo, settings, ref, template=None) -> None:
+def _print_ref(repo, settings, ref, template=None, remotes=()) -> None:
     """One bookmark or tag, as jj's `format_commit_ref` renders it.
 
     jj uses the same template for both, so this serves both listings. A
@@ -601,6 +601,13 @@ def _print_ref(repo, settings, ref, template=None) -> None:
         render(ref.target_ids[0])
     else:
         print(f"{ref.name} (deleted)")
+    # `--all-remotes` adds each remote-tracking counterpart under its
+    # local bookmark, indented, named by the remote alone.
+    for remote in remotes:
+        if remote.name != ref.name:
+            continue
+        for commit_id in remote.target_ids:
+            render(commit_id, f"  @{remote.remote}: ")
 
 
 def _commit_context(repo, settings, commit, bookmarks=None) -> dict:

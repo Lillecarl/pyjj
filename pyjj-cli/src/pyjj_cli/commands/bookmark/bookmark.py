@@ -45,8 +45,13 @@ def bookmark(args) -> int:
             # Filter by names if given (exact match for now)
             if names:
                 bms = [b for b in bms if b.name in names]
+            remotes = (
+                sorted(repo.remote_bookmarks(), key=lambda b: (b.name, b.remote))
+                if getattr(args, "all_remotes", False)
+                else ()
+            )
             for bm in sorted(bms, key=lambda b: b.name):
-                _print_ref(repo, _settings, bm, template)
+                _print_ref(repo, _settings, bm, template, remotes)
             return 0
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
