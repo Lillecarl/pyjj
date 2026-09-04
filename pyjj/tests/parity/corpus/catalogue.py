@@ -50,13 +50,13 @@ CATALOGUE: tuple[Entry, ...] = (
     # -- show -----------------------------------------------------------
     E("show", ("show", 'description(glob:"one*")'), claims=("show",)),
     E("show-no-patch", ("show", "--no-patch", 'description(glob:"one*")'),
-      claims=("show", "--no-patch")),
+      claims=("show", "--no-patch"), colour="bytes"),
     E("show-git", ("show", "--git", 'description(glob:"one*")'),
-      claims=("show", "--git")),
+      claims=("show", "--git"), colour="bytes"),
     E("show-summary", ("show", "--summary", 'description(glob:"one*")'),
-      claims=("show", "--summary", "-s")),
+      claims=("show", "--summary", "-s"), colour="bytes"),
     E("show-stat", ("show", "--stat", 'description(glob:"one*")'),
-      claims=("show", "--stat")),
+      claims=("show", "--stat"), colour="bytes"),
 
     # -- log ------------------------------------------------------------
     E("log", ("log",), bar="facts",

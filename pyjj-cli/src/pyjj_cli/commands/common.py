@@ -1189,6 +1189,31 @@ def _detailed_signature(signature) -> str:
     return f"{name} <{email}> ({_format_timestamp(signature.timestamp)})"
 
 
+def _signature_spans(signature, kind: str):
+    """jj's `format_detailed_signature`, in labelled pieces.
+
+    The name, the email in angle brackets and the timestamp in
+    parentheses. The brackets and parentheses are not part of any field,
+    so only the field itself takes a colour. `kind` is `author` or
+    `committer`.
+    """
+    email = signature.email or ""
+    local, _, domain = email.partition("@")
+    spans = [(signature.name or "(no name set)", f"{kind} name"), (" <", "")]
+    if email:
+        spans.append((local, f"{kind} email local"))
+        if domain:
+            spans.append(("@", f"{kind} email"))
+            spans.append((domain, f"{kind} email domain"))
+    else:
+        spans.append(("(no email set)", f"{kind} email placeholder"))
+    spans.append(("> (", ""))
+    spans.append((_format_timestamp(signature.timestamp),
+                  f"{kind} timestamp local format"))
+    spans.append((")", ""))
+    return spans
+
+
 def _indent(text: str, prefix: str = "    ") -> str:
     """jj's `indent`: every non-empty line gets the prefix.
 

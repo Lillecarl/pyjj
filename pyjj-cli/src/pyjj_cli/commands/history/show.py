@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
+from ...formatter import Line, render_block, separate
 from ..common import (
     _bookmarks_by_commit,
     _commit_context,
@@ -37,6 +38,8 @@ from ..common import (
     _merge_marker_len,
     _run_merge_tool,
     _fix_pattern_matches,
+    _signature_spans,
+    use_color,
 )
 
 def show(args) -> int:
@@ -46,6 +49,14 @@ def show(args) -> int:
         revs = args.revisions or ["@"]
         commits = _resolve_all(repo, settings, revs)
         bookmarks = _bookmarks_by_commit(repo, remotes=True)
+        locals_ = _bookmarks_by_commit(repo)
+        # jj lists the local names first and the remote ones after, and
+        # colours a remote name's three parts apart.
+        remotes: dict[str, list[tuple[str, str]]] = {}
+        for remote_bookmark in repo.remote_bookmarks():
+            for target in remote_bookmark.target_ids:
+                remotes.setdefault(target.hex(), []).append(
+                    (remote_bookmark.name, remote_bookmark.remote))
         tags = _tags_by_commit(repo)
         # jj drives `show` from `templates.show`, whose default is
         # `builtin_log_detailed`. A template replaces the header block;
@@ -73,20 +84,12 @@ def show(args) -> int:
                     _print_diff(args, ws, settings, _diff_base(repo, settings, commit),
                                 commit, None)
                 continue
-            print(f"Commit ID: {commit.id.hex()}")
-            print(f"Change ID: {commit.change_id.reverse_hex()}")
-            names = bookmarks.get(commit.id.hex(), [])
-            if names:
-                print(f"Bookmarks: {' '.join(names)}")
-            commit_tags = tags.get(commit.id.hex(), [])
-            if commit_tags:
-                print(f"Tags     : {' '.join(commit_tags)}")
-            print(f"Author   : {_detailed_signature(commit.author)}")
-            print(f"Committer: {_detailed_signature(commit.committer)}")
-            print()
-            description = commit.description.rstrip() or "(no description set)"
-            print(_indent(description))
-            print()
+            print(render_block(
+                _detailed_lines(repo, settings, commit,
+                                locals_.get(commit.id.hex(), []),
+                                remotes.get(commit.id.hex(), []),
+                                tags.get(commit.id.hex(), [])),
+                "show commit", use_color(settings)))
             if getattr(args, "no_patch", False):
                 continue
             base = _diff_base(repo, settings, commit)
@@ -95,3 +98,45 @@ def show(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
+
+
+def _detailed_lines(repo, settings, commit, names, remote_names, tags):
+    """jj's `builtin_log_detailed`: the block `show` prints above a diff.
+
+    Every label sits under `show commit`, which is what jj labels the
+    whole template. A bookmark line lists the local names first and the
+    remote ones after, and a remote name's three parts colour apart.
+    """
+    lines = [
+        [("Commit ID: ", ""), (commit.id.hex(), "commit_id")],
+        [("Change ID: ", ""),
+         (commit.change_id.reverse_hex(), "change_id")],
+    ]
+    if names or remote_names:
+        refs = [[(name, "local_bookmarks name")] for name in names]
+        refs += [[(name, "remote_bookmarks name"),
+                  ("@", "remote_bookmarks"),
+                  (remote, "remote_bookmarks remote")]
+                 for name, remote in remote_names]
+        lines.append([("Bookmarks: ", "")] + separate(refs))
+    if tags:
+        lines.append([("Tags     : ", "")]
+                     + separate([[(tag, "tags name")] for tag in tags]))
+    lines.append([("Author   : ", "")]
+                 + _signature_spans(commit.author, "author"))
+    lines.append([("Committer: ", "")]
+                 + _signature_spans(commit.committer, "committer"))
+    lines.append([])
+
+    description = commit.description.rstrip()
+    if description:
+        body = [(text, "description trim_end")
+                for text in _indent(description).split("\n")]
+    else:
+        empty = commit.is_empty(repo) if commit.parent_ids else True
+        body = [("    (no description set)",
+                 "empty description placeholder" if empty
+                 else "description placeholder")]
+    lines += [[span] for span in body]
+    lines.append([])
+    return lines
