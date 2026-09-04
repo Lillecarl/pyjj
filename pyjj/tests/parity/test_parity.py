@@ -835,6 +835,19 @@ def test_run_command_that_changes_nothing(pair: RepoPair, tmp_path) -> None:
     pair.assert_parity()
 
 
+def test_run_no_op_writes_no_operation(pair: RepoPair, tmp_path) -> None:
+    """A command that changes nothing must not leave an operation
+    behind. jj's `finish()` returns early on an empty transaction, so
+    the operation log does not grow. `op_restore` addresses operations
+    by depth per side, so a side that wrote one extra restores to a
+    different state and the repos diverge here."""
+    chain(pair)
+    script = run_script(tmp_path, "noop.py", "pass\n")
+    pair.op(jj=["run", "-r", rev("one"), sys.executable, script])
+    pair.op_restore(1)
+    pair.assert_parity()
+
+
 def test_run_rewrites_and_propagates_to_descendants(pair: RepoPair, tmp_path) -> None:
     """The real claim: a command that edits a file rewrites its revision
     AND every descendant, so both sides must reproduce the same commit

@@ -141,11 +141,12 @@ def run(args) -> int:
                 new_trees[commit.id.hex()] = tree_id
 
         if not new_trees:
-            # The command changed nothing anywhere. jj still finishes the
-            # transaction, so the operation log records the attempt, and
-            # reports the no-op the same way every other rewrite does.
+            # The command changed nothing anywhere. jj drops the empty
+            # transaction rather than committing it -- `finish()` in
+            # `cli/src/cli_util.rs` returns early on `!has_changes()` --
+            # so no operation is written, and the only trace is the
+            # message every other no-op rewrite prints.
             print("Nothing changed.", file=sys.stderr)
-            _finish(tx, "run: nothing changed", settings, ws, repo)
             return 0
 
         count, reparented = tx.run_rewrite(
