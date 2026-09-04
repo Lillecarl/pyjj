@@ -433,10 +433,13 @@ class RepoPair:
                 "tags": sorted(tags.split()),
                 "files": files,
             }
-        # Remote-tracking refs live outside the commit graph, so nothing
-        # above reads them. Without this, a command that moves a bookmark
-        # but never exports it to git compares equal: the local bookmark
-        # moves on both sides and only `<name>@git` stays behind.
+        return {"commits": commits, "remote_refs": self._remote_refs(repo)}
+
+    def _remote_refs(self, repo: Path) -> dict:
+        """Remote-tracking refs live outside the commit graph, so nothing
+        that reads commits sees them. Without this, a command that moves a
+        bookmark but never exports it to git compares equal: the local
+        bookmark moves on both sides and only `<name>@git` stays behind."""
         tracking = self._out(
             [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy",
              "bookmark", "list", "--all-remotes", "-T",
@@ -450,7 +453,7 @@ class RepoPair:
                 continue
             symbol, target = line.split("\x1f")
             remote_refs[symbol] = target
-        return {"commits": commits, "remote_refs": remote_refs}
+        return remote_refs
 
     def _out(self, argv: list[str], repo: Path | None = None) -> str:
         # With cwd at the repo root, `jj file list` prints workspace-relative
@@ -468,13 +471,67 @@ class RepoPair:
             )
         return proc.stdout
 
+    def _extract_fast(self, repo: Path) -> dict:
+        """The same comparison, in one `jj log` per side instead of one
+        per commit plus one per file.
+
+        A jj commit id hashes the commit's root tree, so equal commit ids
+        already mean equal file contents -- the per-file hashes in
+        `_extract_repo` prove nothing beyond them. They are diagnostics:
+        worth reading when something differs, not worth 34 process
+        launches when nothing does.
+
+        `\x1e` separates records because a description may contain
+        newlines, and `\x1f` separates fields within one.
+        """
+        template = (
+            'commit_id.short(40) ++ "\x1f" ++ description ++ "\x1f"'
+            ' ++ author.name() ++ "\x1f" ++ author.email() ++ "\x1f"'
+            ' ++ committer.name() ++ "\x1f" ++ committer.email() ++ "\x1f"'
+            ' ++ parents.map(|p| p.commit_id().short(40)).join(" ") ++ "\x1f"'
+            ' ++ bookmarks.join(" ") ++ "\x1f" ++ working_copies.join(" ")'
+            ' ++ "\x1f" ++ tags.join(" ") ++ "\x1e"'
+        )
+        out = self._out(
+            [self.jj_bin, "-R", str(repo), "--no-pager", "--ignore-working-copy",
+             "log", "-r", "all()", "--no-graph", "-T", template],
+            repo,
+        )
+        commits = {}
+        for record in out.split("\x1e"):
+            if not record.strip("\n"):
+                continue
+            fields = record.lstrip("\n").split("\x1f")
+            cid, desc, aname, amail, cname, cmail, parents, bm, wcs, tags = fields
+            commits[cid] = {
+                "description": desc,
+                "author": [aname, amail],
+                "committer": [cname, cmail],
+                "parents": sorted(parents.split()),
+                "bookmarks": sorted(bm.split()),
+                "working_copies": sorted(wcs.split()),
+                "tags": sorted(tags.split()),
+            }
+        return {"commits": commits, "remote_refs": self._remote_refs(repo)}
+
     def assert_parity(self) -> None:
+        fast = {
+            side: self._extract_fast(repo)
+            for side, repo in (("cli", self.cli_repo), ("py", self.py_repo))
+        }
+        if fast["cli"] == fast["py"]:
+            return
+        # Something differs. Pay for the detailed extraction now, so the
+        # failure names the file rather than only the commit.
         got = {
             side: self._extract_repo(repo)
             for side, repo in (("cli", self.cli_repo), ("py", self.py_repo))
         }
-        if got["cli"] == got["py"]:
-            return
+        if got["cli"] == got["py"]:  # pragma: no cover - defensive
+            raise AssertionError(
+                "the fast comparison disagreed with the detailed one; the "
+                f"fast extraction is wrong:\n{fast}"
+            )
         a = json.dumps(got["cli"], indent=1, sort_keys=True).splitlines()
         b = json.dumps(got["py"], indent=1, sort_keys=True).splitlines()
         diff = "\n".join(difflib.unified_diff(a, b, "cli", "py", lineterm=""))
