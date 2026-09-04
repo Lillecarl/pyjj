@@ -2151,6 +2151,38 @@ def test_split_before_the_root_commit_must_fail(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- inserting between two named revisions ------------------------------
+#
+# `-A` and `-B` given together name both sides of the insertion point, so
+# the child keeps whatever other parents it had and gains the inserted
+# commit. That is different from either flag alone, where the child's old
+# parent IS the insertion point and gets replaced.
+
+
+INSERT_BETWEEN_ARGV = [
+    ["new", "-A", rev("base"), "-B", rev("two"), "-m", "ins"],
+    ["new", "-A", rev("base"), "-m", "ins"],
+    ["new", "-B", rev("two"), "-m", "ins"],
+    ["revert", "-r", rev("one"), "-A", rev("base"), "-B", rev("two")],
+    ["revert", "-r", rev("one"), "-A", rev("base")],
+    ["revert", "-r", rev("one"), "-B", rev("two")],
+    ["rebase", "-r", rev("one"), "-A", rev("base"), "-B", rev("two")],
+    ["duplicate", rev("one"), "-A", rev("base"), "-B", rev("two")],
+    ["split", "-r", rev("one"), "-A", rev("base"), "-B", rev("two"),
+     "-m", "sel", "one.txt"],
+]
+
+
+@pytest.mark.parametrize("argv", INSERT_BETWEEN_ARGV,
+                         ids=lambda a: "_".join(a)[:40])
+def test_inserting_between_two_revisions(pair: RepoPair, argv) -> None:
+    """`two` hangs from `one`, so naming `base` and `two` as the two sides
+    makes `two` a merge: it keeps `one` and gains the inserted commit."""
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
 def test_split_parallel_with_a_descendant(pair: RepoPair) -> None:
     """A commit below the split point ends up on both halves."""
     chain(pair)
