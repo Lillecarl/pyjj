@@ -8,7 +8,7 @@ def add_parsers(sub) -> None:
     p_status.set_defaults(_handler="pyjj_cli.commands.history.status:status")
 
     p_log = sub.add_parser("log", help="Show commit history")
-    add_flags(p_log, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.TEMPLATE, Flag.PATCH])
+    add_flags(p_log, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.TEMPLATE, Flag.PATCH, Flag.STAT])
     # log's filesets is suppressed (not shown in help) — keep manual for that nuance
     p_log.add_argument("filesets", nargs="*", metavar="FILESETS", help=argparse.SUPPRESS)
     p_log.set_defaults(_handler="pyjj_cli.commands.history.log:log")

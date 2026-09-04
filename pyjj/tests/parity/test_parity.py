@@ -1435,6 +1435,29 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- --stat ---------------------------------------------------------------
+
+
+def test_log_stat(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["log", "--stat"])
+    pair.assert_parity()
+
+
+def test_log_stat_no_graph(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["log", "--stat", "--no-graph"])
+    pair.assert_parity()
+
+
+def test_log_stat_over_a_binary_file(pair: RepoPair) -> None:
+    """A NUL in the first bytes makes it binary, and it has no lines."""
+    pair.init()
+    pair.op(files={"a.bin": b"\x00\x01\x02"}, jj=["describe", "-m", "one"])
+    pair.op(jj=["log", "--stat"])
+    pair.assert_parity()
+
+
 # -- behaviour-changing global options -----------------------------------
 
 
@@ -1572,7 +1595,6 @@ def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
 
 UNIMPLEMENTED_ARGV = [
     ["config", "gc"],
-    ["log", "--stat"],
     ["run", "-r", rev("one"), "true"],
     ["util", "config-schema"],
 ]

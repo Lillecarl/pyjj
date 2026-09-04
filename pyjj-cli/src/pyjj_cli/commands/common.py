@@ -460,3 +460,44 @@ def _resolve_operation(repo, name: str | None):
     if not name or name == "@":
         return repo.operation
     return repo.load_operation(name)
+
+
+# The bar after a file's line count is scaled to fit the terminal in jj.
+# pyjj draws it at a fixed width instead: the histogram is decoration,
+# and a width that depends on the terminal makes output that scripts
+# cannot rely on.
+_STAT_BAR_WIDTH = 32
+
+
+def _print_diff_stats(stats) -> None:
+    """`--stat`'s output, in the shape `jj diff --stat` prints it.
+
+    Each file gets its changed-line count and a `+`/`-` bar; a binary
+    file gets its byte delta instead, since it has no lines to count.
+    The summary line counts every file, binary ones included.
+    """
+    paths = [stat.path for stat in stats]
+    width = max((len(path) for path in paths), default=0)
+    total_added = 0
+    total_removed = 0
+    for stat in stats:
+        if stat.added is None:
+            delta = f" {stat.bytes_delta:+} bytes" if stat.bytes_delta else ""
+            print(f"{stat.path:<{width}} | (binary){delta}")
+            continue
+        total_added += stat.added
+        total_removed += stat.removed
+        changed = stat.added + stat.removed
+        if changed:
+            # Keep at least one mark for each side that moved, so a bar
+            # never claims a file gained nothing when it gained a line.
+            scale = min(1.0, _STAT_BAR_WIDTH / changed)
+            bar_added = max(1, round(stat.added * scale)) if stat.added else 0
+            bar_removed = max(1, round(stat.removed * scale)) if stat.removed else 0
+            bar = " " + "+" * bar_added + "-" * bar_removed
+        else:
+            bar = ""
+        print(f"{stat.path:<{width}} | {changed}{bar}")
+    print(f"{len(stats)} file{'' if len(stats) == 1 else 's'} changed, "
+          f"{total_added} insertion{'' if total_added == 1 else 's'}(+), "
+          f"{total_removed} deletion{'' if total_removed == 1 else 's'}(-)")

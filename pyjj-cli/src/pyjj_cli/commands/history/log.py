@@ -5,7 +5,7 @@ import sys
 import pyjj
 from pyjj.graph_layout import layout
 
-from ..common import _load, _pyjj_template
+from ..common import _load, _print_diff_stats, _pyjj_template
 
 # ANSI — match jj's 256-color palette where it matters.
 # Only emitted when stdout is a TTY and NO_COLOR is not set.
@@ -128,6 +128,7 @@ def log(args) -> int:
 
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
+    show_stat = getattr(args, "stat", False)
     use_color = _use_color()
 
     # jj's own builtin template names, mapped to a Jinja equivalent so
@@ -362,6 +363,13 @@ def log(args) -> int:
                     print(f"{cont_prefix}{desc}")
             else:
                 print(f"  {desc_raw}")
+
+        if show_stat:
+            # `--stat` reads file content, so it only runs when asked.
+            parent = (repo.get_commit(commit.parent_ids[0])
+                      if commit.parent_ids else None)
+            if parent is not None:
+                _print_diff_stats(parent.diff_stats(commit, settings))
 
         if show_patch:
             if commit.parent_ids:
