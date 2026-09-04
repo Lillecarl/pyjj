@@ -104,6 +104,34 @@ impl PyCommit {
             .map(Into::into))
     }
 
+    /// Whether this commit is no longer reachable from any visible head.
+    ///
+    /// A rewrite leaves its earlier versions hidden rather than deleting
+    /// them, which is what `jj evolog` walks. jj marks such a commit
+    /// `(hidden)` wherever it prints one.
+    fn is_hidden(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        self.inner
+            .is_hidden(repo.inner.as_ref())
+            .map_err(crate::errors::map_py_err)
+    }
+
+    /// This commit's position among the commits sharing its change id,
+    /// or `None` if the change does not resolve.
+    ///
+    /// jj writes it after the change id as `/1`, `/2` and so on, and
+    /// that spelling is a revset: it is how a reader addresses an
+    /// earlier version of a change. Position 0 is the visible one, and
+    /// jj prints no offset for it.
+    fn change_offset(&self, repo: &PyReadonlyRepo) -> PyResult<Option<usize>> {
+        use jj_lib::repo::Repo as _;
+
+        let targets = repo
+            .inner
+            .resolve_change_id(self.inner.change_id())
+            .map_err(crate::errors::map_py_err)?;
+        Ok(targets.and_then(|targets| targets.find_offset(self.inner.id())))
+    }
+
     /// Whether this commit has no changes compared to its parent(s). Returns
     /// `false` if there are no parent commits to compare against (the root).
     fn is_empty(&self, repo: &PyReadonlyRepo) -> bool {
