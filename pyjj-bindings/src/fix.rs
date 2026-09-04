@@ -200,5 +200,15 @@ fn resolve_root_commits(
     for id in &commits {
         crate::rewrite::reject_root(mut_repo, id)?;
     }
+    // jj checks the source roots, not their descendants: fixing a
+    // mutable commit rewrites its descendants too, and those are mutable
+    // by definition once the root is.
+    crate::rewrite::check_rewritable(
+        mut_repo,
+        tx.workspace_root(),
+        tx.workspace_name(),
+        settings,
+        commits.clone(),
+    )?;
     Ok(commits)
 }
