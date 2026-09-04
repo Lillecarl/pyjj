@@ -81,6 +81,9 @@ let
           pyjj-cli
           ps.pytest
           ps.anyio
+          # `cli_surface` reads `jj util markdown-help` with a real
+          # CommonMark parser rather than by matching lines.
+          ps.markdown-it-py
         ]
       );
       # Eval-time impure passthrough so `nix build --impure` can also bake args.
