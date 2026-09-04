@@ -905,6 +905,23 @@ Current state:
   `move_commits`, which they already hand the children to. The children
   are rebased, not re-parented: their trees have to be re-merged against
   the parents they now have.
+- **Colocation is the default**: `jj git init` puts the git repo at the
+  workspace root, so git tools see it too; `git.colocate = false` or
+  `--no-colocate` hides it inside `.jj`. pyjj-cli follows that default.
+  It matters beyond tidiness: jj only exports refs and resets HEAD for a
+  colocated repo, so getting this wrong silently turns both off.
+- **Git refs on every transaction**: for a colocated repo jj resets
+  `HEAD` to `@`'s first parent and then exports bookmarks and tags, once
+  per transaction it finishes -- `working_copy_shared_with_git` in
+  `cli/src/cli_util.rs`. pyjj-cli does the same from `_export_git_refs`
+  in `commands/common.py`, through `Transaction.git_reset_head()` and
+  `Transaction.git_export_refs()`. Skipping it leaves `<name>@git` on
+  the commit a bookmark came from, and `HEAD` wherever `git init` left
+  it.
+  The parity harness reads remote-tracking refs for this reason. It did
+  not until 2026-09-04, and in that time pyjj-cli exported nothing and
+  created non-colocated repos, with a green suite throughout. A
+  dimension nothing reads is a dimension nothing is tested on.
 - **Reverting one operation**: `Transaction.revert_operation(op, what=None)`
   is `jj op revert`, and it is not `restore_operation` with an older
   target. Restoring makes the view *be* a past view and drops everything
