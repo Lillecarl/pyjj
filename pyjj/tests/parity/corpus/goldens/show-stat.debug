@@ -1,0 +1,10 @@
+<<show commit::Commit ID: >>[38;5;4m<<show commit commit_id::42ad4b070b0dbe6926808dd77fcc89f3731cf597>>[39m<<show commit::>>
+<<show commit::Change ID: >>[38;5;5m<<show commit change_id::movruppxykmymsouzwvrxkmwtkkxuxuo>>[39m<<show commit::>>
+<<show commit::Bookmarks: >>[38;5;5m<<show commit local_bookmarks name::main>>[39m<<show commit:: >>[38;5;5m<<show commit remote_bookmarks name::main>><<show commit remote_bookmarks::@>><<show commit remote_bookmarks remote::git>>[39m<<show commit::>>
+<<show commit::Author   : >>[38;5;3m<<show commit author name::Alice>>[39m<<show commit:: <>>[38;5;3m<<show commit author email local::alice>><<show commit author email::@>><<show commit author email domain::example.com>>[39m<<show commit::> (>>[38;5;6m<<show commit author timestamp local format::2001-02-03 09:35:06>>[39m<<show commit::)>>
+<<show commit::Committer: >>[38;5;3m<<show commit committer name::Alice>>[39m<<show commit:: <>>[38;5;3m<<show commit committer email local::alice>><<show commit committer email::@>><<show commit committer email domain::example.com>>[39m<<show commit::> (>>[38;5;6m<<show commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<show commit::)>>
+<<show commit::>>
+<<show commit description trim_end::    one>><<show commit::>>
+<<show commit::>>
+<<diff stat::one.txt | 1 >>[38;5;2m<<diff stat added::+>>[38;5;1m<<diff stat removed::>>[39m
+<<diff stat stat-summary::1 file changed, 1 insertion(+), 0 deletions(-)>>

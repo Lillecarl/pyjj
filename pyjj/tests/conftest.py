@@ -69,6 +69,10 @@ _COVERAGE_COMPLETE = pytest.StashKey[bool]()
 
 def pytest_addoption(parser):
     parser.addoption(
+        "--capture-corpus", action="store_true", default=False,
+        help="Re-record the jj output goldens under parity/corpus/goldens",
+    )
+    parser.addoption(
         "--write-coverage-baseline",
         action="store_true",
         default=False,

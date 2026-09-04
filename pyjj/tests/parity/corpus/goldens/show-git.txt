@@ -1,0 +1,15 @@
+Commit ID: 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+Change ID: movruppxykmymsouzwvrxkmwtkkxuxuo
+Bookmarks: main main@git
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    one
+
+diff --git a/one.txt b/one.txt
+new file mode 100644
+index 0000000000..5626abf0f7
+--- /dev/null
++++ b/one.txt
+@@ -0,0 +1,1 @@
++one

@@ -1,0 +1,6 @@
+added.txt     | 1 +
+edited.txt    | 4 ++--
+mode.txt      | 0
+nonewline.txt | 2 +-
+removed.txt   | 1 -
+5 files changed, 4 insertions(+), 4 deletions(-)

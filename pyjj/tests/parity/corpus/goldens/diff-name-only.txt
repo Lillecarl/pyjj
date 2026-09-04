@@ -1,0 +1,5 @@
+added.txt
+edited.txt
+mode.txt
+nonewline.txt
+removed.txt

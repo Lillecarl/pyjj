@@ -1,0 +1,41 @@
+[1m<<diff git file_header::diff --git a/added.txt b/added.txt>>[0m
+[1m<<diff git file_header::new file mode 100644>>[0m
+[1m<<diff git file_header::index 0000000000..d5a09df94c>>[0m
+[1m<<diff git file_header::--- /dev/null>>[0m
+[1m<<diff git file_header::+++ b/added.txt>>[0m
+[38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@>>[39m
+[38;5;2m<<diff git added::+>>[4m<<diff git added token::brand new>>[24m[39m
+[1m<<diff git file_header::diff --git a/edited.txt b/edited.txt>>[0m
+[1m<<diff git file_header::index b00a0f1b67..91c09ea733 100644>>[0m
+[1m<<diff git file_header::--- a/edited.txt>>[0m
+[1m<<diff git file_header::+++ b/edited.txt>>[0m
+[38;5;6m<<diff git hunk_header::@@ -1,8 +1,8 @@>>[39m
+<<diff git context:: one>>
+[38;5;1m<<diff git removed::->>[4m<<diff git removed token::two>>[24m<<diff git removed::>>[39m
+[38;5;2m<<diff git added::+>>[4m<<diff git added token::TWO>>[24m<<diff git added::>>[39m
+<<diff git context:: three>>
+<<diff git context:: four>>
+<<diff git context:: five>>
+<<diff git context:: six>>
+<<diff git context:: seven>>
+[38;5;1m<<diff git removed::->>[4m<<diff git removed token::eight>>[24m<<diff git removed::>>[39m
+[38;5;2m<<diff git added::+>>[4m<<diff git added token::EIGHT>>[24m<<diff git added::>>[39m
+[1m<<diff git file_header::diff --git a/mode.txt b/mode.txt>>[0m
+[1m<<diff git file_header::old mode 100644>>[0m
+[1m<<diff git file_header::new mode 100755>>[0m
+[1m<<diff git file_header::diff --git a/nonewline.txt b/nonewline.txt>>[0m
+[1m<<diff git file_header::index 69db55d99f..e89a25581d 100644>>[0m
+[1m<<diff git file_header::--- a/nonewline.txt>>[0m
+[1m<<diff git file_header::+++ b/nonewline.txt>>[0m
+[38;5;6m<<diff git hunk_header::@@ -1,1 +1,1 @@>>[39m
+[38;5;1m<<diff git removed::-no trailing newline>>[39m<<diff git::>>
+<<diff git::\ No newline at end of file>>
+[38;5;2m<<diff git added::+no trailing newline>>[4m<<diff git added token::, now longer>>[24m[39m<<diff git::>>
+<<diff git::\ No newline at end of file>>
+[1m<<diff git file_header::diff --git a/removed.txt b/removed.txt>>[0m
+[1m<<diff git file_header::deleted file mode 100644>>[0m
+[1m<<diff git file_header::index 286c5f5776..0000000000>>[0m
+[1m<<diff git file_header::--- a/removed.txt>>[0m
+[1m<<diff git file_header::+++ /dev/null>>[0m
+[38;5;6m<<diff git hunk_header::@@ -1,1 +0,0 @@>>[39m
+[38;5;1m<<diff git removed::->>[4m<<diff git removed token::gone>>[24m[39m

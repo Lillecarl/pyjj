@@ -1,0 +1,6 @@
+The working copy has no changes.
+Working copy  (@) : lzpvzwso ecada373 (conflict) (empty) merge
+Parent commit (@-): movruppx 7c7289b3 one
+Parent commit (@-): yqymtrmq 5394e145 two
+Warning: There are unresolved conflicts at these paths:
+f.txt    2-sided conflict

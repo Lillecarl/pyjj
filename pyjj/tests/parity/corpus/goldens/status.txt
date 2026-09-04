@@ -1,0 +1,4 @@
+Working copy changes:
+A two.txt
+Working copy  (@) : yqymtrmq f966b4d0 two
+Parent commit (@-): movruppx 42ad4b07 main | one

@@ -53,13 +53,11 @@
     "--include-remotes"
   ],
   "bookmark list": [
-    "--all-remotes",
     "--conflicted",
     "--remote",
     "--revision",
     "--sort",
     "--tracked",
-    "-a",
     "-c",
     "-r",
     "-t"
@@ -313,9 +311,6 @@
     "--fetch",
     "--push"
   ],
-  "git root": [
-    "(command)"
-  ],
   "help": [
     "(command)"
   ],
@@ -539,18 +534,14 @@
   "show": [
     "--color-words",
     "--context",
-    "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
     "--reversed",
-    "--stat",
-    "--summary",
     "--tool",
     "--types",
     "-b",
     "-r",
-    "-s",
     "-w"
   ],
   "sign": [

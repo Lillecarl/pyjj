@@ -1,0 +1,14 @@
+[38;5;3m<<diff color_words header::Added regular file added.txt:>>[39m
+<<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::brand new>>[24m[39m
+[38;5;3m<<diff color_words header::Modified regular file edited.txt:>>[39m
+[2m[38;5;1m<<diff color_words context removed line_number::   1>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   1>>[0m<<diff color_words context::: one>>
+[38;5;1m<<diff color_words removed line_number::   2>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   2>>[39m<<diff color_words::: >>[4m[38;5;1m<<diff color_words removed token::two>>[38;5;2m<<diff color_words added token::TWO>>[24m[39m<<diff color_words::>>
+[2m[38;5;1m<<diff color_words context removed line_number::   3>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   3>>[0m<<diff color_words context::: three>>
+<<diff color_words::    ...>>
+[2m[38;5;1m<<diff color_words context removed line_number::   7>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   7>>[0m<<diff color_words context::: seven>>
+[38;5;1m<<diff color_words removed line_number::   8>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   8>>[39m<<diff color_words::: >>[4m[38;5;1m<<diff color_words removed token::eight>>[38;5;2m<<diff color_words added token::EIGHT>>[24m[39m<<diff color_words::>>
+[38;5;3m<<diff color_words header::Non-executable file became executable at mode.txt:>>[39m
+[38;5;3m<<diff color_words header::Modified regular file nonewline.txt:>>[39m
+[38;5;1m<<diff color_words removed line_number::   1>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: no trailing newline>>[4m[38;5;2m<<diff color_words added token::, now longer>>[24m[39m<<diff color_words::>>
+[38;5;3m<<diff color_words header::Removed regular file removed.txt:>>[39m
+[38;5;1m<<diff color_words removed line_number::   1>>[39m<<diff color_words::     : >>[4m[38;5;1m<<diff color_words removed token::gone>>[24m[39m

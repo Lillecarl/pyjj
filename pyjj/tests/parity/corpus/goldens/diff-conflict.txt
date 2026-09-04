@@ -1,0 +1,11 @@
+Created conflict in f.txt:
+   1     : ONE
+        1: <<<<<<< conflict 1 of 1
+        2: %%%%%%% diff from: supuptlt f4051b5f "base"
+        3: \\\\\\\        to: movruppx 7c7289b3 "one"
+        4: -line1
+        5: +ONE
+        6: +++++++ yqymtrmq 5394e145 "two"
+        7: TWO
+        8: >>>>>>> conflict 1 of 1 ends
+   2    9: line2

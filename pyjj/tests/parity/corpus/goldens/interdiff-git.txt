@@ -1,0 +1,13 @@
+diff --git a/JJ-COMMIT-DESCRIPTION b/JJ-COMMIT-DESCRIPTION
+--- JJ-COMMIT-DESCRIPTION
++++ JJ-COMMIT-DESCRIPTION
+@@ -1,1 +1,1 @@
+-one
++two
+diff --git a/two.txt b/two.txt
+new file mode 100644
+index 0000000000..f719efd430
+--- /dev/null
++++ b/two.txt
+@@ -0,0 +1,1 @@
++two

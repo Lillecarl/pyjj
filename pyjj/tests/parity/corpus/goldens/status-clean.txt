@@ -1,0 +1,8 @@
+Working copy changes:
+A added.txt
+M edited.txt
+M mode.txt
+M nonewline.txt
+D removed.txt
+Working copy  (@) : movruppx fdecc72b every shape
+Parent commit (@-): supuptlt 6b204ae1 base

@@ -183,6 +183,65 @@ One limitation of the source: jj's Options brackets list only long
 aliases while its Arguments brackets list short ones, so `jj rebase -d`
 does not appear. The list is a lower bound on jj's surface.
 
+### The output corpus: working through the read-only surface
+
+Roughly half the coverage ledger is read-only commands, and state
+comparison proves nothing about any of them. `pyjj/tests/parity/corpus/`
+holds a recorded corpus of what real jj prints, and `test_corpus.py`
+holds pyjj-cli to it. This is the queue to work through; the loop is:
+
+1. **Add entries to `corpus/catalogue.py`** for the invocations you are
+   about to work on. Each entry declares a bar (below), the fixture it
+   needs, and the ledger items it claims.
+2. **Capture**: `nix run --file . tests -- -q -k test_capture_the_corpus
+   --capture-corpus`. The goldens are committed; read the diff.
+3. **Read the golden.** `<id>.txt` is what jj prints. `<id>.debug` is the
+   same with jj's semantic labels, which is the specification for
+   colouring pyjj-cli later.
+4. **Implement**, then flip the entry from `todo` to `bytes`. A `todo`
+   entry that starts matching fails the suite until you do -- the same
+   strictness as the xfails.
+
+**The bars.** `bytes` is the default: normalized output must match.
+`facts` is for a deliberate divergence, and needs a reason; the `log`
+family is the only one so far. `todo` means not implemented, and the
+golden is the specification to build against. `skip` needs a reason
+about the *output* -- it depends on a terminal, a server or the wall
+clock, or it is each tool's own identity (`version`, `help`). "Not
+implemented yet" is never a `skip` reason; that is what `todo` is for.
+
+**Normalization** is declared per entry, and the goldens store
+normalized text. `root` replaces the workspace path, `op_ids` the
+operation ids, `ago` the relative times, `host` the machine's user and
+hostname. Without these, output that is correct on both sides still
+differs -- and with them, commands like `op log` become comparable
+instead of needing a per-side test.
+
+**Three things the corpus enforces that a live comparison cannot.**
+jj is checked against its own golden too, so a failure says whether
+pyjj-cli moved or whether jj, a fixture or the environment did. A golden
+may not be empty unless its entry says so -- `tag list` kept a wrong
+format for weeks behind a scenario where both sides printed nothing.
+And every read-only command must have an entry or a reasoned refusal, so
+a flag cannot be left out by not thinking about it.
+
+**Two facts about jj's output that cost time to find.**
+
+- **Colour changes the shape, not just the codes.** With colour on,
+  jj's diff puts a word-level change on one row -- `twoTWO` -- because
+  colour is what tells the halves apart. With colour off it splits them
+  into a removed row and an added row. So the plain rendering is
+  captured, never derived by stripping ANSI, and pyjj-cli's current
+  no-colour output is right for no-colour only.
+- **jj's debug format cannot express every output.** It wraps spans as
+  `<<labels::text>>`, and a conflicted file contains `>>>>>>>`, which
+  closes a marker early. The capture asserts the round-trip and, where
+  it fails, records the `.ansi` rendering instead and lists the entry
+  under `unlabelled` in `manifest.json`.
+
+`manifest.json` records which jj produced the goldens, so a recapture
+under a different jj is a diff to read rather than a mystery.
+
 ### Templating
 
 jj drives each listing from a named entry under `[templates]`, written in

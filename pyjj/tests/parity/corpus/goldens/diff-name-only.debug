@@ -1,0 +1,5 @@
+<<diff name_only::added.txt>>
+<<diff name_only::edited.txt>>
+<<diff name_only::mode.txt>>
+<<diff name_only::nonewline.txt>>
+<<diff name_only::removed.txt>>
