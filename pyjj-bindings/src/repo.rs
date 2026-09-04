@@ -405,6 +405,17 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// The name of the backend this repo's commits are stored in, as
+    /// `jj util backend name` prints it.
+    ///
+    /// It is the string written to `.jj/repo/store/type` when the repo
+    /// was created, so it identifies the storage format, not the remote
+    /// or the working copy.
+    #[getter]
+    fn backend_name(&self) -> String {
+        self.inner.store().backend().name().to_string()
+    }
+
     /// `jj util gc`: collects garbage in the operation store and the
     /// commit store.
     ///
