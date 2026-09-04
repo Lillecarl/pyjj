@@ -239,6 +239,8 @@ impl PyReadonlyRepo {
                 name: symbol.name.as_str().to_string(),
                 remote: symbol.remote.as_str().to_string(),
                 target_ids: remote_ref.target.added_ids().map(Into::into).collect(),
+                removed_ids: remote_ref.target.removed_ids().map(Into::into).collect(),
+                has_conflict: remote_ref.target.has_conflict(),
                 tracked: remote_ref.is_tracked(),
             })
             .collect()

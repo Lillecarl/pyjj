@@ -68,6 +68,13 @@ pub struct PyRemoteBookmark {
     pub remote: String,
     #[pyo3(get)]
     pub target_ids: Vec<PyCommitId>,
+    /// The commits a conflicted remote bookmark moved *away* from,
+    /// against `target_ids` as the side it moved to. Empty unless
+    /// `has_conflict`.
+    #[pyo3(get)]
+    pub removed_ids: Vec<PyCommitId>,
+    #[pyo3(get)]
+    pub has_conflict: bool,
     /// Whether the local bookmark of the same name follows this one.
     #[pyo3(get)]
     pub tracked: bool,
