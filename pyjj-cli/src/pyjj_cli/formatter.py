@@ -279,6 +279,14 @@ class Formatter:
             self._out.write(transition(self._style, {}))
             self._style = {}
 
+    def __enter__(self) -> "Formatter":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        # An error part way through a listing must still leave the
+        # terminal plain, so the reset runs even when the block raises.
+        self.close()
+
 
 def formatter(out, settings=None) -> Formatter:
     """The formatter for this run's stdout.
