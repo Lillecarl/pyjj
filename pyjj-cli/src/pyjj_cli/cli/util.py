@@ -1,6 +1,7 @@
 """`jj util`: infrequently used commands.
 
-Only `gc` is implemented. The rest keep the old stub behaviour, so an
+Only `gc` and `snapshot` are implemented. The rest keep the old stub
+behaviour, so an
 unimplemented subcommand still exits 2 -- and so does an unknown one,
 which argparse rejects on its own.
 """
@@ -8,7 +9,7 @@ import sys
 
 
 def _util_help(args):
-    print("usage: pyjj util {gc}", file=sys.stderr)
+    print("usage: pyjj util {gc,snapshot}", file=sys.stderr)
     return 2
 
 
@@ -43,10 +44,6 @@ def _stub_markdown_help(args):
     return _stub("markdown-help")(args)
 
 
-def _stub_snapshot(args):
-    return _stub("snapshot")(args)
-
-
 def add_parsers(sub) -> None:
     p = sub.add_parser(
         "util",
@@ -60,6 +57,11 @@ def add_parsers(sub) -> None:
                       help="Time threshold; only 'now' is accepted")
     p_gc.set_defaults(_handler="pyjj_cli.commands.util.gc:util_gc")
 
+    p_snapshot = util_sub.add_parser(
+        "snapshot", help="Snapshot the working copy if needed")
+    p_snapshot.set_defaults(
+        _handler="pyjj_cli.commands.util.snapshot:util_snapshot")
+
     for name, handler in (
         ("backend", "_stub_backend"),
         ("completion", "_stub_completion"),
@@ -67,7 +69,6 @@ def add_parsers(sub) -> None:
         ("exec", "_stub_exec"),
         ("install-man-pages", "_stub_install_man_pages"),
         ("markdown-help", "_stub_markdown_help"),
-        ("snapshot", "_stub_snapshot"),
     ):
         p_stub = util_sub.add_parser(name, help=f"jj util {name}")
         p_stub.add_argument("rest", nargs="*", help="Not yet supported")

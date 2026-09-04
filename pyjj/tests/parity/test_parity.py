@@ -1458,6 +1458,20 @@ def test_util_gc_expire_now(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def test_util_snapshot_with_a_dirty_working_copy(pair: RepoPair) -> None:
+    """A changed file makes the snapshot real on both sides."""
+    chain(pair)
+    pair.op(files={"late.txt": b"late\n"}, jj=["util", "snapshot"])
+    pair.assert_parity()
+
+
+def test_util_snapshot_with_a_clean_working_copy(pair: RepoPair) -> None:
+    """Nothing moved, so nothing is written and no operation is made."""
+    chain(pair)
+    pair.op(jj=["util", "snapshot"])
+    pair.assert_parity()
+
+
 def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
     """jj accepts only the literal `now`."""
     chain(pair)
