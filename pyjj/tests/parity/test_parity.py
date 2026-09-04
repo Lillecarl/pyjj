@@ -2580,6 +2580,17 @@ def test_status_reports_a_clean_working_copy(pair: RepoPair) -> None:
     pair.assert_output(["status"])
 
 
+@OUTPUT_UNIMPLEMENTED
+def test_status_reports_conflicts(pair: RepoPair) -> None:
+    """A conflicted working copy makes jj print more than the change
+    list: a `(conflict)` marker in the commit summary, a warning, and
+    the conflicted paths under it. pyjj-cli prints none of that, so the
+    `status` claim above is narrower than the command. This marks the
+    gap rather than leaving it invisible."""
+    conflict_pair(pair)
+    pair.assert_output(["status"])
+
+
 @pytest.mark.covers("status")
 def test_status_names_a_bookmark_on_the_parent(pair: RepoPair) -> None:
     """The commit summary puts bookmarks before the description, with

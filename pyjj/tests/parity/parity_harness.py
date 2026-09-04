@@ -216,6 +216,16 @@ class RepoPair:
         construction. A test then asserts each side against its own
         repository rather than against the other.
         """
+        cli, py = self._both(argv, check=True)
+        return cli.stdout, py.stdout
+
+    def _both(self, argv: list[str], *, check: bool):
+        """Runs one read-only argv on each side and returns both results.
+
+        `--ignore-working-copy` is passed for the reason `_extract_repo`
+        gives: reading must not snapshot, or the act of looking could
+        hide a missing snapshot on the pyjj side.
+        """
         env = self._env(bump=False)
         common = ["--no-pager", "--ignore-working-copy", *argv]
         cli = subprocess.run(
@@ -228,13 +238,14 @@ class RepoPair:
             env=env, capture_output=True, text=True, cwd=str(self.py_repo),
             stdin=subprocess.DEVNULL,
         )
-        for name, proc in (("jj", cli), ("pyjj", py)):
-            if proc.returncode != 0:
-                raise AssertionError(
-                    f"{name} failed ({proc.returncode}) on {argv}\n"
-                    f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-                )
-        return cli.stdout, py.stdout
+        if check:
+            for name, proc in (("jj", cli), ("pyjj", py)):
+                if proc.returncode != 0:
+                    raise AssertionError(
+                        f"{name} failed ({proc.returncode}) on {argv}\n"
+                        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+                    )
+        return cli, py
 
     def assert_output(self, argv: list[str], *, may_fail: bool = False) -> str:
         """Run a READ-ONLY argv on both sides and compare stdout verbatim.
@@ -253,25 +264,7 @@ class RepoPair:
         gives: reading must not snapshot, or the act of looking could
         hide a missing snapshot on the pyjj side.
         """
-        env = self._env(bump=False)
-        common = ["--no-pager", "--ignore-working-copy", *argv]
-        cli = subprocess.run(
-            [self.jj_bin, "-R", str(self.cli_repo), *common],
-            env=env, capture_output=True, text=True, cwd=str(self.cli_repo),
-            stdin=subprocess.DEVNULL,
-        )
-        py = subprocess.run(
-            [sys.executable, str(DRIVER), str(self.py_repo), *common],
-            env=env, capture_output=True, text=True, cwd=str(self.py_repo),
-            stdin=subprocess.DEVNULL,
-        )
-        if not may_fail:
-            for name, proc in (("jj", cli), ("pyjj", py)):
-                if proc.returncode != 0:
-                    raise AssertionError(
-                        f"{name} failed ({proc.returncode}) on {argv}\n"
-                        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-                    )
+        cli, py = self._both(argv, check=not may_fail)
         assert cli.returncode == py.returncode, (
             f"exit codes differ on {argv}: "
             f"jj={cli.returncode} pyjj={py.returncode}\n"
