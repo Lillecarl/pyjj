@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _start_transaction,
     _print_ref,
     _resolve_template,
     CommandError,
@@ -60,7 +61,7 @@ def bookmark(args) -> int:
         try:
             settings, ws, repo = _load(args)
             target = _resolve_one(repo, settings, args.revision)
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             for name in args.names:
                 if repo.get_bookmark(name) is not None:
                     raise CommandError(
@@ -68,7 +69,9 @@ def bookmark(args) -> int:
                         "(use `bookmark set` to move it)"
                     )
                 tx.set_bookmark(name, target.id)
-            _finish(tx, f"point bookmark at {target.id.hex()}", settings, ws, repo)
+            _finish(tx, f"create bookmark {', '.join(args.names)} "
+                        f"pointing to commit {target.id.hex()}",
+                    settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1
@@ -79,9 +82,10 @@ def bookmark(args) -> int:
             target = _resolve_one(repo, settings, args.revision)
             if repo.get_bookmark(args.name) is None:
                 raise CommandError(f"No such bookmark: {args.name}")
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             tx.set_bookmark(args.name, target.id)
-            _finish(tx, f"point bookmark at {target.id.hex()}", settings, ws, repo)
+            _finish(tx, f"point bookmark {args.name} to commit "
+                        f"{target.id.hex()}", settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1
@@ -89,13 +93,18 @@ def bookmark(args) -> int:
     if cmd in ("delete", "forget"):
         try:
             settings, ws, repo = _load(args)
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
+            matched = []
             for name in args.names:
                 if repo.get_bookmark(name) is None:
                     print(f"Warning: No such bookmark: {name}", file=sys.stderr)
                     continue
                 tx.delete_bookmark(name)
-            _finish(tx, f"delete bookmark {args.names[0]}", settings, ws, repo)
+                matched.append(name)
+            # jj names every bookmark it matched, and says which of the
+            # two commands ran -- `delete` and `forget` differ.
+            _finish(tx, f"{cmd} bookmark {', '.join(matched)}",
+                    settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1
@@ -113,7 +122,7 @@ def bookmark(args) -> int:
             # For conflicted bookmarks, rename is ambiguous; require non-conflicted for now.
             if old_bm.has_conflict:
                 raise CommandError(f"Bookmark {args.old} is conflicted, cannot rename")
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             tx.set_bookmark(args.new, old_bm.target_ids[0])
             tx.delete_bookmark(args.old)
             _finish(tx, f"rename bookmark {args.old} to {args.new}", settings, ws, repo)
@@ -144,12 +153,13 @@ def bookmark(args) -> int:
                 if not to_move:
                     print("Error: bookmark move requires bookmark names or --from", file=sys.stderr)
                     return 2
-            tx = repo.start_transaction(settings)
+            tx = _start_transaction(repo, settings)
             for name in to_move:
                 if repo.get_bookmark(name) is None:
                     raise CommandError(f"No such bookmark: {name}")
                 tx.set_bookmark(name, target.id)
-            _finish(tx, f"move bookmarks to {target.id.hex()}", settings, ws, repo)
+            _finish(tx, f"point bookmark {', '.join(to_move)} to commit "
+                        f"{target.id.hex()}", settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1
