@@ -51,6 +51,7 @@ fn max_new_file_size(settings: &PyUserSettings) -> u64 {
 pub fn snapshot(
     workspace: &mut Workspace,
     settings: &PyUserSettings,
+    args: Option<String>,
 ) -> PyResult<(PyReadonlyRepo, Py<PyAny>)> {
     let workspace_name = workspace.workspace_name().to_owned();
     let repo = pollster::block_on(workspace.repo_loader().load_at_head())
@@ -112,7 +113,15 @@ pub fn snapshot(
     // rebased after the last rewrites").
     pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
 
-    let tx = Transaction::new(mut_repo, &settings.0);
+    // The operation log records who did what, where and with which
+    // command line. jj stamps all of it on every transaction, and marks
+    // this one as a pure snapshot so `jj op log` can tell it apart.
+    let mut tx = Transaction::new(mut_repo, &settings.0);
+    tx.set_workspace_name(&workspace_name);
+    tx.set_is_snapshot(true);
+    if let Some(args) = args {
+        tx.set_attribute("args".to_string(), args);
+    }
     let new_repo =
         pollster::block_on(tx.commit("snapshot working copy")).map_err(map_transaction_err)?;
 

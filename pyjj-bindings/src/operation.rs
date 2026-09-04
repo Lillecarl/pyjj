@@ -44,6 +44,30 @@ impl PyOperation {
         PyTimestamp(self.0.metadata().time.end)
     }
 
+    /// The workspace the operation ran in, or `None` for an operation
+    /// that belongs to no workspace (the root, and `add workspace`).
+    #[getter]
+    fn workspace_name(&self) -> Option<String> {
+        self.0
+            .metadata()
+            .workspace_name
+            .as_ref()
+            .map(|name| name.as_symbol().to_string())
+    }
+
+    /// The operation's recorded attributes, sorted by key -- `args` is
+    /// the command line that started it. jj prints one `key: value` line
+    /// per entry under the description.
+    #[getter]
+    fn attributes(&self) -> Vec<(String, String)> {
+        self.0
+            .metadata()
+            .attributes
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    }
+
     #[getter]
     fn parent_ids(&self) -> Vec<String> {
         self.0.parent_ids().iter().map(|id| id.hex()).collect()

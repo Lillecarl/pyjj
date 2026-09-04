@@ -421,14 +421,16 @@ impl PyWorkspace {
     /// Snapshot the on-disk working copy into the working-copy commit's
     /// tree, committing that as a new operation. Returns
     /// `(new_repo, stats_dict)`. See `pyjj_bindings.checkout` module docs.
+    #[pyo3(signature = (settings, args=None))]
     fn snapshot(
         &self,
         py: Python<'_>,
         settings: &PyUserSettings,
+        args: Option<String>,
     ) -> PyResult<(PyReadonlyRepo, Py<PyAny>)> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            crate::checkout::snapshot(&mut inner, settings)
+            crate::checkout::snapshot(&mut inner, settings, args)
         })
     }
 

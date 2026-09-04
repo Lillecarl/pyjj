@@ -60,12 +60,20 @@ impl PyReadonlyRepo {
 #[pymethods]
 impl PyReadonlyRepo {
     /// Start a new transaction to make changes to the repo.
-    fn start_transaction(&self, settings: &PyUserSettings) -> PyTransaction {
+    #[pyo3(signature = (settings, args=None))]
+    fn start_transaction(&self, settings: &PyUserSettings, args: Option<String>) -> PyTransaction {
         let base = self.inner.clone();
         let index = base.readonly_index();
         let view = base.view();
         let mut_repo = MutableRepo::new(base.clone(), index, view);
-        let tx = Transaction::new(mut_repo, &settings.0);
+        let mut tx = Transaction::new(mut_repo, &settings.0);
+        // jj stamps the workspace on every transaction it starts, and
+        // the command line that started it. Without those the operation
+        // log records what happened but not where or how.
+        tx.set_workspace_name(&self.workspace_name);
+        if let Some(args) = args {
+            tx.set_attribute("args".to_string(), args);
+        }
         PyTransaction {
             inner: RefCell::new(Some(tx)),
             base_repo: base,
@@ -1366,6 +1374,17 @@ impl PyTransaction {
     }
 
     /// Commit this transaction and publish the operation.
+    /// Record one `key: value` on the operation this transaction will
+    /// become. jj uses `args` for the command line that started it.
+    fn set_attribute(&self, key: String, value: String) -> PyResult<()> {
+        let mut opt = self.inner.borrow_mut();
+        let tx = opt.as_mut().ok_or_else(|| {
+            crate::errors::TransactionError::new_err("Transaction already committed")
+        })?;
+        tx.set_attribute(key, value);
+        Ok(())
+    }
+
     fn commit(&self, description: String) -> PyResult<PyReadonlyRepo> {
         let tx = self.inner.borrow_mut().take().ok_or_else(|| {
             crate::errors::TransactionError::new_err("Transaction already committed")
