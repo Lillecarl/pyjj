@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -58,6 +59,9 @@ def new(args) -> int:
             children = []
 
         tx = repo.start_transaction(settings)
+        # `-A`/`-B` rebase whatever followed the insertion point, so those
+        # commits have to be rewritable.
+        _check_rewritable(tx, settings, children)
         builder = tx.new_commit(settings, parents)
         if args.message:
             builder = builder.set_description(complete_newline(args.message))

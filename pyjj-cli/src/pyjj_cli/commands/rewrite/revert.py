@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -118,6 +119,8 @@ def revert(args) -> int:
                 return 1
 
         tx = repo.start_transaction(settings)
+        # `-A`/`-B` rebase whatever followed the insertion point.
+        _check_rewritable(tx, settings, new_child_ids)
         # Chain reverts in the determined order (which should be reverse topological,
         # i.e. children first). The first revert is onto new_parent_ids, subsequent
         # ones are onto the previous revert's commit.

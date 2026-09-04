@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _check_rewritable,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -29,6 +30,9 @@ def duplicate(args) -> int:
         targets = _resolve_all(repo, settings, revsets)
         parents, children = _placement(repo, settings, args)
         tx = repo.start_transaction(settings)
+        # The duplicates themselves are new commits, but `-A`/`-B` rebase
+        # whatever followed the insertion point.
+        _check_rewritable(tx, settings, children)
         copies = tx.duplicate(targets)
         if parents or children:
             # `tx.duplicate` always lands the copies beside their

@@ -112,7 +112,9 @@ def rebase(args) -> int:
         # `-r` moves the targets themselves; `-s` and `-b` move roots and
         # everything under them. Only one of the two lists is ever set,
         # and jj checks whichever one it is.
-        _check_rewritable(tx, settings, target_commit_ids + target_root_ids)
+        # `-A`/`-B` also rebase whatever followed the insertion point.
+        _check_rewritable(
+            tx, settings, target_commit_ids + target_root_ids + new_child_ids)
         tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
         _finish(tx, "rebase commit", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
