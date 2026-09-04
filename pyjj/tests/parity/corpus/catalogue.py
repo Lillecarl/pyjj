@@ -67,6 +67,12 @@ CATALOGUE: tuple[Entry, ...] = (
       reason="same divergence as `log`", claims=("log", "--no-graph")),
     E("log-reversed", ("log", "--reversed"), bar="facts",
       reason="same divergence as `log`", claims=("log", "--reversed")),
+    # A builtin template name means the same thing on both sides, so
+    # this is where `log`'s rows get compared at all. The three entries
+    # above are `facts`, and a `facts` entry hides everything about its
+    # output -- including the colours.
+    E("log-compact", ("log", "-T", "builtin_log_compact"),
+      claims=("log", "--template", "-T"), colour="bytes"),
 
     # -- evolog ---------------------------------------------------------
     E("evolog", ("evolog",), fixture="evolution", bar="facts",
