@@ -212,7 +212,6 @@
     "(command)"
   ],
   "file annotate": [
-    "(command)",
     "--revision",
     "--template",
     "-T",

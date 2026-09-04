@@ -2610,6 +2610,14 @@ def test_file_list_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["file", "list"])
 
 
+@pytest.mark.covers("file annotate")
+def test_file_annotate_output_matches(pair: RepoPair) -> None:
+    """Each line names the change that last touched it, not the commit:
+    a change id is what jj resolves back to a revision."""
+    chain(pair)
+    pair.assert_output(["file", "annotate", "one.txt"])
+
+
 @pytest.mark.covers("file show")
 def test_file_show_output_matches(pair: RepoPair) -> None:
     chain(pair)
