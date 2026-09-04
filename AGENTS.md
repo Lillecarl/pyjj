@@ -263,7 +263,39 @@ divergence covered the drawing. The way out is a template string both
 engines resolve -- a builtin name such as `builtin_evolog_compact` --
 which makes the rows agree and leaves the one thing you want to test as
 the only thing that can differ. Add that entry beside the `facts` one
-rather than in place of it.
+rather than in place of it. `log` gets its only compared row the same
+way, through `log -T builtin_log_compact`; its three default entries
+are `facts` and can never carry a colour bar.
+
+**Colouring a command.** `pyjj_cli/formatter.py` is jj's formatter,
+ported: the palette from `colors.toml` in file order, the subsequence
+matching from `formatter.rs`, and an emitter that writes only what
+changed. A command builds `(text, labels)` spans and hands them to it
+rather than writing escape sequences.
+
+- **`render_block(lines, base, coloured)`** renders one row into a
+  string. Graph commands need that: renderdag takes a finished row and
+  never measures it, so escapes inside a row stay aligned -- which is
+  also why the node glyph is its own tiny render, under `node`, while
+  renderdag's gutter stays plain.
+- **A line ends in two steps.** jj steps back to the row's own labels,
+  then writes the newline under none at all, so a line ending in a
+  coloured span costs two escape sequences. `Formatter.sync` is the
+  first step. Skip it and every bold row is one sequence short.
+- **A row is not always one label stack.** An evolution log writes its
+  commit under `working_copy mutable` and its operation line under
+  neither. `Line(spans, base)` carries the difference.
+- **A builtin template name must bypass Jinja.** A Jinja render carries
+  no labels, and a label is what decides a colour, so a builtin whose
+  entry is compared -- `builtin_op_log_oneline`, `builtin_evolog_compact`,
+  `builtin_log_compact` -- builds its spans directly. A user's own
+  template keeps the Jinja path and prints plain.
+- **The stack depends on how the template reached the commit.** jj
+  labels a keyword access with the keyword's name. `evolog` reaches the
+  commit through the entry's `commit` field, so every field carries
+  `commit`; `log` labels its whole template `["log", "commit"]` and the
+  fields carry no `commit` of their own. Same fields, different stacks,
+  and `_commit_header_spans` takes `kw` for exactly that.
 
 **Two facts about jj's output that cost time to find.**
 
