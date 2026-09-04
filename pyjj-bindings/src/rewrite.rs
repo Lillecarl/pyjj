@@ -512,6 +512,74 @@ pub fn abandon(mut_repo: &mut MutableRepo, commit: &PyCommit) -> PyResult<()> {
     Ok(())
 }
 
+/// `jj`'s `check_rewritable`: refuse to rewrite a commit the user has
+/// declared immutable.
+///
+/// The set is whatever `immutable()` resolves to, which is jj's own
+/// `::(immutable_heads() | root())` unless the user redefined
+/// `immutable_heads()`. In a repository with no remote that collapses to
+/// the root commit alone; with a pushed trunk or a tag it covers real
+/// shared history, which is the point -- the check exists to stop a
+/// rewrite that would strand everybody else.
+///
+/// Raises on the first immutable commit found, with jj's own wording.
+/// The hints jj adds are left out: they are CLI presentation, and pyjj
+/// raises an exception rather than rendering an error.
+///
+/// This is policy, not safety. `reject_root` below is the safety half,
+/// and stays even where this check runs, because a caller reaching a
+/// jj_lib assertion crashes the interpreter.
+pub fn check_rewritable(
+    mut_repo: &MutableRepo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &crate::settings::PyUserSettings,
+    commits: Vec<PyCommitId>,
+) -> PyResult<()> {
+    use futures::TryStreamExt as _;
+
+    let ids: Vec<CommitId> = commits.into_iter().map(|id| id.0).collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    // `immutable()` comes from jj's bundled `revsets.toml`, so it only
+    // exists when `settings` loaded config. A caller who opted out asked
+    // for a check whose definition they turned off; say that, rather
+    // than letting a bare "function doesn't exist" parse error out.
+    let immutable = crate::revset::resolve_revset(
+        mut_repo,
+        workspace_root,
+        workspace_name,
+        settings,
+        "immutable()",
+    )
+    .map_err(|err| {
+        JjError::new_err(format!(
+            "cannot check for immutable commits: the `immutable()` revset alias is \
+             unavailable, which happens when UserSettings was built with \
+             load_config=False ({err})"
+        ))
+    })?;
+    let to_rewrite = jj_lib::revset::RevsetExpression::commits(ids);
+    let evaluated = immutable
+        .intersection(&to_rewrite)
+        .evaluate(mut_repo)
+        .map_err(crate::errors::map_py_err)?;
+    let found = pollster::block_on(evaluated.stream().try_next())
+        .map_err(crate::errors::map_py_err)?;
+    let Some(id) = found else {
+        return Ok(());
+    };
+    let short = &id.hex()[..12];
+    Err(JjError::new_err(
+        if &id == mut_repo.store().root_commit_id() {
+            format!("The root commit {short} is immutable")
+        } else {
+            format!("Commit {short} is immutable")
+        },
+    ))
+}
+
 /// Refuse to rewrite the root commit.
 ///
 /// jj_lib asserts rather than returning an error here, and an assertion

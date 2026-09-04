@@ -60,10 +60,11 @@ def test_immutable_and_mutable_via_bundled_revset_aliases(tmp_path):
     rewrite guard (`check_rewritable` in cli/src/cli_util.rs) is itself just
     policy built on the `immutable()`/`mutable()` revset aliases from jj's
     bundled `revsets.toml` (`'immutable()' = '::(immutable_heads() | root())'`).
-    Those aliases are already usable today through the existing `revset()`
-    binding, as long as `UserSettings(load_config=True)` (the default) is
-    used, so no new Rust binding is needed for callers who want the same
-    rewrite-safety semantics as the real `jj` CLI.
+    Those aliases are usable directly through the `revset()` binding, as
+    long as `UserSettings(load_config=True)` (the default) is used. That
+    is what `Transaction.check_rewritable()` is built on -- see
+    `test_check_rewritable.py`; it exists to intersect lazily and to name
+    the offending commit, not because the aliases were out of reach.
     """
     settings = pyjj.UserSettings()  # load_config=True (default) loads revsets.toml
     workspace_root = tmp_path / "repo"

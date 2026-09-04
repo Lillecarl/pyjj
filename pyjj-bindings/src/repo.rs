@@ -1122,6 +1122,28 @@ impl PyTransaction {
         })
     }
 
+    /// `jj`'s `check_rewritable`: raise if any of `commits` is
+    /// immutable, i.e. inside whatever `immutable()` resolves to. In a
+    /// repository with no remote that is the root commit alone; with a
+    /// pushed trunk or a tag it covers real shared history. Call it
+    /// before rewriting, the way `jj` does. See
+    /// `pyjj_bindings.rewrite::check_rewritable`.
+    fn check_rewritable(
+        &self,
+        settings: &PyUserSettings,
+        commits: Vec<PyCommitId>,
+    ) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::check_rewritable(
+                mut_repo,
+                self.workspace_root(),
+                self.workspace_name(),
+                settings,
+                commits,
+            )
+        })
+    }
+
     /// `jj abandon <rev>` equivalent: removes `commit` from history. Any
     /// descendants (and a working-copy commit pointing at it) get rebased
     /// onto its parents -- but only once `rebase_descendants()` is called
