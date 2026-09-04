@@ -199,9 +199,13 @@ holds pyjj-cli to it. This is the queue to work through; the loop is:
    same with jj's semantic labels, which is the specification for
    colouring pyjj-cli later. It carries the escape sequences as well as
    the labels, so the mapping from a label stack to a style is there to
-   be read off rather than guessed. Across the whole corpus each stack
-   resolves to exactly one style, which makes the goldens a complete
-   specification rather than a sample.
+   be read off rather than guessed. Across the current catalogue each
+   stack resolves to exactly one style, so the goldens check a colour
+   implementation; they do not specify one, since a new entry brings new
+   stacks. The specification is jj's own: the palette in
+   `cli/src/config/colors.toml` and the matching in
+   `cli/src/formatter.rs`, where a rule's labels must appear in order in
+   the stack and every matching rule merges, lowest priority first.
 
    Read the *stack*, not the last label. Styles compose: a change id's
    prefix is `1;38;5;5`, and the same field under the working copy is
