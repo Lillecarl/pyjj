@@ -122,6 +122,17 @@ def _normalize_ago(text: str, context: dict) -> str:
     return _AGO.sub("«ago»", text)
 
 
+def _normalize_prog(text: str, context: dict) -> str:
+    """Replaces the program name in a recorded command line.
+
+    Both tools record the command that made each operation, and each
+    records its own name -- jj writes `jj`, pyjj-cli writes `pyjj`.
+    Neither is wrong, so the comparison drops the name and keeps the
+    arguments, which is the part that has to agree.
+    """
+    return re.sub(r"(args: )(?:jj|pyjj)\b", r"\1«prog»", text)
+
+
 def _normalize_host(text: str, context: dict) -> str:
     """Replaces the user and host jj stamps on an operation.
 
@@ -139,6 +150,7 @@ NORMALIZERS = {
     "op_ids": _normalize_op_ids,
     "ago": _normalize_ago,
     "host": _normalize_host,
+    "prog": _normalize_prog,
 }
 
 

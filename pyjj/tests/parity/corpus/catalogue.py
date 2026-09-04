@@ -14,6 +14,11 @@ from . import Entry
 
 E = Entry
 
+# The operation log carries three things no two repositories share: an
+# operation id minted per repository, a path, and times whose whole job
+# is to move. Every `op log` entry normalizes the same set.
+_OP = dict(normalize=("op_ids", "ago", "root", "host", "prog"))
+
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",)),
@@ -102,9 +107,13 @@ CATALOGUE: tuple[Entry, ...] = (
     E("git-root", ("git", "root"), normalize=("root",), claims=("git root",)),
 
     # -- operations -----------------------------------------------------
-    E("op-log", ("op", "log"), bar="todo",
-      reason="pyjj-cli prints its own format for the operation log",
-      normalize=("op_ids", "ago", "root", "host"), claims=("operation log",)),
+    E("op-log", ("op", "log"), claims=("operation log",), **_OP),
+    E("op-log-no-graph", ("op", "log", "--no-graph"),
+      claims=("operation log", "--no-graph", "-G"), **_OP),
+    E("op-log-reversed", ("op", "log", "--reversed"),
+      claims=("operation log", "--reversed"), **_OP),
+    E("op-log-limit", ("op", "log", "-n", "3"),
+      claims=("operation log", "--limit", "-n"), **_OP),
 
     # -- each tool's own identity ---------------------------------------
     E("version", ("version",), bar="skip",

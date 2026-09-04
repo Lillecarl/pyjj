@@ -908,6 +908,53 @@ def _local_tz_offset_minutes() -> int:
     return int(offset.total_seconds() // 60) if offset else 0
 
 
+# The units jj's relative times step through, largest first. The month
+# and year sizes are the average ones the `timeago` crate uses, so a
+# span of "1 month" means the same number of days it does there.
+_TIME_UNITS = (
+    ("year", 31_556_952_000),
+    ("month", 2_629_746_000),
+    ("week", 604_800_000),
+    ("day", 86_400_000),
+    ("hour", 3_600_000),
+    ("minute", 60_000),
+    ("second", 1_000),
+    ("millisecond", 1),
+)
+
+
+def _relative(millis: int, units, suffix: str, floor: str) -> str:
+    """The largest single unit that fits, or `floor` if none does."""
+    for name, size in units:
+        if millis >= size:
+            count = millis // size
+            return f"{count} {name}{'' if count == 1 else 's'}{suffix}"
+    return floor
+
+
+def _ago(millis_since_epoch: int) -> str:
+    """How long ago a timestamp was, the way `jj`'s `.ago()` says it.
+
+    jj stops at whole seconds here, so anything more recent reads as
+    "now" rather than as a count of milliseconds.
+    """
+    import time
+
+    return _relative(int(time.time() * 1000) - millis_since_epoch,
+                     _TIME_UNITS[:-1], " ago", "now")
+
+
+def _duration(start_millis: int, end_millis: int) -> str:
+    """How long an operation lasted, the way jj's `.duration()` says it.
+
+    jj measures down to microseconds here, so a span this short reports
+    itself as such rather than as zero. Timestamps carry milliseconds,
+    so any operation that starts and ends within one takes this floor.
+    """
+    return _relative(end_millis - start_millis, _TIME_UNITS, "",
+                     "less than a microsecond")
+
+
 def _format_timestamp(timestamp, century: bool = True) -> str:
     """jj's `format_timestamp`: the local time, to the second.
 

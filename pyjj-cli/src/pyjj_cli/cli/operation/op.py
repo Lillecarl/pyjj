@@ -1,3 +1,6 @@
+from ..flags import add_no_graph_flag, add_template_flag
+
+
 def register(sub) -> None:
     # `op` — short form
     p_op = sub.add_parser("op", help="Operation log commands")
@@ -7,6 +10,14 @@ def register(sub) -> None:
     p_opr.add_argument("operation_pos", metavar="OPERATION", help="The operation to restore to")
     p_opr.set_defaults(_handler="pyjj_cli.commands.operation.op_restore:op_restore")
     p_op_log2 = op_sub.add_parser("log", help="Show the operation log")
+    p_op_log2.add_argument("-n", "--limit", type=int, default=None,
+                       metavar="LIMIT",
+                       help="Limit number of operations to show")
+    p_op_log2.add_argument("--reversed", action="store_true",
+                       help="Show operations in the opposite order "
+                            "(older operations first)")
+    add_no_graph_flag(p_op_log2)
+    add_template_flag(p_op_log2)
     p_op_log2.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_op_show2 = op_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_op_show2.add_argument("operation", nargs="?", help="Operation to show")
@@ -40,6 +51,14 @@ def register(sub) -> None:
     p_oplog.set_defaults(_handler="pyjj_cli.cli.operation:_op_help")
     oplog_sub = p_oplog.add_subparsers(dest="oplog_command")
     p_oplog_log = oplog_sub.add_parser("log", help="Show the operation log")
+    p_oplog_log.add_argument("-n", "--limit", type=int, default=None,
+                       metavar="LIMIT",
+                       help="Limit number of operations to show")
+    p_oplog_log.add_argument("--reversed", action="store_true",
+                       help="Show operations in the opposite order "
+                            "(older operations first)")
+    add_no_graph_flag(p_oplog_log)
+    add_template_flag(p_oplog_log)
     p_oplog_log.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_oplog_show = oplog_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_oplog_show.add_argument("operation", nargs="?", help="Operation to show")

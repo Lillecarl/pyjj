@@ -1,0 +1,24 @@
+[1m[38;5;12m<<op_log operation current_operation id short::«op»>>[39m<<op_log operation current_operation:: >>[38;5;3m<<op_log operation current_operation user::«who»>>[39m<<op_log operation current_operation:: >>[38;5;2m<<op_log operation current_operation workspace_name::default@>>[39m<<op_log operation current_operation:: >>[38;5;14m<<op_log operation current_operation time end ago::«ago»>><<op_log operation current_operation time::, lasted >><<op_log operation current_operation time duration::«ago»>>[39m<<op_log operation current_operation::>>[0m
+[1m<<op_log operation current_operation description first_line::snapshot working copy>><<op_log operation current_operation::>>[0m
+[1m[38;5;13m<<op_log operation current_operation attributes::args: «prog» -R «root» status>>[39m<<op_log operation current_operation::>>[0m
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::new empty commit>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» new -m two>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::create bookmark main pointing to commit 42ad4b070b0dbe6926808dd77fcc89f3731cf597>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» bookmark create main>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::snapshot working copy>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» bookmark create main>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::new empty commit>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» new -m one>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::describe commit ccae09ce50ef7d5dc31836ba6245d07843ee0ec3>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» describe -m base>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation workspace_name::default@>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::snapshot working copy>><<op_log operation::>>
+[38;5;5m<<op_log operation attributes::args: «prog» -R «root» describe -m base>>[39m<<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;3m<<op_log operation user::«who»>>[39m<<op_log operation:: >>[38;5;6m<<op_log operation time end ago::«ago»>><<op_log operation time::, lasted >><<op_log operation time duration::«ago»>>[39m<<op_log operation::>>
+<<op_log operation description first_line::add workspace 'default'>><<op_log operation::>>
+[38;5;4m<<op_log operation id short::«op»>>[39m<<op_log operation:: >>[38;5;2m<<op_log operation root::root()>>[39m<<op_log operation::>>

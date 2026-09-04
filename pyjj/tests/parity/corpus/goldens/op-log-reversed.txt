@@ -1,0 +1,24 @@
+○  «op» root()
+○  «op» «who» «ago», lasted «ago»
+│  add workspace 'default'
+○  «op» «who» default@ «ago», lasted «ago»
+│  snapshot working copy
+│  args: «prog» -R «root» describe -m base
+○  «op» «who» default@ «ago», lasted «ago»
+│  describe commit ccae09ce50ef7d5dc31836ba6245d07843ee0ec3
+│  args: «prog» -R «root» describe -m base
+○  «op» «who» default@ «ago», lasted «ago»
+│  new empty commit
+│  args: «prog» -R «root» new -m one
+○  «op» «who» default@ «ago», lasted «ago»
+│  snapshot working copy
+│  args: «prog» -R «root» bookmark create main
+○  «op» «who» default@ «ago», lasted «ago»
+│  create bookmark main pointing to commit 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+│  args: «prog» -R «root» bookmark create main
+○  «op» «who» default@ «ago», lasted «ago»
+│  new empty commit
+│  args: «prog» -R «root» new -m two
+@  «op» «who» default@ «ago», lasted «ago»
+   snapshot working copy
+   args: «prog» -R «root» status
