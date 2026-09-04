@@ -5,6 +5,7 @@ import pyjj
 from ..common import (
     _bookmarks_by_commit,
     _commit_summary,
+    _conflict_lines,
     _load,
     _summary_lines,
     _ui_path_formatter,
@@ -24,11 +25,12 @@ def status(args) -> int:
     wc = _wc_commit(repo, ws)
     parents = [repo.get_commit(pid) for pid in wc.parent_ids]
 
-    # jj diffs the working copy against its merged parents. A single
-    # parent is the case that matters here; a merge is left to the first
-    # parent until the harness has a scenario for it.
-    entries = parents[0].diff(wc, paths) if parents else wc.diff(wc, paths)
-    lines = _summary_lines(entries, _ui_path_formatter(ws))
+    # Against the parents *merged*, not the first one. A merge that
+    # resolves nothing changes nothing, and diffing against one parent
+    # would report everything the others contributed.
+    to_ui_path = _ui_path_formatter(ws)
+    entries = wc.diff_from_parents(repo, paths)
+    lines = _summary_lines(entries, to_ui_path)
     if lines:
         print("Working copy changes:")
         for line in lines:
@@ -42,4 +44,10 @@ def status(args) -> int:
     for parent in parents:
         print(f"Parent commit (@-): "
               f"{_commit_summary(repo, settings, parent, bookmarks.get(parent.id.hex(), []))}")
+
+    conflicts = _conflict_lines(wc, to_ui_path) if wc.has_conflict else []
+    if conflicts:
+        print("Warning: There are unresolved conflicts at these paths:")
+        for line in conflicts:
+            print(line)
     return 0

@@ -610,6 +610,41 @@ def _print_ref(repo, settings, ref, template=None, remotes=()) -> None:
             render(commit_id, f"  @{remote.remote}: ")
 
 
+def _conflict_lines(commit, to_ui_path) -> list[str]:
+    """The paths jj lists under its unresolved-conflicts warning.
+
+    Each reads `<path> <n>-sided conflict`, and names anything in the
+    conflict that is not a plain file, because those are what stop `jj
+    resolve` and a diff from working. Deletions are counted but not
+    called difficult: they interfere with neither.
+
+    The path column is padded to the longest path, capped at 32, plus
+    three -- jj's width, so a long path does not push every other line
+    across the terminal -- and then a separator space, which jj writes
+    after the padding rather than as part of it.
+    """
+    entries = commit.conflicted_paths()
+    if not entries:
+        return []
+    paths = [to_ui_path(path) for path, _, _, _ in entries]
+    width = min(max(len(p) for p in paths), 32) + 3
+    lines = []
+    for path, (_, sides, adds, objects) in zip(paths, entries):
+        parts = list(objects)
+        deletions = sides - adds
+        if deletions:
+            # Sorted with the objects, and a leading digit sorts first.
+            parts.insert(0, f"{deletions} deletion{'' if deletions == 1 else 's'}")
+        text = f"{sides}-sided conflict"
+        if parts:
+            if len(parts) == 1:
+                text += f" including {parts[0]}"
+            else:
+                text += " including " + ", ".join(parts[:-1]) + f" and {parts[-1]}"
+        lines.append(f"{path:<{width}} {text}")
+    return lines
+
+
 def _commit_context(repo, settings, commit, bookmarks=None) -> dict:
     """The variables a listing's Jinja template can use for one commit.
 

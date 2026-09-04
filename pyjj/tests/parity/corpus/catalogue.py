@@ -18,9 +18,7 @@ CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",)),
     E("status-clean", ("status",), fixture="executable", claims=("status",)),
-    E("status-conflict", ("status",), fixture="conflict", bar="todo",
-      reason="pyjj-cli prints no conflict warning or conflicted paths",
-      claims=("status",)),
+    E("status-conflict", ("status",), fixture="conflict", claims=("status",)),
 
     # -- diff -----------------------------------------------------------
     E("diff", ("diff", "-r", "@"), fixture="executable", claims=("diff",)),
