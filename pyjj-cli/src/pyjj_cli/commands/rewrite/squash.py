@@ -77,7 +77,13 @@ def squash(args) -> int:
         if not use_dest_desc:
             builder = builder.set_description(description)
         builder.write(repo)
-        _finish(tx, "squash commit", settings, ws, repo)
+        # jj words this by where the changes landed. A destination
+        # that already existed -- `--into`, or the source's parent --
+        # reads `squash commits into <id>`; only a destination the
+        # command creates reads `squash commit <id>`, and pyjj-cli
+        # has no flag that creates one.
+        _finish(tx, f"squash commits into {dest.id.hex()}",
+                settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
