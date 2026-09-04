@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 
-from ..formatter import Formatter
+from ..formatter import Formatter, separate
 
 
 def complete_newline(s: str) -> str:
@@ -1140,6 +1140,137 @@ def _indent(text: str, prefix: str = "    ") -> str:
     description with a paragraph break has no trailing whitespace in it.
     """
     return "\n".join(prefix + line if line else line for line in text.split("\n"))
+
+
+def _immutable_ids(repo, settings, commits) -> set[str]:
+    """Which of `commits` jj refuses to rewrite.
+
+    jj asks this once per row, to decide whether the row reads
+    `immutable` or `mutable` -- which is a colour, and a graph glyph.
+    Evaluating `immutable()` on its own would walk the whole of trunk,
+    so the question is narrowed to the rows on screen first.
+
+    A hidden commit is never in the set, and naming one in a revset is
+    not always allowed, so those are dropped before asking.
+    """
+    ids = [commit.id.hex() for commit in commits
+           if not commit.is_hidden(repo)]
+    if not ids:
+        return set()
+    expression = "immutable() & (" + "|".join(ids) + ")"
+    try:
+        return {commit.id.hex()
+                for commit in repo.revset(settings, expression)}
+    except (pyjj.JjError, CommandError):
+        return set()
+
+
+def _commit_kind(repo, commit, wc_ids=(), immutable_ids=()) -> str:
+    """jj's outer label on a log row: what kind of commit this is.
+
+    `builtin_log_compact` wraps a whole row in these, and the palette
+    reads them -- a working copy is bold, an immutable commit is cyan,
+    and the same field under each takes a different colour.
+    """
+    parts = []
+    if commit.id.hex() in wc_ids:
+        parts.append("working_copy")
+    parts.append("immutable" if commit.id.hex() in immutable_ids
+                 else "mutable")
+    if commit.has_conflict:
+        parts.append("conflicted")
+    return " ".join(parts)
+
+
+def _commit_header_spans(repo, settings, commit, *, kw: str = "",
+                         bookmarks=(), tags=(), working_copies=(),
+                         author=None, timestamp=None):
+    """jj's `format_short_commit_header`: the first line of a log row.
+
+    The change id with its offset, the author's email, the committer's
+    timestamp, any names on the commit, the commit id, and the markers
+    that say the commit is hidden, divergent or conflicted.
+
+    `kw` is the keyword the template reached the commit through. jj
+    labels a keyword access with its own name, so `evolog` -- where the
+    commit is the entry's `commit` field -- carries one more label than
+    `log`, where the commit is the row itself. `author` replaces the
+    email with a plain string, and `timestamp` replaces the full
+    stamp, which is what pyjj-cli's own default prints.
+    """
+    def under(*names) -> str:
+        return " ".join(part for part in (kw, *names) if part)
+
+    hidden = commit.is_hidden(repo)
+    divergent = not hidden and commit.is_divergent(repo)
+    marker = "hidden" if hidden else "divergent" if divergent else ""
+
+    change = [(text, f"{marker} {under(labels)}".strip()) for text, labels
+              in _short_id_spans(
+                  commit.change_id.reverse_hex(),
+                  repo.shortest_change_id_prefix_len(commit.change_id,
+                                                     settings),
+                  "change_id")]
+    if marker:
+        # The offset is how a reader addresses this version: jj
+        # resolves `<change id>/2` as a revset. Only a hidden or
+        # divergent version carries one, since the bare change id names
+        # the visible one.
+        offset = commit.change_offset(repo)
+        if offset is not None:
+            change.append(("/", f"{marker} change_offset"))
+            change.append((str(offset), f"{marker} {under('change_offset')}"))
+
+    if author is not None:
+        who = [(author, under("author"))]
+    else:
+        local, _, domain = (commit.author.email or "").partition("@")
+        who = [(local, under("author", "email", "local"))]
+        if domain:
+            who.append(("@", under("author", "email")))
+            who.append((domain, under("author", "email", "domain")))
+
+    names = [[(name, under(kind, "name"))]
+             for kind, group in (("bookmarks", bookmarks), ("tags", tags),
+                                 ("working_copies", working_copies))
+             for name in group]
+
+    labels = []
+    # jj's order: whichever of hidden/divergent applies, then conflict.
+    if marker:
+        labels.append([(f"({marker})", marker)])
+    if commit.has_conflict:
+        labels.append([("(conflict)", "conflict")])
+
+    return separate([
+        change,
+        who,
+        [(timestamp if timestamp is not None
+          else _format_timestamp(commit.committer.timestamp),
+          under("committer", "timestamp", "local", "format"))],
+        *names,
+        [(text, under(labels)) for text, labels in _short_id_spans(
+            commit.id.hex(),
+            repo.shortest_commit_id_prefix_len(commit.id, settings),
+            "commit_id")],
+        *labels,
+    ])
+
+
+def _commit_body_spans(repo, settings, commit, *, kw: str = ""):
+    """jj's second line of `builtin_log_compact`: empty, then the text."""
+    empty = _is_empty(repo, commit)
+    parts = [[("(empty)", "empty")]] if empty else []
+    first_line = commit.description.splitlines()[0] if commit.description else ""
+    if first_line:
+        parts.append([(first_line,
+                       " ".join(part for part in
+                                (kw, "description", "first_line") if part))])
+    else:
+        parts.append([("(no description set)",
+                       "empty description placeholder" if empty
+                       else "description placeholder")])
+    return separate(parts)
 
 
 def _commit_summary_spans(repo, settings, commit, bookmarks=None):

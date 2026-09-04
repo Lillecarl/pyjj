@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import typing
 
 # The eight names and their bright forms, as 256-colour indices. jj
 # writes these as `38;5;N` rather than the 30-37 range, so a terminal
@@ -343,11 +344,25 @@ def separate(parts, gap: str = " ", labels=()):
     return spans
 
 
+class Line(typing.NamedTuple):
+    """One line of spans, with labels of its own under the block's.
+
+    A row is not always one label stack. An evolution log writes its
+    commit under `working_copy mutable` and the operation under
+    neither, so the line carries its own base and the block's is what
+    they share.
+    """
+
+    spans: list
+    base: object = ()
+
+
 def render_block(lines, base=(), enabled: bool = True) -> str:
     """Rows of labelled spans, rendered into one string.
 
-    `lines` is a list of lines. Each line is a list of `(text, labels)`
-    pairs, and every `labels` sits under `base`.
+    `lines` is a list of lines. A line is a list of `(text, labels)`
+    pairs, or a `Line` that adds a base of its own. Every `labels` sits
+    under `base`.
 
     jj ends a line in two steps. It steps back to `base`, then writes
     the newline under no labels at all, so a line that ends in a
@@ -359,9 +374,11 @@ def render_block(lines, base=(), enabled: bool = True) -> str:
     with Formatter(out, enabled) as fmt:
         last = len(lines) - 1
         for index, line in enumerate(lines):
-            for text, labels in line:
-                fmt.write(text, *base, *_labels(labels))
-            fmt.sync(*base)
+            spans, under = line if isinstance(line, Line) else (line, ())
+            under = base + _labels(under)
+            for text, labels in spans:
+                fmt.write(text, *under, *_labels(labels))
+            fmt.sync(*under)
             if index < last:
                 fmt.write("\n")
     return out.getvalue()

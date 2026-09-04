@@ -80,7 +80,8 @@ CATALOGUE: tuple[Entry, ...] = (
     E("evolog-graph",
       ("evolog", "-r", "@-", "-T", "builtin_evolog_compact"),
       fixture="squashed",
-      normalize=("op_ids",), claims=("evolog", "-r", "-T")),
+      normalize=("op_ids",), colour="bytes",
+      claims=("evolog", "-r", "-T")),
 
     # -- interdiff ------------------------------------------------------
     E("interdiff", ("interdiff", "--from", 'description(glob:"one*")',
