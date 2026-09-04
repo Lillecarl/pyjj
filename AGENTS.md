@@ -235,6 +235,15 @@ either ledger -- both read argument parsers -- and neither shows up in a
 state comparison, because the operation log is not part of the state
 those compare. Expect an entry to point past the command it names.
 
+**A `facts` entry hides everything else about its output.** Nothing
+compares pyjj-cli to a `facts` golden, so `evolog` drew its graph wrong
+for as long as the entry existed: the rows diverge on purpose, and the
+divergence covered the drawing. The way out is a template string both
+engines resolve -- a builtin name such as `builtin_evolog_compact` --
+which makes the rows agree and leaves the one thing you want to test as
+the only thing that can differ. Add that entry beside the `facts` one
+rather than in place of it.
+
 **Two facts about jj's output that cost time to find.**
 
 - **Colour changes the shape, not just the codes.** With colour on,
@@ -294,6 +303,12 @@ and emits one row, rather than prefixing each line itself.
 `--reversed` walks the DAG the other way (`reverse_graph`): each
 commit's parents become its children. Reversing the drawn rows instead
 leaves a merge's fork pointing the wrong way.
+
+Three commands draw one: `log`, `op diff` and `evolog`. `evolog`'s
+graph is easy to miss, because a rewrite chain is a line and only a
+squash forks it -- a commit with two predecessors. jj groups those rows
+before drawing them (`TopoGroupedGraph`) and applies `--limit`
+afterwards, so a line of evolution stays contiguous.
 
 `pyjjui` keeps `graph_layout.layout`, which it renders itself in
 Textual rather than as text.
