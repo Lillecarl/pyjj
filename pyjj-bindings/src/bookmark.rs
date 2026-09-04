@@ -52,3 +52,36 @@ impl PyBookmark {
             && self.target_ids == other.target_ids
     }
 }
+
+/// A remote-tracking bookmark: a name on a remote, pointing at commits.
+///
+/// jj spells these `name@remote`, and prints them beside local
+/// bookmarks wherever a commit's refs are listed. A colocated
+/// repository has a `git` remote, so every exported bookmark has one of
+/// these alongside it.
+#[pyclass(name = "RemoteBookmark", frozen, from_py_object)]
+#[derive(Clone)]
+pub struct PyRemoteBookmark {
+    #[pyo3(get)]
+    pub name: String,
+    #[pyo3(get)]
+    pub remote: String,
+    #[pyo3(get)]
+    pub target_ids: Vec<PyCommitId>,
+    /// Whether the local bookmark of the same name follows this one.
+    #[pyo3(get)]
+    pub tracked: bool,
+}
+
+#[pymethods]
+impl PyRemoteBookmark {
+    /// `name@remote`, the way jj writes it.
+    #[getter]
+    fn symbol(&self) -> String {
+        format!("{}@{}", self.name, self.remote)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("RemoteBookmark({})", self.symbol())
+    }
+}

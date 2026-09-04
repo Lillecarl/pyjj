@@ -91,6 +91,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Core types
     m.add_class::<PyUserSettings>()?;
     m.add_class::<PyBookmark>()?;
+    m.add_class::<crate::bookmark::PyRemoteBookmark>()?;
     m.add_class::<PyTag>()?;
     m.add_class::<PyCommit>()?;
     m.add_class::<PyVerification>()?;

@@ -192,6 +192,24 @@ impl PyReadonlyRepo {
             .collect()
     }
 
+    /// All remote-tracking bookmarks, in lexicographical order.
+    ///
+    /// A colocated repository has a `git` remote, so a bookmark that
+    /// has been exported appears here as well as in `bookmarks()`. jj
+    /// prints both wherever it lists a commit's refs.
+    fn remote_bookmarks(&self) -> Vec<crate::bookmark::PyRemoteBookmark> {
+        self.inner
+            .view()
+            .all_remote_bookmarks()
+            .map(|(symbol, remote_ref)| crate::bookmark::PyRemoteBookmark {
+                name: symbol.name.as_str().to_string(),
+                remote: symbol.remote.as_str().to_string(),
+                target_ids: remote_ref.target.added_ids().map(Into::into).collect(),
+                tracked: remote_ref.is_tracked(),
+            })
+            .collect()
+    }
+
     /// `jj interdiff --from A --to B`: how the changes `from` makes
     /// differ from the changes `to` makes. Unlike a plain diff, this
     /// leaves out whatever changed between the two commits' parents.
