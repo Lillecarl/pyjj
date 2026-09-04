@@ -1742,6 +1742,11 @@ ROOT_REWRITE_ARGV = [
 # reaches a `jj_lib` assertion. There is nothing to compare against.
 
 
+@pytest.mark.covers("split", "-r")
+@pytest.mark.covers("simplify-parents", "-r")
+@pytest.mark.covers("fix", "-s")
+@pytest.mark.covers("unsign", "-r")
+@pytest.mark.covers("abandon", "--restore-descendants")
 @pytest.mark.parametrize("argv", ROOT_REWRITE_ARGV, ids=lambda a: "_".join(a)[:40])
 def test_rewriting_the_root_commit_must_fail(pair: RepoPair, argv) -> None:
     chain(pair)
@@ -1776,6 +1781,14 @@ TAGGED_REWRITE_ARGV = [
 ]
 
 
+@pytest.mark.covers("describe", "-m", "-r")
+@pytest.mark.covers("abandon")
+@pytest.mark.covers("squash", "--into", "--from")
+@pytest.mark.covers("rebase", "-r", "-s")
+@pytest.mark.covers("edit")
+@pytest.mark.covers("restore", "--into")
+@pytest.mark.covers("metaedit", "--author", "-r")
+@pytest.mark.covers("run", "-r")
 @pytest.mark.parametrize("argv", TAGGED_REWRITE_ARGV, ids=lambda a: "_".join(a)[:40])
 def test_rewriting_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:
     """A tag makes a commit immutable, so every rewrite that targets it
@@ -1786,6 +1799,7 @@ def test_rewriting_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("absorb", "--into")
 def test_absorbing_into_a_tagged_commit_must_fail(pair: RepoPair) -> None:
     """`absorb` checks the destinations a hunk actually lands in, so the
     scenario has to produce one: the working copy edits `one.txt`, whose
@@ -1808,6 +1822,8 @@ INSERT_AROUND_TAG_ARGV = [
 ]
 
 
+@pytest.mark.covers("new", "-m")
+@pytest.mark.covers("duplicate")
 @pytest.mark.parametrize("argv", INSERT_AROUND_TAG_ARGV,
                          ids=lambda a: "_".join(a)[:40])
 def test_inserting_before_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:
@@ -2117,6 +2133,7 @@ SPLIT_PLACEMENT_ARGV = [
 ]
 
 
+@pytest.mark.covers("split", "-A", "-B", "--onto", "--destination", "-r")
 @pytest.mark.parametrize("placement", SPLIT_PLACEMENT_ARGV,
                          ids=lambda a: "_".join(a)[:40])
 def test_split_places_the_selected_half(pair: RepoPair, placement) -> None:
@@ -2135,6 +2152,7 @@ SPLIT_PLACEMENT_CONFLICTS = [
 ]
 
 
+@pytest.mark.covers("split", "--parallel", "-p")
 @pytest.mark.parametrize("placement", SPLIT_PLACEMENT_CONFLICTS,
                          ids=lambda a: "_".join(a)[:40])
 def test_split_rejects_conflicting_placement(pair: RepoPair, placement) -> None:
@@ -2178,6 +2196,10 @@ INSERT_BETWEEN_ARGV = [
 ]
 
 
+@pytest.mark.covers("new", "-A", "-B")
+@pytest.mark.covers("revert", "-A", "-B")
+@pytest.mark.covers("rebase", "-A", "-B")
+@pytest.mark.covers("duplicate", "-A", "-B")
 @pytest.mark.parametrize("argv", INSERT_BETWEEN_ARGV,
                          ids=lambda a: "_".join(a)[:40])
 def test_inserting_between_two_revisions(pair: RepoPair, argv) -> None:

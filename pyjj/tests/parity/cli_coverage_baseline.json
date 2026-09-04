@@ -1,0 +1,804 @@
+{
+  "": [
+    "(command)",
+    "--at-op",
+    "--at-operation",
+    "--color",
+    "--config",
+    "--config-file",
+    "--debug",
+    "--ignore-immutable",
+    "--ignore-working-copy",
+    "--no-pager",
+    "--quiet",
+    "--repository",
+    "-R"
+  ],
+  "abandon": [
+    "--retain-bookmarks",
+    "-r"
+  ],
+  "absorb": [
+    "--from",
+    "--to",
+    "-f",
+    "-t"
+  ],
+  "arrange": [
+    "(command)",
+    "-r"
+  ],
+  "bisect": [
+    "(command)"
+  ],
+  "bisect run": [
+    "(command)",
+    "--find-good",
+    "--range",
+    "-r"
+  ],
+  "bookmark": [
+    "(command)"
+  ],
+  "bookmark advance": [
+    "(command)",
+    "--to",
+    "-t"
+  ],
+  "bookmark create": [
+    "(command)",
+    "--revision",
+    "--to",
+    "-r"
+  ],
+  "bookmark delete": [
+    "(command)"
+  ],
+  "bookmark forget": [
+    "(command)",
+    "--include-remotes"
+  ],
+  "bookmark list": [
+    "(command)",
+    "--all-remotes",
+    "--conflicted",
+    "--remote",
+    "--revision",
+    "--sort",
+    "--template",
+    "--tracked",
+    "-T",
+    "-a",
+    "-c",
+    "-r",
+    "-t"
+  ],
+  "bookmark move": [
+    "(command)",
+    "--allow-backwards",
+    "--from",
+    "--to",
+    "-B",
+    "-f",
+    "-t"
+  ],
+  "bookmark rename": [
+    "(command)",
+    "--overwrite-existing"
+  ],
+  "bookmark set": [
+    "(command)",
+    "--allow-backwards",
+    "--revision",
+    "--to",
+    "-B",
+    "-r"
+  ],
+  "bookmark track": [
+    "(command)",
+    "--remote"
+  ],
+  "bookmark untrack": [
+    "(command)",
+    "--remote"
+  ],
+  "commit": [
+    "(command)",
+    "--editor",
+    "--interactive",
+    "--message",
+    "--tool",
+    "-A",
+    "-B",
+    "-i",
+    "-m",
+    "-o",
+    "-r"
+  ],
+  "config": [
+    "(command)"
+  ],
+  "config edit": [
+    "(command)",
+    "--repo",
+    "--user",
+    "--workspace"
+  ],
+  "config gc": [
+    "(command)"
+  ],
+  "config get": [
+    "(command)"
+  ],
+  "config list": [
+    "(command)",
+    "--include-defaults",
+    "--include-overridden",
+    "--repo",
+    "--template",
+    "--user",
+    "--workspace",
+    "-T"
+  ],
+  "config path": [
+    "(command)",
+    "--repo",
+    "--user",
+    "--workspace"
+  ],
+  "config set": [
+    "(command)",
+    "--repo",
+    "--user",
+    "--workspace"
+  ],
+  "config unset": [
+    "(command)",
+    "--repo",
+    "--user",
+    "--workspace"
+  ],
+  "describe": [
+    "--editor",
+    "--message",
+    "--stdin"
+  ],
+  "diff": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--from",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--name-only",
+    "--revisions",
+    "--stat",
+    "--summary",
+    "--template",
+    "--to",
+    "--tool",
+    "--types",
+    "-T",
+    "-b",
+    "-f",
+    "-r",
+    "-s",
+    "-t",
+    "-w"
+  ],
+  "diffedit": [
+    "(command)",
+    "--from",
+    "--restore-descendants",
+    "--revision",
+    "--to",
+    "--tool",
+    "-f",
+    "-r",
+    "-t"
+  ],
+  "duplicate": [
+    "--after",
+    "--before",
+    "--destination",
+    "--insert-after",
+    "--insert-before",
+    "--onto",
+    "-o",
+    "-r"
+  ],
+  "edit": [
+    "-r"
+  ],
+  "evolog": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--limit",
+    "--name-only",
+    "--no-graph",
+    "--patch",
+    "--reversed",
+    "--revisions",
+    "--stat",
+    "--summary",
+    "--template",
+    "--tool",
+    "--types",
+    "-G",
+    "-T",
+    "-n",
+    "-p",
+    "-r",
+    "-s"
+  ],
+  "file": [
+    "(command)"
+  ],
+  "file annotate": [
+    "(command)",
+    "--revision",
+    "--template",
+    "-T",
+    "-r"
+  ],
+  "file chmod": [
+    "(command)",
+    "--revision",
+    "-r"
+  ],
+  "file list": [
+    "(command)",
+    "--revision",
+    "--template",
+    "-T",
+    "-r"
+  ],
+  "file search": [
+    "(command)",
+    "--pattern",
+    "--revision",
+    "-p",
+    "-r"
+  ],
+  "file show": [
+    "(command)",
+    "--revision",
+    "--template",
+    "-T",
+    "-r"
+  ],
+  "file track": [
+    "(command)",
+    "--include-ignored"
+  ],
+  "file untrack": [
+    "(command)"
+  ],
+  "fix": [
+    "--all-lines",
+    "--include-unchanged-files",
+    "--source",
+    "-a"
+  ],
+  "gerrit": [
+    "(command)"
+  ],
+  "git": [
+    "(command)"
+  ],
+  "git clone": [
+    "(command)",
+    "--branch",
+    "--colocate",
+    "--depth",
+    "--fetch-tags",
+    "--no-colocate",
+    "--remote",
+    "-b"
+  ],
+  "git colocation": [
+    "(command)"
+  ],
+  "git colocation disable": [
+    "(command)"
+  ],
+  "git colocation enable": [
+    "(command)"
+  ],
+  "git colocation status": [
+    "(command)"
+  ],
+  "git export": [
+    "(command)"
+  ],
+  "git fetch": [
+    "(command)",
+    "--all-remotes",
+    "--branch",
+    "--remote",
+    "--tracked",
+    "-b"
+  ],
+  "git import": [
+    "(command)"
+  ],
+  "git init": [
+    "(command)",
+    "--colocate",
+    "--git-repo",
+    "--no-colocate"
+  ],
+  "git push": [
+    "(command)",
+    "--all",
+    "--allow-empty-description",
+    "--allow-private",
+    "--bookmark",
+    "--change",
+    "--deleted",
+    "--dry-run",
+    "--named",
+    "--option",
+    "--remote",
+    "--revision",
+    "--tracked",
+    "-b",
+    "-c",
+    "-o",
+    "-r"
+  ],
+  "git remote": [
+    "(command)"
+  ],
+  "git remote add": [
+    "(command)",
+    "--fetch-tags",
+    "--push-url"
+  ],
+  "git remote list": [
+    "(command)"
+  ],
+  "git remote remove": [
+    "(command)"
+  ],
+  "git remote rename": [
+    "(command)"
+  ],
+  "git remote set-url": [
+    "(command)",
+    "--fetch",
+    "--push"
+  ],
+  "git root": [
+    "(command)"
+  ],
+  "help": [
+    "(command)"
+  ],
+  "interdiff": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--from",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--name-only",
+    "--stat",
+    "--summary",
+    "--to",
+    "--tool",
+    "--types",
+    "-b",
+    "-f",
+    "-s",
+    "-t",
+    "-w"
+  ],
+  "log": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--count",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--limit",
+    "--name-only",
+    "--no-graph",
+    "--patch",
+    "--reversed",
+    "--revision",
+    "--stat",
+    "--summary",
+    "--template",
+    "--tool",
+    "--types",
+    "-G",
+    "-T",
+    "-n",
+    "-p",
+    "-r",
+    "-s"
+  ],
+  "metaedit": [
+    "--author-timestamp",
+    "--force-rewrite",
+    "--message",
+    "--update-author",
+    "--update-author-timestamp",
+    "--update-change-id",
+    "-m"
+  ],
+  "new": [
+    "--after",
+    "--before",
+    "--insert-after",
+    "--insert-before",
+    "--message",
+    "--no-edit",
+    "-o",
+    "-r"
+  ],
+  "next": [
+    "(command)",
+    "--conflict",
+    "--edit",
+    "--no-edit",
+    "-e",
+    "-n"
+  ],
+  "operation": [
+    "(command)"
+  ],
+  "operation abandon": [
+    "(command)"
+  ],
+  "operation diff": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--from",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--name-only",
+    "--no-graph",
+    "--op",
+    "--operation",
+    "--patch",
+    "--show-changes-in",
+    "--stat",
+    "--summary",
+    "--to",
+    "--tool",
+    "--types",
+    "-G",
+    "-f",
+    "-p",
+    "-s",
+    "-t"
+  ],
+  "operation integrate": [
+    "(command)"
+  ],
+  "operation log": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--limit",
+    "--name-only",
+    "--no-graph",
+    "--op-diff",
+    "--patch",
+    "--reversed",
+    "--show-changes-in",
+    "--stat",
+    "--summary",
+    "--template",
+    "--tool",
+    "--types",
+    "-G",
+    "-T",
+    "-d",
+    "-n",
+    "-p",
+    "-s"
+  ],
+  "operation restore": [
+    "(command)",
+    "--what"
+  ],
+  "operation revert": [
+    "(command)",
+    "--what"
+  ],
+  "operation show": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--name-only",
+    "--no-graph",
+    "--no-op-diff",
+    "--patch",
+    "--show-changes-in",
+    "--stat",
+    "--summary",
+    "--template",
+    "--tool",
+    "--types",
+    "-G",
+    "-T",
+    "-p",
+    "-s"
+  ],
+  "parallelize": [
+    "(command)",
+    "-r"
+  ],
+  "prev": [
+    "(command)",
+    "--conflict",
+    "--edit",
+    "--no-edit",
+    "-e",
+    "-n"
+  ],
+  "rebase": [
+    "--after",
+    "--before",
+    "--branch",
+    "--destination",
+    "--insert-after",
+    "--insert-before",
+    "--keep-divergent",
+    "--onto",
+    "--revision",
+    "--revisions",
+    "--simplify-parents",
+    "--skip-emptied",
+    "--source",
+    "-b",
+    "-o"
+  ],
+  "redo": [
+    "(command)"
+  ],
+  "resolve": [
+    "(command)",
+    "--list",
+    "--revision",
+    "--tool",
+    "-l",
+    "-r"
+  ],
+  "restore": [
+    "--changes-in",
+    "--from",
+    "--restore-descendants",
+    "--to",
+    "--tool",
+    "-c",
+    "-f",
+    "-t"
+  ],
+  "revert": [
+    "--after",
+    "--before",
+    "--destination",
+    "--insert-after",
+    "--insert-before",
+    "--onto",
+    "--revision",
+    "-o",
+    "-r"
+  ],
+  "root": [
+    "(command)"
+  ],
+  "run": [
+    "--clean",
+    "--jobs",
+    "--restore-descendants",
+    "--revision",
+    "--root",
+    "-j"
+  ],
+  "show": [
+    "(command)",
+    "--color-words",
+    "--context",
+    "--git",
+    "--ignore-all-space",
+    "--ignore-space-change",
+    "--name-only",
+    "--no-patch",
+    "--reversed",
+    "--stat",
+    "--summary",
+    "--template",
+    "--tool",
+    "--types",
+    "-T",
+    "-b",
+    "-r",
+    "-s",
+    "-w"
+  ],
+  "sign": [
+    "(command)",
+    "--key",
+    "--revision",
+    "-r"
+  ],
+  "simplify-parents": [
+    "--revision",
+    "--source",
+    "-s"
+  ],
+  "sparse": [
+    "(command)"
+  ],
+  "sparse edit": [
+    "(command)"
+  ],
+  "sparse list": [
+    "(command)"
+  ],
+  "sparse reset": [
+    "(command)"
+  ],
+  "sparse set": [
+    "(command)",
+    "--add",
+    "--clear",
+    "--remove"
+  ],
+  "split": [
+    "--after",
+    "--before",
+    "--editor",
+    "--insert-after",
+    "--insert-before",
+    "--message",
+    "--revision",
+    "--tool",
+    "-m",
+    "-o"
+  ],
+  "squash": [
+    "--after",
+    "--before",
+    "--destination",
+    "--editor",
+    "--insert-after",
+    "--insert-before",
+    "--keep-emptied",
+    "--message",
+    "--onto",
+    "--revision",
+    "--to",
+    "--tool",
+    "--use-destination-message",
+    "-A",
+    "-B",
+    "-f",
+    "-k",
+    "-m",
+    "-o",
+    "-r",
+    "-t",
+    "-u"
+  ],
+  "status": [
+    "(command)"
+  ],
+  "tag": [
+    "(command)"
+  ],
+  "tag delete": [
+    "(command)"
+  ],
+  "tag list": [
+    "(command)",
+    "--all-remotes",
+    "--conflicted",
+    "--contains",
+    "--merged",
+    "--revision",
+    "--sort",
+    "--template",
+    "-T",
+    "-a",
+    "-c",
+    "-r"
+  ],
+  "tag set": [
+    "(command)",
+    "--allow-move",
+    "--revision",
+    "--to",
+    "-r"
+  ],
+  "undo": [
+    "(command)"
+  ],
+  "unsign": [
+    "--revision"
+  ],
+  "util": [
+    "(command)"
+  ],
+  "util backend": [
+    "(command)"
+  ],
+  "util backend name": [
+    "(command)"
+  ],
+  "util completion": [
+    "(command)"
+  ],
+  "util config-schema": [
+    "(command)"
+  ],
+  "util exec": [
+    "(command)"
+  ],
+  "util gc": [
+    "(command)",
+    "--expire"
+  ],
+  "util install-man-pages": [
+    "(command)"
+  ],
+  "util markdown-help": [
+    "(command)"
+  ],
+  "util snapshot": [
+    "(command)"
+  ],
+  "version": [
+    "(command)"
+  ],
+  "workspace": [
+    "(command)"
+  ],
+  "workspace add": [
+    "(command)",
+    "--message",
+    "--name",
+    "--revision",
+    "--sparse-patterns",
+    "-m",
+    "-r"
+  ],
+  "workspace forget": [
+    "(command)"
+  ],
+  "workspace list": [
+    "(command)",
+    "--template",
+    "-T"
+  ],
+  "workspace rename": [
+    "(command)"
+  ],
+  "workspace root": [
+    "(command)",
+    "--name"
+  ],
+  "workspace update-stale": [
+    "(command)"
+  ]
+}
