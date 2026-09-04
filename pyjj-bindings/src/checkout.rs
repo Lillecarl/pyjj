@@ -92,6 +92,7 @@ pub fn snapshot(
         let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
             dict.set_item("untracked_paths", stats.untracked_paths.len())?;
+            dict.set_item("changed", false)?;
             Ok(dict.unbind().into_any())
         })?;
         return Ok((py_repo, stats_dict));
@@ -122,6 +123,10 @@ pub fn snapshot(
     let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         dict.set_item("untracked_paths", stats.untracked_paths.len())?;
+        // `jj util snapshot` reports exactly this: whether the walk found
+        // anything, which is the difference between "Snapshot complete."
+        // and "No snapshot needed."
+        dict.set_item("changed", true)?;
         Ok(dict.unbind().into_any())
     })?;
     Ok((py_repo, stats_dict))

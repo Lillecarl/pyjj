@@ -13,6 +13,15 @@ def test_snapshot_with_no_changes_keeps_same_wc_commit(workspace, repo, settings
     new_wc = new_repo.resolve_single(settings, "@")
     assert new_wc.id == wc_commit.id
     assert stats["untracked_paths"] == 0
+    # `jj util snapshot` reports exactly this bit.
+    assert stats["changed"] is False
+
+
+def test_snapshot_reports_that_it_changed_something(workspace, repo, settings,
+                                                    wc_commit):
+    Path(workspace.workspace_root, "moved.txt").write_text("moved\n")
+    _new_repo, stats = workspace.snapshot(settings)
+    assert stats["changed"] is True
 
 
 def test_snapshot_picks_up_new_file(workspace, repo, settings, wc_commit):
