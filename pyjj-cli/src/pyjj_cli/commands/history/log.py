@@ -5,7 +5,7 @@ import sys
 import pyjj
 from pyjj.graph_layout import layout
 
-from ..common import _load, _print_diff_stats, _pyjj_template
+from ..common import _load, _print_diff_stats, _resolve_template
 
 # ANSI — match jj's 256-color palette where it matters.
 # Only emitted when stdout is a TTY and NO_COLOR is not set.
@@ -151,42 +151,7 @@ def log(args) -> int:
         "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
     }
 
-    template_str = getattr(args, "template", None)
-    if not template_str:
-        # No -T: fall back to the configured default template, if any.
-        template_str = _pyjj_template(settings, "log", cwd=ws.workspace_root)
-    elif template_str in builtin_templates:
-        template_str = builtin_templates[template_str]
-    elif "{{" not in template_str and " " not in template_str and "\n" not in template_str:
-        # A bare name like `mycool` means `pyjj.templates.mycool`. Anything
-        # else is a raw Jinja template.
-        from_config = _pyjj_template(settings, template_str, cwd=ws.workspace_root)
-        if from_config:
-            template_str = from_config
-
-    # Compile Jinja template if --template given. We expose a Pythonic context
-    # (commit, change_id, commit_id, author, author_email, description, bookmarks,
-    # is_wc, datetime) — most well-known templating language in Python, so users
-    # can do `pyjj log -T '{{ author }} {{ description }}'` etc. Builtin jj names
-    # like `builtin_log_compact` are mapped to a Jinja equivalent.
-    jinja_template = None
-    if template_str:
-        try:
-            # Sandboxed: the context binds a live Commit object, so plain
-            # attribute traversal would reach further than a template needs.
-            from jinja2 import StrictUndefined
-            from jinja2.sandbox import SandboxedEnvironment
-
-            env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
-            # Filter to color prefix like jj does, usable as {{ commit_id|short(2) }}
-            def _short_filter(value, n=8):
-                return value[:n] if isinstance(value, str) else value
-
-            env.filters["short"] = _short_filter
-            jinja_template = env.from_string(template_str)
-        except Exception as e:
-            print(f"Error: invalid template: {e}", file=sys.stderr)
-            return 1
+    jinja_template = _resolve_template(settings, ws, args, "log", builtin_templates)
 
     # Decide year display: 26 not 2026, unless visible range spans two millennia
     # (e.g. 1999 and 2026 are 1xxx vs 2xxx → show 4-digit to disambiguate).

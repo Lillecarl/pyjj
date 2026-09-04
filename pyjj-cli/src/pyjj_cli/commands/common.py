@@ -569,6 +569,52 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
+def _compile_template(template_str: str):
+    """Compiles one Jinja template the way pyjj-cli's listings expect.
+
+    Sandboxed on purpose: a context binds live `Commit` objects, so
+    plain attribute traversal would reach further than a template needs.
+    `StrictUndefined` turns a misspelled variable into an error rather
+    than a silently blank column.
+    """
+    from jinja2 import StrictUndefined
+    from jinja2.sandbox import SandboxedEnvironment
+
+    env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
+    env.filters["short"] = lambda value, n=8: value[:n] if isinstance(value, str) else value
+    return env.from_string(template_str)
+
+
+def _resolve_template(settings, ws, args, name: str, builtins=None):
+    """The template a listing should render, or `None` for its default.
+
+    jj drives each listing from a named entry under `[templates]`, and
+    pyjj-cli uses Jinja for the same job, under `pyjj.templates.<name>`.
+    A `-T` argument may be
+
+    - one of jj's builtin template names, mapped to a Jinja equivalent
+      by the caller's `builtins`,
+    - a bare word, which names `pyjj.templates.<that word>`,
+    - or a raw Jinja template.
+
+    With no `-T`, the configured `pyjj.templates.<name>` applies if it
+    is set, so a user can change a listing's shape once rather than on
+    every command line.
+    """
+    template_str = getattr(args, "template", None)
+    if not template_str:
+        template_str = _pyjj_template(settings, name, cwd=ws.workspace_root)
+    elif builtins and template_str in builtins:
+        template_str = builtins[template_str]
+    elif "{{" not in template_str and " " not in template_str and "\n" not in template_str:
+        from_config = _pyjj_template(settings, template_str, cwd=ws.workspace_root)
+        if from_config:
+            template_str = from_config
+    if not template_str:
+        return None
+    return _compile_template(template_str)
+
+
 def _resolve_operation(repo, name: str | None):
     """Resolve an operation the way `jj` names them on the command line.
 
@@ -701,13 +747,21 @@ def _local_tz_offset_minutes() -> int:
     return int(offset.total_seconds() // 60) if offset else 0
 
 
-def _format_timestamp(timestamp) -> str:
-    """jj's `format_timestamp`: the local time, to the second."""
+def _format_timestamp(timestamp, century: bool = True) -> str:
+    """jj's `format_timestamp`: the local time, to the second.
+
+    `century=False` is the shorter spelling pyjj-cli's listings use --
+    two-digit year, no seconds -- which `log` prints by choice rather
+    than to match jj.
+    """
     moment = datetime.fromtimestamp(
         timestamp.millis_since_epoch / 1000, timezone.utc
     )
     zone = timezone(timedelta(minutes=_local_tz_offset_minutes()))
-    return moment.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S")
+    local = moment.astimezone(zone)
+    if century:
+        return local.strftime("%Y-%m-%d %H:%M:%S")
+    return local.strftime("%y-%m-%d %H:%M")
 
 
 def _detailed_signature(signature) -> str:
