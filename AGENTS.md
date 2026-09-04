@@ -897,6 +897,20 @@ Current state:
   each tree verbatim. The choice is made per commit inside the rewrite
   callback, so there is no `RebaseOptions` equivalent and this drives
   `transform_descendants` directly.
+- **Diffing two operations**: `ReadonlyRepo.operation_diff(other, settings,
+  changes_in=None)` is `jj op diff`, with `other` the "from" side. Both
+  repos come from `load_at_operation()`. Two things make it more than a
+  view comparison. The indexes must merge first, or a commit visible on
+  only one side cannot be looked up; the binding does that in a
+  transaction it drops and never commits, so the call still only reads.
+  And `changes_in` is parsed once but resolved *twice*, against each repo
+  separately -- a symbol can name different commits, or none at all, on
+  the two sides. `ReadonlyRepo.merge_operations(ops)` comes with it: the
+  "from" side of a merge operation is its several parents, and they must
+  fold into one operation before a repo view can be loaded from them.
+  The result names its two sides `before`/`after`, not jj's `from`/`to`,
+  because `from` is a Python keyword and an attribute called that would
+  be unreachable.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
