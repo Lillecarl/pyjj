@@ -57,22 +57,27 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # jj takes its global options anywhere on the command line, before or
-# after the subcommand. These four change only what gets printed, never
+# after the subcommand. These three change only what gets printed, never
 # what gets written, so pyjj accepts them and does nothing with them --
 # a script that passes `--no-pager` must not die on a usage dump.
 # `--config` and `--ignore-immutable` are still deliberately absent:
 # silently ignoring one of those would make pyjj quietly disagree with
-# jj. `--at-operation` and `--ignore-working-copy` are honoured, and
-# handled below rather than here, because they change what happens.
+# jj. `--at-operation`, `--ignore-working-copy` and `--color` are
+# honoured, and handled below rather than here, because they change what
+# happens.
 _IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
-_IGNORED_GLOBAL_OPTIONS = {"--color"}
+_IGNORED_GLOBAL_OPTIONS: set[str] = set()
 
 # Globals that change behaviour. argparse only accepts top-level options
 # before the subcommand, so these are lifted out of `argv` wherever they
 # appear and applied to the parsed namespace afterwards.
 _HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy"}
 _HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
-                           "--at-op": "at_operation"}
+                           "--at-op": "at_operation",
+                           "--color": "color"}
+
+# What `--color` accepts, in jj's order.
+_COLOR_CHOICES = ("always", "never", "debug", "auto")
 
 
 # The global options above never reach `argparse`, so a walk of the
@@ -170,6 +175,15 @@ def main(argv=None) -> int:
     from pyjj_cli.commands import common
     common.set_ignore_working_copy(args.ignore_working_copy)
     common.set_operation_args(invocation)
+    colour = globals_.get("color")
+    if colour is not None and colour not in _COLOR_CHOICES:
+        # jj's clap rejects anything else, and naming the accepted
+        # values is what it prints.
+        print(f"Error: invalid value '{colour}' for '--color <WHEN>'\n"
+              f"  [possible values: {', '.join(_COLOR_CHOICES)}]",
+              file=sys.stderr)
+        return 2
+    common.set_color_choice(colour)
     if args.command is None:
         parser.print_help()
         return 1

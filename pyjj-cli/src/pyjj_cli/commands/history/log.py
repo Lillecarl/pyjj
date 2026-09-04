@@ -1,14 +1,13 @@
 """history subcommand: log — backed by log_graph, drawn by jj's renderer."""
-import os
 import sys
 
 import pyjj
 from pyjj.graph_layout import reverse_graph
 
-from ..common import _load, _print_diff_stats, _resolve_template
+from ..common import _load, _print_diff_stats, _resolve_template, use_color
 
 # ANSI — match jj's 256-color palette where it matters.
-# Only emitted when stdout is a TTY and NO_COLOR is not set.
+# `use_color()` decides when these are emitted.
 _RESET = "\033[0m"
 _BOLD = "\033[1m"
 # jj log: change prefix magenta(13) bold, rest grey(8); commit prefix blue(12), rest grey; author yellow(3); timestamp cyan(14); bookmark/graph green(2)
@@ -22,12 +21,6 @@ _BOOKMARK_COLOR = "\033[38;5;2m"
 _GRAPH_GREEN_BOLD = "\033[1m\033[38;5;2m"
 
 
-def _use_color() -> bool:
-    if os.environ.get("NO_COLOR") is not None:
-        return False
-    if os.environ.get("FORCE_COLOR") is not None:
-        return True
-    return sys.stdout.isatty()
 
 
 def _color_change_id(hex_str: str, prefix_len: int, use_color: bool) -> str:
@@ -130,7 +123,7 @@ def log(args) -> int:
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
     show_stat = getattr(args, "stat", False)
-    use_color = _use_color()
+    coloured = use_color(settings)
 
     # jj's own builtin template names, mapped to a Jinja equivalent so
     # `pyjj log -T builtin_log_oneline` keeps working like `jj log` does.
@@ -173,7 +166,7 @@ def log(args) -> int:
         raw_glyph = "@" if is_current_wc else ("◆" if is_root else "○")
         # Only current wc gets green glyph/description — matches jj
         is_green = is_current_wc
-        glyph = f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}" if use_color and is_green else raw_glyph
+        glyph = f"{_GRAPH_GREEN_BOLD}{raw_glyph}{_RESET}" if coloured and is_green else raw_glyph
 
         # The graph is drawn by jj's own renderer, which takes the whole
         # row's text at once and decides where it sits among the lines it
@@ -196,8 +189,8 @@ def log(args) -> int:
             k_len = repo.shortest_commit_id_prefix_len(commit.id, settings)
         except Exception:
             k_len = 8
-        change_disp = _color_change_id(commit.change_id.reverse_hex(), c_len, use_color)
-        commit_disp = _color_commit_id(commit.id.hex(), k_len, use_color)
+        change_disp = _color_change_id(commit.change_id.reverse_hex(), c_len, coloured)
+        commit_disp = _color_commit_id(commit.id.hex(), k_len, coloured)
 
         bm_names = bm_by_commit.get(hex_id, [])
         ws_name = wc_names_by_hex.get(hex_id) if is_wc else None
@@ -207,7 +200,7 @@ def log(args) -> int:
         bm_str_raw = " ".join(sorted(bm_names))
         if bm_names:
             bm_str = " " + bm_str_raw
-            if use_color:
+            if coloured:
                 bm_str = f" {_BOOKMARK_COLOR}{bm_str.strip()}{_RESET}"
                 bm_str = " " + bm_str.strip()
         else:
@@ -221,7 +214,7 @@ def log(args) -> int:
             author = author_name or author_email
         except Exception:
             author_name = author_email = author = ""
-        author_disp = f"{_AUTHOR_COLOR}{author}{_RESET}" if use_color and author else author
+        author_disp = f"{_AUTHOR_COLOR}{author}{_RESET}" if coloured and author else author
 
         try:
             ts = commit.author.timestamp if hasattr(commit.author, "timestamp") else commit.committer.timestamp
@@ -238,11 +231,11 @@ def log(args) -> int:
         except Exception:
             datetime_str = ""
             dt = None
-        datetime_disp = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}" if use_color and datetime_str else datetime_str
+        datetime_disp = f"{_TIMESTAMP_COLOR}{datetime_str}{_RESET}" if coloured and datetime_str else datetime_str
 
         first_line = commit.description.splitlines()[0] if commit.description else None
         desc_raw = first_line or "(no description set)"
-        desc = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if use_color and is_green else desc_raw
+        desc = f"{_BOOKMARK_COLOR}{desc_raw}{_RESET}" if coloured and is_green else desc_raw
 
         # If --template given, render it via Jinja2. Context exposes both raw and
         # colored short ids, plus author/email/description/bookmarks.
@@ -260,8 +253,8 @@ def log(args) -> int:
                 "commit": commit,
                 "change_id": commit.change_id.reverse_hex(),
                 "commit_id": commit.id.hex(),
-                "change_id_short": _color_change_id(commit.change_id.reverse_hex(), c_len, use_color),
-                "commit_id_short": _color_commit_id(commit.id.hex(), k_len, use_color),
+                "change_id_short": _color_change_id(commit.change_id.reverse_hex(), c_len, coloured),
+                "commit_id_short": _color_commit_id(commit.id.hex(), k_len, coloured),
                 "change_id_short_raw": commit.change_id.reverse_hex()[:8],
                 "commit_id_short_raw": commit.id.hex()[:8],
                 "author": author,

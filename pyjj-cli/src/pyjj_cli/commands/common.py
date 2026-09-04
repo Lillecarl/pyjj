@@ -142,6 +142,42 @@ def set_operation_args(argv) -> None:
     _OPERATION_ARGV = list(argv)
 
 
+# What `--color` asked for, or None when it was not given. Set once per
+# process, the same way the recorded argv is.
+_COLOR_CHOICE: str | None = None
+
+
+def set_color_choice(choice: str | None) -> None:
+    global _COLOR_CHOICE
+    _COLOR_CHOICE = choice
+
+
+def use_color(settings=None) -> bool:
+    """Whether to write escape sequences, by jj's rule.
+
+    `--color` wins, then `ui.color`, then `auto`, which means stdout is
+    a terminal. jj reads no environment variable here; `NO_COLOR` is
+    pyjj-cli's own courtesy, and it can only turn colour off.
+
+    `debug` asks for jj's `<<labels::text>>` markers rather than escape
+    sequences. pyjj-cli does not carry the labels yet, so it prints the
+    same plain text `never` does rather than pretending.
+    """
+    choice = _COLOR_CHOICE
+    if choice is None and settings is not None:
+        try:
+            choice = settings.get_string("ui.color")
+        except Exception:
+            choice = None
+    if choice == "always":
+        return True
+    if choice in ("never", "debug"):
+        return False
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    return sys.stdout.isatty()
+
+
 def _operation_args() -> str:
     """The command line to record on this run's operations.
 
