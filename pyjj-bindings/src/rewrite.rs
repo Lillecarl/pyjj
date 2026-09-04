@@ -10,7 +10,7 @@ use jj_lib::merge::Merge;
 use jj_lib::merged_tree::MergedTree;
 use jj_lib::merged_tree_builder::MergedTreeBuilder;
 use jj_lib::object_id::ObjectId as _;
-use jj_lib::repo::MutableRepo;
+use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 use jj_lib::rewrite::{self, CommitWithSelection, MoveCommitsLocation, MoveCommitsTarget, RebaseOptions};
 
@@ -204,6 +204,7 @@ pub fn split_selected(
     paths: Option<Vec<String>>,
     hunks: Option<HashMap<String, Vec<usize>>>,
 ) -> PyResult<PyCommitBuilder> {
+    reject_root(mut_repo, target.inner.id())?;
     let selection = select(mut_repo, &target.inner, paths, hunks)?;
     let builder = mut_repo
         .rewrite_commit(&target.inner)
@@ -271,6 +272,7 @@ pub fn split_selected_edited(
     target: &PyCommit,
     selections: HashMap<String, Option<Vec<u8>>>,
 ) -> PyResult<PyCommitBuilder> {
+    reject_root(mut_repo, target.inner.id())?;
     let parent_tree =
         pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let edited = overlay_contents(parent_tree, Some(&target.inner.tree()), selections)?;
@@ -361,6 +363,9 @@ pub fn abandon_restoring_descendants(
     delete_abandoned_bookmarks: bool,
 ) -> PyResult<usize> {
     let roots: Vec<CommitId> = targets.into_iter().map(|id| id.0).collect();
+    for id in &roots {
+        reject_root(mut_repo, id)?;
+    }
     let to_abandon: HashSet<CommitId> = roots.iter().cloned().collect();
     let options = rewrite::RewriteRefsOptions {
         delete_abandoned_bookmarks,
@@ -400,6 +405,9 @@ pub fn abandon_restoring_descendants(
 /// Returns the new commits, in the same order as `targets`.
 pub fn duplicate(mut_repo: &mut MutableRepo, targets: Vec<PyCommit>) -> PyResult<Vec<PyCommit>> {
     let target_ids: Vec<_> = targets.iter().map(|c| c.inner.id().clone()).collect();
+    for id in &target_ids {
+        reject_root(mut_repo, id)?;
+    }
     let stats = pollster::block_on(rewrite::duplicate_commits_onto_parents(
         mut_repo,
         &target_ids,
@@ -498,8 +506,28 @@ pub fn restore(
 /// call, and a working-copy commit pointing at it gets a fresh child of
 /// those parents instead -- same as `record_abandoned_commit`'s own doc
 /// comment describes. Doesn't itself call `rebase_descendants()`.
-pub fn abandon(mut_repo: &mut MutableRepo, commit: &PyCommit) {
+pub fn abandon(mut_repo: &mut MutableRepo, commit: &PyCommit) -> PyResult<()> {
+    reject_root(mut_repo, commit.inner.id())?;
     mut_repo.record_abandoned_commit(&commit.inner);
+    Ok(())
+}
+
+/// Refuse to rewrite the root commit.
+///
+/// jj_lib asserts rather than returning an error here, and an assertion
+/// failure inside a native extension aborts the process instead of
+/// raising something Python can catch. `jj` never reaches those
+/// assertions because its CLI refuses immutable commits first, and the
+/// root commit is always immutable. The message matches jj's so the two
+/// tools fail the same way.
+pub fn reject_root(mut_repo: &MutableRepo, id: &CommitId) -> PyResult<()> {
+    if id == mut_repo.store().root_commit_id() {
+        return Err(crate::errors::JjError::new_err(format!(
+            "The root commit {} is immutable",
+            &id.hex()[..12]
+        )));
+    }
+    Ok(())
 }
 
 /// `jj rebase -r <rev> -d <dest>` equivalent for a single commit (not its
@@ -512,6 +540,7 @@ pub fn rebase(
     commit: &PyCommit,
     new_parents: Vec<PyCommitId>,
 ) -> PyResult<PyCommit> {
+    reject_root(mut_repo, commit.inner.id())?;
     let new_parent_ids: Vec<CommitId> = new_parents.into_iter().map(|id| id.0).collect();
     let new_commit = pollster::block_on(rewrite::rebase_commit(
         mut_repo,
@@ -576,6 +605,9 @@ pub fn move_commits(
         return Err(JjError::new_err(
             "move_commits: exactly one of target_commit_ids/target_root_ids must be non-empty",
         ));
+    }
+    for id in target_commit_ids.iter().chain(target_root_ids.iter()) {
+        reject_root(mut_repo, &id.0)?;
     }
     let target = if !target_commit_ids.is_empty() {
         MoveCommitsTarget::Commits(target_commit_ids.into_iter().map(|id| id.0).collect())

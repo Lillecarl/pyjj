@@ -1128,8 +1128,7 @@ impl PyTransaction {
     /// afterward, same as every other rewrite here.
     fn abandon_commit(&self, commit: &PyCommit) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
-            crate::rewrite::abandon(mut_repo, commit);
-            Ok(())
+            crate::rewrite::abandon(mut_repo, commit)
         })
     }
 
@@ -1396,8 +1395,23 @@ impl PyCommitBuilder {
     }
 
     /// Write this commit to the repository. Returns the new [`Commit`].
+    ///
+    /// A builder with no parents can only be a rewrite of the root
+    /// commit, which has none. jj_lib asserts on that and aborts the
+    /// process, so the check has to happen before the write: an
+    /// assertion failure inside a native extension is a crash, not an
+    /// exception Python can catch. `jj` never reaches it because its
+    /// CLI refuses to rewrite immutable commits first, and the root
+    /// commit is always immutable.
     fn write(mut slf: PyRefMut<'_, Self>, repo: &PyReadonlyRepo) -> PyResult<PyCommit> {
         let builder = take_inner(&mut slf.inner)?;
+        if builder.parents().is_empty() {
+            let root = repo.inner.store().root_commit_id();
+            return Err(crate::errors::JjError::new_err(format!(
+                "The root commit {} is immutable",
+                &root.hex()[..12]
+            )));
+        }
         let commit = pollster::block_on(builder.write()).map_err(map_backend_err)?;
         Ok(PyCommit {
             inner: commit,

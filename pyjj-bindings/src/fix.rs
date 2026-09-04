@@ -195,5 +195,10 @@ fn resolve_root_commits(
         revset.unwrap_or("reachable(@, mutable())"),
     )?;
     let evaluated = expr.evaluate(mut_repo).map_err(map_py_err)?;
-    pollster::block_on(evaluated.stream().try_collect()).map_err(map_py_err)
+    let commits: Vec<jj_lib::backend::CommitId> =
+        pollster::block_on(evaluated.stream().try_collect()).map_err(map_py_err)?;
+    for id in &commits {
+        crate::rewrite::reject_root(mut_repo, id)?;
+    }
+    Ok(commits)
 }
