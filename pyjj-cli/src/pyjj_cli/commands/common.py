@@ -262,6 +262,33 @@ def _commit_location(repo, settings, ontos, afters, befores):
     return list(seen.values()), [c.id for c in children]
 
 
+def _insert_between(tx, repo, new_parent_ids, new_child_ids, head_id):
+    """Hook the named children onto a commit inserted above them.
+
+    jj's rule, shared by `new` and `revert`: a child parent that is one of
+    the insertion point's own parents gets replaced by the inserted
+    commit, and every other parent stays. The inserted commit is then
+    added if it is not there already, so a child that hangs from
+    somewhere else keeps that edge and gains a second one.
+
+    Rebasing rather than setting the parents matters: the child's tree has
+    to be re-merged against the parents it now has.
+    """
+    parent_hexes = {parent.hex() for parent in new_parent_ids}
+    for child_id in new_child_ids:
+        child = repo.get_commit(child_id)
+        parents = []
+        seen = set()
+        for old_parent in child.parent_ids:
+            chosen = head_id if old_parent.hex() in parent_hexes else old_parent
+            if chosen.hex() not in seen:
+                seen.add(chosen.hex())
+                parents.append(chosen)
+        if head_id.hex() not in seen:
+            parents.append(head_id)
+        tx.rebase(child, parents)
+
+
 def _check_rewritable(tx, settings, commits) -> None:
     """`jj`'s guard against rewriting shared history: refuse when any of
     `commits` falls inside `immutable()`.

@@ -11,6 +11,8 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _check_rewritable,
+    _commit_location,
+    _insert_between,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -49,7 +51,8 @@ def new(args) -> int:
 
     try:
         if afters or befores:
-            parents, children = _insertion_point(repo, settings, afters, befores)
+            parents, children = _commit_location(
+                repo, settings, [], afters, befores)
         elif args.parents_pos:
             parents = [c.id for c in
                        _resolve_in_arg_order(repo, settings, args.parents_pos)]
@@ -69,7 +72,7 @@ def new(args) -> int:
         if children:
             # The commits that followed the insertion point move onto the
             # new change, together with their own descendants.
-            tx.move_commits([], children, [child.id], [])
+            _insert_between(tx, repo, parents, children, child.id)
         if not getattr(args, "no_edit", False):
             tx.set_wc_commit(ws.workspace_name, child.id)
         _finish(tx, "new empty commit", settings, ws, repo)
@@ -79,21 +82,3 @@ def new(args) -> int:
     return 0
 
 
-def _insertion_point(repo, settings, afters, befores):
-    """Parents for the new change, and the commits to rebase onto it."""
-    parents: list = []
-    children: list = []
-    if afters:
-        parents = [c.id for c in _resolve_in_arg_order(repo, settings, afters)]
-        expression = " | ".join(f"children({a})" for a in afters)
-        children = [c.id for c in repo.revset(settings, expression)]
-    if befores:
-        before_commits = _resolve_in_arg_order(repo, settings, befores)
-        children = [c.id for c in before_commits]
-        if not afters:
-            seen = {}
-            for commit in before_commits:
-                for pid in commit.parent_ids:
-                    seen[pid.hex()] = pid
-            parents = list(seen.values())
-    return parents, children

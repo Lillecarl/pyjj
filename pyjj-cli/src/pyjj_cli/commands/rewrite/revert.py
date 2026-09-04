@@ -7,6 +7,8 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _check_rewritable,
+    _commit_location,
+    _insert_between,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -73,50 +75,22 @@ def revert(args) -> int:
         dests = getattr(args, "destinations", None) or []
         afters = getattr(args, "insert_afters", None) or []
         befores = getattr(args, "insert_befores", None) or []
-        dest_mode_count = sum(1 for x in (ontos, dests, afters, befores) if x)
-        if dest_mode_count == 0:
+        plain = list(ontos) + list(dests)
+        if not (plain or afters or befores):
             print("Error: --onto, --insert-after or --insert-before is required", file=sys.stderr)
             return 2
-        if dest_mode_count > 1:
-            print("Error: specify only one of --onto, --insert-after, --insert-before", file=sys.stderr)
+        if plain and (afters or befores):
+            print("Error: --onto cannot be used with --insert-after or "
+                  "--insert-before", file=sys.stderr)
             return 2
 
-        new_parent_ids: list[pyjj.CommitId] = []
-        new_child_ids: list[pyjj.CommitId] = []
-        if ontos or dests:
-            plain = list(ontos) + list(dests)
-            dest_commits = _resolve_in_arg_order(repo, settings, plain)
-            if not dest_commits:
-                print("Error: no destination revisions", file=sys.stderr)
-                return 1
-            new_parent_ids = [c.id for c in dest_commits]
-            new_child_ids = []
-        elif afters:
-            after_commits = _resolve_in_arg_order(repo, settings, afters)
-            new_parent_ids = [c.id for c in after_commits]
-            # Children of after: those whose parent is after
-            try:
-                children_expr = " | ".join(f"children({a})" for a in afters)
-                children = repo.revset(settings, children_expr)
-                new_child_ids = [c.id for c in children]
-            except pyjj.JjError:
-                new_child_ids = []
-        else:  # befores
-            before_commits = _resolve_in_arg_order(repo, settings, befores)
-            new_child_ids = [c.id for c in before_commits]
-            parents_set: dict[str, pyjj.Commit] = {}
-            for c in before_commits:
-                for pid in c.parent_ids:
-                    try:
-                        p = repo.get_commit(pid)
-                        parents_set[pid.hex()] = p
-                    except pyjj.JjError:
-                        pass
-            new_parent_ids = [c.id for c in parents_set.values()]
-            if not new_parent_ids:
-                # If before has no parents (root), use empty? But revert requires at least one parent.
-                print("Error: insert-before destination has no parents", file=sys.stderr)
-                return 1
+        # `-A` and `-B` combine: together they name both sides of the
+        # insertion point directly.
+        new_parent_ids, new_child_ids = _commit_location(
+            repo, settings, plain, afters, befores)
+        if not new_parent_ids:
+            print("Error: No revisions found to use as parent", file=sys.stderr)
+            return 1
 
         tx = repo.start_transaction(settings)
         # `-A`/`-B` rebase whatever followed the insertion point.
@@ -142,27 +116,10 @@ def revert(args) -> int:
             print("No revisions to revert.")
             return 0
 
-        # Handle insert-after / insert-before by rebasing the original children onto the final revert
+        # The reverts form a chain, so the children hang from its head.
         if new_child_ids:
-            for child_id in new_child_ids:
-                try:
-                    child = repo.get_commit(child_id)
-                    # Rewrite child to have last_revert as parent (keeping other parents if merge)
-                    # For simplicity, replace the old parent (the after/before target) with last_revert
-                    # If child had multiple parents, keep them but replace the relevant one.
-                    # For now, just set parents to [last_revert.id] if single parent, else keep other parents
-                    if len(child.parent_ids) == 1:
-                        new_parents = [last_revert.id]
-                    else:
-                        # For merges, replace any parent that was in new_parent_ids or new_child_ids?
-                        # Simplify: keep all parents but ensure last_revert is included
-                        existing = [pid for pid in child.parent_ids if pid.hex() not in {c.hex() for c in new_parent_ids + new_child_ids}]
-                        new_parents = [last_revert.id] + existing
-                    b = tx.rewrite_commit(settings, child)
-                    b.set_parents(new_parents)
-                    b.write(repo)
-                except pyjj.JjError:
-                    continue
+            _insert_between(tx, repo, new_parent_ids, new_child_ids,
+                            last_revert.id)
 
         # If the source was @ and we created a new commit, the working copy should follow?
         # _finish will handle rebase_descendants and checkout.
