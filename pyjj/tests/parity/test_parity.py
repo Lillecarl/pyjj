@@ -1435,6 +1435,36 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- util ---------------------------------------------------------------
+
+
+def test_util_gc_leaves_the_repo_alone(pair: RepoPair) -> None:
+    """The default keeps everything written in the last two weeks, so a
+    fresh repo loses nothing."""
+    chain(pair)
+    pair.op(jj=["util", "gc"])
+    pair.assert_parity()
+
+
+def test_util_gc_expire_now(pair: RepoPair) -> None:
+    """`--expire=now` drops the grace period, so the sweep runs for real.
+
+    What it collects is unreachable by definition, so this cannot claim
+    the objects went -- `_extract_repo` only sees visible ones. The claim
+    is the one the op-read family makes: both sides exit 0 and the
+    visible repository is untouched."""
+    chain(pair)
+    pair.op(jj=["util", "gc", "--expire", "now"])
+    pair.assert_parity()
+
+
+def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
+    """jj accepts only the literal `now`."""
+    chain(pair)
+    pair.op(jj=["util", "gc", "--expire", "1h"], may_fail=True)
+    pair.assert_parity()
+
+
 # -- commands jj has and pyjj-cli does not yet ---------------------------
 #
 # Every one of these runs clean through `jj` and fails through pyjj-cli.
