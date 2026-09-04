@@ -2610,6 +2610,53 @@ def test_file_list_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["file", "list"])
 
 
+@pytest.mark.covers("evolog")
+def test_evolog_carries_the_facts_jj_shows(pair: RepoPair) -> None:
+    """`evolog` cannot be compared byte for byte, for two reasons.
+
+    Its rows share `log`'s deliberate divergence, and every row names
+    the operation that made that version -- and operation ids are
+    repo-local, so the two sides differ there however correct both are.
+    Hence facts: one row per version, every commit id jj shows, the
+    change id, and `(hidden)` on the versions jj calls hidden.
+    """
+    chain(pair)
+    pair.op(files={"two.txt": b"two again\n"}, jj=["describe", "-m", "two rewritten"])
+    cli, py = pair.outputs(["evolog"])
+    cli_rows = [line for line in cli.splitlines() if line[:1] in "@\u25cb\u25c6\u25cf"]
+    py_rows = [line for line in py.splitlines() if line[:1] in "@\u25cb\u25c6\u25cf"]
+    # Guard the scenario itself: without a rewrite there is nothing
+    # hidden to find, and every assertion below would pass on empty.
+    assert len(cli_rows) > 1, f"scenario produced no evolution\njj:\n{cli}"
+    assert cli.count("(hidden)") >= 1, f"scenario hid nothing\njj:\n{cli}"
+    assert len(cli_rows) == len(py_rows), f"row counts differ\njj:\n{cli}\npyjj:\n{py}"
+    assert cli.count("(hidden)") == py.count("(hidden)"), (
+        f"hidden markers differ\njj:\n{cli}\npyjj:\n{py}"
+    )
+    ids = set(re.findall(r"\b[0-9a-f]{8}\b", cli)) | set(re.findall(r"\b[k-z]{8}\b", cli))
+    # Operation ids are repo-local, so drop the ones only they contribute.
+    op_ids = set(re.findall(r"operation ([0-9a-f]{12})", cli))
+    ids = {i for i in ids if not any(i in op for op in op_ids)}
+    missing = sorted(i for i in ids if i not in py)
+    assert not missing, f"pyjj's evolog drops {missing}\njj:\n{cli}\npyjj:\n{py}"
+
+
+@pytest.mark.covers("evolog", "--template", "-T")
+def test_evolog_renders_a_jinja_template(pair: RepoPair) -> None:
+    """`evolog` takes a template, as jj does, and pyjj-cli's template
+    language is Jinja rather than jj's own.
+
+    So the argv cannot be shared: the two sides get the same request
+    written in each one's language, and the output has to agree.
+    """
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["evolog", "--no-graph", "-T", 'commit.commit_id().short(8) ++ "\n"'],
+        ["evolog", "--no-graph", "-T", "{{ commit_id_short }}"],
+    )
+    assert cli == py
+
+
 @pytest.mark.covers("interdiff")
 def test_interdiff_output_matches(pair: RepoPair) -> None:
     """`interdiff` compares two commits' patches, and their

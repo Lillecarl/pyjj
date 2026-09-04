@@ -219,8 +219,23 @@ class RepoPair:
         cli, py = self._both(argv, check=True)
         return cli.stdout, py.stdout
 
-    def _both(self, argv: list[str], *, check: bool):
+    def outputs_asymmetric(self, jj_argv: list[str], py_argv: list[str]) -> tuple[str, str]:
+        """Both stdouts when the two sides need different argv.
+
+        Templates are the case this exists for: jj has a template
+        language of its own and pyjj-cli uses Jinja, so a request for
+        the same output is spelled differently on each side. Everything
+        else in the suite shares one argv on purpose, and should.
+        """
+        cli, _ = self._both(jj_argv, check=True, side="cli")
+        _, py = self._both(py_argv, check=True, side="py")
+        return cli.stdout, py.stdout
+
+    def _both(self, argv: list[str], *, check: bool, side: str | None = None):
         """Runs one read-only argv on each side and returns both results.
+
+        `side` runs only that one, for the asymmetric case; the other
+        result is a stand-in that is never read.
 
         `--ignore-working-copy` is passed for the reason `_extract_repo`
         gives: reading must not snapshot, or the act of looking could
@@ -228,12 +243,13 @@ class RepoPair:
         """
         env = self._env(bump=False)
         common = ["--no-pager", "--ignore-working-copy", *argv]
-        cli = subprocess.run(
+        blank = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        cli = blank if side == "py" else subprocess.run(
             [self.jj_bin, "-R", str(self.cli_repo), *common],
             env=env, capture_output=True, text=True, cwd=str(self.cli_repo),
             stdin=subprocess.DEVNULL,
         )
-        py = subprocess.run(
+        py = blank if side == "cli" else subprocess.run(
             [sys.executable, str(DRIVER), str(self.py_repo), *common],
             env=env, capture_output=True, text=True, cwd=str(self.py_repo),
             stdin=subprocess.DEVNULL,

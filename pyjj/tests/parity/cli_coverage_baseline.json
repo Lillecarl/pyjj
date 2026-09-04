@@ -184,7 +184,6 @@
     "-r"
   ],
   "evolog": [
-    "(command)",
     "--color-words",
     "--context",
     "--git",
@@ -198,11 +197,9 @@
     "--revisions",
     "--stat",
     "--summary",
-    "--template",
     "--tool",
     "--types",
     "-G",
-    "-T",
     "-n",
     "-p",
     "-r",
