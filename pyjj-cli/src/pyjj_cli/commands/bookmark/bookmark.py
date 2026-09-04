@@ -12,6 +12,7 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _start_transaction,
+    _formatter,
     _print_ref,
     _resolve_template,
     CommandError,
@@ -127,10 +128,12 @@ def bookmark(args) -> int:
             _settings, ws, repo = _load(args)
             template = _resolve_template(_settings, ws, args, "bookmark_list")
             names = getattr(args, "names", None) or []
+            fmt = _formatter(_settings)
             for ref, tracked in _list_items(repo, args):
                 if names and ref.name not in names:
                     continue
-                _print_ref(repo, _settings, ref, template, tracked)
+                _print_ref(repo, _settings, ref, template, tracked, fmt=fmt)
+            fmt.close()
             return 0
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

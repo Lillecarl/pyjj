@@ -100,27 +100,27 @@ CATALOGUE: tuple[Entry, ...] = (
     E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",)),
 
     # -- refs -----------------------------------------------------------
-    E("bookmark-list", ("bookmark", "list"), claims=("bookmark list",)),
+    E("bookmark-list", ("bookmark", "list"), claims=("bookmark list",), colour="bytes"),
     E("bookmark-list-all-remotes", ("bookmark", "list", "--all-remotes"),
-      claims=("bookmark list", "--all-remotes", "-a")),
+      claims=("bookmark list", "--all-remotes", "-a"), colour="bytes"),
     E("bookmark-list-a", ("bookmark", "list", "-a"),
-      claims=("bookmark list", "-a")),
+      claims=("bookmark list", "-a"), colour="bytes"),
     # On `chain` these print what their absence prints: with no remote,
     # `--all-remotes` and `--tracked` change nothing. The entries above
     # keep the no-remote case; these hold the flags to their job.
-    E("bookmark-list-remote", ("bookmark", "list"), **_R),
+    E("bookmark-list-remote", ("bookmark", "list"), colour="bytes", **_R),
     E("bookmark-list-all-remotes-fetched",
       ("bookmark", "list", "--all-remotes"),
-      claims=("bookmark list", "--all-remotes", "-a"), **_R),
+      claims=("bookmark list", "--all-remotes", "-a"), colour="bytes", **_R),
     E("bookmark-list-tracked", ("bookmark", "list", "--tracked"),
-      claims=("bookmark list", "--tracked", "-t"), **_R),
+      claims=("bookmark list", "--tracked", "-t"), colour="bytes", **_R),
     E("bookmark-list-one-remote",
       ("bookmark", "list", "--remote", "origin"),
-      claims=("bookmark list", "--remote"), **_R),
+      claims=("bookmark list", "--remote"), colour="bytes", **_R),
     E("git-remotes", ("git", "remote", "list"),
       claims=("git remote list",), colour="bytes", **_R),
 
-    E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",)),
+    E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",), colour="bytes"),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",)),
 
     # -- paths ----------------------------------------------------------

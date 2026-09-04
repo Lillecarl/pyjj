@@ -11,6 +11,7 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     CommandError,
+    _formatter,
     _print_ref,
     _resolve_template,
     _checkout_if_moved,
@@ -40,8 +41,11 @@ def tag_list(args) -> int:
         tags = repo.tags()  # list[Tag]
         if names:
             tags = [t for t in tags if t.name in names]
+        fmt = _formatter(settings)
         for tag in sorted(tags, key=lambda t: t.name):
-            _print_ref(repo, settings, tag, template)
+            _print_ref(repo, settings, tag, template,
+                       kind="tag", fmt=fmt)
+        fmt.close()
         return 0
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

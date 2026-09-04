@@ -11,6 +11,10 @@ from pathlib import Path, PurePosixPath
 
 import pyjj
 import pyjj.hunk as hunk_mod
+
+from ..formatter import Formatter
+
+
 def complete_newline(s: str) -> str:
     """The real CLI's text_util::complete_newline: append exactly one
     trailing newline to non-empty text lacking one; empty stays empty.
@@ -651,20 +655,44 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
-def _tracking_distances(repo, remote_ids, local_ids) -> str:
-    """jj's `format_tracked_remote_ref_distances`, as one bracketed part.
+def _tracking_distance_spans(repo, remote_ids, local_ids):
+    """How far a tracked remote sits from its local ref, in the pieces
+    jj labels it in.
+
+    This is jj's `format_tracked_remote_ref_distances`. Only the count
+    carries a label; the words around it are plain.
+    """
+    parts = _tracking_counts(repo, remote_ids, local_ids)
+    if not parts:
+        return []
+    out = [(" (", "")]
+    for index, (word, count, exact) in enumerate(parts):
+        if index:
+            out.append((", ", ""))
+        out.append((f"{word} by " if exact else f"{word} by at least ", ""))
+        out.append((str(count),
+                    f"tracking_{word}_count "
+                    + ("exact" if exact else "lower")))
+        out.append((" commits", ""))
+    out.append((")", ""))
+    return out
+
+
+def _tracking_counts(repo, remote_ids, local_ids):
+    """How far a tracked remote ref sits from the local ref, jj's way.
 
     Ahead counts the commits the remote ref reaches and the local one
-    does not. Behind counts the other way. jj drops a zero count, drops
-    the brackets when both are zero, and never singularizes "commits".
+    does not. Behind counts the other way. jj drops a zero count, and
+    never singularizes "commits".
 
     A count is a size hint: exact when its bounds meet, and a lower
-    bound otherwise. jj says "at least N" for the second case.
+    bound otherwise, which jj words as "at least N". Returns
+    `(word, count, exact)` for each non-zero direction.
     """
     if not local_ids:
         # The local ref is gone, so there is nothing to measure against.
-        return ""
-    parts = []
+        return []
+    out = []
     for word, wanted, unwanted in (
         ("ahead", remote_ids, local_ids),
         ("behind", local_ids, remote_ids),
@@ -672,22 +700,26 @@ def _tracking_distances(repo, remote_ids, local_ids) -> str:
         lower, upper = repo.walk_revs_count(wanted, unwanted)
         if upper == 0:
             continue
-        if upper == lower:
-            parts.append(f"{word} by {lower} commits")
-        else:
-            parts.append(f"{word} by at least {lower} commits")
-    return f"({', '.join(parts)})" if parts else ""
+        out.append((word, lower, upper == lower))
+    return out
 
 
-def _print_ref(repo, settings, ref, template=None, tracked=()) -> None:
+def _formatter(settings=None) -> Formatter:
+    """This command's stdout, with jj's label stack over it."""
+    return Formatter(sys.stdout, use_color(settings))
+
+
+def _print_ref(repo, settings, ref, template=None, tracked=(), *,
+               kind: str = "bookmark", fmt=None) -> None:
     """One listing item: a ref, then the remote refs that follow it.
 
     jj renders bookmarks and tags from the same `format_commit_ref`, so
-    this serves both listings. A plain ref is `name: <commit summary>`.
-    A deleted one is `name (deleted)`, with no colon. A conflicted one
-    heads a block, then lists the commits it moved away from with `-`
-    and the ones it moved to with `+`. A remote ref that no local ref
-    follows heads its own item, named `name@remote`.
+    this serves both listings; `kind` is which, and it is a label as
+    well as a word. A plain ref is `name: <commit summary>`. A deleted
+    one is `name (deleted)`, with no colon. A conflicted one heads a
+    block, then lists the commits it moved away from with `-` and the
+    ones it moved to with `+`. A remote ref that no local ref follows
+    heads its own item, named `name@remote`.
 
     Each tracked remote ref follows its local ref, indented, named by
     the remote alone, and carrying how far it sits from that local ref.
@@ -697,36 +729,68 @@ def _print_ref(repo, settings, ref, template=None, tracked=()) -> None:
     The summaries carry no ref names of their own: jj passes an empty
     ref list, since the name is already the line's subject.
     """
-    def render(commit_id, prefix: str = "", head: str = "") -> None:
+    own = fmt is None
+    if own:
+        fmt = Formatter(sys.stdout, False)
+    fmt.push(f"{kind}_list")
+
+    def spans(pieces) -> None:
+        for text, labels in pieces:
+            fmt.write(text, *labels.split())
+
+    def summary(commit_id, under: str) -> None:
         commit = repo.get_commit(commit_id)
+        with fmt.labeled(*under.split()):
+            spans(_commit_summary_spans(repo, settings, commit, []))
+
+    def line(commit_id, head=None, prefix: str = "",
+             under: str = "normal_target") -> None:
         if template is not None:
+            commit = repo.get_commit(commit_id)
             context = _commit_context(repo, settings, commit, [])
             context["name"] = ref.name
-            print(prefix + template.render(context))
+            fmt.write(prefix + template.render(context) + "\n")
             return
-        summary = _commit_summary(repo, settings, commit, [])
-        print(f"{prefix}{summary}" if prefix else f"{head}: {summary}")
-
-    def targets(item, head: str, absent: str = " (deleted)") -> None:
-        if getattr(item, "has_conflict", False):
-            print(f"{head} (conflicted):")
-            for commit_id in item.removed_ids:
-                render(commit_id, "  - ")
-            for commit_id in item.target_ids:
-                render(commit_id, "  + ")
-        elif item.target_ids:
-            render(item.target_ids[0], head=head)
+        if head is not None:
+            head()
+            fmt.write(": ")
         else:
-            print(f"{head}{absent}")
+            fmt.write(prefix, *under.split())
+        summary(commit_id, under)
+        fmt.write("\n")
+
+    def targets(item, head, absent: str = " (deleted)") -> None:
+        if getattr(item, "has_conflict", False):
+            head()
+            fmt.write(" ")
+            fmt.write("(conflicted)", "conflict")
+            fmt.write(":\n")
+            for commit_id in item.removed_ids:
+                line(commit_id, prefix="  - ", under="removed_targets map join")
+            for commit_id in item.target_ids:
+                line(commit_id, prefix="  + ", under="added_targets map join")
+        elif item.target_ids:
+            line(item.target_ids[0], head=head)
+        else:
+            head()
+            fmt.write(absent)
+            fmt.write("\n")
 
     remote = getattr(ref, "remote", None)
-    targets(ref, f"{ref.name}@{remote}" if remote else ref.name)
+    if remote is None:
+        name = [(ref.name, f"{kind} name")]
+    else:
+        name = [(ref.name, kind), ("@", kind), (remote, f"{kind} remote")]
+    targets(ref, lambda: spans(name))
+
     for remote_ref, local_ids in tracked:
-        head = f"  @{remote_ref.remote}"
-        distances = _tracking_distances(repo, remote_ref.target_ids, local_ids)
-        if distances:
-            head = f"{head} {distances}"
-        targets(remote_ref, head, absent=" (not created yet)")
+        head = [("  ", ""), ("@", kind), (remote_ref.remote, f"{kind} remote")]
+        head += _tracking_distance_spans(repo, remote_ref.target_ids, local_ids)
+        targets(remote_ref, lambda head=head: spans(head),
+                absent=" (not created yet)")
+    fmt.pop()
+    if own:
+        fmt.close()
 
 
 def _conflict_lines(commit, to_ui_path) -> list[str]:
@@ -945,6 +1009,21 @@ def _short_id(hex_str: str, shortest_len: int) -> str:
     return hex_str[: max(8, shortest_len)]
 
 
+def _short_id_spans(hex_str: str, shortest_len: int, kind: str):
+    """The same id, split where jj colours it.
+
+    jj labels the unique prefix and the rest apart, so the prefix a
+    reader can type stands out from the padding that only makes the
+    column eight wide. `kind` is `change_id` or `commit_id`.
+    """
+    shown = _short_id(hex_str, shortest_len)
+    cut = min(shortest_len if shortest_len > 0 else len(shown), len(shown))
+    spans = [(shown[:cut], f"{kind} shortest prefix")]
+    if shown[cut:]:
+        spans.append((shown[cut:], f"{kind} shortest rest"))
+    return spans
+
+
 def _is_empty(repo, commit) -> bool:
     """Whether a commit changes nothing, the way jj's `empty()` decides.
 
@@ -1063,8 +1142,9 @@ def _indent(text: str, prefix: str = "    ") -> str:
     return "\n".join(prefix + line if line else line for line in text.split("\n"))
 
 
-def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
-    """One commit as jj's `commit_summary` template renders it.
+def _commit_summary_spans(repo, settings, commit, bookmarks=None):
+    """One commit as jj's `commit_summary` template renders it, in the
+    labelled pieces jj colours it in.
 
     jj builds this from `format_commit_summary_with_refs`, and several
     commands print it -- `status` names the working copy and its parents
@@ -1085,39 +1165,73 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
     revset where the bare change id would be ambiguous or resolve to
     something else. jj prints the offset only for those two, because
     only then does the change id alone fail to name the commit.
+
+    Returns `(text, labels)` pairs. The caller supplies the labels
+    around these -- `commit`, and `working_copy` where it applies -- so
+    the same pieces colour differently in different places, which is
+    what jj's stacks do.
     """
     if bookmarks is None:
         bookmarks = _bookmarks_by_commit(repo).get(commit.id.hex(), [])
-    change = _short_id(
-        commit.change_id.reverse_hex(),
-        repo.shortest_change_id_prefix_len(commit.change_id, settings),
-    )
     hidden = commit.is_hidden(repo)
     divergent = not hidden and commit.is_divergent(repo)
-    if hidden or divergent:
+    marker = "hidden" if hidden else "divergent" if divergent else ""
+
+    spans = []
+    for text, labels in _short_id_spans(
+        commit.change_id.reverse_hex(),
+        repo.shortest_change_id_prefix_len(commit.change_id, settings),
+        "change_id",
+    ):
+        spans.append((text, f"{marker} {labels}".strip()))
+    if marker:
         offset = commit.change_offset(repo)
         if offset is not None:
-            change = f"{change}/{offset}"
-    commit_id = _short_id(
+            spans.append((f"/{offset}", f"{marker} change_offset"))
+    spans.append((" ", ""))
+    spans.extend(_short_id_spans(
         commit.id.hex(),
         repo.shortest_commit_id_prefix_len(commit.id, settings),
-    )
+        "commit_id",
+    ))
+    spans.append((" ", ""))
+
+    if bookmarks:
+        for index, name in enumerate(bookmarks):
+            if index:
+                spans.append((" ", ""))
+            spans.append((name, "bookmarks name"))
+        spans.append((" | ", "separator"))
+
     rest = []
     # jj's order: whichever of hidden/divergent applies, then conflict.
-    if hidden:
-        rest.append("(hidden)")
-    elif divergent:
-        rest.append("(divergent)")
+    if marker:
+        rest.append((f"({marker})", marker))
     if commit.has_conflict:
-        rest.append("(conflict)")
-    if _is_empty(repo, commit):
-        rest.append("(empty)")
+        rest.append(("(conflict)", "conflict"))
+    empty = _is_empty(repo, commit)
+    if empty:
+        rest.append(("(empty)", "empty"))
     first_line = commit.description.splitlines()[0] if commit.description else ""
-    rest.append(first_line if first_line else "(no description set)")
-    tail = " ".join(rest)
-    if bookmarks:
-        tail = " ".join(bookmarks) + " | " + tail
-    return f"{change} {commit_id} {tail}"
+    if first_line:
+        rest.append((first_line, "description first_line"))
+    else:
+        rest.append(("(no description set)",
+                     "empty description placeholder" if empty
+                     else "description placeholder"))
+    for index, (text, labels) in enumerate(rest):
+        if index:
+            spans.append((" ", ""))
+        spans.append((text, labels))
+    return spans
+
+
+def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
+    """`_commit_summary_spans` as plain text."""
+    return "".join(
+        text for text, _ in
+        _commit_summary_spans(repo, settings, commit, bookmarks)
+    )
 
 
 def _git_diff_bytes(files, context: int = 3) -> bytes:
