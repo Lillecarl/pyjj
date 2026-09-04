@@ -2672,7 +2672,27 @@ def test_status_names_a_bookmark_on_the_parent(pair: RepoPair) -> None:
     pair.assert_output(["status"])
 
 
-@OUTPUT_UNIMPLEMENTED
+@pytest.mark.covers("show")
 def test_show_output_matches(pair: RepoPair) -> None:
     chain(pair)
     pair.assert_output(["show", rev("one")])
+
+
+@pytest.mark.covers("show")
+def test_show_prints_bookmarks_and_a_long_description(pair: RepoPair) -> None:
+    """The header carries a `Bookmarks:` line only when there are some,
+    and it names an exported bookmark twice -- `main` and `main@git`.
+
+    The description is indented by four, except that a blank line stays
+    blank rather than becoming four spaces.
+    """
+    pair.init()
+    pair.op(files={"f.txt": b"one\n"}, jj=["describe", "-m", "subject\n\nbody line\n"])
+    pair.op(jj=["bookmark", "create", "main"])
+    pair.assert_output(["show", "@"])
+
+
+@pytest.mark.covers("show", "--no-patch")
+def test_show_no_patch_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["show", "--no-patch", rev("one")])

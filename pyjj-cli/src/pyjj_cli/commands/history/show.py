@@ -10,6 +10,12 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _bookmarks_by_commit,
+    _detailed_signature,
+    _diff_base,
+    _indent,
+    _print_diff,
+    _tags_by_commit,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -32,35 +38,32 @@ from ..common import (
 )
 
 def show(args) -> int:
-    """`jj show` — show revision metadata and diff."""
+    """`jj show` — a commit's metadata and its diff."""
     try:
         settings, ws, repo = _load(args)
         revs = args.revisions or ["@"]
         commits = _resolve_all(repo, settings, revs)
+        bookmarks = _bookmarks_by_commit(repo, remotes=True)
+        tags = _tags_by_commit(repo)
         for commit in commits:
-            desc = commit.description or "(no description set)"
-            print(f"Commit: {commit.id.hex()}")
-            print(f"Change: {commit.change_id.hex()}")
-            print(f"Author: {commit.author.name} <{commit.author.email}>")
-            print(f"Description:\n  {desc.strip()}")
+            print(f"Commit ID: {commit.id.hex()}")
+            print(f"Change ID: {commit.change_id.reverse_hex()}")
+            names = bookmarks.get(commit.id.hex(), [])
+            if names:
+                print(f"Bookmarks: {' '.join(names)}")
+            commit_tags = tags.get(commit.id.hex(), [])
+            if commit_tags:
+                print(f"Tags     : {' '.join(commit_tags)}")
+            print(f"Author   : {_detailed_signature(commit.author)}")
+            print(f"Committer: {_detailed_signature(commit.committer)}")
+            print()
+            description = commit.description.rstrip() or "(no description set)"
+            print(_indent(description))
+            print()
             if getattr(args, "no_patch", False):
                 continue
-            if commit.parent_ids:
-                parent = repo.get_commit(commit.parent_ids[0])
-                if getattr(args, "stat", False):
-                    _print_diff_stats(parent.diff_stats(commit, settings))
-                    continue
-                entries = parent.diff(commit)
-            else:
-                entries = []
-                for p in commit.list_files():
-                    print(f"added    {p}")
-                continue
-            for e in entries:
-                if getattr(args, "name_only", False):
-                    print(e.path)
-                else:
-                    print(f"{e.status:8} {e.path}")
+            base = _diff_base(repo, settings, commit)
+            _print_diff(args, ws, settings, base, commit, None)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1

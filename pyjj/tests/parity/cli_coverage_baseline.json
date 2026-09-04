@@ -547,14 +547,12 @@
     "-j"
   ],
   "show": [
-    "(command)",
     "--color-words",
     "--context",
     "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
-    "--no-patch",
     "--reversed",
     "--stat",
     "--summary",

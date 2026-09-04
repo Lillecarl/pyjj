@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 
 import pyjj
@@ -677,8 +678,54 @@ def _is_empty(repo, commit) -> bool:
     return commit.is_empty(repo)
 
 
+def _local_tz_offset_minutes() -> int:
+    """The offset jj's `timestamp.local()` applies.
+
+    jj takes `chrono::Local::now().offset()` -- the offset in force
+    *now* -- and stamps it onto every timestamp it prints, rather than
+    the offset that was in force when the commit was made. A commit from
+    a winter day therefore prints in summer time when read in summer.
+    `JJ_TZ_OFFSET_MINS` overrides it.
+
+    This is not a detail worth guessing at: the parity fixture pins its
+    commits to 2001 and the suite runs today, so the two rules disagree
+    by an hour for half the year.
+    """
+    override = os.environ.get("JJ_TZ_OFFSET_MINS")
+    if override is not None:
+        try:
+            return int(override)
+        except ValueError:
+            pass
+    offset = datetime.now().astimezone().utcoffset()
+    return int(offset.total_seconds() // 60) if offset else 0
 
 
+def _format_timestamp(timestamp) -> str:
+    """jj's `format_timestamp`: the local time, to the second."""
+    moment = datetime.fromtimestamp(
+        timestamp.millis_since_epoch / 1000, timezone.utc
+    )
+    zone = timezone(timedelta(minutes=_local_tz_offset_minutes()))
+    return moment.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _detailed_signature(signature) -> str:
+    """jj's `format_detailed_signature`: name, angle-bracketed email and
+    the timestamp in parentheses, with a placeholder for either half
+    that is missing."""
+    name = signature.name or "(no name set)"
+    email = signature.email or "(no email set)"
+    return f"{name} <{email}> ({_format_timestamp(signature.timestamp)})"
+
+
+def _indent(text: str, prefix: str = "    ") -> str:
+    """jj's `indent`: every non-empty line gets the prefix.
+
+    A blank line stays blank rather than becoming four spaces, so a
+    description with a paragraph break has no trailing whitespace in it.
+    """
+    return "\n".join(prefix + line if line else line for line in text.split("\n"))
 
 
 def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
@@ -781,6 +828,14 @@ def _git_diff_bytes(files, context: int = 3) -> bytes:
                     out.extend(b"\n\\ No newline at end of file\n")
     return bytes(out)
 
+
+def _tags_by_commit(repo) -> dict[str, list[str]]:
+    """Tag names per commit, keyed by hex commit id."""
+    by_commit: dict[str, list[str]] = {}
+    for tag in repo.tags():
+        for target in tag.target_ids:
+            by_commit.setdefault(target.hex(), []).append(tag.name)
+    return by_commit
 
 
 _FILE_TYPES = {
