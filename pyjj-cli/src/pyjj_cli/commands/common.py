@@ -1128,22 +1128,25 @@ def _color_words_bytes(files, to_ui_path, context: int = 3) -> bytes:
     return bytes(out)
 
 
-def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None) -> None:
+def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
+                            context=3) -> None:
     """Writes `jj diff`'s default output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
-    sys.stdout.buffer.write(_color_words_bytes(files, _ui_path_formatter(ws)))
+    sys.stdout.buffer.write(
+        _color_words_bytes(files, _ui_path_formatter(ws), context)
+    )
     sys.stdout.buffer.flush()
 
 
 _DIFF_SIGILS = {"context": b" ", "removed": b"-", "added": b"+"}
 
 
-def _print_git_diff(from_commit, to_commit, settings, paths=None) -> None:
+def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3) -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
-    sys.stdout.buffer.write(_git_diff_bytes(files))
+    sys.stdout.buffer.write(_git_diff_bytes(files, context))
     sys.stdout.buffer.flush()
 
 
@@ -1260,9 +1263,11 @@ def _print_diff_files(args, ws, files) -> None:
     `jj interdiff` diffs a rebased tree that has no commit id, so the
     commit-based helpers cannot serve it.
     """
+    context = getattr(args, "context", None)
+    context = 3 if context is None else context
     if getattr(args, "git", False):
         sys.stdout.flush()
-        sys.stdout.buffer.write(_git_diff_bytes(files))
+        sys.stdout.buffer.write(_git_diff_bytes(files, context))
         sys.stdout.buffer.flush()
         return
     if getattr(args, "stat", False):
@@ -1278,7 +1283,7 @@ def _print_diff_files(args, ws, files) -> None:
             print(line)
         return
     sys.stdout.flush()
-    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path))
+    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context))
     sys.stdout.buffer.flush()
 
 
@@ -1290,8 +1295,10 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
     `--name-only`, and every path through `diff` reaches this with the
     same two commits, so they behave the same everywhere.
     """
+    context = getattr(args, "context", None)
+    context = 3 if context is None else context
     if getattr(args, "git", False):
-        _print_git_diff(base, target, settings, paths)
+        _print_git_diff(base, target, settings, paths, context)
         return
     if getattr(args, "stat", False):
         _print_diff_stats(base.diff_stats(target, settings, paths))
@@ -1305,4 +1312,4 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
         for line in _summary_lines(base.diff(target, paths), to_ui_path):
             print(line)
         return
-    _print_color_words_diff(base, target, settings, ws, paths)
+    _print_color_words_diff(base, target, settings, ws, paths, context)

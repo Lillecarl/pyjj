@@ -42,7 +42,6 @@ CATALOGUE: tuple[Entry, ...] = (
              "in` heading cannot be reconstructed",
       claims=("diff",)),
     E("diff-context", ("diff", "--context", "1", "-r", "@"), fixture="executable",
-      bar="todo", reason="pyjj-cli does not parse --context",
       claims=("diff", "--context")),
 
     # -- show -----------------------------------------------------------
@@ -63,8 +62,8 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("log",)),
     E("log-no-graph", ("log", "--no-graph"), bar="facts",
       reason="same divergence as `log`", claims=("log", "--no-graph")),
-    E("log-reversed", ("log", "--reversed"), bar="todo",
-      reason="pyjj-cli does not parse --reversed", claims=("log", "--reversed")),
+    E("log-reversed", ("log", "--reversed"), bar="facts",
+      reason="same divergence as `log`", claims=("log", "--reversed")),
 
     # -- evolog ---------------------------------------------------------
     E("evolog", ("evolog",), fixture="evolution", bar="facts",

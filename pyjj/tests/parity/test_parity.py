@@ -2435,6 +2435,18 @@ OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
 )
 
 
+@pytest.mark.covers("log", "--reversed")
+def test_log_reversed_puts_the_root_first(pair: RepoPair) -> None:
+    """`--reversed` shows the oldest commit first. The rows diverge from
+    jj's on purpose, as `log`'s do, so this checks the order."""
+    chain(pair)
+    _, forward = pair.outputs(["log"])
+    _, backward = pair.outputs(["log", "--reversed"])
+    rows = lambda text: [l for l in text.splitlines() if l[:1] in "@\u25cb\u25c6\u25cf"]
+    assert rows(backward) == list(reversed(rows(forward)))
+    assert "root()" in rows(backward)[0]
+
+
 @pytest.mark.covers("log")
 def test_log_carries_the_facts_jj_shows(pair: RepoPair) -> None:
     """`log` is the one command where byte parity is not the goal.

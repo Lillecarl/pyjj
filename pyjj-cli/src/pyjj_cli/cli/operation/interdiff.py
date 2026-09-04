@@ -1,4 +1,5 @@
 from ..flags import (
+    add_context_flag,
     add_git_flag,
     add_name_only_flag,
     add_stat_flag,
@@ -21,4 +22,5 @@ def register(sub) -> None:
     add_stat_flag(p)
     add_name_only_flag(p)
     add_git_flag(p)
+    add_context_flag(p)
     p.set_defaults(_handler="pyjj_cli.commands.operation.interdiff:interdiff")

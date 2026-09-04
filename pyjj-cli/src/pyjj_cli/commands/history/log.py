@@ -137,6 +137,15 @@ def log(args) -> int:
         bm_by_commit = {}
 
     rows = layout(nodes)
+    # `--reversed` puts the oldest commit first. The graph is laid out
+    # before reversing, not after: `layout` needs descendants before
+    # ancestors, and handing it a reversed list produces no graph at
+    # all. A reversed row therefore continues to the row now below it,
+    # which is why the continuation is taken from display position
+    # rather than from the row's own edges.
+    reversed_order = getattr(args, "reversed", False)
+    if reversed_order:
+        rows = list(reversed(rows))
 
     no_graph = getattr(args, "no_graph", False)
     show_patch = getattr(args, "patch", False)
@@ -174,7 +183,7 @@ def log(args) -> int:
         except Exception:
             spans_millennia = False
 
-    for row in rows:
+    for row_index, row in enumerate(rows):
         commit = row.node.commit
         hex_id = commit.id.hex()
         is_wc = hex_id in wc_ids
@@ -214,6 +223,11 @@ def log(args) -> int:
             while cont_chars and cont_chars[-1] == " " and len(cont_chars) > row.column + 1:
                 cont_chars.pop()
             cont_prefix = "".join(cont_chars) + " "
+            if reversed_order:
+                # Reversed, a row's lanes lead down to the row after it,
+                # and the last row leads nowhere.
+                last = row_index == len(rows) - 1
+                cont_prefix = ("   " if last else "│  ")
 
         # IDs with shortest-prefix highlight — magenta for change, blue for commit, rest grey
         try:
