@@ -162,6 +162,17 @@ impl PyReadonlyRepo {
         crate::graph::log_graph(self, settings, revision, limit)
     }
 
+    /// The same graph over a set of commits named outright. `jj op diff`
+    /// needs it: some of the commits an operation changed are hidden, and
+    /// no revset expression reaches those. See
+    /// `pyjj_bindings.graph::commits_graph`.
+    fn commits_graph(
+        &self,
+        commit_ids: Vec<crate::ids::PyCommitId>,
+    ) -> PyResult<Vec<crate::graph::PyGraphNode>> {
+        crate::graph::commits_graph(self, commit_ids)
+    }
+
     /// How the given commits evolved: every earlier version of each
     /// change, newest first, the way `jj evolog` shows it. See
     /// `EvolutionEntry`. `limit` stops after that many entries.

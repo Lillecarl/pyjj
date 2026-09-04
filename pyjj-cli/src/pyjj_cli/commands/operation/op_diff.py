@@ -4,15 +4,15 @@ Mirrors `cli/src/commands/operation/diff.rs`. The whole comparison lives
 in `ReadonlyRepo.operation_diff()`; this module only names the two
 operations and prints the result.
 
-The rendering is the flat one `jj op diff --no-graph` produces. The
-default graph draws the changed commits' own DAG, which needs a graph
-over an arbitrary commit set including hidden ones; that and the
-`--patch` diff bodies are not drawn yet, so `--no-graph` is accepted
-and ignored rather than refused.
+The changed commits are drawn on their own graph, which is why
+`ReadonlyRepo.commits_graph()` exists: some of them are hidden, and no
+revset expression reaches those. The `--patch` diff bodies are not
+drawn yet.
 """
 import sys
 
 import pyjj
+from pyjj.graph_layout import lane_prefixes, layout
 
 from ..common import (
     CommandError,
@@ -62,6 +62,44 @@ def _print_ref_section(repo, settings, heading: str, changes) -> None:
         _print_target(repo, settings, change.before, False)
 
 
+def _change_key(change):
+    """The commit id jj keys a modified change by.
+
+    A change that still exists is keyed by its new commit; one that was
+    abandoned is keyed by the commit that went away.
+    """
+    commits = change.added or change.removed
+    return commits[0].id
+
+
+def _print_changed_commits(repo, settings, changes, no_graph: bool) -> None:
+    """The `Changed commits:` block, with or without its graph."""
+    def summary_lines(change):
+        return (
+            [f"+ {_commit_summary(repo, settings, commit, [])}"
+             for commit in change.added]
+            + [f"- {_commit_summary(repo, settings, commit, [])}"
+               for commit in change.removed]
+        )
+
+    if no_graph:
+        for change in changes:
+            for line in summary_lines(change):
+                print(line)
+        return
+
+    # The graph is over the changed commits alone, so its order is its
+    # own -- topologically grouped -- rather than the flat order above.
+    by_id = {_change_key(change).hex(): change for change in changes}
+    nodes = repo.commits_graph([_change_key(change) for change in changes])
+    for node, row in zip(nodes, layout(nodes)):
+        lines = summary_lines(by_id[node.commit.id.hex()])
+        header, cont = lane_prefixes(row, "○")
+        print(f"{header}{lines[0]}")
+        for line in lines[1:]:
+            print(f"{cont}{line}")
+
+
 def _elided_count(estimate) -> str | None:
     """`(lower, upper)` as jj words it: a number, `N+`, or `some`."""
     lower, upper = estimate
@@ -105,11 +143,8 @@ def print_operation_diff(args, settings, repo, from_ops, to_op,
     ):
         print()
         print("Changed commits:")
-        for change in result.changes:
-            for commit in change.added:
-                print(f"+ {_commit_summary(repo, settings, commit, [])}")
-            for commit in change.removed:
-                print(f"- {_commit_summary(repo, settings, commit, [])}")
+        _print_changed_commits(repo, settings, result.changes,
+                               getattr(args, "no_graph", False))
         parts = [
             f"{count} newly {label}"
             for count, label in (

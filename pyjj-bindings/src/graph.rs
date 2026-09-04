@@ -48,6 +48,52 @@ fn edge_type_str(edge_type: GraphEdgeType) -> &'static str {
 /// with unrelated branches -- the same ordering `jj log` shows by default.
 /// `limit`, if given, stops after that many rows (applied to the grouped
 /// stream, same as `jj log -n`).
+/// The same graph, over a set of commits named outright rather than by
+/// a revset expression.
+///
+/// `jj op diff` draws the commits an operation changed, and some of
+/// them are hidden -- a rewrite leaves its earlier version behind. No
+/// revset expression reaches those, but naming their ids does, which is
+/// exactly what jj itself does here (`RevsetExpression::commits`).
+pub fn commits_graph(repo: &PyReadonlyRepo, commit_ids: Vec<PyCommitId>) -> PyResult<Vec<PyGraphNode>> {
+    let repo_ref = repo.inner.as_ref();
+    let ids = commit_ids.into_iter().map(|id| id.0).collect();
+    let expr: std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression> =
+        jj_lib::revset::RevsetExpression::commits(ids);
+    let evaluated = expr.evaluate(repo_ref).map_err(map_revset_eval_err)?;
+    let grouped = TopoGroupedGraph::new(evaluated.stream_graph(), |id| id);
+    let store = repo.inner.store();
+
+    pollster::block_on(async {
+        let mut stream = Box::pin(grouped.stream());
+        let mut result = Vec::new();
+        while let Some((commit_id, edges)) = stream.try_next().await.map_err(map_revset_eval_err)? {
+            let commit = store
+                .get_commit_async(&commit_id)
+                .await
+                .map_err(map_backend_err)?;
+            // jj drops the "missing" edges here, to keep the graph
+            // concise: an ancestor outside the set is not drawn.
+            let py_edges = edges
+                .into_iter()
+                .filter(|edge| edge.edge_type != GraphEdgeType::Missing)
+                .map(|edge| PyGraphEdge {
+                    target: PyCommitId::from(edge.target),
+                    edge_type: edge_type_str(edge.edge_type).to_string(),
+                })
+                .collect();
+            result.push(PyGraphNode {
+                commit: PyCommit {
+                    inner: commit,
+                    _repo: Some(repo.inner.clone()),
+                },
+                edges: py_edges,
+            });
+        }
+        Ok(result)
+    })
+}
+
 pub fn log_graph(
     repo: &PyReadonlyRepo,
     settings: &PyUserSettings,

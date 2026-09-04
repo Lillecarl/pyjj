@@ -19,15 +19,6 @@ E = Entry
 # is to move. Every `op log` entry normalizes the same set.
 _OP = dict(normalize=("op_ids", "ago", "root", "host", "prog"))
 
-# The default `op diff`/`op show` rendering draws the changed commits'
-# own DAG. That needs a graph over an arbitrary commit set including
-# hidden ones, which no binding builds yet, so the graphed forms stay
-# `todo` and the flat ones are held to the goldens.
-_NO_GRAPH_TODO = dict(
-    bar="todo",
-    reason="the changed-commits graph is not drawn; the flat form matches",
-)
-
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",)),
@@ -131,12 +122,12 @@ CATALOGUE: tuple[Entry, ...] = (
     E("op-log-oneline", ("op", "log", "-T", "builtin_op_log_oneline"),
       claims=("operation log", "--template", "-T"), **_OP),
     E("op-diff", ("op", "diff"), claims=("operation diff",),
-      normalize=("op_ids", "ago", "root", "host", "prog"), **_NO_GRAPH_TODO),
+      normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-diff-no-graph", ("op", "diff", "--no-graph"),
       claims=("operation diff", "--no-graph", "-G"),
       normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show", ("op", "show"), claims=("operation show",),
-      normalize=("op_ids", "ago", "root", "host", "prog"), **_NO_GRAPH_TODO),
+      normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show-no-graph", ("op", "show", "--no-graph"),
       claims=("operation show", "--no-graph", "-G"),
       normalize=("op_ids", "ago", "root", "host", "prog")),
