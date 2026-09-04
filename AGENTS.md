@@ -274,6 +274,30 @@ template languages differ. `RepoPair.outputs_asymmetric()` sends each
 side the same request in its own language and compares the output. It is
 the only place in the suite where the two argv differ on purpose.
 
+### The graph
+
+jj does not draw its graph. It hands each row to Sapling's `renderdag`,
+which owns the column bookkeeping and the box glyphs, and pyjj-cli
+binds the same crate at the version jj pins (`GraphRenderer`). Drawing
+lanes by hand agreed with jj on a linear history and diverged on every
+merge, because renderdag puts a fork on the line *below* its node:
+
+    @    merge
+    ├─╮
+    │ ○  two
+
+The renderer is stateful, rows arrive in order, and `next_row` takes
+the whole row's text at once -- it decides how many lines a row takes
+and where the message sits among them. So a command builds its lines
+and emits one row, rather than prefixing each line itself.
+
+`--reversed` walks the DAG the other way (`reverse_graph`): each
+commit's parents become its children. Reversing the drawn rows instead
+leaves a merge's fork pointing the wrong way.
+
+`pyjjui` keeps `graph_layout.layout`, which it renders itself in
+Textual rather than as text.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in
