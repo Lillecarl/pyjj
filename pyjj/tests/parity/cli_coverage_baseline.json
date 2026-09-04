@@ -58,9 +58,7 @@
     "--remote",
     "--revision",
     "--sort",
-    "--template",
     "--tracked",
-    "-T",
     "-a",
     "-c",
     "-r",
@@ -548,10 +546,8 @@
     "--reversed",
     "--stat",
     "--summary",
-    "--template",
     "--tool",
     "--types",
-    "-T",
     "-b",
     "-r",
     "-s",
@@ -622,8 +618,6 @@
     "--merged",
     "--revision",
     "--sort",
-    "--template",
-    "-T",
     "-a",
     "-c",
     "-r"
@@ -671,10 +665,6 @@
     "--sparse-patterns",
     "-m",
     "-r"
-  ],
-  "workspace list": [
-    "--template",
-    "-T"
   ],
   "workspace root": [
     "--name"

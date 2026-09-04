@@ -11,7 +11,9 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _bookmarks_by_commit,
+    _commit_context,
     _commit_summary,
+    _resolve_template,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -34,14 +36,19 @@ from ..common import (
 
 def workspace_list(args) -> int:
     try:
-        settings, _ws, repo = _load(args)
+        settings, ws, repo = _load(args)
         view = repo.view()
         bookmarks = _bookmarks_by_commit(repo)
+        template = _resolve_template(settings, ws, args, "workspace_list")
         for name, commit_id in sorted(view.items()):
             commit = repo.get_commit(pyjj.CommitId(commit_id))
-            summary = _commit_summary(
-                repo, settings, commit, bookmarks.get(commit_id, [])
-            )
+            refs = bookmarks.get(commit_id, [])
+            if template is not None:
+                context = _commit_context(repo, settings, commit, refs)
+                context["name"] = name
+                print(template.render(context))
+                continue
+            summary = _commit_summary(repo, settings, commit, refs)
             print(f"{name}: {summary}")
         return 0
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:

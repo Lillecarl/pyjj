@@ -569,6 +569,79 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
+def _print_ref(repo, settings, ref, template=None) -> None:
+    """One bookmark or tag, as jj's `format_commit_ref` renders it.
+
+    jj uses the same template for both, so this serves both listings. A
+    plain ref is `name: <commit summary>`. A deleted one is `name
+    (deleted)`, with no colon. A conflicted one heads a block, then
+    lists the commits it moved away from with `-` and the ones it moved
+    to with `+`.
+
+    The summaries carry no ref names of their own: jj passes an empty
+    ref list, since the name is already the line's subject.
+    """
+    def render(commit_id, prefix: str = "") -> None:
+        commit = repo.get_commit(commit_id)
+        if template is not None:
+            context = _commit_context(repo, settings, commit, [])
+            context["name"] = ref.name
+            print(prefix + template.render(context))
+            return
+        summary = _commit_summary(repo, settings, commit, [])
+        print(f"{prefix}{summary}" if prefix else f"{ref.name}: {summary}")
+
+    if ref.has_conflict:
+        print(f"{ref.name} (conflicted):")
+        for commit_id in ref.removed_ids:
+            render(commit_id, "  - ")
+        for commit_id in ref.target_ids:
+            render(commit_id, "  + ")
+    elif ref.target_ids:
+        render(ref.target_ids[0])
+    else:
+        print(f"{ref.name} (deleted)")
+
+
+def _commit_context(repo, settings, commit, bookmarks=None) -> dict:
+    """The variables a listing's Jinja template can use for one commit.
+
+    Every listing offers the same names, so a template written for one
+    reads the same in another. Short ids carry jj's shortest-unique
+    prefix with an eight-character floor, and the change id is jj's
+    reverse-hex spelling -- the one a reader can paste back.
+    """
+    if bookmarks is None:
+        bookmarks = _bookmarks_by_commit(repo).get(commit.id.hex(), [])
+    description = commit.description.splitlines()[0] if commit.description else ""
+    return {
+        "commit": commit,
+        "change_id": commit.change_id.reverse_hex(),
+        "change_id_short": _short_id(
+            commit.change_id.reverse_hex(),
+            repo.shortest_change_id_prefix_len(commit.change_id, settings),
+        ),
+        "commit_id": commit.id.hex(),
+        "commit_id_short": _short_id(
+            commit.id.hex(),
+            repo.shortest_commit_id_prefix_len(commit.id, settings),
+        ),
+        "author": commit.author.name or commit.author.email or "",
+        "author_name": commit.author.name or "",
+        "author_email": commit.author.email or "",
+        "committer_name": commit.committer.name or "",
+        "committer_email": commit.committer.email or "",
+        "datetime": _format_timestamp(commit.committer.timestamp),
+        "description": description or "(no description set)",
+        "description_full": commit.description.strip() or "(no description set)",
+        "bookmarks": bookmarks,
+        "bookmarks_str": " ".join(bookmarks),
+        "empty": _is_empty(repo, commit),
+        "conflict": commit.has_conflict,
+        "summary": _commit_summary(repo, settings, commit, bookmarks),
+    }
+
+
 def _compile_template(template_str: str):
     """Compiles one Jinja template the way pyjj-cli's listings expect.
 

@@ -11,10 +11,12 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _bookmarks_by_commit,
+    _commit_context,
     _detailed_signature,
     _diff_base,
     _indent,
     _print_diff,
+    _resolve_template,
     _tags_by_commit,
     CommandError,
     _checkout_if_moved,
@@ -45,7 +47,32 @@ def show(args) -> int:
         commits = _resolve_all(repo, settings, revs)
         bookmarks = _bookmarks_by_commit(repo, remotes=True)
         tags = _tags_by_commit(repo)
+        # jj drives `show` from `templates.show`, whose default is
+        # `builtin_log_detailed`. A template replaces the header block;
+        # the diff below it still prints, as it does for jj.
+        builtins = {
+            "builtin_log_detailed":
+                "Commit ID: {{ commit_id }}\nChange ID: {{ change_id }}\n"
+                "Author   : {{ author_detailed }}\nCommitter: {{ committer_detailed }}\n"
+                "\n{{ description_indented }}\n",
+        }
+        template = _resolve_template(settings, ws, args, "show", builtins)
         for commit in commits:
+            if template is not None:
+                context = _commit_context(
+                    repo, settings, commit, bookmarks.get(commit.id.hex(), [])
+                )
+                context["tags"] = tags.get(commit.id.hex(), [])
+                context["author_detailed"] = _detailed_signature(commit.author)
+                context["committer_detailed"] = _detailed_signature(commit.committer)
+                context["description_indented"] = _indent(
+                    commit.description.rstrip() or "(no description set)"
+                )
+                print(template.render(context))
+                if not getattr(args, "no_patch", False):
+                    _print_diff(args, ws, settings, _diff_base(repo, settings, commit),
+                                commit, None)
+                continue
             print(f"Commit ID: {commit.id.hex()}")
             print(f"Change ID: {commit.change_id.reverse_hex()}")
             names = bookmarks.get(commit.id.hex(), [])

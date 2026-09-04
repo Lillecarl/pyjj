@@ -10,7 +10,8 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
-    _commit_summary,
+    _print_ref,
+    _resolve_template,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -31,46 +32,21 @@ from ..common import (
     _fix_pattern_matches,
 )
 
-def _print_bookmark(repo, settings, bm) -> None:
-    """One bookmark, as jj's `format_commit_ref` renders it.
-
-    A plain bookmark is `name: <commit summary>`. A deleted one is `name
-    (deleted)`, with no colon. A conflicted one heads a block, then
-    lists the commits it moved away from with `-` and the ones it moved
-    to with `+`.
-
-    The summaries carry no bookmark names of their own here: jj passes
-    an empty ref list, since the name is already the line's subject.
-    """
-    def summary(commit_id):
-        return _commit_summary(repo, settings, repo.get_commit(commit_id), [])
-
-    if bm.has_conflict:
-        print(f"{bm.name} (conflicted):")
-        for commit_id in bm.removed_ids:
-            print(f"  - {summary(commit_id)}")
-        for commit_id in bm.target_ids:
-            print(f"  + {summary(commit_id)}")
-    elif bm.target_ids:
-        print(f"{bm.name}: {summary(bm.target_ids[0])}")
-    else:
-        print(f"{bm.name} (deleted)")
-
-
 def bookmark(args) -> int:
     """`jj bookmark` dispatch — create/set/delete/forget/list/move/rename."""
     cmd = getattr(args, "bookmark_command", None)
     # list is read-only, no snapshot needed beyond _load
     if cmd == "list":
         try:
-            _settings, _ws, repo = _load(args)
+            _settings, ws, repo = _load(args)
+            template = _resolve_template(_settings, ws, args, "bookmark_list")
             names = getattr(args, "names", None) or []
             bms = repo.bookmarks()
             # Filter by names if given (exact match for now)
             if names:
                 bms = [b for b in bms if b.name in names]
             for bm in sorted(bms, key=lambda b: b.name):
-                _print_bookmark(repo, _settings, bm)
+                _print_ref(repo, _settings, bm, template)
             return 0
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

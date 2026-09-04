@@ -50,9 +50,7 @@
       "--remote",
       "--revision",
       "--sort",
-      "--template",
       "--tracked",
-      "-T",
       "-c",
       "-r",
       "-t"
@@ -313,8 +311,6 @@
       "--merged",
       "--revision",
       "--sort",
-      "--template",
-      "-T",
       "-a",
       "-c",
       "-r"

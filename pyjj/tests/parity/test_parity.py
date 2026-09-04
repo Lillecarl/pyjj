@@ -2641,6 +2641,50 @@ def test_evolog_carries_the_facts_jj_shows(pair: RepoPair) -> None:
     assert not missing, f"pyjj's evolog drops {missing}\njj:\n{cli}\npyjj:\n{py}"
 
 
+@pytest.mark.covers("bookmark list", "--template", "-T")
+def test_bookmark_list_renders_a_jinja_template(pair: RepoPair) -> None:
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["bookmark", "list", "-T", 'name ++ " " ++ normal_target.commit_id().short(8) ++ "\n"'],
+        ["bookmark", "list", "-T", "{{ name }} {{ commit_id_short }}"],
+    )
+    assert cli == py
+
+
+@pytest.mark.covers("tag list", "--template", "-T")
+def test_tag_list_renders_a_jinja_template(pair: RepoPair) -> None:
+    """No tags here, so both sides print nothing -- which still pins
+    that a template does not make a listing invent rows."""
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["tag", "list", "-T", 'name ++ "\n"'],
+        ["tag", "list", "-T", "{{ name }}"],
+    )
+    assert cli == py
+
+
+@pytest.mark.covers("workspace list", "--template", "-T")
+def test_workspace_list_renders_a_jinja_template(pair: RepoPair) -> None:
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["workspace", "list", "-T", 'name ++ " " ++ target.commit_id().short(8) ++ "\n"'],
+        ["workspace", "list", "-T", "{{ name }} {{ commit_id_short }}"],
+    )
+    assert cli == py
+
+
+@pytest.mark.covers("show", "--template", "-T")
+def test_show_renders_a_jinja_template(pair: RepoPair) -> None:
+    """`show`'s template replaces the header block. The diff below it
+    still prints, as it does for jj."""
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["show", "-T", 'commit_id.short(8) ++ "\n"', rev("one")],
+        ["show", "-T", "{{ commit_id_short }}", rev("one")],
+    )
+    assert cli == py
+
+
 @pytest.mark.covers("evolog", "--template", "-T")
 def test_evolog_renders_a_jinja_template(pair: RepoPair) -> None:
     """`evolog` takes a template, as jj does, and pyjj-cli's template

@@ -15,6 +15,8 @@ def add_parsers(sub) -> None:
     tag_sub = p_tag.add_subparsers(dest="tag_command")
     p_tag_list = tag_sub.add_parser("list", help="List tags")
     p_tag_list.add_argument("names", nargs="*", help="Tags to list")
+    p_tag_list.add_argument("-T", "--template", default=None, metavar="TEMPLATE",
+                            help="Render each tag with this Jinja template")
     p_tag_list.set_defaults(_handler="pyjj_cli.commands.tag.tag_list:tag_list")
     p_tag_set = tag_sub.add_parser("set", help="Create or update tags")
     p_tag_set.add_argument("names", nargs="+", help="Tags to set")

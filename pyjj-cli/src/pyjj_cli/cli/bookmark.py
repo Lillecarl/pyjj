@@ -35,6 +35,10 @@ def add_parsers(sub) -> None:
     p_bml = bm_sub.add_parser("list", help="List bookmarks")
     p_bml.add_argument("names", nargs="*", metavar="NAMES", help="Bookmark names to list")
     p_bml.add_argument("-a", "--all-remotes", action="store_true", help=argparse.SUPPRESS)
+    # jj drives this from `templates.bookmark_list`; pyjj-cli uses Jinja
+    # under `pyjj.templates.bookmark_list`.
+    p_bml.add_argument("-T", "--template", default=None, metavar="TEMPLATE",
+                       help="Render each bookmark with this Jinja template")
     p_bml.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bmm = bm_sub.add_parser("move", help="Move bookmarks to a revision")
