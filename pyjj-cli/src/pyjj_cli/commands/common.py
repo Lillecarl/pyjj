@@ -340,6 +340,9 @@ def _export_git_refs(tx, ws) -> None:
     """
     if not (Path(ws.workspace_root) / ".git").exists():
         return
+    # jj resets HEAD first, then exports. HEAD tracks `@`'s first parent,
+    # so a command that only moves `@` still has to update it.
+    tx.git_reset_head(ws.workspace_name)
     tx.git_export_refs()
 
 
