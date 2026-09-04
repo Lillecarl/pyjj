@@ -296,19 +296,30 @@ pub fn edit_commit_tree(
 }
 
 /// Second half of `jj split`: a `CommitBuilder` for `target`'s remaining
-/// changes (everything not in `first`), as a child of `first` with a fresh
-/// change id (so it doesn't collide with `first`'s, which kept `target`'s
-/// original one).
+/// changes (everything not in `first`), as a child of `first`.
+///
+/// `new_change_id` decides which half keeps `target`'s change id, and jj
+/// gives it to whichever half stays where `target` was. A plain split
+/// leaves `first` in place, so the remainder takes a fresh id (the
+/// default). `jj split --onto/-A/-B` moves `first` away instead, so the
+/// remainder keeps the original -- pass `false` there, and clear the
+/// rewrite source on `first` so only one commit claims to rewrite
+/// `target`.
 pub fn split_remainder(
     mut_repo: &mut MutableRepo,
     target: &PyCommit,
     first: &PyCommit,
+    new_change_id: bool,
 ) -> PyResult<PyCommitBuilder> {
     let builder = mut_repo
         .rewrite_commit(&target.inner)
         .set_parents(vec![first.inner.id().clone()])
-        .set_tree(target.inner.tree())
-        .generate_new_change_id();
+        .set_tree(target.inner.tree());
+    let builder = if new_change_id {
+        builder.generate_new_change_id()
+    } else {
+        builder
+    };
     Ok(PyCommitBuilder::from_rust(builder))
 }
 

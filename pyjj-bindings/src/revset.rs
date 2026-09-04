@@ -89,6 +89,24 @@ pub fn evaluate_revset(
         .collect())
 }
 
+/// `evaluate_revset()` against a transaction's in-progress repo, so a
+/// query sees commits the transaction has already written. Returns bare
+/// `CommitId`s: a `MutableRepo` is not an `Arc<ReadonlyRepo>`, so the
+/// commits cannot carry a repo handle the way `PyCommit` expects.
+pub fn evaluate_revset_mut(
+    repo: &jj_lib::repo::MutableRepo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &PyUserSettings,
+    revision: &str,
+) -> PyResult<Vec<crate::ids::PyCommitId>> {
+    let resolved = resolve_revset(repo, workspace_root, workspace_name, settings, revision)?;
+    let evaluated = resolved.evaluate(repo).map_err(map_revset_eval_err)?;
+    let ids: Vec<jj_lib::backend::CommitId> =
+        pollster::block_on(evaluated.stream().try_collect()).map_err(map_revset_eval_err)?;
+    Ok(ids.into_iter().map(crate::ids::PyCommitId).collect())
+}
+
 /// Parses and symbol-resolves (but does not evaluate) a revset expression
 /// against `repo` -- the `Arc<ResolvedRevsetExpression>` shared by
 /// `evaluate_revset` and anything else (e.g. `absorb`) that needs to hand a

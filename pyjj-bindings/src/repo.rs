@@ -915,9 +915,20 @@ impl PyTransaction {
 
     /// `jj split` equivalent, second half: a `CommitBuilder` for `target`'s
     /// remaining changes, as a child of `first`.
-    fn split_remainder(&self, target: &PyCommit, first: &PyCommit) -> PyResult<PyCommitBuilder> {
+    ///
+    /// `new_change_id=False` keeps `target`'s change id on the remainder,
+    /// which is what `jj split --onto/-A/-B` does -- there the selected
+    /// half moves away and the remainder stays put. See
+    /// `pyjj_bindings.rewrite::split_remainder`.
+    #[pyo3(signature = (target, first, new_change_id=true))]
+    fn split_remainder(
+        &self,
+        target: &PyCommit,
+        first: &PyCommit,
+        new_change_id: bool,
+    ) -> PyResult<PyCommitBuilder> {
         with_mut_repo(self, |mut_repo| {
-            crate::rewrite::split_remainder(mut_repo, target, first)
+            crate::rewrite::split_remainder(mut_repo, target, first, new_change_id)
         })
     }
 
@@ -1145,6 +1156,25 @@ impl PyTransaction {
                 self.workspace_name(),
                 settings,
                 commits.into_iter().map(|id| id.0).collect(),
+            )
+        })
+    }
+
+    /// Evaluate a revset against the transaction's own repo, so it sees
+    /// what the transaction has written so far. `ReadonlyRepo.revset()`
+    /// answers from the state the transaction started from, which is a
+    /// different question once commits have been rewritten inside it.
+    ///
+    /// Returns `CommitId`s rather than `Commit`s: a commit written inside
+    /// a transaction has no `ReadonlyRepo` to hang off yet.
+    fn revset(&self, settings: &PyUserSettings, revision: &str) -> PyResult<Vec<PyCommitId>> {
+        with_mut_repo(self, |mut_repo| {
+            crate::revset::evaluate_revset_mut(
+                mut_repo,
+                self.workspace_root(),
+                self.workspace_name(),
+                settings,
+                revision,
             )
         })
     }
@@ -1397,6 +1427,17 @@ impl PyCommitBuilder {
     fn generate_new_change_id(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
         let builder = take_inner(&mut slf.inner)?;
         slf.inner = Some(builder.generate_new_change_id());
+        Ok(slf)
+    }
+
+    /// Stops the new commit from recording the source commit as the one it
+    /// rewrites. Without this, two commits built from the same
+    /// `rewrite_commit()` both claim to rewrite it, and descendants and
+    /// bookmarks then follow the wrong one. jj's own note applies: assign
+    /// a new change id too, or the result is divergent.
+    fn clear_rewrite_source(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
+        let builder = take_inner(&mut slf.inner)?;
+        slf.inner = Some(builder.clear_rewrite_source());
         Ok(slf)
     }
 
