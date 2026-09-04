@@ -1457,7 +1457,6 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["metaedit", "-r", rev("one"), "--force-rewrite"],
     ["config", "gc"],
     ["log", "--stat"],
     ["run", "-r", rev("one"), "true"],
@@ -1572,6 +1571,21 @@ def test_metaedit_update_change_id(pair: RepoPair) -> None:
 def test_metaedit_message(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["metaedit", "-r", rev("one"), "-m", "renamed"])
+    pair.assert_parity()
+
+
+def test_metaedit_force_rewrite(pair: RepoPair) -> None:
+    """`--force-rewrite` rewrites a commit no other flag would touch."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--force-rewrite"])
+    pair.assert_parity()
+
+
+def test_metaedit_force_rewrite_with_a_new_committer(pair: RepoPair) -> None:
+    """The documented use: restamp the committer, nothing else."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--force-rewrite",
+                "--update-author"])
     pair.assert_parity()
 
 

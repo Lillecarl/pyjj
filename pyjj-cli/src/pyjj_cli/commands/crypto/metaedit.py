@@ -43,10 +43,13 @@ def metaedit(args) -> int:
                     description = candidate
             author = _new_author(settings, commit, args)
             new_change_id = getattr(args, "update_change_id", False)
-            if description is None and author is None and not new_change_id:
+            force = getattr(args, "force_rewrite", False)
+            if (description is None and author is None and not new_change_id
+                    and not force):
                 # Asking for metadata a commit already has changes
                 # nothing, and rewriting it anyway would move its commit
-                # id for no reason.
+                # id for no reason. `--force-rewrite` is the caller
+                # saying to move it anyway, which restamps the committer.
                 continue
 
             builder = tx.rewrite_commit(settings, commit)
@@ -78,6 +81,7 @@ def _requested_edits(args) -> bool:
         getattr(args, "update_author", False),
         getattr(args, "update_author_timestamp", False),
         getattr(args, "update_change_id", False),
+        getattr(args, "force_rewrite", False),
     ))
 
 

@@ -20,4 +20,7 @@ def register(sub) -> None:
     p.add_argument("--update-change-id", dest="update_change_id",
                    action="store_true", default=False,
                    help="Generate a new change id")
+    p.add_argument("--force-rewrite", dest="force_rewrite", action="store_true",
+                   default=False,
+                   help="Rewrite the commit, even if no other metadata changed")
     p.set_defaults(_handler="pyjj_cli.commands.crypto.metaedit:metaedit")
