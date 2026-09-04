@@ -197,7 +197,10 @@ holds pyjj-cli to it. This is the queue to work through; the loop is:
    --capture-corpus`. The goldens are committed; read the diff.
 3. **Read the golden.** `<id>.txt` is what jj prints. `<id>.debug` is the
    same with jj's semantic labels, which is the specification for
-   colouring pyjj-cli later.
+   colouring pyjj-cli later. It carries the escape sequences as well as
+   the labels, so the mapping from a label stack to a style is there to
+   be read off rather than guessed -- `bookmark_list conflict` is
+   `38;5;1`, a `change_id shortest prefix` is `1;38;5;5`, and so on.
 4. **Implement**, then flip the entry from `todo` to `bytes`. A `todo`
    entry that starts matching fails the suite until you do -- the same
    strictness as the xfails.
