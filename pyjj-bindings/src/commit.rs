@@ -104,6 +104,28 @@ impl PyCommit {
             .map(Into::into))
     }
 
+    /// Every conflicted path in this commit's tree, as `(path, sides,
+    /// adds, objects)`. See `conflicts::conflicted_paths`.
+    fn conflicted_paths(&self) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
+        crate::conflicts::conflicted_paths(self)
+    }
+
+    /// This commit's changes against its parents *merged*, which is what
+    /// `jj status` shows.
+    ///
+    /// Diffing against the first parent alone reports a merge commit as
+    /// changing everything the other parents contributed. jj compares
+    /// against the merged parent tree, so a merge that resolves nothing
+    /// reports no changes at all.
+    #[pyo3(signature = (repo, paths=None))]
+    fn diff_from_parents(
+        &self,
+        repo: &PyReadonlyRepo,
+        paths: Option<Vec<String>>,
+    ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
+        crate::tree::diff_from_parents(self, repo, paths)
+    }
+
     /// Whether this commit is no longer reachable from any visible head.
     ///
     /// A rewrite leaves its earlier versions hidden rather than deleting

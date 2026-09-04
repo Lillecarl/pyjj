@@ -349,3 +349,48 @@ pub fn pick_conflict_sides(
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
     Ok(PyCommitBuilder::from_rust(commit_builder))
 }
+
+/// Every conflicted path in `commit`'s tree, with the numbers `jj
+/// status` reports about each.
+///
+/// `sides` is the conflict's arity after simplification, and `adds` how
+/// many of those sides are present -- the difference is deletions, which
+/// jj counts separately because they interfere with neither `jj resolve`
+/// nor a diff. `objects` names anything that is not a plain file, since
+/// those do interfere: an executable, a symlink, a directory or a git
+/// submodule.
+///
+/// Formatting the sentence is the caller's; this settles the counts,
+/// which is the part that has to agree with jj.
+pub fn conflicted_paths(commit: &PyCommit) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
+    use jj_lib::backend::TreeValue;
+
+    let mut out = Vec::new();
+    for (path, value) in commit.inner.tree().conflicts() {
+        let conflict = value.map_err(map_backend_err)?.simplify();
+        let sides = conflict.num_sides();
+        let adds = conflict.adds().flatten().count();
+        let mut objects: Vec<String> = Vec::new();
+        for term in conflict.removes().flatten().chain(conflict.adds().flatten()) {
+            let name = match term {
+                TreeValue::File { executable: false, .. } => continue,
+                TreeValue::File { executable: true, .. } => "an executable",
+                TreeValue::Symlink(_) => "a symlink",
+                TreeValue::Tree(_) => "a directory",
+                TreeValue::GitSubmodule(_) => "a git submodule",
+                _ => continue,
+            };
+            if !objects.iter().any(|seen| seen == name) {
+                objects.push(name.to_string());
+            }
+        }
+        objects.sort();
+        out.push((
+            path.as_internal_file_string().to_string(),
+            sides,
+            adds,
+            objects,
+        ));
+    }
+    Ok(out)
+}

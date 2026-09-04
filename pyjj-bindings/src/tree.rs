@@ -114,6 +114,18 @@ fn diff_trees(
         .collect()
 }
 
+/// A commit's changes against its parents merged, the way `jj status`
+/// computes them.
+pub fn diff_from_parents(
+    commit: &PyCommit,
+    repo: &PyReadonlyRepo,
+    paths: Option<Vec<String>>,
+) -> PyResult<Vec<PyDiffEntry>> {
+    let parent_tree = pollster::block_on(commit.inner.parent_tree(repo.inner.as_ref()))
+        .map_err(map_backend_err)?;
+    diff_trees(&parent_tree, &commit.inner.tree(), paths)
+}
+
 /// `jj interdiff --from A --to B`: the difference between two commits'
 /// *diffs*, rather than between their contents.
 ///
