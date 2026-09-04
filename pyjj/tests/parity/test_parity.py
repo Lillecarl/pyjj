@@ -1425,10 +1425,15 @@ UNIMPLEMENTED = pytest.mark.xfail(
 )
 
 
-@UNIMPLEMENTED
 def test_git_colocation_enable(pair: RepoPair) -> None:
     """Colocation puts a real `.git` beside `.jj`, so git refs must match
-    afterwards too."""
+    afterwards too.
+
+    Both repos are colocated already -- that is what `git init` does
+    now -- so this is the no-op path: both sides say so and change
+    nothing. Converting a non-colocated repo is still unimplemented, and
+    `test_git_colocation_enable_then_disable` still covers that.
+    """
     chain(pair)
     pair.op(jj=["git", "colocation", "enable"])
     pair.assert_parity()
