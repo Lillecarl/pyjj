@@ -1,15 +1,16 @@
 """`jj util`: infrequently used commands.
 
-Only `gc` and `snapshot` are implemented. The rest keep the old stub
-behaviour, so an
-unimplemented subcommand still exits 2 -- and so does an unknown one,
-which argparse rejects on its own.
+Only `backend name`, `exec`, `gc` and `snapshot` are implemented. The
+rest keep the old stub behaviour, so an unimplemented subcommand still
+exits 2 -- and so does an unknown one, which argparse rejects on its
+own.
 """
+import argparse
 import sys
 
 
 def _util_help(args):
-    print("usage: pyjj util {gc,snapshot}", file=sys.stderr)
+    print("usage: pyjj util {backend,exec,gc,snapshot}", file=sys.stderr)
     return 2
 
 
@@ -20,8 +21,9 @@ def _stub(name: str):
     return _h
 
 
-def _stub_backend(args):
-    return _stub("backend")(args)
+def _backend_help(args):
+    print("usage: pyjj util backend {name}", file=sys.stderr)
+    return 2
 
 
 def _stub_completion(args):
@@ -30,10 +32,6 @@ def _stub_completion(args):
 
 def _stub_config_schema(args):
     return _stub("config-schema")(args)
-
-
-def _stub_exec(args):
-    return _stub("exec")(args)
 
 
 def _stub_install_man_pages(args):
@@ -62,11 +60,26 @@ def add_parsers(sub) -> None:
     p_snapshot.set_defaults(
         _handler="pyjj_cli.commands.util.snapshot:util_snapshot")
 
+    p_exec = util_sub.add_parser("exec", help="Execute an external command via jj")
+    p_exec.add_argument("command_name", nargs="?", default=None,
+                        metavar="COMMAND", help="External command to execute")
+    p_exec.add_argument("command_args", nargs=argparse.REMAINDER,
+                        metavar="ARGS",
+                        help="Arguments to pass to the external command")
+    p_exec.set_defaults(_handler="pyjj_cli.commands.util.exec:util_exec")
+
+    p_backend = util_sub.add_parser(
+        "backend", help="Commands relating to the backend used in the current repo")
+    p_backend.set_defaults(_handler="pyjj_cli.cli.util:_backend_help")
+    backend_sub = p_backend.add_subparsers(dest="backend_command")
+    p_backend_name = backend_sub.add_parser(
+        "name", help="Print the name of the backend used in the current repo")
+    p_backend_name.set_defaults(
+        _handler="pyjj_cli.commands.util.backend:util_backend_name")
+
     for name, handler in (
-        ("backend", "_stub_backend"),
         ("completion", "_stub_completion"),
         ("config-schema", "_stub_config_schema"),
-        ("exec", "_stub_exec"),
         ("install-man-pages", "_stub_install_man_pages"),
         ("markdown-help", "_stub_markdown_help"),
     ):

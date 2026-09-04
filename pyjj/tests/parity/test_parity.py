@@ -1458,6 +1458,31 @@ def test_util_gc_expire_now(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def test_util_backend_name(pair: RepoPair) -> None:
+    """Both repos are Git-backed, so both print the same name."""
+    chain(pair)
+    pair.op(jj=["util", "backend", "name"])
+    pair.assert_parity()
+
+
+def test_util_exec_runs_a_command(pair: RepoPair) -> None:
+    """`util exec` does not snapshot, so a dirty working copy stays
+    dirty on both sides."""
+    chain(pair)
+    pair.op(files={"unsnapshotted.txt": b"dirty\n"},
+            jj=["util", "exec", "--", sys.executable, "-c", "pass"])
+    pair.assert_parity()
+
+
+def test_util_exec_propagates_the_exit_status(pair: RepoPair) -> None:
+    """jj exits with the child's own status, so a failure is not jj's."""
+    chain(pair)
+    pair.op(jj=["util", "exec", "--", sys.executable, "-c",
+                "raise SystemExit(3)"],
+            may_fail=True)
+    pair.assert_parity()
+
+
 def test_util_snapshot_with_a_dirty_working_copy(pair: RepoPair) -> None:
     """A changed file makes the snapshot real on both sides."""
     chain(pair)
