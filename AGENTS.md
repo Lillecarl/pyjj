@@ -966,6 +966,17 @@ Current state:
   target gets the command result verbatim and outside descendants are
   reparented, so their trees do not move. Returns
   `(rewritten, reparented)`.
+- **The root commit is immutable**: every rewrite entry point refuses it
+  (`rewrite::reject_root`, and the parent check in `CommitBuilder.write`).
+  This is not a policy choice -- jj_lib *asserts* on the root commit in
+  `Store::write_commit`, `MutableRepo::record_abandoned_commit`,
+  `CommitBuilder::set_parents` and `MutableRepo::new_parents`, and an
+  assertion inside a native extension aborts the interpreter instead of
+  raising something Python can catch. `jj` never reaches them because
+  its CLI runs `check_rewritable` first. pyjj has no equivalent, so the
+  guard sits in the bindings and uses jj's own wording. Still missing:
+  the wider `immutable()` check, so a commit made immutable by a tag or
+  a pushed trunk is rewritten where `jj` would refuse.
 - **Deliberately deferred**: `jj_lib::rewrite::{find_recursive_merge_commits,
   find_duplicate_divergent_commits}` are internal helpers for the CLI's
   fuller `move_commits`-based multi-revision rebase (divergence detection),
