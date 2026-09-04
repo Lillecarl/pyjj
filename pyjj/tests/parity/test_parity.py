@@ -1705,6 +1705,34 @@ def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- the root commit is immutable ---------------------------------------
+#
+# `root()` is the one commit that is immutable in every repository,
+# including a local one with no remote where `trunk()` collapses to
+# `root()`. jj refuses to rewrite it. jj_lib does not: it asserts, and an
+# assertion inside a native extension aborts the process instead of
+# raising, so pyjj has to refuse before the call. Each scenario asserts
+# both sides fail and neither writes anything.
+
+ROOT_REWRITE_ARGV = [
+    ["describe", "-r", "root()", "-m", "nope"],
+    ["abandon", "root()"],
+    ["abandon", "--restore-descendants", "root()"],
+    ["squash", "--into", "root()"],
+    ["duplicate", "root()"],
+    ["split", "-r", "root()", "base.txt"],
+    ["rebase", "-r", "root()", "-d", "@"],
+    ["metaedit", "-r", "root()", "--author", "Someone <someone@example.com>"],
+]
+
+
+@pytest.mark.parametrize("argv", ROOT_REWRITE_ARGV, ids=lambda a: "_".join(a)[:40])
+def test_rewriting_the_root_commit_must_fail(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv, may_fail=True)
+    pair.assert_parity()
+
+
 # -- commands jj has and pyjj-cli does not yet ---------------------------
 #
 # Every one of these runs clean through `jj` and fails through pyjj-cli.
