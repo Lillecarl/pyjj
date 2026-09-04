@@ -18,9 +18,6 @@ def add_parsers(sub) -> None:
     p_help.add_argument("topic", nargs="*", metavar="COMMAND",
                         help="Command to describe")
     p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
-    p_run = sub.add_parser("run", help="Run a command across a set of revisions")
-    p_run.add_argument("-r", "--revision", dest="revisions", default=None, help=argparse.SUPPRESS)
-    p_run.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_run")
     p_bench = sub.add_parser("bench", help="Benchmarking commands")
     p_bench.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_bench")
     p_debug = sub.add_parser("debug", help="Low-level commands not intended for users")
@@ -60,12 +57,6 @@ def _subparser(parser, name):
         if mapping and name in mapping:
             return mapping[name]
     return None
-
-
-def _stub_run(args):
-    import sys
-    print("Error: run is not yet supported", file=sys.stderr)
-    return 2
 
 
 def _stub_bench(args):

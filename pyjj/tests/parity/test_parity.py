@@ -812,6 +812,101 @@ def test_bisect_run_skip(pair: RepoPair, tmp_path) -> None:
     pair.assert_parity()
 
 
+# -- run ----------------------------------------------------------------
+#
+# `jj run` checks each revision out into a scratch slot under
+# `.jj/run/default/`, runs a command there, and writes the result back.
+# The command itself lives outside both repos, for the same reason the
+# bisect predicate does: every slot holds a different tree, so a script
+# stored in the working copy would not survive the first checkout.
+
+
+def run_script(tmp_path, name: str, body: str) -> str:
+    script = tmp_path / name
+    script.write_text(body)
+    return str(script)
+
+
+def test_run_command_that_changes_nothing(pair: RepoPair, tmp_path) -> None:
+    """A command that touches no file must leave both repos alone."""
+    chain(pair)
+    script = run_script(tmp_path, "noop.py", "pass\n")
+    pair.op(jj=["run", "-r", rev("one"), sys.executable, script])
+    pair.assert_parity()
+
+
+def test_run_rewrites_and_propagates_to_descendants(pair: RepoPair, tmp_path) -> None:
+    """The real claim: a command that edits a file rewrites its revision
+    AND every descendant, so both sides must reproduce the same commit
+    ids all the way down the chain."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "append.py",
+        "import pathlib\n"
+        "p = pathlib.Path('base.txt')\n"
+        "p.write_bytes(p.read_bytes() + b'ran\\n')\n",
+    )
+    pair.op(jj=["run", "-r", rev("one"), sys.executable, script])
+    pair.assert_parity()
+
+
+def test_run_adding_a_file_across_the_whole_chain(pair: RepoPair, tmp_path) -> None:
+    """No `-r` means the `revsets.run` default, `reachable(@, mutable())`
+    -- every mutable revision, each in its own slot, one after another."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "add.py",
+        "import pathlib\n"
+        "pathlib.Path('added.txt').write_bytes(b'added\\n')\n",
+    )
+    pair.op(jj=["run", sys.executable, script])
+    pair.assert_parity()
+
+
+def test_run_restore_descendants_keeps_their_content(pair: RepoPair, tmp_path) -> None:
+    """`--restore-descendants` reparents the descendants instead of
+    rebasing them, so their trees do not move -- a different set of
+    commit ids from the default, and both sides must pick the same one."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "append.py",
+        "import pathlib\n"
+        "p = pathlib.Path('base.txt')\n"
+        "p.write_bytes(p.read_bytes() + b'ran\\n')\n",
+    )
+    pair.op(jj=["run", "--restore-descendants", "-r", rev("base"),
+                sys.executable, script])
+    pair.assert_parity()
+
+
+def test_run_failing_command_writes_nothing(pair: RepoPair, tmp_path) -> None:
+    """A nonzero exit aborts the whole run. Both sides must fail, and
+    neither may keep the edit the command already made."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "fail.py",
+        "import pathlib, sys\n"
+        "pathlib.Path('base.txt').write_bytes(b'ruined\\n')\n"
+        "sys.exit(1)\n",
+    )
+    pair.op(jj=["run", "-r", rev("one"), sys.executable, script],
+            may_fail=True)
+    pair.assert_parity()
+
+
+def test_run_clean_slot_each_time(pair: RepoPair, tmp_path) -> None:
+    """`--clean` wipes each slot before the checkout, so nothing a
+    previous revision left behind can leak into the next one."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "add.py",
+        "import pathlib\n"
+        "pathlib.Path('added.txt').write_bytes(b'added\\n')\n",
+    )
+    pair.op(jj=["run", "--clean", sys.executable, script])
+    pair.assert_parity()
+
+
 # -- operation log family -----------------------------------------------
 #
 # `op log`, `op show` and `op diff` only read. Parity for them is the
@@ -1619,7 +1714,6 @@ def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
 
 
 UNIMPLEMENTED_ARGV = [
-    ["run", "-r", rev("one"), "true"],
     ["util", "config-schema"],
 ]
 
