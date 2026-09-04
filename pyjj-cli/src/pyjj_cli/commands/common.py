@@ -231,6 +231,37 @@ def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
         current = reached
     return current
 
+def _commit_location(repo, settings, ontos, afters, befores):
+    """jj's `compute_commit_location`: the new parents and new children a
+    placement flag asks for.
+
+    `--onto`/`-d` names the parents outright and moves nothing else.
+    `-A` puts the commit after the named revisions, so their children
+    become its children. `-B` puts it before them, so they become its
+    children and their parents become its parents. `-A` and `-B` together
+    name both sides directly. Argument order is kept, because a merge's
+    parent order is part of its commit id.
+    """
+    if ontos:
+        return [c.id for c in _resolve_in_arg_order(repo, settings, ontos)], []
+    if afters and befores:
+        return ([c.id for c in _resolve_in_arg_order(repo, settings, afters)],
+                [c.id for c in _resolve_in_arg_order(repo, settings, befores)])
+    if afters:
+        parents = _resolve_in_arg_order(repo, settings, afters)
+        expression = " | ".join(f"children({after})" for after in afters)
+        return ([c.id for c in parents],
+                [c.id for c in repo.revset(settings, expression)])
+    # `-B` alone. jj resolves the parents from the commits themselves
+    # rather than through a `parents()` revset, to keep their order.
+    children = _resolve_in_arg_order(repo, settings, befores)
+    seen: dict[str, object] = {}
+    for child in children:
+        for parent_id in child.parent_ids:
+            seen.setdefault(parent_id.hex(), parent_id)
+    return list(seen.values()), [c.id for c in children]
+
+
 def _check_rewritable(tx, settings, commits) -> None:
     """`jj`'s guard against rewriting shared history: refuse when any of
     `commits` falls inside `immutable()`.

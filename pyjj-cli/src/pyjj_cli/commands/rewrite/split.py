@@ -7,6 +7,7 @@ import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
     _check_rewritable,
+    _commit_location,
     CommandError,
     _checkout_if_moved,
     _finish,
@@ -26,10 +27,39 @@ from ..common import (
 def split(args) -> int:
     try:
         settings, ws, repo = _load(args)
+        parallel = getattr(args, "parallel", False)
+        ontos = ((getattr(args, "ontos", None) or [])
+                 + (getattr(args, "destinations", None) or []))
+        afters = getattr(args, "insert_afters", None) or []
+        befores = getattr(args, "insert_befores", None) or []
+        # A placement flag sends the selected half somewhere else, so it
+        # cannot also make the two halves siblings.
+        moving = bool(ontos or afters or befores)
+        if moving and parallel:
+            print("Error: --parallel cannot be used with --onto, "
+                  "--insert-after or --insert-before", file=sys.stderr)
+            return 2
+        if ontos and (afters or befores):
+            print("Error: --onto cannot be used with --insert-after or "
+                  "--insert-before", file=sys.stderr)
+            return 2
+
         target = _resolve_one(repo, settings, args.revision or "@")
 
         tx = repo.start_transaction(settings)
         _check_rewritable(tx, settings, [target])
+        new_parent_ids: list = []
+        new_child_ids: list = []
+        if moving:
+            new_parent_ids, new_child_ids = _commit_location(
+                repo, settings, ontos, afters, befores)
+            # The commits that followed the insertion point get rebased,
+            # so they have to be rewritable.
+            _check_rewritable(tx, settings, new_child_ids)
+            if not new_parent_ids:
+                print("Error: No revisions found to use as parent",
+                      file=sys.stderr)
+                return 1
         if args.paths_pos:
             first_builder = tx.split_selected(target, list(args.paths_pos))
         else:
@@ -57,8 +87,16 @@ def split(args) -> int:
             # description past all "JJ:" comments.
             first_description = _run_editor(settings, target.description)
 
+        if moving:
+            # The half that stays where `target` was keeps its change id,
+            # and the half that moves takes a fresh one. Clearing the
+            # rewrite source leaves the remainder as the only commit that
+            # claims to rewrite `target`, so descendants and bookmarks
+            # follow it rather than the commit that left.
+            first_builder = (first_builder
+                             .clear_rewrite_source()
+                             .generate_new_change_id())
         first = first_builder.set_description(first_description).write(repo)
-        parallel = getattr(args, "parallel", False)
         if parallel:
             second = tx.split_remainder_parallel(target, first).write(repo)
             # Whatever followed the split now sits on both halves, first
@@ -68,9 +106,27 @@ def split(args) -> int:
                 tx.move_commits([c.id for c in children], [],
                                 [first.id, second.id], [])
         else:
-            second = tx.split_remainder(target, first).write(repo)
+            second = tx.split_remainder(target, first,
+                                        new_change_id=not moving).write(repo)
         if target.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, second.id)
+        if moving:
+            # jj settles the descendants onto the remainder first, then
+            # moves the selected half away -- which pulls the remainder
+            # back down onto the parents `target` used to have. Doing it
+            # in the other order would move a commit whose descendants
+            # still hang off the old one.
+            #
+            # A placement revision that is itself a descendant of `target`
+            # has a new commit id by then, so it is tracked by change id,
+            # which a rebase preserves.
+            parent_changes = _change_ids(repo, new_parent_ids)
+            child_changes = _change_ids(repo, new_child_ids)
+            tx.rebase_descendants(False)
+            tx.move_commits(
+                [first.id], [],
+                _by_change_ids(tx, settings, parent_changes),
+                _by_change_ids(tx, settings, child_changes))
         _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
@@ -80,3 +136,19 @@ def split(args) -> int:
               file=sys.stderr)
         return 1
     return 0
+
+
+def _change_ids(repo, commit_ids):
+    """The change id behind each commit id, in order."""
+    return [repo.get_commit(commit_id).change_id.reverse_hex()
+            for commit_id in commit_ids]
+
+
+def _by_change_ids(tx, settings, change_hexes):
+    """Back to commit ids, after a rebase may have moved them. The query
+    runs against the transaction, which is the only place the rebased
+    commits exist yet."""
+    ids = []
+    for change_hex in change_hexes:
+        ids.extend(tx.revset(settings, change_hex))
+    return ids
