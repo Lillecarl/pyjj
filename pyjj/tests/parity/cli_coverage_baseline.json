@@ -53,7 +53,6 @@
     "--include-remotes"
   ],
   "bookmark list": [
-    "(command)",
     "--all-remotes",
     "--conflicted",
     "--remote",
@@ -684,7 +683,6 @@
     "-r"
   ],
   "workspace list": [
-    "(command)",
     "--template",
     "-T"
   ],

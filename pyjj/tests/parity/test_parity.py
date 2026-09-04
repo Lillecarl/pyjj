@@ -2492,6 +2492,35 @@ def test_diff_git_format_reads_a_root_commit(pair: RepoPair) -> None:
     pair.assert_output(["diff", "--git", "-r", "@"])
 
 
+@pytest.mark.covers("bookmark list")
+def test_bookmark_list_output_matches(pair: RepoPair) -> None:
+    """A bookmark lists as `name: <commit summary>`, and the summary
+    carries no bookmark name of its own -- the line already names it."""
+    chain(pair)
+    pair.assert_output(["bookmark", "list"])
+
+
+@pytest.mark.covers("bookmark list")
+@pytest.mark.covers("bookmark delete")
+def test_bookmark_list_drops_a_deleted_bookmark(pair: RepoPair) -> None:
+    """A deleted local-only bookmark leaves nothing behind, so both
+    sides print nothing.
+
+    jj's `name (deleted)` line is for a bookmark that still has a
+    remote-tracking counterpart. `_print_bookmark` writes it, and no
+    scenario reaches it yet -- this repository has no remote.
+    """
+    chain(pair)
+    pair.op(jj=["bookmark", "delete", "main"])
+    pair.assert_output(["bookmark", "list"])
+
+
+@pytest.mark.covers("workspace list")
+def test_workspace_list_output_matches(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["workspace", "list"])
+
+
 @pytest.mark.covers("diff", "--stat")
 def test_diff_stat_output_matches(pair: RepoPair) -> None:
     chain(pair)
