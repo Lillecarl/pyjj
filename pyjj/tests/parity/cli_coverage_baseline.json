@@ -41,21 +41,15 @@
     "(command)"
   ],
   "bookmark advance": [
-    "(command)",
     "--to",
     "-t"
   ],
   "bookmark create": [
-    "(command)",
     "--revision",
     "--to",
     "-r"
   ],
-  "bookmark delete": [
-    "(command)"
-  ],
   "bookmark forget": [
-    "(command)",
     "--include-remotes"
   ],
   "bookmark list": [
@@ -83,7 +77,6 @@
     "-t"
   ],
   "bookmark rename": [
-    "(command)",
     "--overwrite-existing"
   ],
   "bookmark set": [
@@ -95,15 +88,12 @@
     "-r"
   ],
   "bookmark track": [
-    "(command)",
     "--remote"
   ],
   "bookmark untrack": [
-    "(command)",
     "--remote"
   ],
   "commit": [
-    "(command)",
     "--editor",
     "--interactive",
     "--message",
@@ -111,7 +101,6 @@
     "-A",
     "-B",
     "-i",
-    "-m",
     "-o",
     "-r"
   ],
@@ -123,9 +112,6 @@
     "--repo",
     "--user",
     "--workspace"
-  ],
-  "config gc": [
-    "(command)"
   ],
   "config get": [
     "(command)"
@@ -147,21 +133,16 @@
     "--workspace"
   ],
   "config set": [
-    "(command)",
-    "--repo",
     "--user",
     "--workspace"
   ],
   "config unset": [
-    "(command)",
-    "--repo",
     "--user",
     "--workspace"
   ],
   "describe": [
     "--editor",
-    "--message",
-    "--stdin"
+    "--message"
   ],
   "diff": [
     "(command)",
@@ -188,12 +169,10 @@
     "-w"
   ],
   "diffedit": [
-    "(command)",
     "--from",
     "--restore-descendants",
     "--revision",
     "--to",
-    "--tool",
     "-f",
     "-r",
     "-t"
@@ -247,7 +226,6 @@
     "-r"
   ],
   "file chmod": [
-    "(command)",
     "--revision",
     "-r"
   ],
@@ -273,11 +251,7 @@
     "-r"
   ],
   "file track": [
-    "(command)",
     "--include-ignored"
-  ],
-  "file untrack": [
-    "(command)"
   ],
   "fix": [
     "--all-lines",
@@ -304,28 +278,15 @@
   "git colocation": [
     "(command)"
   ],
-  "git colocation disable": [
-    "(command)"
-  ],
-  "git colocation enable": [
-    "(command)"
-  ],
   "git colocation status": [
     "(command)"
   ],
-  "git export": [
-    "(command)"
-  ],
   "git fetch": [
-    "(command)",
     "--all-remotes",
     "--branch",
     "--remote",
     "--tracked",
     "-b"
-  ],
-  "git import": [
-    "(command)"
   ],
   "git init": [
     "(command)",
@@ -334,7 +295,6 @@
     "--no-colocate"
   ],
   "git push": [
-    "(command)",
     "--all",
     "--allow-empty-description",
     "--allow-private",
@@ -344,10 +304,8 @@
     "--dry-run",
     "--named",
     "--option",
-    "--remote",
     "--revision",
     "--tracked",
-    "-b",
     "-c",
     "-o",
     "-r"
@@ -356,14 +314,10 @@
     "(command)"
   ],
   "git remote add": [
-    "(command)",
     "--fetch-tags",
     "--push-url"
   ],
   "git remote list": [
-    "(command)"
-  ],
-  "git remote remove": [
     "(command)"
   ],
   "git remote rename": [
@@ -441,14 +395,11 @@
     "--insert-after",
     "--insert-before",
     "--message",
-    "--no-edit",
     "-o",
     "-r"
   ],
   "next": [
-    "(command)",
     "--conflict",
-    "--edit",
     "--no-edit",
     "-e",
     "-n"
@@ -548,9 +499,7 @@
     "-r"
   ],
   "prev": [
-    "(command)",
     "--conflict",
-    "--edit",
     "--no-edit",
     "-e",
     "-n"
@@ -572,15 +521,9 @@
     "-b",
     "-o"
   ],
-  "redo": [
-    "(command)"
-  ],
   "resolve": [
-    "(command)",
     "--list",
     "--revision",
-    "--tool",
-    "-l",
     "-r"
   ],
   "restore": [
@@ -656,13 +599,7 @@
   "sparse list": [
     "(command)"
   ],
-  "sparse reset": [
-    "(command)"
-  ],
   "sparse set": [
-    "(command)",
-    "--add",
-    "--clear",
     "--remove"
   ],
   "split": [
@@ -673,8 +610,6 @@
     "--insert-before",
     "--message",
     "--revision",
-    "--tool",
-    "-m",
     "-o"
   ],
   "squash": [
@@ -684,7 +619,6 @@
     "--editor",
     "--insert-after",
     "--insert-before",
-    "--keep-emptied",
     "--message",
     "--onto",
     "--revision",
@@ -698,16 +632,12 @@
     "-m",
     "-o",
     "-r",
-    "-t",
-    "-u"
+    "-t"
   ],
   "status": [
     "(command)"
   ],
   "tag": [
-    "(command)"
-  ],
-  "tag delete": [
     "(command)"
   ],
   "tag list": [
@@ -731,9 +661,6 @@
     "--to",
     "-r"
   ],
-  "undo": [
-    "(command)"
-  ],
   "unsign": [
     "--revision"
   ],
@@ -755,17 +682,10 @@
   "util exec": [
     "(command)"
   ],
-  "util gc": [
-    "(command)",
-    "--expire"
-  ],
   "util install-man-pages": [
     "(command)"
   ],
   "util markdown-help": [
-    "(command)"
-  ],
-  "util snapshot": [
     "(command)"
   ],
   "version": [
@@ -775,24 +695,16 @@
     "(command)"
   ],
   "workspace add": [
-    "(command)",
     "--message",
-    "--name",
     "--revision",
     "--sparse-patterns",
     "-m",
     "-r"
   ],
-  "workspace forget": [
-    "(command)"
-  ],
   "workspace list": [
     "(command)",
     "--template",
     "-T"
-  ],
-  "workspace rename": [
-    "(command)"
   ],
   "workspace root": [
     "(command)",

@@ -35,13 +35,14 @@ def rev(name: str) -> str:
 
 def chain(pair: RepoPair) -> None:
     """base <- one <- two, with base.txt/one.txt/two.txt and bookmark main
-    on 'one' -- the shared prefix most scenarios start from."""
-    pair.init()
-    pair.op(files={"base.txt": b"base\n"}, jj=["describe", "-m", "base"])
-    pair.op(jj=["new", "-m", "one"])
-    pair.op(files={"one.txt": b"one\n"}, jj=["bookmark", "create", "main"])
-    pair.op(jj=["new", "-m", "two"])
-    pair.op(files={"two.txt": b"two\n"}, jj=["status"])
+    on 'one' -- the shared prefix most scenarios start from.
+
+    Restored from a copy built once per session rather than replayed;
+    `conftest.build_chain` is the definition. Replaying costs ten CLI
+    runs, and 164 tests start here.
+    """
+    template, step = pair.chain_template
+    pair.load_template(template, step)
 
 
 def test_init_only(pair: RepoPair) -> None:
@@ -94,6 +95,7 @@ def test_edit_moves_working_copy(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("commit", "-m")
 def test_commit_describes_and_advances(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"a\n"}, jj=["commit", "-m", "one"])
@@ -109,12 +111,14 @@ def test_describe_multiple_revisions_shared_message(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "--stdin")
 def test_describe_stdin_description(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"a\n"}, jj=["describe", "--stdin"], stdin="from stdin\n")
     pair.assert_parity()
 
 
+@pytest.mark.covers("restore")
 def test_restore_all_from_parent(pair: RepoPair) -> None:
     chain(pair)
     # The implicit snapshot absorbs the edit into @ first; the restore
@@ -131,6 +135,8 @@ def test_restore_single_path_between_revisions(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("split", "-m")
 def test_split_paths_on_wc(pair: RepoPair) -> None:
     pair.init()
     pair.op(
@@ -157,6 +163,7 @@ def test_new_merge_two_parents(pair: RepoPair) -> None:
 # fair game -- see the *_crossing scenarios below.
 
 
+@pytest.mark.covers("undo")
 def test_undo_bookmark_move(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
@@ -164,6 +171,8 @@ def test_undo_bookmark_move(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("redo")
+@pytest.mark.covers("undo")
 def test_undo_then_redo(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
@@ -172,6 +181,8 @@ def test_undo_then_redo(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("undo")
 def test_undo_describe(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["describe", "-m", "renamed"])
@@ -179,6 +190,9 @@ def test_undo_describe(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark create")
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("undo")
 def test_undo_twice(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "create", "extra"])
@@ -188,6 +202,8 @@ def test_undo_twice(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark create")
+@pytest.mark.covers("new", "-m")
 def test_op_restore_skips_last_operation(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "create", "extra"])
@@ -198,6 +214,7 @@ def test_op_restore_skips_last_operation(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("new", "-m")
 def test_op_restore_across_wc_move(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["new", "-m", "later"])
@@ -207,6 +224,8 @@ def test_op_restore_across_wc_move(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("undo")
 def test_undo_across_file_write(pair: RepoPair) -> None:
     chain(pair)
     # The dirty-wc describe emits "snapshot working copy" then "describe
@@ -216,6 +235,8 @@ def test_undo_across_file_write(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("undo")
 def test_undo_twice_past_describe_onto_snapshot(pair: RepoPair) -> None:
     chain(pair)
     pair.op(files={"two.txt": b"changed\n"}, jj=["describe", "-m", "renamed"])
@@ -227,6 +248,8 @@ def test_undo_twice_past_describe_onto_snapshot(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("undo")
 def test_undo_three_times_through_snapshot_op(pair: RepoPair) -> None:
     chain(pair)
     pair.op(files={"two.txt": b"changed\n"}, jj=["describe", "-m", "renamed"])
@@ -306,6 +329,7 @@ def multi_hunk_conflict(pair: RepoPair) -> None:
     pair.op(jj=["new", rev("one"), rev("two"), "-m", "merge"])
 
 
+@pytest.mark.covers("resolve", "-l")
 def test_resolve_list_shows_conflicts(pair: RepoPair) -> None:
     conflict_pair(pair)
     pair.op(jj=["resolve", "-l"])
@@ -313,6 +337,7 @@ def test_resolve_list_shows_conflicts(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("resolve")
 def test_resolve_no_conflicts_is_an_error(pair: RepoPair) -> None:
     chain(pair)
     rc = pair.op(jj=["resolve"], may_fail=True)
@@ -320,6 +345,7 @@ def test_resolve_no_conflicts_is_an_error(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("resolve", "--tool")
 def test_resolve_partial_region_leaves_conflict(pair: RepoPair) -> None:
     multi_hunk_conflict(pair)
     # Resolving only the first region of a two-region conflict still
@@ -333,6 +359,7 @@ def test_resolve_partial_region_leaves_conflict(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("resolve", "--tool")
 def test_resolve_pick_left_resolves_fully(pair: RepoPair) -> None:
     multi_hunk_conflict(pair)
     # A whole-side pick collapses every region of both hunks at once.
@@ -343,6 +370,7 @@ def test_resolve_pick_left_resolves_fully(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("resolve", "--tool")
 def test_resolve_verbatim_output_is_taken_as_is(pair: RepoPair) -> None:
     conflict_pair(pair)
     # parity-write runs without merge-tool-edits-conflict-markers: $output
@@ -354,6 +382,7 @@ def test_resolve_verbatim_output_is_taken_as_is(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("resolve", "--tool")
 def test_resolve_unchanged_output_still_commits(pair: RepoPair) -> None:
     conflict_pair(pair)
     # Upstream's EmptyOrUnchanged path: nothing resolved, but the commit
@@ -367,6 +396,9 @@ def test_resolve_unchanged_output_still_commits(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
+@pytest.mark.covers("resolve", "--tool")
 def test_resolve_specific_file_only(pair: RepoPair) -> None:
     """Two conflicted files; FILESETS restricts the tool run to one."""
     pair.init()
@@ -386,6 +418,7 @@ def test_resolve_specific_file_only(pair: RepoPair) -> None:
 # -- flag combinations --------------------------------------------------------
 
 
+@pytest.mark.covers("bookmark create")
 def test_bookmark_create_multiple_names(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "create", "alpha", "beta"])
@@ -426,6 +459,7 @@ def test_describe_ancestor_rebases_descendants(pair: RepoPair) -> None:
 # on both sides, so these scenarios can't silently skip the mechanism.
 
 
+@pytest.mark.covers("describe")
 def test_describe_via_editor(pair: RepoPair) -> None:
     pair.init()
     pair.op(
@@ -436,6 +470,7 @@ def test_describe_via_editor(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe")
 def test_describe_editor_append_keeps_typed_text(pair: RepoPair) -> None:
     # Appending proves the buffer actually round-tripped through the
     # editor: whatever survives cleanup must be identical on both sides.
@@ -448,6 +483,7 @@ def test_describe_editor_append_keeps_typed_text(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("commit")
 def test_commit_via_editor(pair: RepoPair) -> None:
     pair.init()
     pair.op(
@@ -468,6 +504,8 @@ def test_squash_combines_messages_via_editor(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("split")
 def test_split_first_half_message_via_editor(pair: RepoPair) -> None:
     pair.init()
     pair.op(
@@ -495,6 +533,7 @@ def two_file_change(pair: RepoPair) -> None:
     pair.op(files={"one.txt": b"one\n", "two.txt": b"two\n"}, jj=["status"])
 
 
+@pytest.mark.covers("split", "--tool", "-m")
 def test_split_via_diff_tool_selects_whole_files(pair: RepoPair) -> None:
     two_file_change(pair)
     pair.op(
@@ -504,6 +543,7 @@ def test_split_via_diff_tool_selects_whole_files(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("split", "--tool", "-m")
 def test_split_diff_tool_partial_edit_is_verbatim(pair: RepoPair) -> None:
     two_file_change(pair)
     # Editing a single line inside the right directory selects that file
@@ -517,6 +557,7 @@ def test_split_diff_tool_partial_edit_is_verbatim(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("split", "--tool", "-m")
 def test_split_diff_tool_dropped_file_stays_in_remainder(pair: RepoPair) -> None:
     two_file_change(pair)
     pair.op(
@@ -526,6 +567,7 @@ def test_split_diff_tool_dropped_file_stays_in_remainder(pair: RepoPair) -> None
     pair.assert_parity()
 
 
+@pytest.mark.covers("diffedit", "--tool")
 def test_diffedit_rewrites_destination(pair: RepoPair) -> None:
     chain(pair)
     pair.op(
@@ -539,6 +581,8 @@ def test_diffedit_rewrites_destination(pair: RepoPair) -> None:
 
 # -- absorb -------------------------------------------------------------------
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new")
 def test_absorb_moves_change_into_parent(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
@@ -548,6 +592,9 @@ def test_absorb_moves_change_into_parent(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("absorb")
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new")
 def test_absorb_default_mutable_destination(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
@@ -557,6 +604,8 @@ def test_absorb_default_mutable_destination(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new")
 def test_absorb_with_path_filter(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"a1\n", "b.txt": b"b1\n"}, jj=["describe", "-m", "base"])
@@ -566,6 +615,8 @@ def test_absorb_with_path_filter(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_absorb_keeps_described_source(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"a.txt": b"line1\nline2\nline3\n"}, jj=["describe", "-m", "base"])
@@ -584,6 +635,9 @@ def _add_fix_tool(pair: RepoPair) -> None:
         f.write('\n[fix.tools.trivial]\ncommand = ["tr", "a-z", "A-Z"]\npatterns = ["glob:\'**/*.txt\'"]\n')
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("fix")
+@pytest.mark.covers("new")
 def test_fix_basic(pair: RepoPair) -> None:
     _add_fix_tool(pair)
     pair.init()
@@ -594,6 +648,9 @@ def test_fix_basic(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("fix")
+@pytest.mark.covers("new")
 def test_fix_with_path_filter(pair: RepoPair) -> None:
     _add_fix_tool(pair)
     pair.init()
@@ -604,6 +661,8 @@ def test_fix_with_path_filter(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_fix_with_source_filter(pair: RepoPair) -> None:
     _add_fix_tool(pair)
     pair.init()
@@ -614,6 +673,8 @@ def test_fix_with_source_filter(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new")
 def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
     _add_fix_tool(pair)
     pair.init()
@@ -628,6 +689,8 @@ def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
 
 # -- revert -------------------------------------------------------------------
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_revert_single_onto_parent(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
@@ -637,6 +700,8 @@ def test_revert_single_onto_parent(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_revert_onto_self(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
@@ -646,6 +711,8 @@ def test_revert_onto_self(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_revert_multiple_in_reverse_topological(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"a\n"}, jj=["describe", "-m", "A"])
@@ -658,6 +725,8 @@ def test_revert_multiple_in_reverse_topological(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_revert_insert_after(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
@@ -717,6 +786,7 @@ def test_git_clone(pair: RepoPair) -> None:
         shutil.rmtree(str(base), ignore_errors=True)
 
 
+@pytest.mark.covers("git fetch")
 def test_git_fetch(pair: RepoPair) -> None:
     base = Path(tempfile.mkdtemp())
     try:
@@ -730,6 +800,10 @@ def test_git_fetch(pair: RepoPair) -> None:
         shutil.rmtree(str(base), ignore_errors=True)
 
 
+@pytest.mark.covers("bookmark create")
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("git fetch")
+@pytest.mark.covers("git push", "--remote", "-b")
 def test_git_push(pair: RepoPair) -> None:
     base = Path(tempfile.mkdtemp())
     try:
@@ -746,6 +820,8 @@ def test_git_push(pair: RepoPair) -> None:
         shutil.rmtree(str(base), ignore_errors=True)
 
 
+@pytest.mark.covers("git remote add")
+@pytest.mark.covers("git remote remove")
 def test_git_remote_add_list_remove(pair: RepoPair) -> None:
     pair.init()
     pair.op(jj=["git", "remote", "add", "origin", "https://example.com/repo.git"])
@@ -1011,18 +1087,21 @@ def test_op_abandon_old_operations(pair: RepoPair) -> None:
 # `chain()` leaves bookmark `main` on the commit described "one".
 
 
+@pytest.mark.covers("bookmark delete")
 def test_bookmark_delete(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "delete", "main"])
     pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark forget")
 def test_bookmark_forget(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "forget", "main"])
     pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark rename")
 def test_bookmark_rename(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "rename", "main", "trunk"])
@@ -1071,6 +1150,7 @@ def test_rebase_insert_before(pair: RepoPair) -> None:
 # -- squash and restore variants ----------------------------------------
 
 
+@pytest.mark.covers("squash", "-u")
 def test_squash_working_copy_into_parent(pair: RepoPair) -> None:
     """`-u` is `--use-destination-message`: no editor, so no prompt."""
     chain(pair)
@@ -1093,12 +1173,14 @@ def test_restore_into_named_revision(pair: RepoPair) -> None:
 # -- working-copy navigation --------------------------------------------
 
 
+@pytest.mark.covers("prev")
 def test_prev_moves_to_the_parent(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["prev"])
     pair.assert_parity()
 
 
+@pytest.mark.covers("prev", "--edit")
 def test_prev_with_edit_moves_onto_the_parent(pair: RepoPair) -> None:
     """`--edit` moves onto the parent itself, one step less far back than
     the default, which lands a NEW commit below it."""
@@ -1107,12 +1189,14 @@ def test_prev_with_edit_moves_onto_the_parent(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("prev", "--edit")
 def test_prev_with_an_offset(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["prev", "2", "--edit"])
     pair.assert_parity()
 
 
+@pytest.mark.covers("next")
 def test_next_moves_onto_the_sibling_line(pair: RepoPair) -> None:
     """`next` walks forward from `@`'s PARENT and skips `@` itself, so
     from a sibling branch it lands on the other line of development."""
@@ -1122,6 +1206,7 @@ def test_next_moves_onto_the_sibling_line(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("next", "--edit")
 def test_next_with_edit_moves_onto_the_descendant(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["edit", rev("base")])
@@ -1129,6 +1214,7 @@ def test_next_with_edit_moves_onto_the_descendant(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("next")
 def test_next_without_a_descendant_fails_on_both(pair: RepoPair) -> None:
     """At the tip there is nothing to move to. Both sides must refuse,
     and neither may change the repository while refusing."""
@@ -1137,6 +1223,7 @@ def test_next_without_a_descendant_fails_on_both(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("next")
 def test_next_refuses_when_the_working_copy_has_children(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["edit", rev("base")])
@@ -1161,6 +1248,7 @@ def test_new_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("new", "--no-edit", "-m")
 def test_new_no_edit_keeps_the_working_copy(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["new", "--no-edit", "-m", "detached"])
@@ -1194,6 +1282,7 @@ def test_file_search_is_read_only(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("file chmod")
 def test_file_chmod_executable(pair: RepoPair) -> None:
     """The executable bit is part of the git tree, so a divergence here
     changes the commit id."""
@@ -1202,6 +1291,7 @@ def test_file_chmod_executable(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("file chmod")
 def test_file_chmod_back_to_normal(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["file", "chmod", "x", "two.txt"])
@@ -1209,6 +1299,7 @@ def test_file_chmod_back_to_normal(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("file track")
 def test_file_track_is_a_no_op_by_default(pair: RepoPair) -> None:
     """`snapshot.auto-track` defaults to `all()`, so tracking an already
     tracked path changes nothing."""
@@ -1217,6 +1308,7 @@ def test_file_track_is_a_no_op_by_default(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("file untrack")
 def test_file_untrack_an_ignored_path(pair: RepoPair) -> None:
     """`file untrack` drops a path from the tree but leaves it on disk."""
     chain(pair)
@@ -1227,6 +1319,7 @@ def test_file_untrack_an_ignored_path(pair: RepoPair) -> None:
         assert pair.read_wc_file(side, "two.txt") == b"two\n"
 
 
+@pytest.mark.covers("file untrack")
 def test_file_untrack_refuses_a_tracked_path(pair: RepoPair) -> None:
     """A path that is not ignored comes straight back, so both sides
     must refuse rather than silently doing nothing."""
@@ -1244,6 +1337,7 @@ def test_sparse_list_is_read_only(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("sparse set", "--add", "--clear")
 def test_sparse_set_narrows_the_working_copy(pair: RepoPair) -> None:
     """Narrowing removes paths from disk but not from the commit."""
     chain(pair)
@@ -1251,6 +1345,8 @@ def test_sparse_set_narrows_the_working_copy(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("sparse set", "--add", "--clear")
 def test_sparse_set_then_edit_only_touches_the_visible_path(pair: RepoPair) -> None:
     """A snapshot taken through a narrowed working copy must not drop the
     paths that are no longer materialized."""
@@ -1260,6 +1356,8 @@ def test_sparse_set_then_edit_only_touches_the_visible_path(pair: RepoPair) -> N
     pair.assert_parity()
 
 
+@pytest.mark.covers("sparse reset")
+@pytest.mark.covers("sparse set", "--add", "--clear")
 def test_sparse_reset_restores_everything(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
@@ -1309,6 +1407,7 @@ def test_tag_set(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("tag delete")
 def test_tag_delete(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
@@ -1338,12 +1437,15 @@ def test_tag_set_refuses_to_move_without_the_flag(pair: RepoPair) -> None:
 # `working_copies` in the extracted state carries the workspace names.
 
 
+@pytest.mark.covers("workspace add", "--name")
 def test_workspace_add(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "add", "--name", "second", "../second"])
     pair.assert_parity()
 
 
+@pytest.mark.covers("workspace add", "--name")
+@pytest.mark.covers("workspace forget")
 def test_workspace_add_then_forget(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "add", "--name", "second", "../second"])
@@ -1351,6 +1453,7 @@ def test_workspace_add_then_forget(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("workspace rename")
 def test_workspace_rename(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "rename", "renamed"])
@@ -1394,6 +1497,7 @@ def assert_ref_parity(pair: RepoPair) -> None:
     assert cli == py, f"git refs diverged:\ncli: {cli}\npy:  {py}"
 
 
+@pytest.mark.covers("git export")
 def test_git_export_writes_bookmarks_as_git_refs(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["git", "export"])
@@ -1402,6 +1506,8 @@ def test_git_export_writes_bookmarks_as_git_refs(pair: RepoPair) -> None:
     assert any(name.startswith("refs/heads/main") for name in git_refs(pair, "cli"))
 
 
+@pytest.mark.covers("git export")
+@pytest.mark.covers("git import")
 def test_git_import_after_export_is_a_no_op(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["git", "export"])
@@ -1410,6 +1516,8 @@ def test_git_import_after_export_is_a_no_op(pair: RepoPair) -> None:
     assert_ref_parity(pair)
 
 
+@pytest.mark.covers("bookmark delete")
+@pytest.mark.covers("git export")
 def test_git_export_after_bookmark_delete(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["git", "export"])
@@ -1425,6 +1533,7 @@ UNIMPLEMENTED = pytest.mark.xfail(
 )
 
 
+@pytest.mark.covers("git colocation enable")
 def test_git_colocation_enable(pair: RepoPair) -> None:
     """Colocation puts a real `.git` beside `.jj`, so git refs must match
     afterwards too.
@@ -1440,6 +1549,8 @@ def test_git_colocation_enable(pair: RepoPair) -> None:
     assert_ref_parity(pair)
 
 
+@pytest.mark.covers("git colocation disable")
+@pytest.mark.covers("git colocation enable")
 @UNIMPLEMENTED
 def test_git_colocation_enable_then_disable(pair: RepoPair) -> None:
     chain(pair)
@@ -1449,6 +1560,9 @@ def test_git_colocation_enable_then_disable(pair: RepoPair) -> None:
     assert_ref_parity(pair)
 
 
+@pytest.mark.covers("bookmark track")
+@pytest.mark.covers("bookmark untrack")
+@pytest.mark.covers("git fetch")
 def test_bookmark_track_and_untrack_a_remote_bookmark(pair: RepoPair) -> None:
     """A fetched bookmark starts untracked; tracking it makes the local
     name follow the remote one."""
@@ -1466,6 +1580,7 @@ def test_bookmark_track_and_untrack_a_remote_bookmark(pair: RepoPair) -> None:
         shutil.rmtree(str(base), ignore_errors=True)
 
 
+@pytest.mark.covers("bookmark advance")
 def test_bookmark_advance_moves_to_the_working_copy_parent(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "advance", "main"])
@@ -1475,6 +1590,7 @@ def test_bookmark_advance_moves_to_the_working_copy_parent(pair: RepoPair) -> No
 # -- global options -----------------------------------------------------
 
 
+@pytest.mark.covers("describe", "-m")
 @pytest.mark.parametrize(
     "argv",
     [
@@ -1515,6 +1631,8 @@ def test_abandon_restore_descendants(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
+@pytest.mark.covers("new", "-m")
 def test_abandon_restore_descendants_with_a_conflicting_change(
     pair: RepoPair,
 ) -> None:
@@ -1563,6 +1681,7 @@ def test_log_stat_no_graph(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
 def test_log_stat_over_a_binary_file(pair: RepoPair) -> None:
     """A NUL in the first bytes makes it binary, and it has no lines."""
     pair.init()
@@ -1589,6 +1708,7 @@ def test_show_stat(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("config gc")
 def test_config_gc_with_nothing_to_collect(pair: RepoPair) -> None:
     """Both repos still exist, so neither side has a leftover config."""
     chain(pair)
@@ -1644,6 +1764,7 @@ def test_at_op_equals_form(pair: RepoPair) -> None:
 # -- util ---------------------------------------------------------------
 
 
+@pytest.mark.covers("util gc")
 def test_util_gc_leaves_the_repo_alone(pair: RepoPair) -> None:
     """The default keeps everything written in the last two weeks, so a
     fresh repo loses nothing."""
@@ -1652,6 +1773,7 @@ def test_util_gc_leaves_the_repo_alone(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("util gc", "--expire")
 def test_util_gc_expire_now(pair: RepoPair) -> None:
     """`--expire=now` drops the grace period, so the sweep runs for real.
 
@@ -1689,6 +1811,7 @@ def test_util_exec_propagates_the_exit_status(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("util snapshot")
 def test_util_snapshot_with_a_dirty_working_copy(pair: RepoPair) -> None:
     """A changed file makes the snapshot real on both sides."""
     chain(pair)
@@ -1696,6 +1819,7 @@ def test_util_snapshot_with_a_dirty_working_copy(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("util snapshot")
 def test_util_snapshot_with_a_clean_working_copy(pair: RepoPair) -> None:
     """Nothing moved, so nothing is written and no operation is made."""
     chain(pair)
@@ -1703,6 +1827,7 @@ def test_util_snapshot_with_a_clean_working_copy(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("util gc", "--expire")
 def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
     """jj accepts only the literal `now`."""
     chain(pair)
@@ -1926,6 +2051,7 @@ def test_simplify_parents_leaves_a_real_merge_alone(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "--keep-emptied", "-u")
 def test_squash_keep_emptied_leaves_the_source_behind(pair: RepoPair) -> None:
     """Squashing everything out of a revision empties it, and jj abandons
     it -- unless asked not to."""
@@ -1943,6 +2069,7 @@ def test_unsign_an_unsigned_commit_changes_nothing(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("unsign", "-r")
 def test_unsign_the_whole_chain_changes_nothing(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["unsign", "-r", "mutable()"])
@@ -2014,6 +2141,7 @@ def test_parallelize_a_two_commit_chain(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("new", "-m")
 def test_parallelize_leaves_a_follower_on_both(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["new", "-m", "three"])
@@ -2030,6 +2158,8 @@ def test_parallelize_leaves_a_follower_on_both(pair: RepoPair) -> None:
 # carries the configured author.
 
 
+@pytest.mark.covers("config set", "--repo")
+@pytest.mark.covers("new", "-m")
 def test_config_set_repo_changes_later_commits(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["config", "set", "--repo", "user.name", "Bob"])
@@ -2037,6 +2167,9 @@ def test_config_set_repo_changes_later_commits(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("config set", "--repo")
+@pytest.mark.covers("config unset", "--repo")
+@pytest.mark.covers("new", "-m")
 def test_config_set_then_unset_restores_the_author(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["config", "set", "--repo", "user.email", "bob@example.com"])
@@ -2045,12 +2178,14 @@ def test_config_set_then_unset_restores_the_author(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("config unset", "--repo")
 def test_config_unset_a_missing_key_fails_on_both(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["config", "unset", "--repo", "user.name"], may_fail=True)
     pair.assert_parity()
 
 
+@pytest.mark.covers("config set", "--repo")
 @pytest.mark.parametrize(
     "argv",
     [
@@ -2116,6 +2251,7 @@ def test_interdiff_needs_from_or_to(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("split", "--parallel", "-m")
 def test_split_parallel_makes_siblings(pair: RepoPair) -> None:
     """`--parallel` puts the two halves side by side, so the second one
     hangs from the original's parents and loses the first one's changes."""
@@ -2210,6 +2346,7 @@ def test_inserting_between_two_revisions(pair: RepoPair, argv) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("new", "-m")
 def test_split_parallel_with_a_descendant(pair: RepoPair) -> None:
     """A commit below the split point ends up on both halves."""
     chain(pair)
@@ -2232,6 +2369,7 @@ def test_op_revert_the_last_operation(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("new", "-m")
 def test_op_revert_an_earlier_operation_keeps_later_ones(pair: RepoPair) -> None:
     """The bookmark move is reverted; the commit made after it stays."""
     chain(pair)
@@ -2244,6 +2382,7 @@ def test_op_revert_an_earlier_operation_keeps_later_ones(pair: RepoPair) -> None
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "-m")
 def test_op_revert_a_describe(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["describe", "-m", "renamed"])
