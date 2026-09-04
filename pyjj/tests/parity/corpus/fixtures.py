@@ -80,8 +80,23 @@ def executable(pair) -> None:
     )
 
 
+def rewritten_stack(pair) -> None:
+    """A chain whose oldest commit is rewritten, so the stack moves.
+
+    `op diff` draws the commits an operation changed. With one changed
+    commit that graph is a single node with no edges, which says
+    nothing about the drawing -- the same way `tag list` passed for
+    weeks on a repository with no tags. Rewriting an ancestor changes
+    three commits at once, with edges between them.
+    """
+    chain(pair)
+    pair.op(jj=["describe", "-r", 'description(glob:"base*")',
+                "-m", "base rewritten"])
+
+
 FIXTURES = {
     "chain": chain,
+    "rewritten_stack": rewritten_stack,
     "conflict": conflict,
     "tags": tags,
     "evolution": evolution,

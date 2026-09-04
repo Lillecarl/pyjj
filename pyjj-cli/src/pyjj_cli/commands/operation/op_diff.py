@@ -16,6 +16,7 @@ from pyjj.graph_layout import lane_prefixes, layout
 
 from ..common import (
     CommandError,
+    _bookmarks_by_commit,
     _commit_summary,
     _format_timestamp,
     _load,
@@ -31,6 +32,18 @@ def _op_summary(op) -> str:
     return " ".join(part for part in (op.id[:12], when, op.description) if part)
 
 
+def _summary(repo, settings, commit) -> str:
+    """A commit as `op diff` prints it, bookmarks and all.
+
+    jj renders these with its `commit_summary` template, which names the
+    bookmarks on a commit -- `movruppx 1a949896 main | one`. Dropping
+    them would lose the one part of the line that says which branch an
+    operation moved.
+    """
+    bookmarks = _bookmarks_by_commit(repo).get(commit.id.hex(), [])
+    return _commit_summary(repo, settings, commit, bookmarks)
+
+
 def _print_target(repo, settings, summary, added: bool) -> None:
     """One side of a changed ref, `+` for the new state, `-` for the old."""
     sign = "+" if added else "-"
@@ -40,12 +53,12 @@ def _print_target(repo, settings, summary, added: bool) -> None:
         return
     if summary.conflict:
         for commit in summary.commits:
-            print(f"{sign} {prefix}(added) {_commit_summary(repo, settings, commit, [])}")
+            print(f"{sign} {prefix}(added) {_summary(repo, settings, commit)}")
         for commit in summary.removed_commits:
-            print(f"{sign} {prefix}(removed) {_commit_summary(repo, settings, commit, [])}")
+            print(f"{sign} {prefix}(removed) {_summary(repo, settings, commit)}")
         return
     for commit in summary.commits:
-        print(f"{sign} {prefix}{_commit_summary(repo, settings, commit, [])}")
+        print(f"{sign} {prefix}{_summary(repo, settings, commit)}")
 
 
 def _print_ref_section(repo, settings, heading: str, changes) -> None:
@@ -76,9 +89,9 @@ def _print_changed_commits(repo, settings, changes, no_graph: bool) -> None:
     """The `Changed commits:` block, with or without its graph."""
     def summary_lines(change):
         return (
-            [f"+ {_commit_summary(repo, settings, commit, [])}"
+            [f"+ {_summary(repo, settings, commit)}"
              for commit in change.added]
-            + [f"- {_commit_summary(repo, settings, commit, [])}"
+            + [f"- {_summary(repo, settings, commit)}"
                for commit in change.removed]
         )
 

@@ -126,6 +126,13 @@ CATALOGUE: tuple[Entry, ...] = (
     E("op-diff-no-graph", ("op", "diff", "--no-graph"),
       claims=("operation diff", "--no-graph", "-G"),
       normalize=("op_ids", "ago", "root", "host", "prog")),
+    # One changed commit is one node with no edges, which pins nothing
+    # about the drawing. This operation rewrites a whole stack.
+    E("op-diff-stack", ("op", "diff"), fixture="rewritten_stack",
+      normalize=("op_ids", "ago", "root", "host", "prog")),
+    E("op-diff-stack-no-graph", ("op", "diff", "--no-graph"),
+      fixture="rewritten_stack",
+      normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show", ("op", "show"), claims=("operation show",),
       normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show-no-graph", ("op", "show", "--no-graph"),
