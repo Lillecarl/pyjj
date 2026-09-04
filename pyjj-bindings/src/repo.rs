@@ -686,6 +686,25 @@ impl PyTransaction {
         })
     }
 
+    /// `jj abandon --restore-descendants`: abandon `targets` and move
+    /// their descendants down with their content untouched. Returns how
+    /// many descendants moved. See
+    /// `pyjj_bindings.rewrite::abandon_restoring_descendants`.
+    #[pyo3(signature = (targets, delete_abandoned_bookmarks=false))]
+    fn abandon_restoring_descendants(
+        &self,
+        targets: Vec<PyCommitId>,
+        delete_abandoned_bookmarks: bool,
+    ) -> PyResult<usize> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::abandon_restoring_descendants(
+                mut_repo,
+                targets,
+                delete_abandoned_bookmarks,
+            )
+        })
+    }
+
     /// `jj git import` equivalent: reflect changes from the underlying
     /// (colocated) Git repo into this transaction's view.
     fn git_import_refs(&self) -> PyResult<Py<PyAny>> {

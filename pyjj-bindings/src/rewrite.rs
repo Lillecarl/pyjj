@@ -343,6 +343,48 @@ pub fn split_remainder_parallel(
     Ok(PyCommitBuilder::from_rust(builder))
 }
 
+/// `jj abandon --restore-descendants`: abandon `targets` and move their
+/// descendants down without touching the descendants' contents.
+///
+/// A plain abandon *rebases* the descendants, so each one's diff is
+/// replayed against its new parent and its content can change. Restoring
+/// descendants *reparents* them instead: the tree is kept verbatim and
+/// only the parent edge moves, which is what the flag is for. There is no
+/// `RebaseOptions` for this -- the choice lives in the per-commit
+/// callback, so this drives `transform_descendants` the way
+/// `cli/src/commands/abandon.rs` does.
+///
+/// Returns the number of descendants that moved.
+pub fn abandon_restoring_descendants(
+    mut_repo: &mut MutableRepo,
+    targets: Vec<PyCommitId>,
+    delete_abandoned_bookmarks: bool,
+) -> PyResult<usize> {
+    let roots: Vec<CommitId> = targets.into_iter().map(|id| id.0).collect();
+    let to_abandon: HashSet<CommitId> = roots.iter().cloned().collect();
+    let options = rewrite::RewriteRefsOptions {
+        delete_abandoned_bookmarks,
+    };
+    let moved = std::cell::Cell::new(0usize);
+    pollster::block_on(mut_repo.transform_descendants_with_options(
+        roots.clone(),
+        &jj_lib::revset::RevsetExpression::none(),
+        &HashMap::new(),
+        &options,
+        async |rewriter| {
+            if to_abandon.contains(rewriter.old_commit().id()) {
+                rewriter.abandon();
+            } else {
+                rewriter.reparent().write().await?;
+                moved.set(moved.get() + 1);
+            }
+            Ok(())
+        },
+    ))
+    .map_err(map_backend_err)?;
+    Ok(moved.into_inner())
+}
+
 /// `jj duplicate` equivalent: creates a copy of each commit in `targets`
 /// (same tree/description/author, fresh change id) onto its own original
 /// parents (or other just-duplicated commits, if one target is a parent of

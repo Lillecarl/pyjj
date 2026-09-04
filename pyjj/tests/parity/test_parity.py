@@ -1357,9 +1357,25 @@ def test_abandon_retain_bookmarks(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
-@UNIMPLEMENTED
 def test_abandon_restore_descendants(pair: RepoPair) -> None:
+    """The descendants keep their trees verbatim; a plain abandon would
+    replay each one's diff against its new parent instead."""
     chain(pair)
+    pair.op(jj=["abandon", "--restore-descendants", rev("one")])
+    pair.assert_parity()
+
+
+def test_abandon_restore_descendants_with_a_conflicting_change(
+    pair: RepoPair,
+) -> None:
+    """Where a rebase would have to merge, reparenting simply keeps the
+    child's own content -- so the two modes give different trees."""
+    pair.init()
+    pair.op(files={"a.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"a.txt": b"one\n"}, jj=["status"])
+    pair.op(jj=["new", "-m", "two"])
+    pair.op(files={"a.txt": b"two\n"}, jj=["status"])
     pair.op(jj=["abandon", "--restore-descendants", rev("one")])
     pair.assert_parity()
 
