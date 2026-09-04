@@ -1,0 +1,346 @@
+{
+  "extra_commands": [
+    "bench",
+    "debug",
+    "desc",
+    "hunk",
+    "hunk commit",
+    "hunk list",
+    "hunk schema",
+    "hunk split",
+    "hunk squash",
+    "op",
+    "op abandon",
+    "op diff",
+    "op integrate",
+    "op log",
+    "op restore",
+    "op revert",
+    "op show",
+    "tag track",
+    "tag untrack",
+    "templates",
+    "templates edit",
+    "templates get",
+    "templates list",
+    "templates set",
+    "templates unset"
+  ],
+  "missing_commands": [
+    "gerrit upload"
+  ],
+  "missing_flags": {
+    "": [
+      "--at-op",
+      "--at-operation",
+      "--color",
+      "--config",
+      "--config-file",
+      "--debug",
+      "--ignore-immutable",
+      "--ignore-working-copy",
+      "--no-integrate-operation",
+      "--no-pager",
+      "--quiet"
+    ],
+    "bookmark create": [
+      "--to"
+    ],
+    "bookmark forget": [
+      "--include-remotes"
+    ],
+    "bookmark list": [
+      "--conflicted",
+      "--remote",
+      "--revision",
+      "--sort",
+      "--template",
+      "--tracked",
+      "-T",
+      "-c",
+      "-r",
+      "-t"
+    ],
+    "bookmark move": [
+      "--allow-backwards",
+      "-B"
+    ],
+    "bookmark rename": [
+      "--overwrite-existing"
+    ],
+    "bookmark set": [
+      "--allow-backwards",
+      "--to",
+      "-B"
+    ],
+    "commit": [
+      "-A",
+      "-B",
+      "-o",
+      "-r"
+    ],
+    "config edit": [
+      "--repo",
+      "--user",
+      "--workspace"
+    ],
+    "config list": [
+      "--include-defaults",
+      "--include-overridden",
+      "--template",
+      "-T"
+    ],
+    "describe": [
+      "--editor"
+    ],
+    "diff": [
+      "--color-words",
+      "--context",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--tool",
+      "--types",
+      "-b",
+      "-w"
+    ],
+    "diffedit": [
+      "--restore-descendants",
+      "--revision",
+      "-r"
+    ],
+    "evolog": [
+      "--color-words",
+      "--context",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--name-only",
+      "--no-graph",
+      "--patch",
+      "--reversed",
+      "--stat",
+      "--summary",
+      "--template",
+      "--tool",
+      "--types",
+      "-G",
+      "-T",
+      "-p",
+      "-s"
+    ],
+    "file annotate": [
+      "--template",
+      "-T"
+    ],
+    "file list": [
+      "--template",
+      "-T"
+    ],
+    "file show": [
+      "--template",
+      "-T"
+    ],
+    "fix": [
+      "--all-lines",
+      "-a"
+    ],
+    "git clone": [
+      "--fetch-tags"
+    ],
+    "git init": [
+      "--git-repo"
+    ],
+    "git push": [
+      "--option",
+      "--revision",
+      "-o",
+      "-r"
+    ],
+    "git remote add": [
+      "--fetch-tags",
+      "--push-url"
+    ],
+    "git remote set-url": [
+      "--fetch",
+      "--push"
+    ],
+    "help": [
+      "--keyword",
+      "-k"
+    ],
+    "interdiff": [
+      "--color-words",
+      "--context",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--name-only",
+      "--stat",
+      "--summary",
+      "--tool",
+      "--types",
+      "-b",
+      "-s",
+      "-w"
+    ],
+    "log": [
+      "--color-words",
+      "--context",
+      "--count",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--name-only",
+      "--reversed",
+      "--revision",
+      "--summary",
+      "--tool",
+      "--types",
+      "-s"
+    ],
+    "next": [
+      "--conflict"
+    ],
+    "operation diff": [
+      "--color-words",
+      "--context",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--name-only",
+      "--patch",
+      "--stat",
+      "--summary",
+      "--tool",
+      "--types",
+      "-p",
+      "-s"
+    ],
+    "operation log": [
+      "--color-words",
+      "--context",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--limit",
+      "--name-only",
+      "--no-graph",
+      "--op-diff",
+      "--patch",
+      "--reversed",
+      "--show-changes-in",
+      "--stat",
+      "--summary",
+      "--template",
+      "--tool",
+      "--types",
+      "-G",
+      "-T",
+      "-d",
+      "-n",
+      "-p",
+      "-s"
+    ],
+    "operation restore": [
+      "--what"
+    ],
+    "operation revert": [
+      "--what"
+    ],
+    "operation show": [
+      "--color-words",
+      "--context",
+      "--git",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--name-only",
+      "--no-graph",
+      "--no-op-diff",
+      "--patch",
+      "--show-changes-in",
+      "--stat",
+      "--summary",
+      "--template",
+      "--tool",
+      "--types",
+      "-G",
+      "-T",
+      "-p",
+      "-s"
+    ],
+    "prev": [
+      "--conflict"
+    ],
+    "rebase": [
+      "--keep-divergent",
+      "--revisions",
+      "--simplify-parents",
+      "--skip-emptied"
+    ],
+    "restore": [
+      "--changes-in",
+      "--interactive",
+      "--restore-descendants",
+      "--to",
+      "--tool",
+      "-c",
+      "-i"
+    ],
+    "show": [
+      "--color-words",
+      "--context",
+      "--ignore-all-space",
+      "--ignore-space-change",
+      "--reversed",
+      "--tool",
+      "--types",
+      "-b",
+      "-w"
+    ],
+    "split": [
+      "--editor",
+      "--interactive",
+      "-i"
+    ],
+    "squash": [
+      "--after",
+      "--before",
+      "--destination",
+      "--editor",
+      "--insert-after",
+      "--insert-before",
+      "--interactive",
+      "--onto",
+      "--to",
+      "--tool",
+      "-A",
+      "-B",
+      "-i",
+      "-o"
+    ],
+    "tag list": [
+      "--all-remotes",
+      "--conflicted",
+      "--contains",
+      "--merged",
+      "--revision",
+      "--sort",
+      "--template",
+      "-T",
+      "-a",
+      "-c",
+      "-r"
+    ],
+    "tag set": [
+      "--to"
+    ],
+    "workspace add": [
+      "--message",
+      "--sparse-patterns",
+      "-m"
+    ],
+    "workspace root": [
+      "--name"
+    ]
+  }
+}
