@@ -305,6 +305,16 @@ rather than writing escape sequences.
   into a removed row and an added row. So the plain rendering is
   captured, never derived by stripping ANSI, and pyjj-cli's current
   no-colour output is right for no-colour only.
+- **Colouring the diff is a word diff, not an escape pass.** The
+  remaining colour todos in the `diff` family all need the same missing
+  piece: jj splits a changed line into *tokens* and marks only the words
+  that moved. With colour on, the color-words diff then merges a
+  replaced line into one row -- `two` and `TWO` side by side -- where the
+  plain rendering splits it into a removed row and an added row, so the
+  rows themselves differ. `--git` keeps its rows but still underlines
+  the changed words inside them, which the goldens show on
+  `nonewline.txt`. Neither can be reached from pyjj-cli's line-level
+  hunks; both want a binding over jj's own word diff.
 - **jj's debug format cannot express every output.** It wraps spans as
   `<<labels::text>>`, and a conflicted file contains `>>>>>>>`, which
   closes a marker early. The capture asserts the round-trip and, where
