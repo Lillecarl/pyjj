@@ -58,12 +58,54 @@ def build_parser() -> argparse.ArgumentParser:
 # after the subcommand. These four change only what gets printed, never
 # what gets written, so pyjj accepts them and does nothing with them --
 # a script that passes `--no-pager` must not die on a usage dump.
-# The ones that DO change behaviour (`--at-operation`,
-# `--ignore-working-copy`, `--config`, `--ignore-immutable`) are
-# deliberately absent: silently ignoring one of those would make pyjj
-# quietly disagree with jj.
+# `--config` and `--ignore-immutable` are still deliberately absent:
+# silently ignoring one of those would make pyjj quietly disagree with
+# jj. `--at-operation` and `--ignore-working-copy` are honoured, and
+# handled below rather than here, because they change what happens.
 _IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
 _IGNORED_GLOBAL_OPTIONS = {"--color"}
+
+# Globals that change behaviour. argparse only accepts top-level options
+# before the subcommand, so these are lifted out of `argv` wherever they
+# appear and applied to the parsed namespace afterwards.
+_HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy"}
+_HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
+                           "--at-op": "at_operation"}
+
+
+def _hoist_global_options(argv):
+    """Pull the behaviour-changing globals out of `argv`.
+
+    Returns the remaining argv and a dict of what was found. jj takes
+    these anywhere on the command line; argparse would only see them in
+    front of the subcommand.
+    """
+    kept = []
+    found = {}
+    pending = None
+    for arg in argv:
+        if pending is not None:
+            found[pending] = arg
+            pending = None
+            continue
+        if arg in _HOISTED_GLOBAL_FLAGS:
+            found[_HOISTED_GLOBAL_FLAGS[arg]] = True
+            continue
+        if arg in _HOISTED_GLOBAL_OPTIONS:
+            pending = _HOISTED_GLOBAL_OPTIONS[arg]
+            continue
+        name, sep, value = arg.partition("=")
+        if sep and name in _HOISTED_GLOBAL_OPTIONS:
+            found[_HOISTED_GLOBAL_OPTIONS[name]] = value
+            continue
+        kept.append(arg)
+    if pending is not None:
+        # jj's clap says "a value is required"; dropping it silently
+        # would run the command against the wrong operation.
+        raise SystemExit(
+            f"Error: a value is required for '--{pending.replace('_', '-')}'"
+        )
+    return kept, found
 
 
 def _drop_ignored_global_flags(argv):
@@ -97,9 +139,19 @@ def main(argv=None) -> int:
     # Completion runs the CLI itself on every <TAB>; keep everything heavy
     # out of that path — handlers are not imported yet.
     argcomplete.autocomplete(parser)
-    args = parser.parse_args(
-        _drop_ignored_global_flags(sys.argv[1:] if argv is None else argv)
+    raw = sys.argv[1:] if argv is None else argv
+    raw, globals_ = _hoist_global_options(_drop_ignored_global_flags(raw))
+    args = parser.parse_args(raw)
+    args.at_operation = globals_.get("at_operation")
+    # Loading the repo at a past operation implies not touching the
+    # working copy, the same way jj documents it.
+    args.ignore_working_copy = bool(
+        globals_.get("ignore_working_copy") or args.at_operation
     )
+    # Imported here, not at module scope: it pulls in `pyjj`, and this
+    # line sits after `autocomplete()`, which exits during completion.
+    from pyjj_cli.commands import common
+    common.set_ignore_working_copy(args.ignore_working_copy)
     if args.command is None:
         parser.print_help()
         return 1

@@ -1435,6 +1435,51 @@ def test_duplicate_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- behaviour-changing global options -----------------------------------
+
+
+def test_ignore_working_copy_skips_the_snapshot(pair: RepoPair) -> None:
+    """The new file stays out of every commit: no snapshot, no operation.
+
+    Without the flag, `status` would have absorbed it into `@`."""
+    chain(pair)
+    pair.op(files={"unsnapshotted.txt": b"dirty\n"},
+            jj=["--ignore-working-copy", "status"])
+    pair.assert_parity()
+
+
+def test_ignore_working_copy_before_a_write(pair: RepoPair) -> None:
+    """A write command must not snapshot either.
+
+    This checks the first half only. The second -- not updating the
+    working copy afterwards -- leaves the same bytes on disk here, so
+    the harness cannot tell it apart."""
+    chain(pair)
+    pair.op(files={"unsnapshotted.txt": b"dirty\n"},
+            jj=["--ignore-working-copy", "describe", "-m", "renamed"])
+    pair.assert_parity()
+
+
+def test_at_operation_reads_a_past_view(pair: RepoPair) -> None:
+    """Op ids differ between the repos, so each side names its own."""
+    chain(pair)
+    pair.op(
+        jj=["--at-operation", pair.op_id("cli", 2), "log"],
+        py=["--at-operation", pair.op_id("py", 2), "log"],
+    )
+    pair.assert_parity()
+
+
+def test_at_op_equals_form(pair: RepoPair) -> None:
+    """`--at-op=<id>` is the short spelling of the same option."""
+    chain(pair)
+    pair.op(
+        jj=[f"--at-op={pair.op_id('cli', 2)}", "status"],
+        py=[f"--at-op={pair.op_id('py', 2)}", "status"],
+    )
+    pair.assert_parity()
+
+
 # -- util ---------------------------------------------------------------
 
 

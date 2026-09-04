@@ -72,12 +72,44 @@ def _run_editor(settings, content: str) -> str:
         kept.append(line)
     return complete_newline("\n".join(kept).strip("\n"))
 
+# `--ignore-working-copy` -- and `--at-operation`, which implies it --
+# decide once per process whether this command may touch the working
+# copy. That is what jj models too, so a module-level setting is the
+# honest shape: threading one boolean through every command's call to
+# `_finish` would say the same thing in forty places.
+_IGNORE_WORKING_COPY = False
+
+
+def set_ignore_working_copy(value: bool) -> None:
+    """Called once by `main()` from the parsed globals."""
+    global _IGNORE_WORKING_COPY
+    _IGNORE_WORKING_COPY = bool(value)
+
+
+def _open(settings, args):
+    """The repo this command should act on.
+
+    Normally that is the head, snapshotted first like every real jj
+    workspace command does. `--at-operation` names a past operation
+    instead, and jj documents that as implying `--ignore-working-copy`:
+    a snapshot would write into a view the command is only visiting.
+    """
+    ws = pyjj.Workspace.load(settings, args.repository)
+    at_op = getattr(args, "at_operation", None)
+    if at_op:
+        repo = ws.load_at_head()
+        return ws, repo.load_at_operation(_resolve_operation(repo, at_op))
+    if _IGNORE_WORKING_COPY:
+        return ws, ws.load_at_head()
+    repo, _stats = ws.snapshot(settings)
+    return ws, repo
+
+
 def _load(args):
     """Load settings + workspace at the -R path, snapshotting the working
     copy first like every real jj workspace command does."""
     settings = pyjj.UserSettings()
-    ws = pyjj.Workspace.load(settings, args.repository)
-    repo, _stats = ws.snapshot(settings)
+    ws, repo = _open(settings, args)
     return settings, ws, repo
 
 def _reload(settings, args):
@@ -90,9 +122,7 @@ def _reload(settings, args):
     settings once per process -- draws the next one. Only commands that
     write commits after a reload can tell, but for those it is the
     difference between matching `jj` and not."""
-    ws = pyjj.Workspace.load(settings, args.repository)
-    repo, _stats = ws.snapshot(settings)
-    return ws, repo
+    return _open(settings, args)
 
 def _resolve_all(repo, settings, expressions):
     """Resolve positional REVSETS the way the real CLI does for target
@@ -128,6 +158,10 @@ def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
     """Mirror the real CLI's transaction-finish behavior: when the current
     view's working-copy commit differs from `old_wc_hex`, update the
     on-disk working copy to match."""
+    if _IGNORE_WORKING_COPY:
+        # jj's `--ignore-working-copy` is both halves: don't snapshot at
+        # the start, and don't update the working copy at the end.
+        return
     fresh_ws = pyjj.Workspace.load(settings, ws.workspace_root)
     fresh_repo = fresh_ws.load_at_head()
     new_wc_hex = fresh_repo.view()[fresh_ws.workspace_name]
