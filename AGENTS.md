@@ -183,6 +183,28 @@ One limitation of the source: jj's Options brackets list only long
 aliases while its Arguments brackets list short ones, so `jj rebase -d`
 does not appear. The list is a lower bound on jj's surface.
 
+### Templating
+
+jj drives each listing from a named entry under `[templates]`, written in
+jj's own template language. pyjj-cli does the same job with **Jinja2**,
+under `pyjj.templates.<name>`. Use it wherever a command has output
+worth shaping -- a hardcoded format is the exception, not the default.
+
+`_resolve_template(settings, ws, args, name, builtins)` in `common.py`
+is the one way in. It resolves `-T` against jj's builtin template names
+(which the caller maps to Jinja equivalents), against
+`pyjj.templates.<word>` for a bare word, or as a raw Jinja template, and
+falls back to the configured `pyjj.templates.<name>` when there is no
+`-T`. It compiles in a `SandboxedEnvironment` with `StrictUndefined`:
+a context binds live `Commit` objects, so plain attribute traversal
+would reach further than a template needs, and a misspelled variable
+should fail rather than render blank.
+
+A templated command cannot share one argv with jj, since the two
+template languages differ. `RepoPair.outputs_asymmetric()` sends each
+side the same request in its own language and compares the output. It is
+the only place in the suite where the two argv differ on purpose.
+
 ### Running the suite
 
 The suite is almost entirely subprocess wait, so `pytest-xdist` is
