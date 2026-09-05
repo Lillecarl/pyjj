@@ -2114,7 +2114,7 @@ _DESCRIPTION_PATH = "JJ-COMMIT-DESCRIPTION"
 
 
 def _description_diff_bytes(args, before: str, after: str,
-                            coloured: bool = False) -> bytes:
+                            coloured: bool = False, formats=None) -> bytes:
     """What jj prints when two commits' descriptions differ.
 
     `jj interdiff` compares descriptions as well as trees. The short
@@ -2123,7 +2123,7 @@ def _description_diff_bytes(args, before: str, after: str,
     """
     if before == after:
         return b""
-    _short, long = _diff_formats(args)
+    _short, long = _diff_formats(args) if formats is None else formats
     if long is None:
         return b""
     left, right = before.encode(), after.encode()
@@ -2246,38 +2246,51 @@ def _compare_mode(args) -> str:
     return "exact"
 
 
-def _print_diff_files(args, ws, files, settings=None) -> None:
-    """The same format choice as `_print_diff`, from file content alone.
+def _diff_files_bytes(args, ws, files, settings=None, formats=None) -> bytes:
+    """The same format choice as `_diff_bytes`, from file content alone.
 
     `jj interdiff` diffs a rebased tree that has no commit id, so the
-    commit-based helpers cannot serve it.
+    commit-based helper cannot serve it. `jj evolog --patch` compares
+    the same way, against a commit's predecessors.
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
     compare = _compare_mode(args)
     to_ui_path = _ui_path_formatter(ws)
-    short, long = _diff_formats(args)
+    short, long = _diff_formats(args) if formats is None else formats
+    coloured = use_color(settings)
+
+    def block(lines, label: str) -> bytes:
+        if not lines:
+            return b""
+        return (render_block(lines, label, coloured)
+                .encode("utf-8", "surrogateescape") + b"\n")
+
+    out = b""
     if short == "summary":
-        _print_summary([_FileStat(f, compare) for f in files], to_ui_path,
-                       settings)
+        out = block(_summary_spans([_FileStat(f, compare) for f in files],
+                                   to_ui_path), "diff summary")
     elif short == "stat":
-        _print_diff_stats([_FileStat(f, compare) for f in files], settings)
+        out = block(_diff_stats_lines([_FileStat(f, compare) for f in files]),
+                    "diff stat")
     elif short == "types":
-        _print_types([_FileStat(f, compare) for f in files], to_ui_path,
-                     settings)
+        out = block(_types_spans([_FileStat(f, compare) for f in files],
+                                 to_ui_path), "diff types")
     elif short == "name_only":
-        for f in files:
-            print(to_ui_path(f.path))
+        out = "".join(f"{to_ui_path(f.path)}\n" for f in files).encode(
+            "utf-8", "surrogateescape")
     if long is None:
-        return
-    sys.stdout.flush()
+        return out
     if long == "git":
-        sys.stdout.buffer.write(_git_diff_bytes(files, context,
-                                                use_color(settings), compare))
-    else:
-        sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context,
-                                                   use_color(settings),
-                                                   compare))
+        return out + _git_diff_bytes(files, context, coloured, compare)
+    return out + _color_words_bytes(files, to_ui_path, context, coloured,
+                                    compare)
+
+
+def _print_diff_files(args, ws, files, settings=None) -> None:
+    """`_diff_files_bytes`, written to stdout."""
+    sys.stdout.flush()
+    sys.stdout.buffer.write(_diff_files_bytes(args, ws, files, settings))
     sys.stdout.buffer.flush()
 
 
