@@ -1261,7 +1261,10 @@ REBASE_SPELLING_ARGV = [
 ]
 
 
-@pytest.mark.covers("rebase", "--revision", "--revisions")
+# `--revisions` is not on the checklist: `markdown-help` hides it, the
+# same way it hides `jj squash -d`. The row still types it, because jj
+# accepts it and so must pyjj-cli.
+@pytest.mark.covers("rebase", "--revision")
 @pytest.mark.covers("rebase", "--destination", "--branch")
 @pytest.mark.covers("rebase", "--source", "--onto", "-o")
 @pytest.mark.covers("rebase", "--after", "--before")

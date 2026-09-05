@@ -90,11 +90,7 @@
     "--interactive",
     "--message",
     "--tool",
-    "-A",
-    "-B",
-    "-i",
-    "-o",
-    "-r"
+    "-i"
   ],
   "config": [
     "(command)"
@@ -375,8 +371,6 @@
   "tag list": [
     "--all-remotes",
     "--conflicted",
-    "--contains",
-    "--merged",
     "--revision",
     "--sort",
     "-a",

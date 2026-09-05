@@ -64,12 +64,6 @@
       "--to",
       "-B"
     ],
-    "commit": [
-      "-A",
-      "-B",
-      "-o",
-      "-r"
-    ],
     "config edit": [
       "--repo",
       "--user",
@@ -156,8 +150,6 @@
     "tag list": [
       "--all-remotes",
       "--conflicted",
-      "--contains",
-      "--merged",
       "--revision",
       "--sort",
       "-a",

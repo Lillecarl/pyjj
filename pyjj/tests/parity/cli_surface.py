@@ -22,11 +22,12 @@ Hidden commands are absent by construction: clap leaves them out of
 `markdown-help`, the same way it leaves them out of `--help`. So `bench`
 and `debug` show up as pyjj-only here, and that is not a divergence.
 
-One known under-report: `markdown-help` prints only an option's long
-aliases, so a short alias like `jj rebase -d` (for `--destination`) does
-not appear. The list is therefore a lower bound on jj's surface. It is
-still authoritative for what it does list, which is what the baselines
-and the coverage checklist are measured against.
+One known under-report: `markdown-help` hides some of an option's
+aliases, so `jj rebase -d` (for `--destination`) and `jj rebase
+--revisions` (for `--revision`) do not appear. The list is therefore a
+lower bound on jj's surface. It is still authoritative for what it does
+list, which is what the baselines and the coverage checklist are
+measured against.
 """
 
 from __future__ import annotations
@@ -53,6 +54,11 @@ _EM_DASH = "—"
 # `alias(?:es)?`, not `aliases?`: the latter binds the `?` to the final
 # `s` alone, so it matches "aliase" and never "alias".
 _ALIAS_BRACKET = re.compile(r"\[alias(?:es)?:\s*([^\]]+)\]")
+
+
+# The level-6 headings whose list items declare arguments. jj writes a
+# third one, "Subcommands:", and puts the description above all three.
+_ARGUMENT_SECTIONS = ("Arguments", "Options")
 
 
 def _spelling(word: str) -> str | None:
@@ -118,6 +124,7 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
     surface: dict[str, set[str]] = {}
     current: str | None = None
     heading_level: str | None = None
+    section: str | None = None
     in_list_item = False
     for index, token in enumerate(tokens):
         if token.type == "heading_open":
@@ -135,12 +142,27 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
         if heading_level == "h2":
             # `## `jj bookmark set`` -- the whole path in one code span.
             heading_level = None
+            section = None
             text = token.content.strip()
             if text.startswith("`jj") and text.endswith("`"):
                 current = text[1:-1].removeprefix("jj").strip()
                 surface.setdefault(current, set())
             continue
+        if heading_level == "h6":
+            # `###### **Options:**` -- which of a subcommand's three
+            # sections the list items that follow belong to.
+            heading_level = None
+            section = token.content.strip().strip("*").strip().rstrip(":")
+            continue
         heading_level = None
+
+        # Only the two sections that declare arguments count. A
+        # subcommand's description is prose, and jj writes prose as a
+        # bullet list too -- `jj commit`'s says it has no `-r` option,
+        # and `jj tag list`'s names `git tag --contains`. Reading those
+        # as flags invents surface that jj does not have.
+        if section not in _ARGUMENT_SECTIONS:
+            continue
 
         # Only the first paragraph of a list item declares flags; the
         # indented prose that follows is a paragraph of its own.
