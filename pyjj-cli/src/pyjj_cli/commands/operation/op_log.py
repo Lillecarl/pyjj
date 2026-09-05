@@ -8,12 +8,14 @@ from ...formatter import render_block, separate
 from ..common import (
     CommandError,
     _ago,
+    _diff_formats_for_log,
     _duration,
     _load,
     _pyjj_template,
     _resolve_template,
     use_color,
 )
+from .op_diff import print_operation_diff
 
 # jj's own builtin template names. These carry labels, and a label
 # decides a colour, so pyjj-cli builds their spans itself rather than
@@ -150,6 +152,21 @@ def render_node(current: bool, prefix: str, coloured: bool) -> str:
     return render_block([line], (prefix, "operation", "node"), coloured)
 
 
+def _op_diff_text(args, settings, ws, repo, op) -> str:
+    """One operation's own diff, as the text that sits under its row.
+
+    `jj op log --op-diff` shows what each operation changed, compared
+    with its parents -- the same body `op show` prints. `--patch` asks
+    for it too, and adds the diff of every changed commit.
+    """
+    import io
+
+    buffer = io.StringIO()
+    print_operation_diff(args, settings, ws, repo, op.parents(), op,
+                         heading=False, prefix="op_log", out=buffer)
+    return buffer.getvalue()
+
+
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
     try:
@@ -175,11 +192,23 @@ def op_log(args) -> int:
     if getattr(args, "reversed", False):
         items = reverse_graph(items)
 
+    # `--op-diff` shows what each operation changed, and `--patch`
+    # implies it -- so does any other diff-format flag, since a format
+    # with nothing to format would print nothing at all.
+    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+    with_diff = getattr(args, "op_diff", False) or formats != (None, None)
+
+    def body(op_id: str) -> str:
+        if not with_diff:
+            return ""
+        return _op_diff_text(args, settings, ws, repo, by_id[op_id])
+
     if getattr(args, "no_graph", False):
         for op_id, _edges in items:
             sys.stdout.write(render_operation(
                 by_id[op_id], op_id == current_id, shape, template,
                 "op_log", coloured) + "\n")
+            sys.stdout.write(body(op_id))
         return 0
 
     renderer = pyjj.GraphRenderer()
@@ -188,8 +217,10 @@ def op_log(args) -> int:
         # `--limit` the oldest row shown still has a parent, and jj
         # leaves its lane running rather than closing it.
         current = op_id == current_id
+        text = render_operation(by_id[op_id], current, shape, template,
+                                "op_log", coloured)
+        patch = body(op_id)
         sys.stdout.write(renderer.next_row(
             op_id, edges, render_node(current, "op_log", coloured),
-            render_operation(by_id[op_id], current, shape, template,
-                             "op_log", coloured)))
+            f"{text}\n{patch}" if patch else text))
     return 0
