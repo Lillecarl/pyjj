@@ -1,0 +1,5 @@
+-F added.txt
+FF edited.txt
+FF mode.txt
+FF nonewline.txt
+F- removed.txt

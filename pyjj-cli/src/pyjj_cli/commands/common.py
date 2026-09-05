@@ -1009,6 +1009,20 @@ def _print_summary(entries, to_ui_path=None, settings=None) -> None:
                        use_color(settings)))
 
 
+def _print_types(entries, to_ui_path=None, settings=None) -> None:
+    """`jj diff --types`: what each path is before and after.
+
+    Two characters, one a side, then the path. jj answers "what is it"
+    here, not "what happened to it", so a symlink that became a regular
+    file reads `LF` where the summary reads `M`. Every row carries the
+    same `modified` label whatever the two characters say.
+    """
+    to_ui_path = to_ui_path or (lambda path: path)
+    lines = [[(f"{e.before_type}{e.after_type} {to_ui_path(e.path)}",
+               "modified")] for e in entries]
+    print(render_block(lines, "diff types", use_color(settings)))
+
+
 def _relative_path(from_dir: Path, to: Path) -> str:
     """jj's `file_util::relative_path`.
 
@@ -2110,6 +2124,15 @@ class _FileStat:
     since its left side is a tree that was never committed.
     """
 
+    @staticmethod
+    def _type(mode, conflict) -> str:
+        """jj's type character, from what `git_diff()` reports."""
+        if mode is None:
+            return "-"
+        if conflict:
+            return "C"
+        return {"120000": "L", "040000": "G"}.get(mode, "F")
+
     def __init__(self, f):
         self.path = f.path
         self.status = (
@@ -2117,6 +2140,8 @@ class _FileStat:
             else "removed" if f.after_mode is None
             else "modified"
         )
+        self.before_type = self._type(f.before_mode, f.before_conflict)
+        self.after_type = self._type(f.after_mode, f.after_conflict)
         self.binary = f.is_binary
         self.bytes_delta = len(f.after_content) - len(f.before_content)
         if f.is_binary:
@@ -2133,7 +2158,7 @@ class _FileStat:
 
 # jj's short formats, in the order it picks between them. Each is a
 # listing: one line a file, and no content.
-_SHORT_FORMATS = ("summary", "stat", "name_only")
+_SHORT_FORMATS = ("summary", "stat", "types", "name_only")
 
 
 def _diff_formats(args) -> tuple[str | None, str | None]:
@@ -2168,6 +2193,8 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
         _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
     elif short == "stat":
         _print_diff_stats([_FileStat(f) for f in files], settings)
+    elif short == "types":
+        _print_types([_FileStat(f) for f in files], to_ui_path, settings)
     elif short == "name_only":
         for f in files:
             print(to_ui_path(f.path))
@@ -2198,6 +2225,8 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
         _print_summary(base.diff(target, paths), to_ui_path, settings)
     elif short == "stat":
         _print_diff_stats(base.diff_stats(target, settings, paths), settings)
+    elif short == "types":
+        _print_types(base.diff(target, paths), to_ui_path, settings)
     elif short == "name_only":
         for entry in base.diff(target, paths):
             print(to_ui_path(entry.path))

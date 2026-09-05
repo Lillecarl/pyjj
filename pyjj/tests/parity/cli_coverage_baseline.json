@@ -144,7 +144,6 @@
     "--template",
     "--to",
     "--tool",
-    "--types",
     "-T",
     "-b",
     "-f",
@@ -314,7 +313,6 @@
     "--stat",
     "--to",
     "--tool",
-    "--types",
     "-b",
     "-f",
     "-s",
@@ -508,7 +506,6 @@
     "--name-only",
     "--reversed",
     "--tool",
-    "--types",
     "-b",
     "-r",
     "-w"

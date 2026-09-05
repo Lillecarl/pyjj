@@ -88,7 +88,6 @@
       "--ignore-all-space",
       "--ignore-space-change",
       "--tool",
-      "--types",
       "-b",
       "-w"
     ],
@@ -160,7 +159,6 @@
       "--ignore-all-space",
       "--ignore-space-change",
       "--tool",
-      "--types",
       "-b",
       "-w"
     ],
@@ -261,7 +259,6 @@
       "--ignore-space-change",
       "--reversed",
       "--tool",
-      "--types",
       "-b",
       "-w"
     ],

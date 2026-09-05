@@ -49,6 +49,13 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("diff", "--context"), colour="bytes"),
     E("diff-color-words", ("diff", "--color-words", "-r", "@"),
       fixture="executable", claims=("diff", "--color-words"), colour="bytes"),
+    E("diff-types", ("diff", "--types", "-r", "@"), fixture="executable",
+      claims=("diff", "--types"), colour="bytes"),
+    # `--types` says what a path *is*, so a conflict is the case that
+    # tells it apart from `--summary`.
+    E("diff-types-conflict", ("diff", "--types",
+                              "--from", 'description(glob:"one*")', "--to", "@"),
+      fixture="conflict", claims=("diff",), colour="bytes"),
     # jj sorts the format flags into a listing and a content format and
     # prints one of each, so this asks for two formats and gets two.
     E("diff-stat-color-words", ("diff", "--stat", "--color-words", "-r", "@"),
@@ -67,6 +74,8 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("show", "--stat"), colour="bytes"),
     E("show-color-words", ("show", "--color-words", 'description(glob:"one*")'),
       claims=("show", "--color-words"), colour="bytes"),
+    E("show-types", ("show", "--types", 'description(glob:"one*")'),
+      claims=("show", "--types"), colour="bytes"),
 
     # -- log ------------------------------------------------------------
     E("log", ("log",), bar="facts",
@@ -114,6 +123,10 @@ CATALOGUE: tuple[Entry, ...] = (
                                 "--from", 'description(glob:"one*")',
                                 "--to", 'description(glob:"two*")'),
       claims=("interdiff", "--color-words"), colour="bytes"),
+    E("interdiff-types", ("interdiff", "--types",
+                          "--from", 'description(glob:"one*")',
+                          "--to", 'description(glob:"two*")'),
+      claims=("interdiff", "--types"), colour="bytes"),
 
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),

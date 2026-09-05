@@ -46,6 +46,7 @@ class Flag(Enum):
     SUMMARY = auto()
     STAT = auto()
     NAME_ONLY = auto()
+    TYPES = auto()
     GIT = auto()
     CONTEXT = auto()
     NO_PATCH = auto()
@@ -157,6 +158,11 @@ def add_stat_flag(parser: argparse.ArgumentParser) -> None:
 
 def add_name_only_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name-only", action="store_true", help="Show only path")
+
+
+def add_types_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--types", action="store_true",
+                        help="Show only the type of each path")
 
 
 def add_context_flag(parser: argparse.ArgumentParser) -> None:
@@ -375,6 +381,7 @@ _FLAG_HANDLERS = {
     Flag.SUMMARY: lambda p: add_summary_flag(p),
     Flag.STAT: lambda p: add_stat_flag(p),
     Flag.NAME_ONLY: lambda p: add_name_only_flag(p),
+    Flag.TYPES: lambda p: add_types_flag(p),
     Flag.GIT: lambda p: add_git_flag(p),
     Flag.CONTEXT: lambda p: add_context_flag(p),
     Flag.NO_PATCH: lambda p: add_no_patch_flag(p),
