@@ -138,18 +138,14 @@
   ],
   "diff": [
     "--from",
-    "--ignore-all-space",
-    "--ignore-space-change",
     "--revisions",
     "--template",
     "--to",
     "--tool",
     "-T",
-    "-b",
     "-f",
     "-r",
-    "-t",
-    "-w"
+    "-t"
   ],
   "diffedit": [
     "--from",
@@ -307,17 +303,13 @@
   "interdiff": [
     "--context",
     "--from",
-    "--ignore-all-space",
-    "--ignore-space-change",
     "--name-only",
     "--stat",
     "--to",
     "--tool",
-    "-b",
     "-f",
     "-s",
-    "-t",
-    "-w"
+    "-t"
   ],
   "log": [
     "--color-words",
@@ -501,14 +493,10 @@
   ],
   "show": [
     "--context",
-    "--ignore-all-space",
-    "--ignore-space-change",
     "--name-only",
     "--reversed",
     "--tool",
-    "-b",
-    "-r",
-    "-w"
+    "-r"
   ],
   "sign": [
     "(command)",

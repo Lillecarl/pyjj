@@ -1,0 +1,12 @@
+Modified commit description:
+   1     : base
+        1: whitespace
+Modified regular file ws.txt:
+   1     :     indented
+   2     : spaced  out
+   3     : str ipped
+        1:         indented
+        2: spaced out
+        3: stripped
+   4     : real change
+        4: real changed

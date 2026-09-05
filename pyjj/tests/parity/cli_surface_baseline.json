@@ -85,11 +85,7 @@
       "--editor"
     ],
     "diff": [
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--tool",
-      "-b",
-      "-w"
+      "--tool"
     ],
     "diffedit": [
       "--restore-descendants",
@@ -156,11 +152,7 @@
       "--push"
     ],
     "interdiff": [
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--tool",
-      "-b",
-      "-w"
+      "--tool"
     ],
     "log": [
       "--color-words",
@@ -255,12 +247,8 @@
       "-c"
     ],
     "show": [
-      "--ignore-all-space",
-      "--ignore-space-change",
       "--reversed",
-      "--tool",
-      "-b",
-      "-w"
+      "--tool"
     ],
     "split": [
       "--editor"

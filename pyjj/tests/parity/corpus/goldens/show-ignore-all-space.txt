@@ -1,0 +1,16 @@
+Commit ID: 32776e398eb3fe86fbe044ced7382ef4aac2a49e
+Change ID: movruppxykmymsouzwvrxkmwtkkxuxuo
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    whitespace
+
+Modified regular file ws.txt:
+   1     :     indented
+   2     : spaced  out
+   3     : str ipped
+        1:         indented
+        2: spaced out
+        3: stripped
+   4     : real change
+        4: real changed

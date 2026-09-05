@@ -1497,7 +1497,7 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
     )
 
 
-def _git_diff_lines(files, context: int = 3):
+def _git_diff_lines(files, context: int = 3, compare: str = "exact"):
     """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
 
     The layout follows jj's `show_git_diff`. Two details differ from what
@@ -1545,16 +1545,18 @@ def _git_diff_lines(files, context: int = 3):
         line(f"--- {left_name}")
         line(f"+++ {right_name}")
         lines.extend(_unified_hunk_lines(f.before_content, f.after_content,
-                                         context))
+                                         context, compare))
     return lines
 
 
-def _git_diff_bytes(files, context: int = 3, coloured: bool = False) -> bytes:
+def _git_diff_bytes(files, context: int = 3, coloured: bool = False,
+                    compare: str = "exact") -> bytes:
     """`_git_diff_lines` as bytes, ready to write to stdout."""
-    return _render_diff(_git_diff_lines(files, context), coloured)
+    return _render_diff(_git_diff_lines(files, context, compare), coloured)
 
 
-def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3):
+def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
+                        compare: str = "exact"):
     """The `@@` headers and their lines, as labelled spans.
 
     jj prints these for a file and, in `--git` format, for a commit
@@ -1567,7 +1569,7 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3):
     underline is written all the same.
     """
     lines = []
-    for hunk in pyjj.unified_hunks(before, after, context):
+    for hunk in pyjj.unified_hunks(before, after, context, compare):
         lines.append([(f"@@ -{hunk.left_start},{hunk.left_len} "
                        f"+{hunk.right_start},{hunk.right_len} @@",
                        "hunk_header")])
@@ -1587,9 +1589,11 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3):
     return lines
 
 
-def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3) -> bytes:
+def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3,
+                        compare: str = "exact") -> bytes:
     """`_unified_hunk_lines` as plain bytes."""
-    return _render_diff(_unified_hunk_lines(before, after, context), False)
+    return _render_diff(_unified_hunk_lines(before, after, context, compare),
+                        False)
 
 
 def _render_diff(lines, coloured: bool, base: str = "diff git") -> bytes:
@@ -1890,10 +1894,14 @@ def _changed_rows(rows, before: bytes, after: bytes, numbers, coloured) -> None:
 def _unchanged_rows(rows, left_lines, right_lines, numbers, coloured) -> None:
     """Rows for lines both sides share, under the `context` label."""
     if left_lines != right_lines:
-        # Only a whitespace-insensitive comparison reaches this: the
-        # lines match the line diff and differ to the eye.
-        _changed_rows(rows, b"".join(left_lines), b"".join(right_lines),
+        # Only `-w` or `-b` reaches this: the line diff called the
+        # lines the same and they still differ to the eye. jj
+        # word-diffs them and keeps the `context` label on the rows,
+        # so they stay dim however they are told apart.
+        changed: list = []
+        _changed_rows(changed, b"".join(left_lines), b"".join(right_lines),
                       numbers, coloured)
+        rows.extend(Line(spans, "context") for spans in changed)
         return
     for line in left_lines:
         rows.append(Line(_color_words_number_spans(numbers[0], numbers[1])
@@ -1936,7 +1944,7 @@ def _context_rows(rows, pending, numbers, num_after, num_before,
 
 
 def _color_words_rows(before: bytes, after: bytes, context: int = 3,
-                      coloured: bool = False):
+                      coloured: bool = False, compare: str = "exact"):
     """The numbered body of a color-words diff, as labelled rows.
 
     jj keeps `context` unchanged lines after a change and `context`
@@ -1947,7 +1955,7 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
     numbers = [1, 1]
     pending = None
     emitted = False
-    for kind, lhs, rhs in pyjj.content_hunks(before, after, "line"):
+    for kind, lhs, rhs in pyjj.content_hunks(before, after, "line", compare):
         if kind == "matching":
             pending = (lhs, rhs)
             continue
@@ -1962,7 +1970,7 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
 
 
 def _color_words_lines(files, to_ui_path, context: int = 3,
-                       coloured: bool = False):
+                       coloured: bool = False, compare: str = "exact"):
     """`jj diff`'s default output for a list of `Commit.git_diff()` files.
 
     A conflicted path reads as a regular file here. jj names it a
@@ -1986,25 +1994,27 @@ def _color_words_lines(files, to_ui_path, context: int = 3,
         after = b"" if removed else f.after_content
         if before == after:
             continue
-        rows.extend(_color_words_rows(before, after, context, coloured))
+        rows.extend(_color_words_rows(before, after, context, coloured,
+                                      compare))
     return rows
 
 
 def _color_words_bytes(files, to_ui_path, context: int = 3,
-                       coloured: bool = False) -> bytes:
+                       coloured: bool = False, compare: str = "exact") -> bytes:
     """`_color_words_lines` as bytes, ready to write to stdout."""
-    return _render_diff(_color_words_lines(files, to_ui_path, context, coloured),
-                        coloured, "diff color_words")
+    return _render_diff(
+        _color_words_lines(files, to_ui_path, context, coloured, compare),
+        coloured, "diff color_words")
 
 
 def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
-                            context=3) -> None:
+                            context=3, compare="exact") -> None:
     """Writes `jj diff`'s default output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
     sys.stdout.buffer.write(
         _color_words_bytes(files, _ui_path_formatter(ws), context,
-                           use_color(settings))
+                           use_color(settings), compare)
     )
     sys.stdout.buffer.flush()
 
@@ -2012,12 +2022,13 @@ def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
 _DIFF_SIGILS = {"context": " ", "removed": "-", "added": "+"}
 
 
-def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3) -> None:
+def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3,
+                    compare="exact") -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
     sys.stdout.buffer.write(_git_diff_bytes(files, context,
-                                            use_color(settings)))
+                                            use_color(settings), compare))
     sys.stdout.buffer.flush()
 
 
@@ -2103,6 +2114,7 @@ def _description_diff_bytes(args, before: str, after: str,
     if long is None:
         return b""
     left, right = before.encode(), after.encode()
+    compare = _compare_mode(args)
     if long == "git":
         lines = [
             [(f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}",
@@ -2110,10 +2122,10 @@ def _description_diff_bytes(args, before: str, after: str,
             [(f"--- {_DESCRIPTION_PATH}", "file_header")],
             [(f"+++ {_DESCRIPTION_PATH}", "file_header")],
         ]
-        lines += _unified_hunk_lines(left, right)
+        lines += _unified_hunk_lines(left, right, compare=compare)
         return _render_diff(lines, coloured, "diff")
     lines = [[("Modified commit description:", "header")]]
-    lines += _color_words_rows(left, right, coloured=coloured)
+    lines += _color_words_rows(left, right, coloured=coloured, compare=compare)
     return _render_diff(lines, coloured, "diff")
 
 
@@ -2133,7 +2145,7 @@ class _FileStat:
             return "C"
         return {"120000": "L", "040000": "G"}.get(mode, "F")
 
-    def __init__(self, f):
+    def __init__(self, f, compare: str = "exact"):
         self.path = f.path
         self.status = (
             "added" if f.before_mode is None
@@ -2148,7 +2160,8 @@ class _FileStat:
             self.added = self.removed = None
             return
         self.added = self.removed = 0
-        for hunk in pyjj.unified_hunks(f.before_content, f.after_content, 0):
+        for hunk in pyjj.unified_hunks(f.before_content, f.after_content, 0,
+                                       compare):
             for kind, _ in hunk.lines:
                 if kind == "added":
                     self.added += 1
@@ -2179,6 +2192,19 @@ def _diff_formats(args) -> tuple[str | None, str | None]:
     return short, None if short else "color_words"
 
 
+def _compare_mode(args) -> str:
+    """How `-w` and `-b` ask for two lines to be compared.
+
+    This decides which lines a diff calls the same, so it reaches
+    every format, the histogram included.
+    """
+    if getattr(args, "ignore_all_space", False):
+        return "ignore-all-space"
+    if getattr(args, "ignore_space_change", False):
+        return "ignore-space-change"
+    return "exact"
+
+
 def _print_diff_files(args, ws, files, settings=None) -> None:
     """The same format choice as `_print_diff`, from file content alone.
 
@@ -2187,14 +2213,17 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
+    compare = _compare_mode(args)
     to_ui_path = _ui_path_formatter(ws)
     short, long = _diff_formats(args)
     if short == "summary":
-        _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
+        _print_summary([_FileStat(f, compare) for f in files], to_ui_path,
+                       settings)
     elif short == "stat":
-        _print_diff_stats([_FileStat(f) for f in files], settings)
+        _print_diff_stats([_FileStat(f, compare) for f in files], settings)
     elif short == "types":
-        _print_types([_FileStat(f) for f in files], to_ui_path, settings)
+        _print_types([_FileStat(f, compare) for f in files], to_ui_path,
+                     settings)
     elif short == "name_only":
         for f in files:
             print(to_ui_path(f.path))
@@ -2203,10 +2232,11 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
     sys.stdout.flush()
     if long == "git":
         sys.stdout.buffer.write(_git_diff_bytes(files, context,
-                                                use_color(settings)))
+                                                use_color(settings), compare))
     else:
         sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context,
-                                                   use_color(settings)))
+                                                   use_color(settings),
+                                                   compare))
     sys.stdout.buffer.flush()
 
 
@@ -2219,18 +2249,21 @@ def _print_diff(args, ws, settings, base, target, paths) -> None:
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
+    compare = _compare_mode(args)
     to_ui_path = _ui_path_formatter(ws)
     short, long = _diff_formats(args)
     if short == "summary":
         _print_summary(base.diff(target, paths), to_ui_path, settings)
     elif short == "stat":
-        _print_diff_stats(base.diff_stats(target, settings, paths), settings)
+        _print_diff_stats(base.diff_stats(target, settings, paths, compare),
+                          settings)
     elif short == "types":
         _print_types(base.diff(target, paths), to_ui_path, settings)
     elif short == "name_only":
         for entry in base.diff(target, paths):
             print(to_ui_path(entry.path))
     if long == "git":
-        _print_git_diff(base, target, settings, paths, context)
+        _print_git_diff(base, target, settings, paths, context, compare)
     elif long == "color_words":
-        _print_color_words_diff(base, target, settings, ws, paths, context)
+        _print_color_words_diff(base, target, settings, ws, paths, context,
+                                compare)

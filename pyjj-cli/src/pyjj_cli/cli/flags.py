@@ -47,6 +47,7 @@ class Flag(Enum):
     STAT = auto()
     NAME_ONLY = auto()
     TYPES = auto()
+    WHITESPACE = auto()
     GIT = auto()
     CONTEXT = auto()
     NO_PATCH = auto()
@@ -163,6 +164,19 @@ def add_name_only_flag(parser: argparse.ArgumentParser) -> None:
 def add_types_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--types", action="store_true",
                         help="Show only the type of each path")
+
+
+def add_whitespace_flags(parser: argparse.ArgumentParser) -> None:
+    """`-w` and `-b`: how much whitespace a diff is allowed to ignore.
+
+    jj makes them exclusive, since a line cannot be compared two ways
+    at once.
+    """
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-w", "--ignore-all-space", action="store_true",
+                       help="Ignore whitespace when comparing lines")
+    group.add_argument("-b", "--ignore-space-change", action="store_true",
+                       help="Ignore changes in amount of whitespace when comparing lines")
 
 
 def add_context_flag(parser: argparse.ArgumentParser) -> None:
@@ -382,6 +396,7 @@ _FLAG_HANDLERS = {
     Flag.STAT: lambda p: add_stat_flag(p),
     Flag.NAME_ONLY: lambda p: add_name_only_flag(p),
     Flag.TYPES: lambda p: add_types_flag(p),
+    Flag.WHITESPACE: lambda p: add_whitespace_flags(p),
     Flag.GIT: lambda p: add_git_flag(p),
     Flag.CONTEXT: lambda p: add_context_flag(p),
     Flag.NO_PATCH: lambda p: add_no_patch_flag(p),

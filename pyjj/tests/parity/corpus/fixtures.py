@@ -100,6 +100,33 @@ def executable(pair) -> None:
     )
 
 
+def whitespace(pair) -> None:
+    """Lines that differ only in whitespace, and one that does not.
+
+    `-w` and `-b` are the only flags whose answer is which lines
+    changed rather than how they are printed, so nothing else in the
+    corpus can tell them apart. Three lines, one each: `indented` moves
+    leading space, so `-b` and `-w` both hide it; `spaced` changes the
+    amount of space inside the line, which `-b` hides and `-w` hides
+    too; `stripped` removes space entirely, which only `-w` hides. The
+    fourth line changes a word, so every mode still shows something.
+    """
+    pair.init()
+    pair.op(
+        files={
+            "ws.txt": b"    indented\nspaced  out\nstr ipped\nreal change\n",
+        },
+        jj=["describe", "-m", "base"],
+    )
+    pair.op(jj=["new"])
+    pair.op(
+        files={
+            "ws.txt": b"        indented\nspaced out\nstripped\nreal changed\n",
+        },
+        jj=["describe", "-m", "whitespace"],
+    )
+
+
 def rewritten_stack(pair) -> None:
     """A chain whose oldest commit is rewritten, so the stack moves.
 
@@ -151,4 +178,5 @@ FIXTURES = {
     "evolution": evolution,
     "squashed": squashed,
     "executable": executable,
+    "whitespace": whitespace,
 }

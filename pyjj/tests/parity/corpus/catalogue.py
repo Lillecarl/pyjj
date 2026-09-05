@@ -51,6 +51,20 @@ CATALOGUE: tuple[Entry, ...] = (
       fixture="executable", claims=("diff", "--color-words"), colour="bytes"),
     E("diff-types", ("diff", "--types", "-r", "@"), fixture="executable",
       claims=("diff", "--types"), colour="bytes"),
+    # `-w` and `-b` answer which lines changed, not how they print, so
+    # a fixture whose lines differ only in whitespace is what tells
+    # them apart -- from each other and from a plain diff.
+    E("diff-whitespace", ("diff", "-r", "@"), fixture="whitespace",
+      claims=("diff",), colour="bytes"),
+    E("diff-ignore-all-space", ("diff", "-w", "-r", "@"), fixture="whitespace",
+      claims=("diff", "--ignore-all-space", "-w"), colour="bytes"),
+    E("diff-ignore-space-change", ("diff", "-b", "-r", "@"),
+      fixture="whitespace",
+      claims=("diff", "--ignore-space-change", "-b"), colour="bytes"),
+    E("diff-ignore-all-space-git", ("diff", "-w", "--git", "-r", "@"),
+      fixture="whitespace", claims=("diff",), colour="bytes"),
+    E("diff-ignore-all-space-stat", ("diff", "-w", "--stat", "-r", "@"),
+      fixture="whitespace", claims=("diff",), colour="bytes"),
     # `--types` says what a path *is*, so a conflict is the case that
     # tells it apart from `--summary`.
     E("diff-types-conflict", ("diff", "--types",
@@ -76,6 +90,12 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("show", "--color-words"), colour="bytes"),
     E("show-types", ("show", "--types", 'description(glob:"one*")'),
       claims=("show", "--types"), colour="bytes"),
+    E("show-ignore-all-space", ("show", "-w", 'description(glob:"whitespace*")'),
+      fixture="whitespace",
+      claims=("show", "--ignore-all-space", "-w"), colour="bytes"),
+    E("show-ignore-space-change",
+      ("show", "-b", 'description(glob:"whitespace*")'), fixture="whitespace",
+      claims=("show", "--ignore-space-change", "-b"), colour="bytes"),
 
     # -- log ------------------------------------------------------------
     E("log", ("log",), bar="facts",
@@ -127,6 +147,16 @@ CATALOGUE: tuple[Entry, ...] = (
                           "--from", 'description(glob:"one*")',
                           "--to", 'description(glob:"two*")'),
       claims=("interdiff", "--types"), colour="bytes"),
+    E("interdiff-ignore-all-space",
+      ("interdiff", "-w", "--from", 'description(glob:"base*")',
+       "--to", 'description(glob:"whitespace*")'),
+      fixture="whitespace",
+      claims=("interdiff", "--ignore-all-space", "-w"), colour="bytes"),
+    E("interdiff-ignore-space-change",
+      ("interdiff", "-b", "--from", 'description(glob:"base*")',
+       "--to", 'description(glob:"whitespace*")'),
+      fixture="whitespace",
+      claims=("interdiff", "--ignore-space-change", "-b"), colour="bytes"),
 
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),

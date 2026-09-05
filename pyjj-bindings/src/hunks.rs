@@ -7,7 +7,7 @@ use jj_lib::diff_presentation::LineCompareMode;
 
 /// How `jj diff` compares two lines: literally, or with `-w` / `-b`,
 /// which let it call two lines the same across whitespace.
-fn compare_mode(name: &str) -> PyResult<LineCompareMode> {
+pub(crate) fn compare_mode(name: &str) -> PyResult<LineCompareMode> {
     match name {
         "exact" => Ok(LineCompareMode::Exact),
         "ignore-all-space" => Ok(LineCompareMode::IgnoreAllSpace),

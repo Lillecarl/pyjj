@@ -1,0 +1,9 @@
+Modified regular file ws.txt:
+   1     :     indented
+   2     : spaced  out
+        1:         indented
+        2: spaced out
+   3     : str ipped
+   4     : real change
+        3: stripped
+        4: real changed

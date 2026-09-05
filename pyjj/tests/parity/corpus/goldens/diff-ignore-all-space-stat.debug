@@ -1,0 +1,2 @@
+<<diff stat::ws.txt | 2 >>[38;5;2m<<diff stat added::+>>[38;5;1m<<diff stat removed::->>[39m
+<<diff stat stat-summary::1 file changed, 1 insertion(+), 1 deletion(-)>>
