@@ -2085,10 +2085,11 @@ def _description_diff_bytes(args, before: str, after: str,
     """
     if before == after:
         return b""
-    if any(getattr(args, flag, False) for flag in ("stat", "summary", "name_only")):
+    _short, long = _diff_formats(args)
+    if long is None:
         return b""
     left, right = before.encode(), after.encode()
-    if getattr(args, "git", False):
+    if long == "git":
         lines = [
             [(f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}",
               "file_header")],
@@ -2130,6 +2131,29 @@ class _FileStat:
                     self.removed += 1
 
 
+# jj's short formats, in the order it picks between them. Each is a
+# listing: one line a file, and no content.
+_SHORT_FORMATS = ("summary", "stat", "name_only")
+
+
+def _diff_formats(args) -> tuple[str | None, str | None]:
+    """The formats jj prints for these flags, in the order it prints them.
+
+    jj sorts the flags into a *short* format, which lists the files,
+    and a *long* one, which carries their content. It prints at most
+    one of each and the short one first, so `--stat --git` prints both.
+    The default is the long color-words format, and it applies only
+    when no flag asks for anything.
+    """
+    short = next((name for name in _SHORT_FORMATS
+                  if getattr(args, name, False)), None)
+    if getattr(args, "git", False):
+        return short, "git"
+    if getattr(args, "color_words", False):
+        return short, "color_words"
+    return short, None if short else "color_words"
+
+
 def _print_diff_files(args, ws, files, settings=None) -> None:
     """The same format choice as `_print_diff`, from file content alone.
 
@@ -2138,51 +2162,46 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
-    if getattr(args, "git", False):
-        sys.stdout.flush()
-        sys.stdout.buffer.write(_git_diff_bytes(files, context,
-                                                use_color(settings)))
-        sys.stdout.buffer.flush()
-        return
-    if getattr(args, "stat", False):
-        _print_diff_stats([_FileStat(f) for f in files], settings)
-        return
     to_ui_path = _ui_path_formatter(ws)
-    if getattr(args, "name_only", False):
+    short, long = _diff_formats(args)
+    if short == "summary":
+        _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
+    elif short == "stat":
+        _print_diff_stats([_FileStat(f) for f in files], settings)
+    elif short == "name_only":
         for f in files:
             print(to_ui_path(f.path))
-        return
-    if getattr(args, "summary", False):
-        _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
+    if long is None:
         return
     sys.stdout.flush()
-    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context,
-                                               use_color(settings)))
+    if long == "git":
+        sys.stdout.buffer.write(_git_diff_bytes(files, context,
+                                                use_color(settings)))
+    else:
+        sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context,
+                                                   use_color(settings)))
     sys.stdout.buffer.flush()
 
 
 def _print_diff(args, ws, settings, base, target, paths) -> None:
     """One place that decides which format `jj diff` prints.
 
-    jj's default is the color-words diff, not a file listing. The flags
-    that replace it are `--git`, `--stat`, `--summary` and
-    `--name-only`, and every path through `diff` reaches this with the
-    same two commits, so they behave the same everywhere.
+    jj's default is the color-words diff, not a file listing. Every
+    path through `diff` reaches this with the same two commits, so the
+    flags behave the same everywhere.
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
-    if getattr(args, "git", False):
-        _print_git_diff(base, target, settings, paths, context)
-        return
-    if getattr(args, "stat", False):
-        _print_diff_stats(base.diff_stats(target, settings, paths), settings)
-        return
     to_ui_path = _ui_path_formatter(ws)
-    if getattr(args, "name_only", False):
+    short, long = _diff_formats(args)
+    if short == "summary":
+        _print_summary(base.diff(target, paths), to_ui_path, settings)
+    elif short == "stat":
+        _print_diff_stats(base.diff_stats(target, settings, paths), settings)
+    elif short == "name_only":
         for entry in base.diff(target, paths):
             print(to_ui_path(entry.path))
-        return
-    if getattr(args, "summary", False):
-        _print_summary(base.diff(target, paths), to_ui_path, settings)
-        return
-    _print_color_words_diff(base, target, settings, ws, paths, context)
+    if long == "git":
+        _print_git_diff(base, target, settings, paths, context)
+    elif long == "color_words":
+        _print_color_words_diff(base, target, settings, ws, paths, context)
