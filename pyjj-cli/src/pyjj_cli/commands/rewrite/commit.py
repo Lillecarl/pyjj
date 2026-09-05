@@ -28,15 +28,12 @@ def commit(args) -> int:
     change) into it and create a new working-copy child on top."""
     try:
         settings, ws, repo = _load(args)
-        if args.interactive or args.tool or args.editor:
+        if args.interactive or args.tool:
             print("Error: interactive commit is not supported; pass -m "
                   "(with optional FILESETS)", file=sys.stderr)
             return 2
         wc = _wc_commit(repo, ws)
-        if args.message is not None:
-            description = complete_newline(args.message)
-        else:
-            description = _run_editor(settings, wc.description)
+        description = _description(args, settings, wc)
         tx = _start_transaction(repo, settings)
         if args.paths_pos:
             # Selected paths stay in @ (same change id); everything else
@@ -61,6 +58,18 @@ def commit(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
+
+
+def _description(args, settings, wc) -> str:
+    """`-m` alone means no editor. `--editor` opens one anyway, seeded
+    with whatever `-m` gave, and no `-m` at all opens one seeded with
+    the commit's own description."""
+    if args.message is None:
+        return _run_editor(settings, wc.description)
+    text = complete_newline(args.message)
+    if getattr(args, "editor", False):
+        return _run_editor(settings, text)
+    return text
 
 
 def _remainder(tx, repo, wc, kept):
