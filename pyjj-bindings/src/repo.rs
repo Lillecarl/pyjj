@@ -1481,6 +1481,24 @@ impl PyTransaction {
         with_mut_repo(self, crate::oplog::redo)
     }
 
+    /// `jj git push`: push the given bookmark updates in one go.
+    ///
+    /// `updates` is `(name, before, after)` a bookmark, with `None`
+    /// standing for an absent ref on either side. `push_options` is
+    /// `jj git push -o`.
+    #[pyo3(signature = (settings, remote, updates, push_options=Vec::new()))]
+    fn git_push_updates(
+        &self,
+        settings: &PyUserSettings,
+        remote: &str,
+        updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
+        push_options: Vec<String>,
+    ) -> PyResult<Py<PyAny>> {
+        with_mut_repo(self, |mut_repo| {
+            crate::git::push_updates(mut_repo, settings, remote, updates, push_options)
+        })
+    }
+
     /// `jj git push -b <bookmark>` equivalent.
     fn git_push_bookmark(
         &self,

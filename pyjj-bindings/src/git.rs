@@ -382,6 +382,91 @@ pub fn fetch_all(
     })
 }
 
+/// `jj git push`, with the caller deciding what to push.
+///
+/// `updates` is one entry a bookmark: `(name, before, after)`, where
+/// `before` is the commit the remote is expected to hold and `after`
+/// the one to put there. `None` on either side means the ref is absent
+/// -- `before: None` creates it, `after: None` deletes it. Git rejects
+/// the push when the remote does not hold `before`, which is how a
+/// concurrent push is caught.
+///
+/// One call pushes every update together, because git does: a push is
+/// one connection, and jj reports the whole batch's result at once.
+///
+/// `push_options` carries `jj git push -o`, the values git sends to the
+/// receiving side. A remote that does not advertise push options
+/// refuses the push outright.
+///
+/// The caller decides what belongs in `updates`. Which bookmarks jj
+/// selects, and which selections it refuses, is `jj git push`'s own
+/// logic and lives in pyjj-cli.
+pub fn push_updates(
+    mut_repo: &mut MutableRepo,
+    settings: &PyUserSettings,
+    remote: &str,
+    updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
+    push_options: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    let remote_name = RemoteName::new(remote);
+    let targets = GitPushRefTargets {
+        bookmarks: updates
+            .into_iter()
+            .map(|(name, before, after)| {
+                (
+                    RefNameBuf::from(name.as_str()),
+                    Diff::new(before.map(|id| id.0), after.map(|id| id.0)),
+                )
+            })
+            .collect(),
+        tags: vec![],
+    };
+
+    let subprocess_options =
+        jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
+    let mut callback = SilentCallback;
+    let stats = git::push_refs(
+        mut_repo,
+        subprocess_options,
+        remote_name,
+        &targets,
+        &mut callback,
+        &GitPushOptions {
+            remote_push_options: push_options,
+        },
+    )
+    .map_err(map_git_push_err)?;
+
+    Python::attach(|py| {
+        let dict = PyDict::new(py);
+        dict.set_item(
+            "pushed",
+            stats
+                .pushed
+                .iter()
+                .map(|n| n.as_str().to_string())
+                .collect::<Vec<_>>(),
+        )?;
+        dict.set_item(
+            "rejected",
+            stats
+                .rejected
+                .iter()
+                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
+                .collect::<Vec<_>>(),
+        )?;
+        dict.set_item(
+            "remote_rejected",
+            stats
+                .remote_rejected
+                .iter()
+                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(dict.unbind().into_any())
+    })
+}
+
 /// `jj git push -b <bookmark>` equivalent: pushes the local bookmark's
 /// current target to `remote` (as a subprocess `git push`), expecting the
 /// remote to currently be at whatever `{bookmark}@{remote}` is tracked as
