@@ -39,6 +39,17 @@ pub struct PyDiffEntry {
     /// directory, or a conflict).
     #[pyo3(get)]
     pub executable: Option<bool>,
+    /// What the path *is* on each side, as the single character `jj
+    /// diff --types` prints: `-` absent, `F` file, `L` symlink, `G`
+    /// Git submodule, `C` conflict.
+    ///
+    /// This is a different question from `status`, which says how the
+    /// path changed. A symlink that became a regular file is
+    /// `"modified"` with types `L` and `F`.
+    #[pyo3(get)]
+    pub before_type: String,
+    #[pyo3(get)]
+    pub after_type: String,
 }
 
 /// Resolves `value` to a plain `TreeValue::File`'s `(id, executable)`, or
@@ -48,6 +59,20 @@ fn resolved_file(value: &MergedTreeValue) -> Option<(FileId, bool)> {
         TreeValue::File { id, executable, .. } => Some((id.clone(), *executable)),
         _ => None,
     }
+}
+
+/// jj's `diff_summary_char`: what a path is, in one character.
+fn type_char(value: &MergedTreeValue) -> String {
+    match value.as_resolved() {
+        Some(None) => "-",
+        Some(Some(TreeValue::File { .. })) => "F",
+        Some(Some(TreeValue::Symlink(_))) => "L",
+        Some(Some(TreeValue::GitSubmodule(_))) => "G",
+        // A tree cannot appear in a diff, so anything left is a
+        // conflict.
+        _ => "C",
+    }
+    .to_string()
 }
 
 #[pymethods]
@@ -109,6 +134,8 @@ fn diff_trees(
                 status: status.to_string(),
                 source_path: None,
                 executable,
+                before_type: type_char(&values.before),
+                after_type: type_char(&values.after),
             })
         })
         .collect()
@@ -207,6 +234,8 @@ pub fn diff_commits_with_copies(
                 status: status.to_string(),
                 source_path: source_path.map(|p| p.as_internal_file_string().to_string()),
                 executable,
+                before_type: type_char(&values.before),
+                after_type: type_char(&values.after),
             })
         })
         .collect()
