@@ -156,7 +156,6 @@
     "restore": [
       "--changes-in",
       "--restore-descendants",
-      "--to",
       "--tool",
       "-c"
     ],
@@ -164,18 +163,8 @@
       "--editor"
     ],
     "squash": [
-      "--after",
-      "--before",
-      "--destination",
       "--editor",
-      "--insert-after",
-      "--insert-before",
-      "--onto",
-      "--to",
-      "--tool",
-      "-A",
-      "-B",
-      "-o"
+      "--tool"
     ],
     "tag list": [
       "--all-remotes",

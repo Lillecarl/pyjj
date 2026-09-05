@@ -287,7 +287,9 @@ def add_use_dest_message_flag(parser: argparse.ArgumentParser) -> None:
 
 
 def add_into_flag(parser: argparse.ArgumentParser, dest: str = "into", default=None, help: str = "Destination revision (default: source's parent)") -> None:
-    parser.add_argument("-t", "--into", dest=dest, default=default, metavar="REVSET", help=help)
+    # jj spells this `-t`, `--into` with `--to` as a visible alias, on
+    # every command that has it: squash, restore and absorb.
+    parser.add_argument("-t", "--into", "--to", dest=dest, default=default, metavar="REVSET", help=help)
 
 
 def add_remote_flag(parser: argparse.ArgumentParser) -> None:
