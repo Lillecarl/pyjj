@@ -192,8 +192,10 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
         return 1
 
     # jj renders the summaries against the repository at the newer
-    # operation, so that is the view that decides which commit is the
-    # working copy.
+    # operation, not the one the command is running at. That view
+    # decides which commit is the working copy, and it also decides
+    # whether a commit is hidden: one this operation had just created
+    # was visible then, however it stands now.
     wc_id = to_repo.view().get(ws.workspace_name)
     coloured = use_color(settings)
     with _formatter(settings) as fmt:
@@ -210,7 +212,7 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
         ):
             fmt.write("\n")
             fmt.write("Changed commits:\n")
-            _changed_commits(fmt, repo, settings, result.changes,
+            _changed_commits(fmt, to_repo, settings, result.changes,
                              getattr(args, "no_graph", False), wc_id, prefix,
                              coloured)
             parts = [
@@ -229,18 +231,20 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
             fmt.write("Changed working copy ")
             fmt.write(f"{change.name}@", "working_copies")
             fmt.write(":\n")
-            _write_lines(fmt, _target_lines(repo, settings, change.after, True,
+            _write_lines(fmt, _target_lines(to_repo, settings,
+                                            change.after, True,
                                             wc_id, prefix))
-            _write_lines(fmt, _target_lines(repo, settings, change.before,
-                                            False, wc_id, prefix))
+            _write_lines(fmt, _target_lines(to_repo, settings,
+                                            change.before, False,
+                                            wc_id, prefix))
 
-        _ref_section(fmt, repo, settings, "Changed local bookmarks:",
+        _ref_section(fmt, to_repo, settings, "Changed local bookmarks:",
                      result.changed_local_bookmarks, wc_id, prefix)
-        _ref_section(fmt, repo, settings, "Changed local tags:",
+        _ref_section(fmt, to_repo, settings, "Changed local tags:",
                      result.changed_local_tags, wc_id, prefix)
-        _ref_section(fmt, repo, settings, "Changed remote bookmarks:",
+        _ref_section(fmt, to_repo, settings, "Changed remote bookmarks:",
                      result.changed_remote_bookmarks, wc_id, prefix)
-        _ref_section(fmt, repo, settings, "Changed remote tags:",
+        _ref_section(fmt, to_repo, settings, "Changed remote tags:",
                      result.changed_remote_tags, wc_id, prefix)
     return 0
 
