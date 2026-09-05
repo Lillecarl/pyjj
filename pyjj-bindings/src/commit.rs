@@ -228,14 +228,19 @@ impl PyCommit {
     /// Unlike `diff()`, this reads file content, so it costs more. A
     /// binary file reports `None` for both counts, decided the way jj
     /// and git decide it -- a NUL byte in the first 8000 bytes.
-    #[pyo3(signature = (other, settings, paths=None))]
+    ///
+    /// `compare` is how two lines are compared, as for
+    /// `pyjj.content_hunks()`: jj's `-w` and `-b` change these counts,
+    /// because they change which lines it calls the same.
+    #[pyo3(signature = (other, settings, paths=None, compare="exact"))]
     fn diff_stats(
         &self,
         other: &Self,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
+        compare: &str,
     ) -> PyResult<Vec<crate::tree::PyDiffStat>> {
-        crate::tree::diff_stats(self, other, settings, paths)
+        crate::tree::diff_stats(self, other, settings, paths, compare)
     }
 
     /// The per-file halves of `jj diff --git`: mode, abbreviated hash and

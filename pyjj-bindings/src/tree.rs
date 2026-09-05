@@ -287,14 +287,17 @@ pub fn diff_stats(
     to: &PyCommit,
     settings: &crate::settings::PyUserSettings,
     paths: Option<Vec<String>>,
+    compare: &str,
 ) -> PyResult<Vec<PyDiffStat>> {
     use jj_lib::conflict_labels::ConflictLabels;
     use jj_lib::conflicts::{
         ConflictMarkerStyle, ConflictMaterializeOptions, materialized_diff_stream,
     };
     use jj_lib::diff::DiffHunkKind;
-    use jj_lib::diff_presentation::{diff_by_line, LineCompareMode};
+    use jj_lib::diff_presentation::diff_by_line;
     use jj_lib::merge::Diff;
+
+    let compare_mode = crate::hunks::compare_mode(compare)?;
 
     let store = from.inner.store();
     let marker_style: ConflictMarkerStyle = settings
@@ -347,7 +350,7 @@ pub fn diff_stats(
             let (added, removed) = if before.is_binary || after.is_binary {
                 (None, None)
             } else {
-                let diff = diff_by_line([&before.contents, &after.contents], &LineCompareMode::Exact);
+                let diff = diff_by_line([&before.contents, &after.contents], &compare_mode);
                 let mut added = 0usize;
                 let mut removed = 0usize;
                 for hunk in diff.hunks() {
