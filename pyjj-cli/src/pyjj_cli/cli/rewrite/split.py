@@ -8,8 +8,8 @@ def register(sub) -> None:
     p.add_argument("-p", "--parallel", dest="parallel", action="store_true",
                    default=False,
                    help="Make the two halves siblings instead of a chain")
-    add_flags(p, [Flag.MESSAGE, Flag.TOOL, Flag.DESTINATION, Flag.ONTO,
-                  Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
+    add_flags(p, [Flag.MESSAGE, Flag.EDITOR, Flag.TOOL, Flag.DESTINATION,
+                  Flag.ONTO, Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
     p.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                    help="Paths going into the first half")
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.split:split")

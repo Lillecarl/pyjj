@@ -81,12 +81,30 @@ def split(args) -> int:
                 return 1
             first_builder = tx.split_selected_edited(target, selections)
 
+        forced_editor = getattr(args, "editor", False)
         if args.message is not None:
             first_description = complete_newline(args.message)
+            if forced_editor:
+                # `-m` normally means no editor. `--editor` opens one
+                # anyway, seeded with what `-m` gave.
+                first_description = _run_editor(settings, first_description)
         else:
             # The editor path: the draft template carries the current
             # description past all "JJ:" comments.
             first_description = _run_editor(settings, target.description)
+
+        # jj asks about the second half too, right after the first. A
+        # revision with no description leaves the remainder with none
+        # and skips that editor, unless `--editor` forces it. A
+        # described one seeds the editor with its own description.
+        if not target.description:
+            second_description = ""
+            show_editor = forced_editor
+        else:
+            second_description = target.description
+            show_editor = forced_editor or args.message is None
+        if show_editor:
+            second_description = _run_editor(settings, second_description)
 
         if moving:
             # The half that stays where `target` was keeps its change id,
@@ -99,7 +117,8 @@ def split(args) -> int:
                              .generate_new_change_id())
         first = first_builder.set_description(first_description).write(repo)
         if parallel:
-            second = tx.split_remainder_parallel(target, first).write(repo)
+            second = (tx.split_remainder_parallel(target, first)
+                      .set_description(second_description).write(repo))
             # Whatever followed the split now sits on both halves, first
             # one first -- a merge's parent order is part of its id.
             children = repo.revset(settings, f"children({target.id.hex()})")
@@ -107,8 +126,9 @@ def split(args) -> int:
                 tx.move_commits([c.id for c in children], [],
                                 [first.id, second.id], [])
         else:
-            second = tx.split_remainder(target, first,
-                                        new_change_id=not moving).write(repo)
+            second = (tx.split_remainder(target, first,
+                                         new_change_id=not moving)
+                      .set_description(second_description).write(repo))
         if target.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, second.id)
         if moving:
