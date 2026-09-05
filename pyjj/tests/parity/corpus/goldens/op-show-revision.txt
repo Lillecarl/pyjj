@@ -1,0 +1,10 @@
+«op» «who» default@ «ago», lasted «ago»
+new empty commit
+args: «prog» -R «root» new -m two
+
+Changed commits:
+○  + yqymtrmq 2430aeeb (empty) two
+
+Changed working copy default@:
++ yqymtrmq 2430aeeb (empty) two
+- movruppx 42ad4b07 main | one

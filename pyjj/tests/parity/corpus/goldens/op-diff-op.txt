@@ -1,0 +1,7 @@
+From operation: «op» (2001-02-03 09:35:06) snapshot working copy
+  To operation: «op» (2001-02-03 09:35:06) create bookmark main pointing to commit 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+
+Changed local bookmarks:
+main:
++ movruppx 42ad4b07 main | one
+- (absent)

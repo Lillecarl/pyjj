@@ -316,24 +316,17 @@
   "operation diff": [
     "--color-words",
     "--context",
-    "--from",
     "--git",
     "--ignore-all-space",
     "--ignore-space-change",
     "--name-only",
-    "--op",
-    "--operation",
     "--patch",
-    "--show-changes-in",
     "--stat",
     "--summary",
-    "--to",
     "--tool",
     "--types",
-    "-f",
     "-p",
-    "-s",
-    "-t"
+    "-s"
   ],
   "operation integrate": [
     "(command)"
@@ -372,7 +365,6 @@
     "--ignore-space-change",
     "--name-only",
     "--patch",
-    "--show-changes-in",
     "--stat",
     "--summary",
     "--tool",

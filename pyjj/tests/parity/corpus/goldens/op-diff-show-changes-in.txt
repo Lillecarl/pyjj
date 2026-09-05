@@ -1,0 +1,16 @@
+From operation: «op» (2001-02-03 09:35:06) snapshot working copy
+  To operation: «op» (2001-02-03 09:35:06) describe commit f6a17347eafd86448bea7769a4da25f79caf5192
+
+Changed commits:
+○  + movruppx 1a949896 main | one
+   - movruppx/1 42ad4b07 (hidden) one
+   (Elided 2 newly added and 2 newly removed revisions)
+
+Changed working copy default@:
++ yqymtrmq b9be47e8 two
+- yqymtrmq/1 f966b4d0 (hidden) two
+
+Changed local bookmarks:
+main:
++ movruppx 1a949896 main | one
+- movruppx/1 42ad4b07 (hidden) one

@@ -1,0 +1,9 @@
+From operation: «op» (2001-02-03 09:35:06) create bookmark main pointing to commit 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+  To operation: «op» (2001-02-03 09:35:06) new empty commit
+
+Changed commits:
+○  + yqymtrmq 2430aeeb (empty) two
+
+Changed working copy default@:
++ yqymtrmq 2430aeeb (empty) two
+- movruppx 42ad4b07 main | one

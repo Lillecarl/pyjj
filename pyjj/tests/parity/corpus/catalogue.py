@@ -352,8 +352,31 @@ CATALOGUE: tuple[Entry, ...] = (
     E("op-diff-stack-no-graph", ("op", "diff", "--no-graph"),
       fixture="rewritten_stack", colour="bytes",
       normalize=("op_ids", "ago", "root", "host", "prog")),
+    # `--from`/`--to` name two operations to compare; `--op` names one
+    # and compares it with its parent. A trailing `-` walks the
+    # operation log back a step, which is how a name reaches an
+    # operation that is not the newest.
+    E("op-diff-from-to", ("op", "diff", "--from", "@--", "--to", "@"),
+      claims=("operation diff", "--from", "--to"), colour="bytes", **_OP),
+    E("op-diff-f-t", ("op", "diff", "-f", "@-", "-t", "@"),
+      claims=("operation diff", "-f", "-t"), colour="bytes", **_OP),
+    E("op-diff-operation", ("op", "diff", "--operation", "@-"),
+      claims=("operation diff", "--operation"), colour="bytes", **_OP),
+    E("op-diff-op", ("op", "diff", "--op", "@--"),
+      claims=("operation diff", "--op"), colour="bytes", **_OP),
+    # `--show-changes-in` narrows the changed commits to a revset. The
+    # ones it leaves out are counted as elided rather than dropped.
+    E("op-diff-show-changes-in",
+      ("op", "diff", "--show-changes-in", 'description(glob:"one*")'),
+      fixture="rewritten_stack",
+      claims=("operation diff", "--show-changes-in"), colour="bytes", **_OP),
     E("op-show", ("op", "show"), claims=("operation show",), colour="bytes",
       normalize=("op_ids", "ago", "root", "host", "prog")),
+    E("op-show-revision", ("op", "show", "@-"), colour="bytes", **_OP),
+    E("op-show-show-changes-in",
+      ("op", "show", "--show-changes-in", 'description(glob:"one*")'),
+      fixture="rewritten_stack",
+      claims=("operation show", "--show-changes-in"), colour="bytes", **_OP),
     E("op-show-no-graph", ("op", "show", "--no-graph"),
       claims=("operation show", "--no-graph", "-G"), colour="bytes",
       normalize=("op_ids", "ago", "root", "host", "prog")),
