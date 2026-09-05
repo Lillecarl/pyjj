@@ -12,6 +12,7 @@ they are an *output* of these tests, not an input. The glob form absorbs
 the trailing newline `jj -m` stores in every description.
 """
 
+import contextlib
 import os
 import shutil
 import subprocess
@@ -3341,3 +3342,204 @@ def test_commit_diff_tool_selecting_nothing_is_allowed(pair: RepoPair) -> None:
     pair.op(jj=["commit", "--tool", "parity-diff", "-m", "first"],
             diff_spec={"op": "drop", "paths": ["one.txt", "two.txt"]})
     pair.assert_parity()
+
+
+# -- git push ------------------------------------------------------------------
+#
+# Each side gets its own bare remote. One remote would not do: a push is
+# not idempotent -- the second side deleting a ref the first side already
+# deleted fails -- and one side's push would decide what the other side's
+# push sees. The two remotes hold the same seed commit, so the repository
+# state the two sides end up in still compares.
+
+
+@contextlib.contextmanager
+def push_pair(pair: RepoPair):
+    """A pair of repositories, each with its own `origin` to push to.
+
+    `@` starts as a child of what the remote holds, since that is the
+    shape `jj git push` is about: work built on top of a fetched
+    bookmark. The remotes advertise push options, so `-o` has somewhere
+    to send them.
+    """
+    base = Path(tempfile.mkdtemp())
+    try:
+        remotes = {side: _make_bare_remote(base / side) for side in ("cli", "py")}
+        for remote in remotes.values():
+            subprocess.run(["git", "-C", str(remote), "config",
+                            "receive.advertisePushOptions", "true"],
+                           check=True, capture_output=True)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remotes["cli"])],
+                py=["git", "remote", "add", "origin", str(remotes["py"])])
+        pair.op(jj=["git", "fetch"])
+        pair.op(jj=["new", "main@origin", "-m", "work"])
+        pair.op(files={"work.txt": b"work\n"}, jj=["status"])
+        yield
+    finally:
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+@pytest.mark.covers("git push", "--bookmark")
+def test_git_push_by_the_long_bookmark_spelling(pair: RepoPair) -> None:
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature"])
+        pair.op(jj=["git", "push", "--bookmark", "feature"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "-b")
+def test_git_push_matches_a_bookmark_pattern(pair: RepoPair) -> None:
+    """`-b` takes a glob, not only a name, so one flag pushes a set."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature-one"])
+        pair.op(jj=["bookmark", "create", "feature-two"])
+        pair.op(jj=["bookmark", "create", "other"])
+        pair.op(jj=["git", "push", "-b", "feature-*"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--all")
+def test_git_push_all_bookmarks(pair: RepoPair) -> None:
+    """`--all` creates a remote bookmark for every local one, which is
+    what makes it different from the default."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "one"])
+        pair.op(jj=["bookmark", "create", "two"])
+        pair.op(jj=["git", "push", "--all"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--tracked")
+def test_git_push_only_tracked_bookmarks(pair: RepoPair) -> None:
+    """`--tracked` moves the bookmarks the remote already has and
+    refuses to create one it does not."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "tracked"])
+        pair.op(jj=["git", "push", "-b", "tracked"])
+        pair.op(jj=["new", "-m", "more"])
+        pair.op(files={"more.txt": b"more\n"}, jj=["status"])
+        pair.op(jj=["bookmark", "set", "tracked", "-r", "@"])
+        pair.op(jj=["bookmark", "create", "fresh"])
+        pair.op(jj=["git", "push", "--tracked"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--deleted")
+def test_git_push_deleted_bookmarks(pair: RepoPair) -> None:
+    """A bookmark deleted locally is still on the remote until a push
+    says so, and only `--deleted` (or naming it) says so."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "doomed"])
+        pair.op(jj=["git", "push", "-b", "doomed"])
+        pair.op(jj=["bookmark", "delete", "doomed"])
+        pair.op(jj=["git", "push", "--deleted"])
+        pair.assert_parity()
+
+
+GIT_PUSH_REVISION_ARGV = [["-r", rev("work")], ["--revision", rev("work")]]
+
+
+@pytest.mark.covers("git push", "-r", "--revision")
+@pytest.mark.parametrize("argv", GIT_PUSH_REVISION_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_push_by_revision(pair: RepoPair, argv) -> None:
+    """`-r` names commits, and the bookmarks pointing at them are what
+    gets pushed. It never creates a remote bookmark, so the one here is
+    pushed by name first."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature"])
+        pair.op(jj=["git", "push", "-b", "feature"])
+        pair.op(files={"work.txt": b"more work\n"}, jj=["status"])
+        pair.op(jj=["bookmark", "set", "feature", "-r", "@"])
+        pair.op(jj=["git", "push", *argv])
+        pair.assert_parity()
+
+
+GIT_PUSH_CHANGE_ARGV = [["-c", "@"], ["--change", "@"]]
+
+
+@pytest.mark.covers("git push", "-c", "--change")
+@pytest.mark.parametrize("argv", GIT_PUSH_CHANGE_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_push_creates_a_bookmark_for_a_change(pair: RepoPair, argv) -> None:
+    """`--change` invents the bookmark name from the change id, so the
+    two sides agree only because the harness pins the change ids."""
+    with push_pair(pair):
+        pair.op(jj=["git", "push", *argv])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--named")
+def test_git_push_under_a_new_name(pair: RepoPair) -> None:
+    with push_pair(pair):
+        pair.op(jj=["git", "push", "--named", "mine=@"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--named")
+def test_git_push_named_refuses_an_existing_bookmark(pair: RepoPair) -> None:
+    """`--named` creates, and never moves. jj refuses rather than guess
+    which of the two the reader meant."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "mine"])
+        assert pair.op(jj=["git", "push", "--named", "mine=@"],
+                       may_fail=True) != 0
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--dry-run")
+def test_git_push_dry_run_changes_nothing(pair: RepoPair) -> None:
+    """Not even the bookmark `--change` would have created: jj stops
+    before it writes, so the repository is untouched."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature"])
+        pair.op(jj=["git", "push", "--dry-run", "-c", "@"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--allow-empty-description")
+def test_git_push_refuses_an_empty_description(pair: RepoPair) -> None:
+    """A commit with no description is one nobody can read later, so jj
+    refuses to send it until the flag says otherwise."""
+    with push_pair(pair):
+        pair.op(jj=["new", "-m", ""])
+        pair.op(files={"blank.txt": b"blank\n"}, jj=["status"])
+        pair.op(jj=["bookmark", "create", "blank"])
+        assert pair.op(jj=["git", "push", "-b", "blank"], may_fail=True) != 0
+        pair.assert_parity()
+        pair.op(jj=["git", "push", "-b", "blank",
+                    "--allow-empty-description"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--allow-private")
+def test_git_push_refuses_a_private_commit(pair: RepoPair) -> None:
+    """`git.private-commits` names work that must not leave the
+    machine. `--allow-private` sends it anyway."""
+    pair.add_config('[git]\nprivate-commits = "description(glob:\\"wip*\\")"')
+    with push_pair(pair):
+        pair.op(jj=["new", "-m", "wip secret"])
+        pair.op(files={"secret.txt": b"secret\n"}, jj=["status"])
+        pair.op(jj=["bookmark", "create", "secret"])
+        assert pair.op(jj=["git", "push", "-b", "secret"], may_fail=True) != 0
+        pair.assert_parity()
+        pair.op(jj=["git", "push", "-b", "secret", "--allow-private"])
+        pair.assert_parity()
+
+
+GIT_PUSH_OPTION_ARGV = [["-o", "ci.skip"], ["--option", "ci.skip"]]
+
+
+@pytest.mark.covers("git push", "-o", "--option")
+@pytest.mark.parametrize("argv", GIT_PUSH_OPTION_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_push_sends_push_options(pair: RepoPair, argv) -> None:
+    """A push option goes to the receiving side, which does nothing
+    with it here. What this checks is that git accepts the push at all:
+    a remote that does not advertise push options rejects one outright.
+    """
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature"])
+        pair.op(jj=["git", "push", "-b", "feature", *argv])
+        pair.assert_parity()

@@ -108,12 +108,6 @@
     "git init": [
       "--git-repo"
     ],
-    "git push": [
-      "--option",
-      "--revision",
-      "-o",
-      "-r"
-    ],
     "git remote add": [
       "--fetch-tags",
       "--push-url"

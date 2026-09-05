@@ -217,22 +217,6 @@
     "--git-repo",
     "--no-colocate"
   ],
-  "git push": [
-    "--all",
-    "--allow-empty-description",
-    "--allow-private",
-    "--bookmark",
-    "--change",
-    "--deleted",
-    "--dry-run",
-    "--named",
-    "--option",
-    "--revision",
-    "--tracked",
-    "-c",
-    "-o",
-    "-r"
-  ],
   "git remote": [
     "(command)"
   ],
