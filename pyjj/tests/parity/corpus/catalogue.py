@@ -47,6 +47,12 @@ CATALOGUE: tuple[Entry, ...] = (
       fixture="conflict", claims=("diff",), colour="bytes"),
     E("diff-context", ("diff", "--context", "1", "-r", "@"), fixture="executable",
       claims=("diff", "--context"), colour="bytes"),
+    E("diff-color-words", ("diff", "--color-words", "-r", "@"),
+      fixture="executable", claims=("diff", "--color-words"), colour="bytes"),
+    # jj sorts the format flags into a listing and a content format and
+    # prints one of each, so this asks for two formats and gets two.
+    E("diff-stat-color-words", ("diff", "--stat", "--color-words", "-r", "@"),
+      fixture="executable", claims=("diff",), colour="bytes"),
 
     # -- show -----------------------------------------------------------
     E("show", ("show", 'description(glob:"one*")'), claims=("show",),
@@ -59,6 +65,8 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("show", "--summary", "-s"), colour="bytes"),
     E("show-stat", ("show", "--stat", 'description(glob:"one*")'),
       claims=("show", "--stat"), colour="bytes"),
+    E("show-color-words", ("show", "--color-words", 'description(glob:"one*")'),
+      claims=("show", "--color-words"), colour="bytes"),
 
     # -- log ------------------------------------------------------------
     E("log", ("log",), bar="facts",
@@ -102,6 +110,10 @@ CATALOGUE: tuple[Entry, ...] = (
                             "--from", 'description(glob:"one*")',
                             "--to", 'description(glob:"two*")'),
       claims=("interdiff", "--summary"), colour="bytes"),
+    E("interdiff-color-words", ("interdiff", "--color-words",
+                                "--from", 'description(glob:"one*")',
+                                "--to", 'description(glob:"two*")'),
+      claims=("interdiff", "--color-words"), colour="bytes"),
 
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),

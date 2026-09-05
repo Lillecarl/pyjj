@@ -85,7 +85,6 @@
       "--editor"
     ],
     "diff": [
-      "--color-words",
       "--ignore-all-space",
       "--ignore-space-change",
       "--tool",
@@ -158,7 +157,6 @@
       "--push"
     ],
     "interdiff": [
-      "--color-words",
       "--ignore-all-space",
       "--ignore-space-change",
       "--tool",
@@ -259,7 +257,6 @@
       "-c"
     ],
     "show": [
-      "--color-words",
       "--ignore-all-space",
       "--ignore-space-change",
       "--reversed",

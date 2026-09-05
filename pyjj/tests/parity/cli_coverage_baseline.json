@@ -137,7 +137,6 @@
     "--message"
   ],
   "diff": [
-    "--color-words",
     "--from",
     "--ignore-all-space",
     "--ignore-space-change",
@@ -307,7 +306,6 @@
     "(command)"
   ],
   "interdiff": [
-    "--color-words",
     "--context",
     "--from",
     "--ignore-all-space",
@@ -504,7 +502,6 @@
     "-j"
   ],
   "show": [
-    "--color-words",
     "--context",
     "--ignore-all-space",
     "--ignore-space-change",

@@ -165,7 +165,16 @@ def add_context_flag(parser: argparse.ArgumentParser) -> None:
 
 
 def add_git_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--git", action="store_true", help="Show Git-format diff")
+    """`--git` and `--color-words` pick the format that carries content.
+
+    jj lets a command ask for one of these and one listing format at
+    the same time, but never for both of these, so they share a
+    mutually exclusive group.
+    """
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--git", action="store_true", help="Show Git-format diff")
+    group.add_argument("--color-words", action="store_true",
+                       help="Show a word-level diff with changes indicated only by color")
 
 
 def add_no_patch_flag(parser: argparse.ArgumentParser) -> None:

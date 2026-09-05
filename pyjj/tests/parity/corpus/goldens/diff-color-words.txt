@@ -1,0 +1,19 @@
+Added regular file added.txt:
+        1: brand new
+Modified regular file edited.txt:
+   1    1: one
+   2     : two
+        2: TWO
+   3    3: three
+   4    4: four
+   5    5: five
+   6    6: six
+   7    7: seven
+   8     : eight
+        8: EIGHT
+Non-executable file became executable at mode.txt:
+Modified regular file nonewline.txt:
+   1     : no trailing newline
+        1: no trailing newline, now longer
+Removed regular file removed.txt:
+   1     : gone
