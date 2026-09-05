@@ -7,6 +7,7 @@ from pyjj.graph_layout import reverse_graph
 from ...formatter import Line, render_block, separate
 from ..common import (
     CommandError,
+    _bookmarks_by_commit,
     _commit_body_spans,
     _commit_glyph,
     _commit_header_spans,
@@ -106,6 +107,9 @@ def evolog(args) -> int:
     # which is what makes a row bold and its glyph an `@`.
     current_wc = repo.view().get(ws.workspace_name)
     wc_hexes = {current_wc} if current_wc else set()
+    # A version that still carries a bookmark says so, exactly as a
+    # `log` row does.
+    bookmarks_by_commit = _bookmarks_by_commit(repo)
     immutable = _immutable_ids(repo, settings,
                                [entry.commit for entry in entries])
     sys.stdout.flush()
@@ -147,11 +151,13 @@ def evolog(args) -> int:
             emit([[(line, "")] for line in rendered.splitlines() or [""]])
             continue
 
+        names = sorted(bookmarks_by_commit.get(hex_id, []))
         if builtin:
-            header = _commit_header_spans(repo, settings, commit, kw="commit")
+            header = _commit_header_spans(repo, settings, commit, kw="commit",
+                                          bookmarks=names)
         else:
             header = _commit_header_spans(
-                repo, settings, commit, kw="commit",
+                repo, settings, commit, kw="commit", bookmarks=names,
                 author=commit.author.name or commit.author.email or "",
                 timestamp=_format_timestamp(commit.committer.timestamp,
                                             century=False))
