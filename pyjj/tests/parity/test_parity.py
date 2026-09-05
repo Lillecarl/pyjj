@@ -57,6 +57,7 @@ def test_describe_and_commit_chain(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "-r", "--use-destination-message")
 def test_squash_non_wc_commit(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["squash", "-r", rev("one"), "--use-destination-message"])
@@ -442,6 +443,7 @@ def test_duplicate_two_revisions_at_once(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "-r", "-m")
 def test_squash_with_explicit_message(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["squash", "-r", rev("one"), "-m", "explicit message"])
@@ -693,6 +695,7 @@ def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
 
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("new", "-m")
+@pytest.mark.covers("revert", "-r", "--onto")
 def test_revert_single_onto_parent(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
@@ -715,6 +718,7 @@ def test_revert_onto_self(pair: RepoPair) -> None:
 
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("new", "-m")
+@pytest.mark.covers("revert", "-r", "--onto")
 def test_revert_multiple_in_reverse_topological(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"a\n"}, jj=["describe", "-m", "A"])
@@ -729,6 +733,7 @@ def test_revert_multiple_in_reverse_topological(pair: RepoPair) -> None:
 
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("new", "-m")
+@pytest.mark.covers("revert", "-r", "--insert-after")
 def test_revert_insert_after(pair: RepoPair) -> None:
     pair.init()
     pair.op(files={"file.txt": b"hello\n"}, jj=["describe", "-m", "A"])
@@ -1117,18 +1122,21 @@ def test_rebase_source_onto_grandparent(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("rebase", "-b")
 def test_rebase_branch_onto_grandparent(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["rebase", "-b", rev("two"), "-d", rev("base")])
     pair.assert_parity()
 
 
+@pytest.mark.covers("rebase", "-r", "--insert-after")
 def test_rebase_insert_after(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["rebase", "-r", rev("two"), "--insert-after", rev("base")])
     pair.assert_parity()
 
 
+@pytest.mark.covers("rebase", "-r", "--insert-before")
 def test_rebase_insert_before(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["rebase", "-r", rev("two"), "--insert-before", rev("one")])
@@ -1636,18 +1644,21 @@ def test_abandon_restore_descendants_with_a_conflicting_change(
     pair.assert_parity()
 
 
+@pytest.mark.covers("duplicate", "--onto")
 def test_duplicate_onto_another_revision(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["duplicate", rev("two"), "--onto", rev("base")])
     pair.assert_parity()
 
 
+@pytest.mark.covers("duplicate", "--insert-after")
 def test_duplicate_insert_after(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["duplicate", rev("two"), "--insert-after", rev("base")])
     pair.assert_parity()
 
 
+@pytest.mark.covers("duplicate", "--insert-before")
 def test_duplicate_insert_before(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["duplicate", rev("base"), "--insert-before", rev("two")])
@@ -1935,8 +1946,10 @@ INSERT_AROUND_TAG_ARGV = [
 ]
 
 
-@pytest.mark.covers("new", "-m")
-@pytest.mark.covers("duplicate")
+@pytest.mark.covers("new", "-m", "-A", "-B")
+@pytest.mark.covers("duplicate", "-A")
+@pytest.mark.covers("revert", "-r", "-A")
+@pytest.mark.covers("rebase", "-r", "-A")
 @pytest.mark.parametrize("argv", INSERT_AROUND_TAG_ARGV,
                          ids=lambda a: "_".join(a)[:40])
 def test_inserting_before_a_tagged_commit_must_fail(pair: RepoPair, argv) -> None:

@@ -153,9 +153,6 @@
     "--after",
     "--before",
     "--destination",
-    "--insert-after",
-    "--insert-before",
-    "--onto",
     "-o",
     "-r"
   ],
@@ -328,8 +325,6 @@
     "--before",
     "--branch",
     "--destination",
-    "--insert-after",
-    "--insert-before",
     "--keep-divergent",
     "--onto",
     "--revision",
@@ -337,7 +332,6 @@
     "--simplify-parents",
     "--skip-emptied",
     "--source",
-    "-b",
     "-o"
   ],
   "resolve": [
@@ -359,12 +353,9 @@
     "--after",
     "--before",
     "--destination",
-    "--insert-after",
     "--insert-before",
-    "--onto",
     "--revision",
-    "-o",
-    "-r"
+    "-o"
   ],
   "run": [
     "--clean",
@@ -419,14 +410,11 @@
     "--revision",
     "--to",
     "--tool",
-    "--use-destination-message",
     "-A",
     "-B",
     "-f",
     "-k",
-    "-m",
     "-o",
-    "-r",
     "-t"
   ],
   "tag": [
