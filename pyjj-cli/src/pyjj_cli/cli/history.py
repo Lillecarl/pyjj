@@ -33,5 +33,7 @@ def add_parsers(sub) -> None:
     p_show.add_argument("-r", "--revision", dest="revision_flags",
                         action="append", metavar="REVSETS",
                         help="Revisions to show")
+    p_show.add_argument("--reversed", action="store_true",
+                        help="Show oldest revisions first")
     add_flags(p_show, [Flag.TEMPLATE, Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY, Flag.TYPES, Flag.GIT, Flag.WHITESPACE, Flag.CONTEXT, Flag.NO_PATCH])
     p_show.set_defaults(_handler="pyjj_cli.commands.history.show:show")

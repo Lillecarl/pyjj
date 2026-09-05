@@ -51,6 +51,11 @@ def show(args) -> int:
         revs = (list(args.revisions or [])
                 + list(getattr(args, "revision_flags", None) or [])) or ["@"]
         commits = _resolve_all(repo, settings, revs)
+        # A revset answers newest first, and `--reversed` asks for the
+        # other end. jj reverses the revisions, not the blocks it
+        # prints, so each one still carries its own diff.
+        if getattr(args, "reversed", False):
+            commits = list(reversed(commits))
         bookmarks = _bookmarks_by_commit(repo, remotes=True)
         locals_ = _bookmarks_by_commit(repo)
         # jj lists the local names first and the remote ones after, and
