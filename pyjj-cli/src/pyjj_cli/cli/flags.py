@@ -282,6 +282,13 @@ def add_insert_before_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-B", "--insert-before", "--before", dest="insert_befores", action="append", default=None, metavar="REVSETS", help="Insert before this revision")
 
 
+def add_editor_flag(parser: argparse.ArgumentParser) -> None:
+    """`--editor` opens the editor even when `-m` already gave a text."""
+    parser.add_argument("--editor", dest="editor", action="store_true",
+                        default=False,
+                        help="Open an editor to edit the change description")
+
+
 def add_use_dest_message_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-u", "--use-destination-message", dest="use_destination_message", action="store_true", help="Keep destination's description unchanged")
 
@@ -441,6 +448,7 @@ _FLAG_HANDLERS = {
     Flag.FILESETS: lambda p: add_filesets_flag(p, nargs="*"),
     Flag.FILESETS_REQUIRED: lambda p: add_filesets_flag(p, nargs="+"),
     Flag.TOOL: lambda p: add_tool_flag(p),
+    Flag.EDITOR: lambda p: add_editor_flag(p),
     Flag.DIFF_TOOL: lambda p: add_diff_tool_flag(p),
     Flag.STDIN: lambda p: add_stdin_flag(p),
     Flag.SOURCE: lambda p: add_source_flag(p),

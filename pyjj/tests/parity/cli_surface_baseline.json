@@ -163,7 +163,6 @@
       "--editor"
     ],
     "squash": [
-      "--editor",
       "--tool"
     ],
     "tag list": [

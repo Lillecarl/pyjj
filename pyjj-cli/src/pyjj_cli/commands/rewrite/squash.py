@@ -67,13 +67,6 @@ def squash(args) -> int:
         # before an insertion rebases any of them.
         squashed = f"squash commit {source.id.hex()}"
 
-        # Message handling, mirroring the real CLI's paths. -u keeps the
-        # destination's description untouched; -m replaces; with no flag,
-        # a single non-empty side wins, two non-empty sides open the
-        # combining editor whose template is destination-block-first. A
-        # placement leaves only one side, since the commit it creates has
-        # no description of its own.
-        use_dest_desc = args.use_destination_message and args.message is None
         description = _description(args, settings, source, dest)
 
         tx = _start_transaction(repo, settings)
@@ -93,8 +86,7 @@ def squash(args) -> int:
             # The placement still created a commit, so the operation is
             # not empty even though nothing moved into it.
         else:
-            if not use_dest_desc:
-                builder = builder.set_description(description)
+            builder = builder.set_description(description)
             if inserting:
                 # Forget the empty commit the placement created. It is a
                 # step nobody asked for, and an evolog naming it would
@@ -147,21 +139,35 @@ def _oldest_first(sources):
 
 
 def _description(args, settings, source, dest) -> str:
+    """The description the squashed commit ends up with.
+
+    `-m` gives it outright and `-u` keeps the destination's. With
+    neither, a single non-empty side wins and two non-empty sides open
+    the combining editor, whose template is destination-block-first. A
+    placement leaves only one side, since the commit it creates has no
+    description of its own.
+    """
     if args.message is not None:
-        return complete_newline(args.message)
-    sides = [source] if dest is None else [source, dest]
-    candidates = [c.description for c in sides if c.description]
-    if len(candidates) <= 1:
-        return candidates[0] if candidates else ""
-    if args.use_destination_message:
-        return dest.description
-    combined = (
-        "JJ: Description from the destination commit:\n"
-        + dest.description
-        + "\nJJ: Description from source commit:\n"
-        + source.description
-    )
-    return _run_editor(settings, combined)
+        text = complete_newline(args.message)
+    elif args.use_destination_message:
+        text = dest.description if dest is not None else ""
+    else:
+        sides = [source] if dest is None else [source, dest]
+        candidates = [c.description for c in sides if c.description]
+        if len(candidates) > 1:
+            # Two descriptions cannot be joined without a choice, so the
+            # editor opens whether or not `--editor` asked for it.
+            combined = (
+                "JJ: Description from the destination commit:\n"
+                + dest.description
+                + "\nJJ: Description from source commit:\n"
+                + source.description
+            )
+            return _run_editor(settings, combined)
+        text = candidates[0] if candidates else ""
+    if getattr(args, "editor", False):
+        return _run_editor(settings, text)
+    return text
 
 
 def _place_new_commit(tx, repo, settings, source, ontos, afters, befores):

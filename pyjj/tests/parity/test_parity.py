@@ -1199,6 +1199,25 @@ def test_squash_with_the_long_flag_spellings(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "--editor")
+def test_squash_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
+    """`-m` normally means no editor. `--editor` opens one anyway, and
+    what it writes is what the commit keeps."""
+    chain(pair)
+    pair.op(jj=["squash", "-r", rev("one"), "-m", "explicit", "--editor"],
+            editor_spec={"op": "set", "value": "edited over the message\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--editor")
+def test_squash_editor_opens_over_the_destination_message(pair: RepoPair) -> None:
+    """`-u` normally keeps the destination's description untouched."""
+    chain(pair)
+    pair.op(jj=["squash", "-r", rev("one"), "-u", "--editor"],
+            editor_spec={"op": "set", "value": "edited\n"})
+    pair.assert_parity()
+
+
 # -- squash's experimental placement UI ----------------------------------
 #
 # `-o`, `-A` and `-B` squash into a commit that does not exist yet: jj

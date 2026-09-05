@@ -399,7 +399,6 @@
     "-o"
   ],
   "squash": [
-    "--editor",
     "--tool"
   ],
   "tag": [
