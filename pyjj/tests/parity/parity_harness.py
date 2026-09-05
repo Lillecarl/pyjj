@@ -144,6 +144,13 @@ class RepoPair:
             f'program = "{self.diff_tool_bin}"\n'
             'edit-args = ["--edit", "$left", "$right"]\n'
             "\n"
+            # The same program, registered again for the other protocol:
+            # `jj diff --tool` prints a diff rather than editing one, and
+            # jj refuses a tool that has no `diff-args` for that job.
+            "[merge-tools.parity-format]\n"
+            f'program = "{self.diff_tool_bin}"\n'
+            'diff-args = ["--format", "$left", "$right"]\n'
+            "\n"
             "[merge-tools.parity-merge]\n"
             f'program = "{self.merge_tool_bin}"\n'
             'merge-args = ["--marker", "$base", "$left", "$right", "$output", "$path"]\n'

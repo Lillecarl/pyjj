@@ -11,6 +11,16 @@ deterministically. Spec from PARITY_DIFF_SPEC (JSON):
     {"op": "edit", "edits": [{"path": ..., "find": ..., "replace": ...}]}
 
 argv: <script> --edit $left $right   (left is ignored: read-only side)
+
+`--format` is the other protocol the same program serves. `jj diff
+--tool` runs a tool to *print* a diff rather than to edit one: jj
+writes the two sides into the same pair of directories, runs the tool
+with its working directory set to the pair, and copies its output
+through unchanged. This script's format mode walks both sides and
+prints one line a path, which is deterministic across two repositories
+because it names nothing outside them.
+
+argv: <script> --format $left $right
 """
 
 from __future__ import annotations
@@ -21,7 +31,39 @@ import shutil
 import sys
 
 
+def _walk(root: str) -> dict[str, bytes]:
+    """Every file under `root`, keyed by its path relative to it."""
+    found = {}
+    for directory, _subdirs, names in os.walk(root):
+        for name in names:
+            full = os.path.join(directory, name)
+            found[os.path.relpath(full, root)] = open(full, "rb").read()
+    return found
+
+
+def format_diff(left: str, right: str) -> int:
+    """Print what changed between the two directories, one line a path.
+
+    The paths are relative and the contents come from the repository,
+    so two repositories holding the same commits print the same thing.
+    """
+    before, after = _walk(left), _walk(right)
+    for path in sorted(set(before) | set(after)):
+        old, new = before.get(path), after.get(path)
+        if old is None:
+            print(f"added {path}: {new.decode('utf-8', 'replace').strip()}")
+        elif new is None:
+            print(f"removed {path}: {old.decode('utf-8', 'replace').strip()}")
+        elif old != new:
+            print(f"changed {path}: "
+                  f"{old.decode('utf-8', 'replace').strip()} -> "
+                  f"{new.decode('utf-8', 'replace').strip()}")
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1] == "--format":
+        return format_diff(sys.argv[2], sys.argv[3])
     # edit-args template is ["--edit", "$left", "$right"]
     right = sys.argv[-1]
     raw = os.environ.get("PARITY_DIFF_SPEC")
