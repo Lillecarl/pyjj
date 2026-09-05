@@ -99,21 +99,7 @@
       "-r"
     ],
     "evolog": [
-      "--color-words",
-      "--context",
-      "--git",
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--name-only",
-      "--patch",
-      "--reversed",
-      "--stat",
-      "--summary",
-      "--tool",
-      "--types",
-      "-G",
-      "-p",
-      "-s"
+      "--tool"
     ],
     "file annotate": [
       "--template",

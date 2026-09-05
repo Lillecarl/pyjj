@@ -2,6 +2,7 @@
 import sys
 
 import pyjj
+from pyjj.graph_layout import reverse_graph
 
 from ...formatter import Line, render_block, separate
 from ..common import (
@@ -10,6 +11,9 @@ from ..common import (
     _commit_glyph,
     _commit_header_spans,
     _commit_kind,
+    _description_diff_bytes,
+    _diff_files_bytes,
+    _diff_formats_for_log,
     _format_timestamp,
     _immutable_ids,
     _is_empty,
@@ -63,6 +67,24 @@ def evolog(args) -> int:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
 
+    # `jj evolog` compares a version with the one it was rewritten
+    # from, not with its parent, so `--patch` asks for an interdiff.
+    # The pair may name no format at all.
+    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+    with_diff = formats != (None, None)
+
+    # jj takes the limit first and reverses what is left. Without the
+    # graph that is the plain order; with it, each version's
+    # predecessors become its successors, which is what `reverse_graph`
+    # does.
+    items = [(entry.commit.id.hex(),
+              [(edge.target.hex(), edge.edge_type) for edge in entry.edges])
+             for entry in entries]
+    if getattr(args, "reversed", False):
+        items = (list(reversed(items)) if no_graph
+                 else reverse_graph(items))
+    by_id = {entry.commit.id.hex(): entry for entry in entries}
+
     # `builtin_evolog_compact` means the same thing on both sides, so
     # pyjj-cli builds its spans itself rather than resolving it to a
     # Jinja string: a Jinja render carries no labels, and a label is
@@ -86,28 +108,39 @@ def evolog(args) -> int:
     wc_hexes = {current_wc} if current_wc else set()
     immutable = _immutable_ids(repo, settings,
                                [entry.commit for entry in entries])
-    for entry in entries:
+    sys.stdout.flush()
+    for hex_id, edges in items:
+        entry = by_id[hex_id]
         commit = entry.commit
-        hex_id = commit.id.hex()
         kind = _commit_kind(repo, commit, wc_hexes, immutable)
-        edges = [(edge.target.hex(), edge.edge_type) for edge in entry.edges]
         operation = entry.operation
 
         def emit(lines) -> None:
-            """One row, buffered: renderdag takes a finished string."""
+            """One row, buffered: renderdag takes a finished string.
+
+            The patch goes into the same buffer as the row, so the
+            graph column runs down beside it, exactly as `log` does.
+            """
             text = render_block(lines, "evolog", coloured)
+            patch = "" if not with_diff else _patch_bytes(
+                args, ws, settings, repo, entry, formats,
+            ).decode("utf-8", "surrogateescape")
             if no_graph:
-                print(text)
+                _write(text + "\n" + patch)
                 return
             glyph = render_block([[(_commit_glyph(kind), kind)]],
                                  "evolog commit node", coloured)
-            sys.stdout.write(renderer.next_row(hex_id, edges, glyph, text))
+            # renderdag drops a trailing newline, so a row with a patch
+            # under it reads the same as jj's own buffer.
+            _write(renderer.next_row(hex_id, edges, glyph,
+                                     f"{text}\n{patch}" if patch else text))
 
         if jinja_template is not None:
             try:
                 rendered = jinja_template.render(
                     _context(repo, settings, commit, operation))
             except Exception as e:
+                sys.stdout.buffer.flush()
                 print(f"Error: template render failed: {e}", file=sys.stderr)
                 return 1
             # A template is the whole entry, as it is for `log`.
@@ -128,7 +161,50 @@ def evolog(args) -> int:
         if operation is not None:
             lines.append(Line(_operation_spans(operation)))
         emit(lines)
+    sys.stdout.buffer.flush()
     return 0
+
+
+def _write(text: str) -> None:
+    """One piece of output, through the byte stream.
+
+    A row can carry a patch, and file content need not be text, so the
+    spans hold it decoded with `surrogateescape` and this puts it back.
+    """
+    sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
+
+
+def _patch_bytes(args, ws, settings, repo, entry, formats) -> bytes:
+    """What `jj evolog --patch` prints under one version.
+
+    jj compares the version with the ones it was rewritten from, and
+    rebases those onto its parents first so an unrelated change to the
+    parents stays out of the diff. A squash gives a version more than
+    one predecessor, and the first version has none: its description
+    and its files then read as added.
+    """
+    predecessors = [repo.get_commit(pid) for pid in entry.predecessor_ids]
+    # jj merges the predecessors' descriptions the way it merges their
+    # trees: the descriptions as the sides, an empty string between
+    # each pair as the base. One predecessor is the common case and
+    # merges to itself; none leaves an empty description, so the whole
+    # of this version's description reads as added. Two rarely resolve,
+    # and the diff then starts from the conflict itself.
+    descriptions = [p.description for p in predecessors]
+    if not descriptions:
+        before = ""
+    elif len(descriptions) == 1:
+        before = descriptions[0]
+    else:
+        before = repo.materialize_merge(
+            [b""] * (len(descriptions) - 1),
+            [d.encode("utf-8", "surrogateescape") for d in descriptions],
+            settings,
+        ).decode("utf-8", "surrogateescape")
+    files = repo.interdiff_files(predecessors, entry.commit, settings, None)
+    return (_description_diff_bytes(args, before, entry.commit.description,
+                                    use_color(settings), formats)
+            + _diff_files_bytes(args, ws, files, settings, formats))
 
 
 def _context(repo, settings, commit, operation) -> dict:
