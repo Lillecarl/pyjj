@@ -155,18 +155,9 @@
       "--tool"
     ],
     "log": [
-      "--color-words",
-      "--context",
       "--count",
-      "--git",
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--name-only",
       "--revision",
-      "--summary",
-      "--tool",
-      "--types",
-      "-s"
+      "--tool"
     ],
     "new": [
       "-o",

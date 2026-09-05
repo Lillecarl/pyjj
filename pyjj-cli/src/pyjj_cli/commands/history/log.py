@@ -25,8 +25,10 @@ from ..common import (
     _commit_kind,
     _commit_root_spans,
     _immutable_ids,
+    _diff_base,
+    _diff_bytes,
+    _diff_formats_for_log,
     _load,
-    _print_diff_stats,
     _pyjj_template,
     _resolve_template,
     _short_id,
@@ -45,6 +47,15 @@ _BUILTINS = {
         "{{ commit_id_short }}\n{{ description_full }}",
     "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
 }
+
+
+def _write(text: str) -> None:
+    """One piece of output, through the byte stream.
+
+    A row can carry a patch, and file content need not be text, so the
+    spans hold it decoded with `surrogateescape` and this puts it back.
+    """
+    sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
 
 
 def _local(timestamp, fmt: str) -> str:
@@ -122,8 +133,11 @@ def log(args) -> int:
         items = reverse_graph(items)
 
     no_graph = getattr(args, "no_graph", False)
-    show_patch = getattr(args, "patch", False)
-    show_stat = getattr(args, "stat", False)
+    # `jj log` prints a row and nothing else unless a flag asks for a
+    # diff, so this pair may name no format at all.
+    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+    with_diff = formats != (None, None)
+    paths = getattr(args, "filesets", None) or None
     coloured = use_color(settings)
 
     given = (getattr(args, "template", None)
@@ -135,6 +149,7 @@ def log(args) -> int:
     short_year = not _spans_millennia(nodes)
 
     renderer = None if no_graph else pyjj.GraphRenderer()
+    sys.stdout.flush()
     for hex_id, edges in items:
         commit = by_id[hex_id].commit
         root = not commit.parent_ids
@@ -142,17 +157,33 @@ def log(args) -> int:
         names = sorted(bookmarks_by_commit.get(hex_id, []))
 
         def emit(lines, indent: bool = True) -> None:
-            """One row, buffered: renderdag takes a finished string."""
+            """One row, buffered: renderdag takes a finished string.
+
+            jj writes the patch into the same buffer as the row, so the
+            graph column runs down beside the diff. File content is
+            bytes and need not be text, so the row goes out through
+            `stdout.buffer` once it carries a diff.
+            """
             text = render_block(lines, "log commit", coloured)
+            patch = ""
+            if with_diff:
+                patch = _diff_bytes(
+                    args, ws, settings, _diff_base(repo, settings, commit),
+                    commit, paths, formats,
+                ).decode("utf-8", "surrogateescape")
             if no_graph:
                 head, _, rest = text.partition("\n")
-                print(head)
+                out = head + "\n"
                 for line in rest.splitlines():
-                    print(f"  {line}" if indent else line)
+                    out += f"  {line}\n" if indent else f"{line}\n"
+                _write(out + patch)
                 return
             glyph = render_block([[(_commit_glyph(kind), kind)]],
                                  "log commit node", coloured)
-            sys.stdout.write(renderer.next_row(hex_id, edges, glyph, text))
+            # renderdag drops a trailing newline, so the row reads the
+            # same with a patch under it as jj's own buffer does.
+            _write(renderer.next_row(hex_id, edges, glyph,
+                                     f"{text}\n{patch}" if patch else text))
 
         if jinja_template is not None:
             try:
@@ -160,6 +191,7 @@ def log(args) -> int:
                     repo, settings, commit, names, short_year,
                     hex_id in all_wc_ids, hex_id in wc_ids))
             except Exception as e:
+                sys.stdout.buffer.flush()
                 print(f"Error: template render failed: {e}", file=sys.stderr)
                 return 1
             # A template is the whole row, exactly like `jj log -T`.
@@ -188,23 +220,7 @@ def log(args) -> int:
             emit(_default_lines(repo, settings, commit, kind, sorted(own),
                                 root, short_year))
 
-        if show_stat:
-            # `--stat` reads file content, so it only runs when asked.
-            parent = (repo.get_commit(commit.parent_ids[0])
-                      if commit.parent_ids else None)
-            if parent is not None:
-                _print_diff_stats(parent.diff_stats(commit, settings),
-                                  settings)
-
-        if show_patch:
-            if commit.parent_ids:
-                parent = repo.get_commit(commit.parent_ids[0])
-                for entry in parent.diff(commit):
-                    print(f"  {entry.status:8} {entry.path}")
-            else:
-                for path in commit.list_files():
-                    print(f"  added    {path}")
-
+    sys.stdout.buffer.flush()
     return 0
 
 

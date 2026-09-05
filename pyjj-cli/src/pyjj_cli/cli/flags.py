@@ -48,6 +48,9 @@ class Flag(Enum):
     NAME_ONLY = auto()
     TYPES = auto()
     WHITESPACE = auto()
+    # the same two, without the `-w` / `-b` aliases jj gives
+    # only to the diff commands
+    WHITESPACE_LONG = auto()
     GIT = auto()
     CONTEXT = auto()
     NO_PATCH = auto()
@@ -166,16 +169,21 @@ def add_types_flag(parser: argparse.ArgumentParser) -> None:
                         help="Show only the type of each path")
 
 
-def add_whitespace_flags(parser: argparse.ArgumentParser) -> None:
-    """`-w` and `-b`: how much whitespace a diff is allowed to ignore.
+def add_whitespace_flags(parser: argparse.ArgumentParser,
+                         short: bool = True) -> None:
+    """How much whitespace a diff is allowed to ignore.
 
-    jj makes them exclusive, since a line cannot be compared two ways
-    at once.
+    jj makes the two exclusive, since a line cannot be compared two
+    ways at once. `-w` and `-b` are the diff commands' own spelling:
+    the log-like commands take the long names alone, so `short` turns
+    the aliases off.
     """
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("-w", "--ignore-all-space", action="store_true",
+    group.add_argument(*(["-w"] if short else []), "--ignore-all-space",
+                       action="store_true",
                        help="Ignore whitespace when comparing lines")
-    group.add_argument("-b", "--ignore-space-change", action="store_true",
+    group.add_argument(*(["-b"] if short else []), "--ignore-space-change",
+                       action="store_true",
                        help="Ignore changes in amount of whitespace when comparing lines")
 
 
@@ -397,6 +405,7 @@ _FLAG_HANDLERS = {
     Flag.NAME_ONLY: lambda p: add_name_only_flag(p),
     Flag.TYPES: lambda p: add_types_flag(p),
     Flag.WHITESPACE: lambda p: add_whitespace_flags(p),
+    Flag.WHITESPACE_LONG: lambda p: add_whitespace_flags(p, short=False),
     Flag.GIT: lambda p: add_git_flag(p),
     Flag.CONTEXT: lambda p: add_context_flag(p),
     Flag.NO_PATCH: lambda p: add_no_patch_flag(p),

@@ -8,7 +8,10 @@ def add_parsers(sub) -> None:
     p_status.set_defaults(_handler="pyjj_cli.commands.history.status:status")
 
     p_log = sub.add_parser("log", help="Show commit history")
-    add_flags(p_log, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.TEMPLATE, Flag.PATCH, Flag.STAT])
+    add_flags(p_log, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH,
+                      Flag.TEMPLATE, Flag.PATCH, Flag.SUMMARY, Flag.STAT,
+                      Flag.NAME_ONLY, Flag.TYPES, Flag.GIT,
+                      Flag.WHITESPACE_LONG, Flag.CONTEXT])
     p_log.add_argument("--reversed", action="store_true",
                        help="Show oldest commits first")
     # log's filesets is suppressed (not shown in help) — keep manual for that nuance
