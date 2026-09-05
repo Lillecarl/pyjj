@@ -1005,11 +1005,12 @@ def _summary_lines(entries, to_ui_path=None) -> list[str]:
 
 def _print_summary(entries, to_ui_path=None, settings=None) -> None:
     """The summary listing, coloured the way jj colours it."""
-    print(render_block(_summary_spans(entries, to_ui_path), "diff summary",
-                       use_color(settings)))
+    lines = _summary_spans(entries, to_ui_path)
+    if lines:
+        print(render_block(lines, "diff summary", use_color(settings)))
 
 
-def _print_types(entries, to_ui_path=None, settings=None) -> None:
+def _types_spans(entries, to_ui_path=None):
     """`jj diff --types`: what each path is before and after.
 
     Two characters, one a side, then the path. jj answers "what is it"
@@ -1018,9 +1019,15 @@ def _print_types(entries, to_ui_path=None, settings=None) -> None:
     same `modified` label whatever the two characters say.
     """
     to_ui_path = to_ui_path or (lambda path: path)
-    lines = [[(f"{e.before_type}{e.after_type} {to_ui_path(e.path)}",
-               "modified")] for e in entries]
-    print(render_block(lines, "diff types", use_color(settings)))
+    return [[(f"{e.before_type}{e.after_type} {to_ui_path(e.path)}",
+              "modified")] for e in entries]
+
+
+def _print_types(entries, to_ui_path=None, settings=None) -> None:
+    """The types listing, coloured the way jj colours it."""
+    lines = _types_spans(entries, to_ui_path)
+    if lines:
+        print(render_block(lines, "diff types", use_color(settings)))
 
 
 def _relative_path(from_dir: Path, to: Path) -> str:
@@ -2032,7 +2039,7 @@ def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3,
     sys.stdout.buffer.flush()
 
 
-def _print_diff_stats(stats, settings=None) -> None:
+def _diff_stats_lines(stats):
     """`--stat`'s output, in the shape `jj diff --stat` prints it.
 
     Each file gets its changed-line count and a `+`/`-` bar; a binary
@@ -2079,7 +2086,13 @@ def _print_diff_stats(stats, settings=None) -> None:
         f"{total_added} insertion{'' if total_added == 1 else 's'}(+), "
         f"{total_removed} deletion{'' if total_removed == 1 else 's'}(-)",
         "stat-summary")])
-    print(render_block(lines, "diff stat", use_color(settings)))
+    return lines
+
+
+def _print_diff_stats(stats, settings=None) -> None:
+    """The histogram, coloured the way jj colours it."""
+    print(render_block(_diff_stats_lines(stats), "diff stat",
+                       use_color(settings)))
 
 
 def _diff_base(repo, settings, commit):
@@ -2174,14 +2187,12 @@ class _FileStat:
 _SHORT_FORMATS = ("summary", "stat", "types", "name_only")
 
 
-def _diff_formats(args) -> tuple[str | None, str | None]:
-    """The formats jj prints for these flags, in the order it prints them.
+def _diff_formats_from_args(args) -> tuple[str | None, str | None]:
+    """The formats these flags name, before any default applies.
 
     jj sorts the flags into a *short* format, which lists the files,
-    and a *long* one, which carries their content. It prints at most
-    one of each and the short one first, so `--stat --git` prints both.
-    The default is the long color-words format, and it applies only
-    when no flag asks for anything.
+    and a *long* one, which carries their content. It asks for at most
+    one of each, so `--stat --git` names both.
     """
     short = next((name for name in _SHORT_FORMATS
                   if getattr(args, name, False)), None)
@@ -2189,7 +2200,37 @@ def _diff_formats(args) -> tuple[str | None, str | None]:
         return short, "git"
     if getattr(args, "color_words", False):
         return short, "color_words"
-    return short, None if short else "color_words"
+    return short, None
+
+
+def _diff_formats(args) -> tuple[str | None, str | None]:
+    """The formats `jj diff` prints, in the order it prints them.
+
+    A diff command always prints something, so the long color-words
+    format is the default. It applies only when no flag asks for
+    anything: the short format alone prints the listing alone.
+    """
+    short, long = _diff_formats_from_args(args)
+    if short is None and long is None:
+        return None, "color_words"
+    return short, long
+
+
+def _diff_formats_for_log(args, patch: bool) -> tuple[str | None, str | None]:
+    """The formats a log-like command prints, which may be none at all.
+
+    `jj log` prints a row and nothing else unless a flag asks for a
+    diff, so both formats can be `None`. `--patch` asks for the default
+    long format, and a long flag of its own already covers that.
+
+    jj also skips the default when the short format *is* the configured
+    default. pyjj-cli's default is the color-words format, which is
+    long, so that case cannot arise here.
+    """
+    short, long = _diff_formats_from_args(args)
+    if patch and long is None:
+        long = "color_words"
+    return short, long
 
 
 def _compare_mode(args) -> str:
@@ -2240,30 +2281,62 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
     sys.stdout.buffer.flush()
 
 
-def _print_diff(args, ws, settings, base, target, paths) -> None:
-    """One place that decides which format `jj diff` prints.
+def _diff_bytes(args, ws, settings, base, target, paths,
+                formats=None) -> bytes:
+    """One place that decides which format a diff prints.
 
     jj's default is the color-words diff, not a file listing. Every
     path through `diff` reaches this with the same two commits, so the
     flags behave the same everywhere.
+
+    A log-like command passes its own `formats`, since `jj log` prints
+    no diff at all unless a flag asks for one. It also needs the bytes
+    rather than the printing: the graph lays them beside its column.
     """
     context = getattr(args, "context", None)
     context = 3 if context is None else context
     compare = _compare_mode(args)
     to_ui_path = _ui_path_formatter(ws)
-    short, long = _diff_formats(args)
+    short, long = _diff_formats(args) if formats is None else formats
+    coloured = use_color(settings)
+
+    def block(lines, label: str) -> bytes:
+        """One rendered listing, with the newline that ends its last row.
+
+        A listing of nothing is nothing: jj writes a line per file, so
+        a diff that touches no file writes no blank line either.
+        """
+        if not lines:
+            return b""
+        return (render_block(lines, label, coloured)
+                .encode("utf-8", "surrogateescape") + b"\n")
+
+    out = b""
     if short == "summary":
-        _print_summary(base.diff(target, paths), to_ui_path, settings)
+        out = block(_summary_spans(base.diff(target, paths), to_ui_path),
+                    "diff summary")
     elif short == "stat":
-        _print_diff_stats(base.diff_stats(target, settings, paths, compare),
-                          settings)
+        out = block(_diff_stats_lines(
+            base.diff_stats(target, settings, paths, compare)), "diff stat")
     elif short == "types":
-        _print_types(base.diff(target, paths), to_ui_path, settings)
+        out = block(_types_spans(base.diff(target, paths), to_ui_path),
+                    "diff types")
     elif short == "name_only":
-        for entry in base.diff(target, paths):
-            print(to_ui_path(entry.path))
+        out = "".join(f"{to_ui_path(entry.path)}\n"
+                      for entry in base.diff(target, paths)).encode(
+                          "utf-8", "surrogateescape")
+    if long is None:
+        return out
+    files = base.git_diff(target, settings, paths)
     if long == "git":
-        _print_git_diff(base, target, settings, paths, context, compare)
-    elif long == "color_words":
-        _print_color_words_diff(base, target, settings, ws, paths, context,
-                                compare)
+        return out + _git_diff_bytes(files, context, coloured, compare)
+    return out + _color_words_bytes(files, to_ui_path, context, coloured,
+                                    compare)
+
+
+def _print_diff(args, ws, settings, base, target, paths) -> None:
+    """`_diff_bytes`, written to stdout."""
+    sys.stdout.flush()
+    sys.stdout.buffer.write(_diff_bytes(args, ws, settings, base, target,
+                                        paths))
+    sys.stdout.buffer.flush()
