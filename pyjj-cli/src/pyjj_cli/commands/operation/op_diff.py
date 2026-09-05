@@ -13,13 +13,17 @@ import sys
 
 import pyjj
 
-from ...formatter import render_block, separate
+from ...formatter import Formatter, render_block, separate
 from ..common import (
     CommandError,
     _bookmarks_by_commit,
     _commit_summary_spans,
+    _description_diff_bytes,
+    _diff_base,
+    _diff_bytes,
+    _diff_files_bytes,
+    _diff_formats_for_log,
     _format_timestamp,
-    _formatter,
     _load,
     _resolve_operation,
     _write_lines,
@@ -124,8 +128,35 @@ def _change_key(change):
     return commits[0].id
 
 
-def _changed_commits(fmt, repo, settings, changes, no_graph: bool, wc_id,
-                     prefix: str, coloured: bool) -> None:
+def _change_patch_bytes(args, ws, settings, repo, change, formats) -> bytes:
+    """What `--patch` prints under one changed commit.
+
+    A change that still exists is compared with the version it was
+    rewritten from, rebased onto the new version's parents, so an
+    unrelated change to those parents stays out of it. jj takes the
+    first predecessor only: the diff of a partial squash against all of
+    them would not read.
+
+    An abandoned change has no new version to compare against, so what
+    prints is the commit's own diff against its parent.
+    """
+    if not change.added:
+        commit = change.removed[0]
+        return _diff_bytes(args, ws, settings,
+                           _diff_base(repo, settings, commit), commit, None,
+                           formats)
+    commit = change.added[0]
+    predecessors = change.removed[:1]
+    before = predecessors[0].description if predecessors else ""
+    files = repo.interdiff_files(predecessors, commit, settings, None)
+    return (_description_diff_bytes(args, before, commit.description,
+                                    use_color(settings), formats)
+            + _diff_files_bytes(args, ws, files, settings, formats))
+
+
+def _changed_commits(fmt, out, repo, settings, changes, no_graph: bool, wc_id,
+                     prefix: str, coloured: bool, args=None, ws=None,
+                     formats=(None, None)) -> None:
     """The `Changed commits:` block, with or without its graph."""
     def summary_lines(change):
         sign = lambda added: [("+" if added else "-",
@@ -139,9 +170,16 @@ def _changed_commits(fmt, repo, settings, changes, no_graph: bool, wc_id,
                for commit in change.removed]
         )
 
+    def patch(change) -> str:
+        if formats == (None, None):
+            return ""
+        return _change_patch_bytes(args, ws, settings, repo, change,
+                                   formats).decode("utf-8", "surrogateescape")
+
     if no_graph:
         for change in changes:
             _write_lines(fmt, summary_lines(change))
+            out.write(patch(change))
         return
 
     # The graph is over the changed commits alone, so its order is its
@@ -153,8 +191,13 @@ def _changed_commits(fmt, repo, settings, changes, no_graph: bool, wc_id,
     for node in repo.commits_graph([_change_key(change) for change in changes]):
         node_id = node.commit.id.hex()
         edges = [(edge.target.hex(), edge.edge_type) for edge in node.edges]
-        text = render_block(summary_lines(by_id[node_id]), (), coloured)
-        sys.stdout.write(renderer.next_row(node_id, edges, "○", text))
+        change = by_id[node_id]
+        text = render_block(summary_lines(change), (), coloured)
+        # The patch goes into the same buffer as the row, so the graph
+        # column runs down beside it, as it does for `log` and `evolog`.
+        body = patch(change)
+        out.write(renderer.next_row(
+            node_id, edges, "○", f"{text}\n{body}" if body else text))
 
 
 def _elided_count(estimate) -> str | None:
@@ -171,13 +214,18 @@ def _elided_count(estimate) -> str | None:
 
 def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
                          *, heading: bool = True,
-                         prefix: str = "op_diff") -> int:
+                         prefix: str = "op_diff", out=None) -> int:
     """What changed between `from_ops` and `to_op`.
 
     `op diff` leads with the two operation summaries; `op show` has
     already printed the operation, so it asks for the body alone and
     passes its own label as `prefix`.
+
+    `out` is where it goes. `op log --op-diff` writes each operation's
+    diff into the buffer of its own row, so the graph column runs down
+    beside it, and passes a buffer here rather than the terminal.
     """
+    out = sys.stdout if out is None else out
     try:
         # A merge operation has several parents. They fold into one
         # operation before a repo view can be loaded from them.
@@ -198,7 +246,10 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
     # was visible then, however it stands now.
     wc_id = to_repo.view().get(ws.workspace_name)
     coloured = use_color(settings)
-    with _formatter(settings) as fmt:
+    # `op diff` prints no patch unless a flag asks for one, the same
+    # rule every log-like command follows.
+    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+    with Formatter(out, coloured) as fmt:
         if heading:
             for op in from_ops:
                 fmt.write("From operation: ")
@@ -212,9 +263,9 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
         ):
             fmt.write("\n")
             fmt.write("Changed commits:\n")
-            _changed_commits(fmt, to_repo, settings, result.changes,
+            _changed_commits(fmt, out, to_repo, settings, result.changes,
                              getattr(args, "no_graph", False), wc_id, prefix,
-                             coloured)
+                             coloured, args, ws, formats)
             parts = [
                 f"{count} newly {label}"
                 for count, label in (

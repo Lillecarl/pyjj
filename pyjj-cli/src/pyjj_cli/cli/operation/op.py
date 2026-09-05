@@ -1,4 +1,11 @@
-from ..flags import add_no_graph_flag, add_template_flag
+from ..flags import Flag, add_flags, add_no_graph_flag, add_template_flag
+
+
+# Every op subcommand that prints an operation's diff takes the whole
+# diff format set, and `-p` asks for the default long format when no
+# other flag names one.
+_DIFF_FLAGS = [Flag.PATCH, Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY,
+               Flag.TYPES, Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT]
 
 
 def register(sub) -> None:
@@ -18,6 +25,11 @@ def register(sub) -> None:
                             "(older operations first)")
     add_no_graph_flag(p_op_log2)
     add_template_flag(p_op_log2)
+    p_op_log2.add_argument("-d", "--op-diff", action="store_true",
+                       help="Show changes to the repository at each operation")
+    p_op_log2.add_argument("--show-changes-in", default=None, metavar="REVSETS",
+                       help="Show only changed revisions matching this revset")
+    add_flags(p_op_log2, _DIFF_FLAGS)
     p_op_log2.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_op_show2 = op_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_op_show2.add_argument("operation", nargs="?", help="Operation to show")
@@ -28,6 +40,7 @@ def register(sub) -> None:
                        help="Show only changed revisions matching this revset")
     add_no_graph_flag(p_op_show2)
     add_template_flag(p_op_show2)
+    add_flags(p_op_show2, _DIFF_FLAGS)
     p_op_show2.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")
     p_op_abandon2 = op_sub.add_parser("abandon", help="Abandon operation history")
     p_op_abandon2.add_argument("operations", nargs="+", help="Operations to abandon")
@@ -44,6 +57,7 @@ def register(sub) -> None:
                           help="Don't show the graph, show a flat list of modified changes")
     p_op_diff2.add_argument("--show-changes-in", default=None, metavar="REVSETS",
                           help="Show only changed revisions matching this revset")
+    add_flags(p_op_diff2, _DIFF_FLAGS)
     p_op_diff2.set_defaults(_handler="pyjj_cli.commands.operation.op_diff:op_diff")
     p_op_integrate2 = op_sub.add_parser("integrate", help="Make an operation part of the operation log")
     p_op_integrate2.add_argument("operation", help="Operation to integrate")
@@ -66,6 +80,11 @@ def register(sub) -> None:
                             "(older operations first)")
     add_no_graph_flag(p_oplog_log)
     add_template_flag(p_oplog_log)
+    p_oplog_log.add_argument("-d", "--op-diff", action="store_true",
+                       help="Show changes to the repository at each operation")
+    p_oplog_log.add_argument("--show-changes-in", default=None, metavar="REVSETS",
+                       help="Show only changed revisions matching this revset")
+    add_flags(p_oplog_log, _DIFF_FLAGS)
     p_oplog_log.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_oplog_show = oplog_sub.add_parser("show", help="Show changes to the repository in an operation")
     p_oplog_show.add_argument("operation", nargs="?", help="Operation to show")
@@ -76,6 +95,7 @@ def register(sub) -> None:
                        help="Show only changed revisions matching this revset")
     add_no_graph_flag(p_oplog_show)
     add_template_flag(p_oplog_show)
+    add_flags(p_oplog_show, _DIFF_FLAGS)
     p_oplog_show.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")
     p_oplog_abandon = oplog_sub.add_parser("abandon", help="Abandon operation history")
     p_oplog_abandon.add_argument("operations", nargs="+", help="Operations to abandon")
@@ -92,6 +112,7 @@ def register(sub) -> None:
                           help="Don't show the graph, show a flat list of modified changes")
     p_oplog_diff.add_argument("--show-changes-in", default=None, metavar="REVSETS",
                           help="Show only changed revisions matching this revset")
+    add_flags(p_oplog_diff, _DIFF_FLAGS)
     p_oplog_diff.set_defaults(_handler="pyjj_cli.commands.operation.op_diff:op_diff")
     p_oplog_restore2 = oplog_sub.add_parser("restore", help="Restore to the state of an operation")
     p_oplog_restore2.add_argument("operation", help="Operation to restore to")

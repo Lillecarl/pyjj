@@ -152,37 +152,10 @@
       "--conflict"
     ],
     "operation diff": [
-      "--color-words",
-      "--context",
-      "--git",
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--name-only",
-      "--patch",
-      "--stat",
-      "--summary",
-      "--tool",
-      "--types",
-      "-p",
-      "-s"
+      "--tool"
     ],
     "operation log": [
-      "--color-words",
-      "--context",
-      "--git",
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--name-only",
-      "--op-diff",
-      "--patch",
-      "--show-changes-in",
-      "--stat",
-      "--summary",
-      "--tool",
-      "--types",
-      "-d",
-      "-p",
-      "-s"
+      "--tool"
     ],
     "operation restore": [
       "--what"
@@ -191,19 +164,7 @@
       "--what"
     ],
     "operation show": [
-      "--color-words",
-      "--context",
-      "--git",
-      "--ignore-all-space",
-      "--ignore-space-change",
-      "--name-only",
-      "--patch",
-      "--stat",
-      "--summary",
-      "--tool",
-      "--types",
-      "-p",
-      "-s"
+      "--tool"
     ],
     "prev": [
       "--conflict"
