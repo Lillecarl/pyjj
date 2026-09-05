@@ -1,0 +1,20 @@
+«op» «who» default@ «ago», lasted «ago»
+snapshot working copy
+args: «prog» -R «root» describe -m whitespace
+
+Changed commits:
+○  + movruppx 728e9c28 (no description set)
+   - movruppx/1 3a688285 (hidden) (empty) (no description set)
+   Modified regular file ws.txt:
+      1     :     indented
+      2     : spaced  out
+           1:         indented
+           2: spaced out
+      3     : str ipped
+      4     : real change
+           3: stripped
+           4: real changed
+
+Changed working copy default@:
++ movruppx 728e9c28 (no description set)
+- movruppx/1 3a688285 (hidden) (empty) (no description set)

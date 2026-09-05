@@ -1,0 +1,41 @@
+@  «op» «who» default@ «ago», lasted «ago»
+│  describe commit f6a17347eafd86448bea7769a4da25f79caf5192
+│  args: «prog» -R «root» describe -r 'description(glob:"base*")' -m 'base rewritten'
+│
+│  Changed commits:
+│  ○  + yqymtrmq b9be47e8 two
+│  │  - yqymtrmq/1 f966b4d0 (hidden) two
+│  ○  + movruppx 1a949896 main | one
+│  │  - movruppx/1 42ad4b07 (hidden) one
+│  ○  + supuptlt 187dcf6a base rewritten
+│     - supuptlt/1 f6a17347 (hidden) base
+│
+│  Changed working copy default@:
+│  + yqymtrmq b9be47e8 two
+│  - yqymtrmq/1 f966b4d0 (hidden) two
+│
+│  Changed local bookmarks:
+│  main:
+│  + movruppx 1a949896 main | one
+│  - movruppx/1 42ad4b07 (hidden) one
+○  «op» «who» default@ «ago», lasted «ago»
+│  snapshot working copy
+│  args: «prog» -R «root» status
+│
+│  Changed commits:
+│  ○  + yqymtrmq f966b4d0 two
+│     - yqymtrmq/1 2430aeeb (hidden) (empty) two
+│
+│  Changed working copy default@:
+│  + yqymtrmq f966b4d0 two
+│  - yqymtrmq/1 2430aeeb (hidden) (empty) two
+○  «op» «who» default@ «ago», lasted «ago»
+│  new empty commit
+│  args: «prog» -R «root» new -m two
+│
+│  Changed commits:
+│  ○  + yqymtrmq 2430aeeb (empty) two
+│
+│  Changed working copy default@:
+│  + yqymtrmq 2430aeeb (empty) two
+│  - movruppx 42ad4b07 main | one

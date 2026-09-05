@@ -1,0 +1,22 @@
+From operation: «op» (2001-02-03 09:35:06) snapshot working copy
+  To operation: «op» (2001-02-03 09:35:06) describe commit f6a17347eafd86448bea7769a4da25f79caf5192
+
+Changed commits:
+○  + yqymtrmq b9be47e8 two
+│  - yqymtrmq/1 f966b4d0 (hidden) two
+○  + movruppx 1a949896 main | one
+│  - movruppx/1 42ad4b07 (hidden) one
+○  + supuptlt 187dcf6a base rewritten
+   - supuptlt/1 f6a17347 (hidden) base
+   Modified commit description:
+      1     : base
+           1: base rewritten
+
+Changed working copy default@:
++ yqymtrmq b9be47e8 two
+- yqymtrmq/1 f966b4d0 (hidden) two
+
+Changed local bookmarks:
+main:
++ movruppx 1a949896 main | one
+- movruppx/1 42ad4b07 (hidden) one

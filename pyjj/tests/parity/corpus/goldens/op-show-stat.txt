@@ -1,0 +1,23 @@
+«op» «who» default@ «ago», lasted «ago»
+describe commit f6a17347eafd86448bea7769a4da25f79caf5192
+args: «prog» -R «root» describe -r 'description(glob:"base*")' -m 'base rewritten'
+
+Changed commits:
+○  + yqymtrmq b9be47e8 two
+│  - yqymtrmq/1 f966b4d0 (hidden) two
+│  0 files changed, 0 insertions(+), 0 deletions(-)
+○  + movruppx 1a949896 main | one
+│  - movruppx/1 42ad4b07 (hidden) one
+│  0 files changed, 0 insertions(+), 0 deletions(-)
+○  + supuptlt 187dcf6a base rewritten
+   - supuptlt/1 f6a17347 (hidden) base
+   0 files changed, 0 insertions(+), 0 deletions(-)
+
+Changed working copy default@:
++ yqymtrmq b9be47e8 two
+- yqymtrmq/1 f966b4d0 (hidden) two
+
+Changed local bookmarks:
+main:
++ movruppx 1a949896 main | one
+- movruppx/1 42ad4b07 (hidden) one

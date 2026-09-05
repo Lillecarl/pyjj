@@ -314,40 +314,13 @@
     "(command)"
   ],
   "operation diff": [
-    "--color-words",
-    "--context",
-    "--git",
-    "--ignore-all-space",
-    "--ignore-space-change",
-    "--name-only",
-    "--patch",
-    "--stat",
-    "--summary",
-    "--tool",
-    "--types",
-    "-p",
-    "-s"
+    "--tool"
   ],
   "operation integrate": [
     "(command)"
   ],
   "operation log": [
-    "--color-words",
-    "--context",
-    "--git",
-    "--ignore-all-space",
-    "--ignore-space-change",
-    "--name-only",
-    "--op-diff",
-    "--patch",
-    "--show-changes-in",
-    "--stat",
-    "--summary",
-    "--tool",
-    "--types",
-    "-d",
-    "-p",
-    "-s"
+    "--tool"
   ],
   "operation restore": [
     "(command)",
@@ -358,19 +331,7 @@
     "--what"
   ],
   "operation show": [
-    "--color-words",
-    "--context",
-    "--git",
-    "--ignore-all-space",
-    "--ignore-space-change",
-    "--name-only",
-    "--patch",
-    "--stat",
-    "--summary",
-    "--tool",
-    "--types",
-    "-p",
-    "-s"
+    "--tool"
   ],
   "parallelize": [
     "(command)",

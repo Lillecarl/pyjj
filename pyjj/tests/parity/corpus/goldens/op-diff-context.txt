@@ -1,0 +1,12 @@
+From operation: «op» (2001-02-03 09:35:06) snapshot working copy
+  To operation: «op» (2001-02-03 09:35:06) describe commit 728e9c28bb9da315bdc693ebff60afd1a70537ad
+
+Changed commits:
+○  + movruppx 32776e39 whitespace
+   - movruppx/1 728e9c28 (hidden) (no description set)
+   Modified commit description:
+           1: whitespace
+
+Changed working copy default@:
++ movruppx 32776e39 whitespace
+- movruppx/1 728e9c28 (hidden) (no description set)
