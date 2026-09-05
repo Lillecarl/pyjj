@@ -49,14 +49,17 @@ def new(args) -> int:
 
     afters = getattr(args, "insert_afters", None) or []
     befores = getattr(args, "insert_befores", None) or []
+    # `-o` and `-r` name parents too, so the two lists are one list.
+    parents_given = (list(args.parents_pos)
+                     + list(getattr(args, "parents_opt", None) or []))
 
     try:
         if afters or befores:
             parents, children = _commit_location(
                 repo, settings, [], afters, befores)
-        elif args.parents_pos:
+        elif parents_given:
             parents = [c.id for c in
-                       _resolve_in_arg_order(repo, settings, args.parents_pos)]
+                       _resolve_in_arg_order(repo, settings, parents_given)]
             children = []
         else:
             parents = [_wc_commit(repo, ws).id]
