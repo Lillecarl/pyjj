@@ -1199,6 +1199,40 @@ def test_squash_with_the_long_flag_spellings(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "--tool")
+def test_squash_via_diff_tool_selects_whole_files(pair: RepoPair) -> None:
+    """The tool edits a copy of the source's own diff. What the right
+    side holds when it exits is what moves, so a file deleted there
+    stays behind in the source."""
+    two_file_change(pair)
+    pair.op(jj=["squash", "--tool", "parity-diff", "-u"],
+            diff_spec={"op": "keep", "paths": ["one.txt"]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--tool")
+def test_squash_diff_tool_partial_edit_is_verbatim(pair: RepoPair) -> None:
+    """Editing a line inside the right directory moves that file with the
+    edited bytes -- fidelity beyond whole-file selection."""
+    two_file_change(pair)
+    pair.op(jj=["squash", "--tool", "parity-diff", "-u"],
+            diff_spec={"op": "edit",
+                       "edits": [{"path": "one.txt",
+                                  "find": "one", "replace": "one-edited"}]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--tool")
+def test_squash_diff_tool_selecting_nothing_fails(pair: RepoPair) -> None:
+    """A selection that moves nothing is a mistake, not a no-op: the
+    reader was asked to choose and chose none."""
+    two_file_change(pair)
+    assert pair.op(jj=["squash", "--tool", "parity-diff", "-u"],
+                   diff_spec={"op": "drop", "paths": ["one.txt", "two.txt"]},
+                   may_fail=True) != 0
+    pair.assert_parity()
+
+
 @pytest.mark.covers("squash", "--editor")
 def test_squash_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
     """`-m` normally means no editor. `--editor` opens one anyway, and

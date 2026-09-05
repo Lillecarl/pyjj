@@ -192,6 +192,40 @@ pub fn squash(
     Ok(result.map(|squashed| PyCommitBuilder::from_rust(squashed.commit_builder)))
 }
 
+/// `jj squash --tool`: the same squash, with the moved changes chosen by a
+/// diff editor rather than by paths. The tool edits a copy of the source's
+/// own diff -- left is the source's parent, right is the source -- and
+/// whatever the right side holds afterwards is what moves. See
+/// `overlay_contents` for the selection model.
+pub fn squash_edited(
+    mut_repo: &mut MutableRepo,
+    source: &PyCommit,
+    destination: &PyCommit,
+    selections: HashMap<String, Option<Vec<u8>>>,
+    keep_emptied: bool,
+) -> PyResult<Option<PyCommitBuilder>> {
+    let parent_tree =
+        pollster::block_on(source.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+    let selected_tree = overlay_contents(
+        parent_tree.clone(),
+        Some(&source.inner.tree()),
+        selections,
+    )?;
+    let selection = CommitWithSelection {
+        commit: source.inner.clone(),
+        selected_tree,
+        parent_tree,
+    };
+    let result = pollster::block_on(rewrite::squash_commits(
+        mut_repo,
+        &[selection],
+        &destination.inner,
+        keep_emptied,
+    ))
+    .map_err(map_backend_err)?;
+    Ok(result.map(|squashed| PyCommitBuilder::from_rust(squashed.commit_builder)))
+}
+
 /// First half of `jj split`: a `CommitBuilder` for the changes matched by
 /// `paths`, plus (if `hunks` is given) the selected hunk indices of any
 /// path named in `hunks` -- see `hunks::diff_hunks(before, after)`, where

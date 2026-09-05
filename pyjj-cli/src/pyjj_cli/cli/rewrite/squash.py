@@ -17,5 +17,6 @@ def register(sub) -> None:
                    action="store_true", default=False,
                    help="Leave the source revision behind when it ends up empty")
     add_flags(p, [Flag.INTO, Flag.USE_DEST_MESSAGE, Flag.MESSAGE, Flag.EDITOR,
-                  Flag.INSERT_AFTER, Flag.INSERT_BEFORE, Flag.FILESETS])
+                  Flag.TOOL, Flag.INSERT_AFTER, Flag.INSERT_BEFORE,
+                  Flag.FILESETS])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.squash:squash")

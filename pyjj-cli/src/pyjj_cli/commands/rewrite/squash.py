@@ -1,9 +1,11 @@
 """pyjj-cli rewrite command: squash."""
+import subprocess
 import sys
 
 import pyjj
 from ..common import (
     _start_transaction,
+    _changed_files,
     _check_rewritable,
     _commit_location,
     CommandError,
@@ -11,6 +13,7 @@ from ..common import (
     _load,
     _resolve_all,
     _resolve_one,
+    _run_diff_tool,
     complete_newline,
     _run_editor,
 )
@@ -76,10 +79,21 @@ def squash(args) -> int:
             dest, source = _place_new_commit(
                 tx, repo, settings, source, ontos, afters, befores)
 
-        paths = getattr(args, "filesets", None) or None
-        builder = tx.squash(source, dest, paths=paths,
-                            keep_emptied=getattr(args, "keep_emptied", False))
+        keep_emptied = getattr(args, "keep_emptied", False)
+        tool = getattr(args, "tool", None)
+        if tool:
+            builder = tx.squash_edited(
+                source, dest, _selected(repo, settings, tool, source),
+                keep_emptied=keep_emptied)
+        else:
+            builder = tx.squash(source, dest,
+                                paths=getattr(args, "filesets", None) or None,
+                                keep_emptied=keep_emptied)
         if builder is None:
+            if tool:
+                # A selection that moved nothing is a mistake rather than
+                # a no-op: the reader was asked to choose and chose none.
+                raise CommandError("No changes selected")
             if not inserting:
                 print("Nothing changed.")
                 return 0
@@ -105,7 +119,25 @@ def squash(args) -> int:
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:
+        print(f"Error: diff editor exited with status {e.returncode}",
+              file=sys.stderr)
+        return 1
     return 0
+
+
+def _selected(repo, settings, tool, source):
+    """What a diff editor chose to move, per path.
+
+    The tool edits the source's own diff: left is the source's parent,
+    right is the source. Whatever the right side holds when the tool
+    exits is what moves, so leaving it alone moves everything.
+    """
+    parent = repo.get_commit(source.parent_ids[0])
+    changed = _changed_files(repo, settings, parent, source)
+    before = {path: b for path, (b, _a) in changed.items()}
+    after = {path: a for path, (_b, a) in changed.items()}
+    return _run_diff_tool(settings, tool, before, after)
 
 
 def _sources_and_destination(args, repo, settings, inserting):

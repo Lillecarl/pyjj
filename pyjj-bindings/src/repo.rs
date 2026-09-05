@@ -1025,6 +1025,22 @@ impl PyTransaction {
     /// `{path: [hunk_index, ...]}` map, indices from
     /// `pyjj_bindings.diff_hunks(before, after)`). Write this, then pass
     /// the result to `split_remainder()`.
+    /// `jj squash --tool`: squash a diff-editor's selection instead of a
+    /// set of paths. `selections` is the tool's output, per path: bytes
+    /// to write that content, `None` to leave the path out.
+    #[pyo3(signature = (source, destination, selections, keep_emptied=false))]
+    fn squash_edited(
+        &self,
+        source: &PyCommit,
+        destination: &PyCommit,
+        selections: std::collections::HashMap<String, Option<Vec<u8>>>,
+        keep_emptied: bool,
+    ) -> PyResult<Option<PyCommitBuilder>> {
+        with_mut_repo(self, |mut_repo| {
+            crate::rewrite::squash_edited(mut_repo, source, destination, selections, keep_emptied)
+        })
+    }
+
     #[pyo3(signature = (target, paths=None, hunks=None))]
     fn split_selected(
         &self,

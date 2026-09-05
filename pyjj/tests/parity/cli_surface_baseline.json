@@ -162,9 +162,6 @@
     "split": [
       "--editor"
     ],
-    "squash": [
-      "--tool"
-    ],
     "tag list": [
       "--all-remotes",
       "--conflicted",

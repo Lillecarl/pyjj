@@ -398,9 +398,6 @@
     "--revision",
     "-o"
   ],
-  "squash": [
-    "--tool"
-  ],
   "tag": [
     "(command)"
   ],
