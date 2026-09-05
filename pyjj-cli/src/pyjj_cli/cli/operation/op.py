@@ -23,6 +23,9 @@ def register(sub) -> None:
     p_op_show2.add_argument("operation", nargs="?", help="Operation to show")
     p_op_show2.add_argument("--no-op-diff", action="store_true",
                        help="Do not show operation diff")
+    p_op_show2.add_argument("--show-changes-in", default=None,
+                       metavar="REVSETS",
+                       help="Show only changed revisions matching this revset")
     add_no_graph_flag(p_op_show2)
     add_template_flag(p_op_show2)
     p_op_show2.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")
@@ -68,6 +71,9 @@ def register(sub) -> None:
     p_oplog_show.add_argument("operation", nargs="?", help="Operation to show")
     p_oplog_show.add_argument("--no-op-diff", action="store_true",
                        help="Do not show operation diff")
+    p_oplog_show.add_argument("--show-changes-in", default=None,
+                       metavar="REVSETS",
+                       help="Show only changed revisions matching this revset")
     add_no_graph_flag(p_oplog_show)
     add_template_flag(p_oplog_show)
     p_oplog_show.set_defaults(_handler="pyjj_cli.commands.operation.op_show:op_show")

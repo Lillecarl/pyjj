@@ -198,7 +198,6 @@
       "--ignore-space-change",
       "--name-only",
       "--patch",
-      "--show-changes-in",
       "--stat",
       "--summary",
       "--tool",
