@@ -303,18 +303,19 @@ rather than writing escape sequences.
   jj's diff puts a word-level change on one row -- `twoTWO` -- because
   colour is what tells the halves apart. With colour off it splits them
   into a removed row and an added row. So the plain rendering is
-  captured, never derived by stripping ANSI, and pyjj-cli's current
-  no-colour output is right for no-colour only.
-- **Colouring the diff is a word diff, not an escape pass.** The
-  remaining colour todos in the `diff` family all need the same missing
-  piece: jj splits a changed line into *tokens* and marks only the words
-  that moved. With colour on, the color-words diff then merges a
-  replaced line into one row -- `two` and `TWO` side by side -- where the
-  plain rendering splits it into a removed row and an added row, so the
-  rows themselves differ. `--git` keeps its rows but still underlines
-  the changed words inside them, which the goldens show on
-  `nonewline.txt`. Neither can be reached from pyjj-cli's line-level
-  hunks; both want a binding over jj's own word diff.
+  captured, never derived by stripping ANSI, and a diff renderer takes
+  `coloured` to pick the shape before it builds a single row.
+- **The diff is two diffs.** jj splits a file into lines, then splits
+  each changed region into *words*, and marks only the words that moved.
+  `--git` keeps its rows and underlines the changed words inside them;
+  the color-words format goes further and merges a replaced line into
+  one row. `pyjj.content_hunks(before, after, by)` gives both
+  tokenizers, and `common.py` ports the three rules that turn word
+  hunks into rows: `DiffLineIterator` groups them, `count_alternation`
+  measures how busy a row would look, and
+  `diff.color-words.max-inline-alternation` (3) decides whether it
+  inlines at all. Read `show_color_words_diff_lines` in
+  `cli/src/diff_util.rs` before changing any of it.
 - **jj's debug format cannot express every output.** It wraps spans as
   `<<labels::text>>`, and a conflicted file contains `>>>>>>>`, which
   closes a marker early. The capture asserts the round-trip and, where
