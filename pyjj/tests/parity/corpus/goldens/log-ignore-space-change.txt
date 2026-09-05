@@ -1,0 +1,19 @@
+@  movruppx alice@example.com 2001-02-03 09:35:06 32776e39
+│  whitespace
+│  Modified regular file ws.txt:
+│     1     :     indented
+│     2     : spaced  out
+│          1:         indented
+│          2: spaced out
+│     3     : str ipped
+│     4     : real change
+│          3: stripped
+│          4: real changed
+○  supuptlt alice@example.com 2001-02-03 09:35:06 b9abe86a
+│  base
+│  Added regular file ws.txt:
+│          1:     indented
+│          2: spaced  out
+│          3: str ipped
+│          4: real change
+◆  zzzzzzzz root() 00000000

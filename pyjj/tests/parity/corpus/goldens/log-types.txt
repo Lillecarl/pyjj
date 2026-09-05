@@ -1,0 +1,14 @@
+@  movruppx alice@example.com 2001-02-03 09:35:06 fdecc72b
+│  every shape
+│  -F added.txt
+│  FF edited.txt
+│  FF mode.txt
+│  FF nonewline.txt
+│  F- removed.txt
+○  supuptlt alice@example.com 2001-02-03 09:35:06 6b204ae1
+│  base
+│  -F edited.txt
+│  -F mode.txt
+│  -F nonewline.txt
+│  -F removed.txt
+◆  zzzzzzzz root() 00000000

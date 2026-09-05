@@ -1,0 +1,34 @@
+[1m[38;5;2m<<log commit node working_copy mutable::@>>[0m  [1m[38;5;13m<<log commit working_copy mutable change_id shortest prefix::m>>[38;5;8m<<log commit working_copy mutable change_id shortest rest::ovruppx>>[39m<<log commit working_copy mutable:: >>[38;5;3m<<log commit working_copy mutable author email local::alice>><<log commit working_copy mutable author email::@>><<log commit working_copy mutable author email domain::example.com>>[39m<<log commit working_copy mutable:: >>[38;5;14m<<log commit working_copy mutable committer timestamp local format::2001-02-03 09:35:06>>[39m<<log commit working_copy mutable:: >>[38;5;12m<<log commit working_copy mutable commit_id shortest prefix::f>>[38;5;8m<<log commit working_copy mutable commit_id shortest rest::decc72b>>[39m<<log commit working_copy mutable::>>[0m
+│  [1m<<log commit working_copy mutable description first_line::every shape>><<log commit working_copy mutable::>>[0m
+│  [38;5;3m<<diff color_words header::Added regular file added.txt:>>[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::brand new>>[24m[39m
+│  [38;5;3m<<diff color_words header::Modified regular file edited.txt:>>[39m
+│  [2m[38;5;1m<<diff color_words context removed line_number::   1>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   1>>[0m<<diff color_words context::: one>>
+│  [38;5;1m<<diff color_words removed line_number::   2>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   2>>[39m<<diff color_words::: >>[4m[38;5;1m<<diff color_words removed token::two>>[38;5;2m<<diff color_words added token::TWO>>[24m[39m<<diff color_words::>>
+│  [2m[38;5;1m<<diff color_words context removed line_number::   3>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   3>>[0m<<diff color_words context::: three>>
+│  <<diff color_words::    ...>>
+│  [2m[38;5;1m<<diff color_words context removed line_number::   7>>[0m<<diff color_words context:: >>[2m[38;5;2m<<diff color_words context added line_number::   7>>[0m<<diff color_words context::: seven>>
+│  [38;5;1m<<diff color_words removed line_number::   8>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   8>>[39m<<diff color_words::: >>[4m[38;5;1m<<diff color_words removed token::eight>>[38;5;2m<<diff color_words added token::EIGHT>>[24m[39m<<diff color_words::>>
+│  [38;5;3m<<diff color_words header::Non-executable file became executable at mode.txt:>>[39m
+│  [38;5;3m<<diff color_words header::Modified regular file nonewline.txt:>>[39m
+│  [38;5;1m<<diff color_words removed line_number::   1>>[39m<<diff color_words:: >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: no trailing newline>>[4m[38;5;2m<<diff color_words added token::, now longer>>[24m[39m<<diff color_words::>>
+│  [38;5;3m<<diff color_words header::Removed regular file removed.txt:>>[39m
+│  [38;5;1m<<diff color_words removed line_number::   1>>[39m<<diff color_words::     : >>[4m[38;5;1m<<diff color_words removed token::gone>>[24m[39m
+<<log commit node mutable::○>>  [1m[38;5;5m<<log commit mutable change_id shortest prefix::s>>[0m[38;5;8m<<log commit mutable change_id shortest rest::upuptlt>>[39m<<log commit mutable:: >>[38;5;3m<<log commit mutable author email local::alice>><<log commit mutable author email::@>><<log commit mutable author email domain::example.com>>[39m<<log commit mutable:: >>[38;5;6m<<log commit mutable committer timestamp local format::2001-02-03 09:35:06>>[39m<<log commit mutable:: >>[1m[38;5;4m<<log commit mutable commit_id shortest prefix::6>>[0m[38;5;8m<<log commit mutable commit_id shortest rest::b204ae1>>[39m<<log commit mutable::>>
+│  <<log commit mutable description first_line::base>><<log commit mutable::>>
+│  [38;5;3m<<diff color_words header::Added regular file edited.txt:>>[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::one>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   2>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::two>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   3>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::three>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   4>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::four>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   5>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::five>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   6>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::six>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   7>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::seven>>[24m[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   8>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::eight>>[24m[39m
+│  [38;5;3m<<diff color_words header::Added regular file mode.txt:>>[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::same content>>[24m[39m
+│  [38;5;3m<<diff color_words header::Added regular file nonewline.txt:>>[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::no trailing newline>>[24m[39m<<diff color_words::>>
+│  [38;5;3m<<diff color_words header::Added regular file removed.txt:>>[39m
+│  <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::gone>>[24m[39m
+[1m[38;5;14m<<log commit node immutable::◆>>[0m  [1m[38;5;5m<<log commit immutable change_id shortest prefix::z>>[0m[38;5;8m<<log commit immutable change_id shortest rest::zzzzzzz>>[39m<<log commit immutable:: >>[38;5;2m<<log commit immutable root::root()>>[39m<<log commit immutable:: >>[1m[38;5;4m<<log commit immutable commit_id shortest prefix::0>>[0m[38;5;8m<<log commit immutable commit_id shortest rest::0000000>>[39m<<log commit immutable::>>

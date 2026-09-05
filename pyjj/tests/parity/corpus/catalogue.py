@@ -23,6 +23,11 @@ _OP = dict(normalize=("op_ids", "ago", "root", "host", "prog"))
 # it: the remote listing prints it, and so does a fetch.
 _R = dict(fixture="remote", normalize=("remote",))
 
+# `log`'s own rows diverge from jj's on purpose, so every entry that
+# wants to read what sits *under* a row asks for a builtin template
+# both sides resolve the same way.
+_COMPACT = "builtin_log_compact"
+
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",), colour="bytes"),
@@ -128,6 +133,50 @@ CATALOGUE: tuple[Entry, ...] = (
     # output -- including the colours.
     E("log-compact", ("log", "-T", "builtin_log_compact"),
       claims=("log", "--template", "-T"), colour="bytes"),
+    # Every diff flag below rides on that same builtin name, for the
+    # same reason: the rows have to agree before the diff under them
+    # can be read. jj lays the diff beside the graph column, so these
+    # entries pin the drawing as much as the diff.
+    E("log-patch", ("log", "-T", _COMPACT, "-p"),
+      claims=("log", "--patch", "-p"), colour="bytes"),
+    E("log-git", ("log", "-T", _COMPACT, "--git"),
+      claims=("log", "--git"), colour="bytes"),
+    E("log-color-words", ("log", "-T", _COMPACT, "--color-words"),
+      claims=("log", "--color-words"), colour="bytes"),
+    E("log-summary", ("log", "-T", _COMPACT, "-s"),
+      claims=("log", "--summary", "-s"), colour="bytes"),
+    E("log-stat", ("log", "-T", _COMPACT, "--stat"),
+      claims=("log", "--stat"), colour="bytes"),
+    E("log-name-only", ("log", "-T", _COMPACT, "--name-only"),
+      claims=("log", "--name-only"), colour="bytes"),
+    E("log-types", ("log", "-T", _COMPACT, "--types"),
+      fixture="executable", claims=("log", "--types"), colour="bytes"),
+    # A short format and a long one together: the listing comes first,
+    # and the root commit lists nothing at all.
+    E("log-summary-git", ("log", "-T", _COMPACT, "-s", "--git"),
+      colour="bytes"),
+    E("log-context", ("log", "-T", _COMPACT, "-p", "--context", "1"),
+      fixture="executable", claims=("log", "--context"), colour="bytes"),
+    E("log-ignore-all-space",
+      ("log", "-T", _COMPACT, "-p", "--ignore-all-space"),
+      fixture="whitespace", claims=("log", "--ignore-all-space"),
+      colour="bytes"),
+    E("log-ignore-space-change",
+      ("log", "-T", _COMPACT, "-p", "--ignore-space-change"),
+      fixture="whitespace", claims=("log", "--ignore-space-change"),
+      colour="bytes"),
+    # `--no-graph` drops the column the diff was laid beside, so the
+    # diff has to stand on its own.
+    E("log-patch-no-graph", ("log", "-T", _COMPACT, "--no-graph", "-p"),
+      claims=("log", "--no-graph", "-G"), colour="bytes"),
+    E("log-patch-limit", ("log", "-T", _COMPACT, "-n", "2", "-p"),
+      claims=("log", "--limit", "-n"), colour="bytes"),
+    E("log-patch-revision", ("log", "-T", _COMPACT, "-r", "@-", "-p"),
+      claims=("log", "-r"), colour="bytes"),
+    # `--count` prints no rows, so it needs no template to agree.
+    E("log-count", ("log", "--count"), claims=("log", "--count"),
+      colour="bytes"),
+    E("log-count-limit", ("log", "--count", "-n", "2"), colour="bytes"),
 
     # -- evolog ---------------------------------------------------------
     E("evolog", ("evolog",), fixture="evolution", bar="facts",

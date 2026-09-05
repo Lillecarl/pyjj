@@ -1,0 +1,4 @@
+○  movruppx alice@example.com 2001-02-03 09:35:06 main 42ad4b07
+│  one
+~  Added regular file one.txt:
+           1: one

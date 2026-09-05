@@ -1,0 +1,10 @@
+@  yqymtrmq alice@example.com 2001-02-03 09:35:06 f966b4d0
+│  two
+│  A two.txt
+○  movruppx alice@example.com 2001-02-03 09:35:06 main 42ad4b07
+│  one
+│  A one.txt
+○  supuptlt alice@example.com 2001-02-03 09:35:06 f6a17347
+│  base
+│  A base.txt
+◆  zzzzzzzz root() 00000000

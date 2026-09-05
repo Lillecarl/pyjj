@@ -1,0 +1,28 @@
+@  yqymtrmq alice@example.com 2001-02-03 09:35:06 f966b4d0
+│  two
+│  diff --git a/two.txt b/two.txt
+│  new file mode 100644
+│  index 0000000000..f719efd430
+│  --- /dev/null
+│  +++ b/two.txt
+│  @@ -0,0 +1,1 @@
+│  +two
+○  movruppx alice@example.com 2001-02-03 09:35:06 main 42ad4b07
+│  one
+│  diff --git a/one.txt b/one.txt
+│  new file mode 100644
+│  index 0000000000..5626abf0f7
+│  --- /dev/null
+│  +++ b/one.txt
+│  @@ -0,0 +1,1 @@
+│  +one
+○  supuptlt alice@example.com 2001-02-03 09:35:06 f6a17347
+│  base
+│  diff --git a/base.txt b/base.txt
+│  new file mode 100644
+│  index 0000000000..df967b96a5
+│  --- /dev/null
+│  +++ b/base.txt
+│  @@ -0,0 +1,1 @@
+│  +base
+◆  zzzzzzzz root() 00000000

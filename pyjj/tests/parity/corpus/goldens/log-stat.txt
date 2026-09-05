@@ -1,0 +1,14 @@
+@  yqymtrmq alice@example.com 2001-02-03 09:35:06 f966b4d0
+│  two
+│  two.txt | 1 +
+│  1 file changed, 1 insertion(+), 0 deletions(-)
+○  movruppx alice@example.com 2001-02-03 09:35:06 main 42ad4b07
+│  one
+│  one.txt | 1 +
+│  1 file changed, 1 insertion(+), 0 deletions(-)
+○  supuptlt alice@example.com 2001-02-03 09:35:06 f6a17347
+│  base
+│  base.txt | 1 +
+│  1 file changed, 1 insertion(+), 0 deletions(-)
+◆  zzzzzzzz root() 00000000
+   0 files changed, 0 insertions(+), 0 deletions(-)
