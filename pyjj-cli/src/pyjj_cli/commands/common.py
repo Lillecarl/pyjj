@@ -948,13 +948,42 @@ def _resolve_template(settings, ws, args, name: str, builtins=None):
 def _resolve_operation(repo, name: str | None):
     """Resolve an operation the way `jj` names them on the command line.
 
-    `@` means the operation the repo is loaded at. Anything else is a
-    full hex id, which is what the binding takes. `None` means `@` too,
-    so a command can pass an absent argument straight through.
+    `@` means the operation the repo is loaded at, and `None` means `@`
+    too, so a command can pass an absent argument straight through.
+    Anything else is a hex id, which is what the binding takes.
+
+    A trailing run of `-` or `+` walks the operation log: `@-` is the
+    operation before this one, `@--` the one before that, and `+` walks
+    the other way. A step that has no one operation to land on is an
+    error, since the name has to mean exactly one.
     """
-    if not name or name == "@":
+    if not name:
         return repo.operation
-    return repo.load_operation(name)
+    symbol = name.rstrip("-+")
+    steps = name[len(symbol):]
+    operation = repo.operation if symbol == "@" else repo.load_operation(symbol)
+    children = None
+    for index, step in enumerate(steps):
+        if step == "-":
+            neighbours = operation.parents()
+        else:
+            if children is None:
+                # A child is only findable by walking the log: an
+                # operation records its parents, not the other way
+                # round.
+                children = {}
+                for other in repo.operation_log():
+                    for parent in other.parent_ids:
+                        children.setdefault(parent, []).append(other)
+            neighbours = children.get(operation.id, [])
+        if len(neighbours) != 1:
+            reached = name[:len(symbol) + index + 1]
+            raise CommandError(
+                f"The operation {reached!r} resolves to "
+                f"{'no' if not neighbours else 'more than one'} operation"
+            )
+        operation = neighbours[0]
+    return operation
 
 
 # The bar after a file's line count is scaled to fit the terminal in jj.
