@@ -1,6 +1,12 @@
 {
   "captured": "2026-09-05",
-  "entries": 160,
+  "entries": 170,
   "jj": "jj 0.43.0-89f62ede8c1c611eaf134c0c49252efd65c7945d",
-  "unlabelled": []
+  "unlabelled": [
+    "evolog-tool",
+    "log-tool",
+    "op-diff-tool",
+    "op-log-tool",
+    "op-show-tool"
+  ]
 }

@@ -1,0 +1,41 @@
+diff --git a/added.txt b/added.txt
+new file mode 100644
+index 0000000000..d5a09df94c
+--- /dev/null
++++ b/added.txt
+@@ -0,0 +1,1 @@
++brand new
+diff --git a/edited.txt b/edited.txt
+index b00a0f1b67..91c09ea733 100644
+--- a/edited.txt
++++ b/edited.txt
+@@ -1,8 +1,8 @@
+ one
+-two
++TWO
+ three
+ four
+ five
+ six
+ seven
+-eight
++EIGHT
+diff --git a/mode.txt b/mode.txt
+old mode 100644
+new mode 100755
+diff --git a/nonewline.txt b/nonewline.txt
+index 69db55d99f..e89a25581d 100644
+--- a/nonewline.txt
++++ b/nonewline.txt
+@@ -1,1 +1,1 @@
+-no trailing newline
+\ No newline at end of file
++no trailing newline, now longer
+\ No newline at end of file
+diff --git a/removed.txt b/removed.txt
+deleted file mode 100644
+index 286c5f5776..0000000000
+--- a/removed.txt
++++ /dev/null
+@@ -1,1 +0,0 @@
+-gone

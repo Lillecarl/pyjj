@@ -138,7 +138,6 @@
   ],
   "diff": [
     "--template",
-    "--tool",
     "-T"
   ],
   "diffedit": [
@@ -162,9 +161,6 @@
   ],
   "edit": [
     "-r"
-  ],
-  "evolog": [
-    "--tool"
   ],
   "file": [
     "(command)"
@@ -276,12 +272,6 @@
   "help": [
     "(command)"
   ],
-  "interdiff": [
-    "--tool"
-  ],
-  "log": [
-    "--tool"
-  ],
   "metaedit": [
     "--author-timestamp",
     "--force-rewrite",
@@ -312,14 +302,8 @@
   "operation abandon": [
     "(command)"
   ],
-  "operation diff": [
-    "--tool"
-  ],
   "operation integrate": [
     "(command)"
-  ],
-  "operation log": [
-    "--tool"
   ],
   "operation restore": [
     "(command)",
@@ -328,9 +312,6 @@
   "operation revert": [
     "(command)",
     "--what"
-  ],
-  "operation show": [
-    "--tool"
   ],
   "parallelize": [
     "(command)",
@@ -392,9 +373,6 @@
     "--revision",
     "--root",
     "-j"
-  ],
-  "show": [
-    "--tool"
   ],
   "sign": [
     "(command)",

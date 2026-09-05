@@ -28,6 +28,12 @@ _R = dict(fixture="remote", normalize=("remote",))
 # both sides resolve the same way.
 _COMPACT = "builtin_log_compact"
 
+# The scripted diff formatter the harness registers. `--tool` runs an
+# external program to print the diff, so the corpus needs one whose
+# output is the same in two repositories: this one names relative paths
+# and the content it finds, and nothing about where it ran.
+_TOOL = "parity-format"
+
 # `evolog`'s rows diverge the same way, and every row names the
 # operation that made the version, whose id is repo-local.
 _EVO = "builtin_evolog_compact"
@@ -94,6 +100,15 @@ CATALOGUE: tuple[Entry, ...] = (
     E("diff-stat-color-words", ("diff", "--stat", "--color-words", "-r", "@"),
       fixture="executable", claims=("diff",), colour="bytes"),
 
+    E("diff-tool", ("diff", "-r", "@", "--tool", _TOOL),
+      fixture="executable", claims=("diff", "--tool"), colour="bytes"),
+    # A `:` before the name asks for one of jj's builtin formats
+    # instead, so `--tool=:git` and `--git` print the same thing.
+    E("diff-tool-builtin", ("diff", "-r", "@", "--tool", ":git"),
+      fixture="executable", colour="bytes"),
+    E("diff-tool-summary", ("diff", "-r", "@", "--tool", _TOOL, "-s"),
+      fixture="executable", colour="bytes"),
+
     # -- show -----------------------------------------------------------
     E("show", ("show", 'description(glob:"one*")'), claims=("show",),
       colour="bytes"),
@@ -126,6 +141,9 @@ CATALOGUE: tuple[Entry, ...] = (
     E("show-ignore-space-change",
       ("show", "-b", 'description(glob:"whitespace*")'), fixture="whitespace",
       claims=("show", "--ignore-space-change", "-b"), colour="bytes"),
+
+    E("show-tool", ("show", "--tool", _TOOL, 'description(glob:"one*")'),
+      claims=("show", "--tool"), colour="bytes"),
 
     # -- log ------------------------------------------------------------
     E("log", ("log",), bar="facts",
@@ -196,6 +214,9 @@ CATALOGUE: tuple[Entry, ...] = (
       colour="bytes"),
     E("log-count-limit", ("log", "--count", "-n", "2"), colour="bytes"),
 
+    E("log-tool", ("log", "-T", _COMPACT, "--tool", _TOOL),
+      claims=("log", "--tool"), colour="bytes"),
+
     # -- evolog ---------------------------------------------------------
     E("evolog", ("evolog",), fixture="evolution", bar="facts",
       reason="rows share `log`'s divergence, and every row names an "
@@ -256,6 +277,9 @@ CATALOGUE: tuple[Entry, ...] = (
       ("evolog", "-T", _EVO, "-p", "--ignore-space-change"),
       fixture="whitespace", normalize=("op_ids",), colour="bytes",
       claims=("evolog", "--ignore-space-change")),
+
+    E("evolog-tool", ("evolog", "-T", _EVO, "--tool", _TOOL),
+      claims=("evolog", "--tool"), **_E),
 
     # -- interdiff ------------------------------------------------------
     E("interdiff", ("interdiff", "--from", 'description(glob:"one*")',
@@ -330,6 +354,10 @@ CATALOGUE: tuple[Entry, ...] = (
 
     E("tag-list", ("tag", "list"), fixture="tags", claims=("tag list",), colour="bytes"),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",), colour="bytes"),
+
+    E("interdiff-tool", ("interdiff", "--from", 'description(glob:"one*")',
+                         "--to", 'description(glob:"two*")', "--tool", _TOOL),
+      claims=("interdiff", "--tool"), colour="bytes"),
 
     # -- paths ----------------------------------------------------------
     E("root", ("root",), normalize=("root",), claims=("root",), colour="bytes"),
@@ -463,6 +491,15 @@ CATALOGUE: tuple[Entry, ...] = (
       fixture="whitespace",
       claims=("operation diff", "--ignore-space-change"), colour="bytes",
       **_OP),
+    E("op-diff-tool", ("op", "diff", "--tool", _TOOL),
+      fixture="rewritten_stack",
+      claims=("operation diff", "--tool"), colour="bytes", **_OP),
+    E("op-log-tool", ("op", "log", "--tool", _TOOL, "-n", "3"),
+      fixture="rewritten_stack",
+      claims=("operation log", "--tool"), colour="bytes", **_OP),
+    E("op-show-tool", ("op", "show", "--tool", _TOOL),
+      fixture="rewritten_stack",
+      claims=("operation show", "--tool"), colour="bytes", **_OP),
     E("op-show", ("op", "show"), claims=("operation show",), colour="bytes",
       normalize=("op_ids", "ago", "root", "host", "prog")),
     E("op-show-patch", ("op", "show", "-p"), fixture="rewritten_stack",

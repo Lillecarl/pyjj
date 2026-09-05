@@ -1,0 +1,18 @@
+added added.txt: brand new
+changed edited.txt: one
+two
+three
+four
+five
+six
+seven
+eight -> one
+TWO
+three
+four
+five
+six
+seven
+EIGHT
+changed nonewline.txt: no trailing newline -> no trailing newline, now longer
+removed removed.txt: gone
