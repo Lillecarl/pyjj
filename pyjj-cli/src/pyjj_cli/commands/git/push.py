@@ -54,7 +54,9 @@ def git_push(args) -> int:
         tx = _start_transaction(repo, settings)
         for name, target in created.items():
             tx.set_bookmark(name, target)
-        stats = tx.git_push_updates(settings, remote, updates)
+        stats = tx.git_push_updates(
+            settings, remote, updates,
+            list(getattr(args, "push_options", None) or []))
         rejected = list(stats["rejected"]) + list(stats["remote_rejected"])
         for name, reason in rejected:
             print(f"Error: {name} rejected: {reason or 'no reason given'}",

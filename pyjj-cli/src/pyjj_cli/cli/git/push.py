@@ -8,4 +8,6 @@ def register(git_sub) -> None:
     p.add_argument("-r", "--revision", dest="revisions", action="append",
                    default=None, metavar="REVSETS",
                    help="Push bookmarks pointing to these commits (repeatable)")
+    p.add_argument("-o", "--option", dest="push_options", action="append",
+                   default=None, metavar="OPTION", help="Git push options")
     p.set_defaults(_handler="pyjj_cli.commands.git.push:git_push")
