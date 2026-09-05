@@ -78,7 +78,13 @@ def new(args) -> int:
             # new change, together with their own descendants.
             _insert_between(tx, repo, parents, children, child.id)
         if not getattr(args, "no_edit", False):
-            tx.set_wc_commit(ws.workspace_name, child.id)
+            # `edit`, not `set_wc_commit`: jj abandons the commit the
+            # working copy leaves behind when it is empty, undescribed
+            # and nothing else points at it. Moving forward onto a
+            # child never triggers that -- the child already made the
+            # old commit a non-head -- so this only differs when `new`
+            # names a revision somewhere else.
+            tx.edit(ws.workspace_name, child)
         _finish(tx, "new empty commit", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
