@@ -119,6 +119,10 @@ CATALOGUE: tuple[Entry, ...] = (
     E("show-ignore-all-space", ("show", "-w", 'description(glob:"whitespace*")'),
       fixture="whitespace",
       claims=("show", "--ignore-all-space", "-w"), colour="bytes"),
+    # jj reverses the revisions, not the blocks: each one still carries
+    # its own diff, and only the order of the two changes.
+    E("show-reversed", ("show", "-r", "all()", "--reversed"),
+      claims=("show", "--reversed"), colour="bytes"),
     E("show-ignore-space-change",
       ("show", "-b", 'description(glob:"whitespace*")'), fixture="whitespace",
       claims=("show", "--ignore-space-change", "-b"), colour="bytes"),

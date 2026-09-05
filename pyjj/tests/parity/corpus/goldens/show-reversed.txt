@@ -1,0 +1,35 @@
+Commit ID: 0000000000000000000000000000000000000000
+Change ID: zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+Author   : (no name set) <(no email set)> (1970-01-01 05:30:00)
+Committer: (no name set) <(no email set)> (1970-01-01 05:30:00)
+
+    (no description set)
+
+Commit ID: f6a17347eafd86448bea7769a4da25f79caf5192
+Change ID: supuptltkpyzzqoplyruxkkqpmtyzttz
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    base
+
+Added regular file base.txt:
+        1: base
+Commit ID: 42ad4b070b0dbe6926808dd77fcc89f3731cf597
+Change ID: movruppxykmymsouzwvrxkmwtkkxuxuo
+Bookmarks: main main@git
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    one
+
+Added regular file one.txt:
+        1: one
+Commit ID: f966b4d02b13188e1721948c33845fd49438abff
+Change ID: yqymtrmqlwtpprnyponyrwynltyrqtvy
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    two
+
+Added regular file two.txt:
+        1: two

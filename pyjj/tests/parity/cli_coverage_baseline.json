@@ -434,7 +434,6 @@
     "-j"
   ],
   "show": [
-    "--reversed",
     "--tool"
   ],
   "sign": [
