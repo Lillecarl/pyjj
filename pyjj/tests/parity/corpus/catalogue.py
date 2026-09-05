@@ -28,6 +28,11 @@ _R = dict(fixture="remote", normalize=("remote",))
 # both sides resolve the same way.
 _COMPACT = "builtin_log_compact"
 
+# `evolog`'s rows diverge the same way, and every row names the
+# operation that made the version, whose id is repo-local.
+_EVO = "builtin_evolog_compact"
+_E = dict(fixture="evolution", normalize=("op_ids",), colour="bytes")
+
 CATALOGUE: tuple[Entry, ...] = (
     # -- status ---------------------------------------------------------
     E("status", ("status",), claims=("status",), colour="bytes"),
@@ -192,6 +197,52 @@ CATALOGUE: tuple[Entry, ...] = (
       fixture="squashed",
       normalize=("op_ids",), colour="bytes",
       claims=("evolog", "-r", "-T")),
+    # `evolog --patch` is an interdiff, not a parent diff: it compares
+    # a version with the one it was rewritten from, rebased onto this
+    # version's parents. jj compares the descriptions too, which is why
+    # a `describe` step shows a diff at all.
+    E("evolog-patch", ("evolog", "-T", _EVO, "-p"),
+      claims=("evolog", "--patch", "-p"), **_E),
+    E("evolog-git", ("evolog", "-T", _EVO, "--git"),
+      claims=("evolog", "--git"), **_E),
+    E("evolog-color-words", ("evolog", "-T", _EVO, "--color-words"),
+      claims=("evolog", "--color-words"), **_E),
+    E("evolog-summary", ("evolog", "-T", _EVO, "-s"),
+      claims=("evolog", "--summary", "-s"), **_E),
+    E("evolog-stat", ("evolog", "-T", _EVO, "--stat"),
+      claims=("evolog", "--stat"), **_E),
+    E("evolog-name-only", ("evolog", "-T", _EVO, "--name-only"),
+      claims=("evolog", "--name-only"), **_E),
+    E("evolog-types", ("evolog", "-T", _EVO, "--types"),
+      claims=("evolog", "--types"), **_E),
+    E("evolog-context", ("evolog", "-T", _EVO, "-p", "--context", "1"),
+      claims=("evolog", "--context"), **_E),
+    E("evolog-patch-no-graph", ("evolog", "-T", _EVO, "-p", "--no-graph"),
+      claims=("evolog", "--no-graph", "-G"), **_E),
+    E("evolog-patch-limit", ("evolog", "-T", _EVO, "-p", "-n", "2"),
+      claims=("evolog", "--limit", "-n"), **_E),
+    E("evolog-reversed", ("evolog", "-T", _EVO, "--reversed"),
+      claims=("evolog", "--reversed"), **_E),
+    E("evolog-revisions",
+      ("evolog", "-T", _EVO, "--revisions", "@-", "-p"),
+      fixture="squashed", normalize=("op_ids",), colour="bytes",
+      claims=("evolog", "--revisions")),
+    # A squash gives a version two predecessors, and jj merges their
+    # descriptions the way it merges their trees. That merge does not
+    # resolve, so the description the diff starts from is the conflict,
+    # markers and all.
+    E("evolog-patch-squash", ("evolog", "-T", _EVO, "-r", "@-", "-p"),
+      fixture="squashed", normalize=("op_ids",), colour="bytes"),
+    # A snapshot whose only change is whitespace: `-w` and `-b` decide
+    # which of its lines count as the same.
+    E("evolog-ignore-all-space",
+      ("evolog", "-T", _EVO, "-p", "--ignore-all-space"),
+      fixture="whitespace", normalize=("op_ids",), colour="bytes",
+      claims=("evolog", "--ignore-all-space")),
+    E("evolog-ignore-space-change",
+      ("evolog", "-T", _EVO, "-p", "--ignore-space-change"),
+      fixture="whitespace", normalize=("op_ids",), colour="bytes",
+      claims=("evolog", "--ignore-space-change")),
 
     # -- interdiff ------------------------------------------------------
     E("interdiff", ("interdiff", "--from", 'description(glob:"one*")',

@@ -164,25 +164,7 @@
     "-r"
   ],
   "evolog": [
-    "--color-words",
-    "--context",
-    "--git",
-    "--ignore-all-space",
-    "--ignore-space-change",
-    "--limit",
-    "--name-only",
-    "--no-graph",
-    "--patch",
-    "--reversed",
-    "--revisions",
-    "--stat",
-    "--summary",
-    "--tool",
-    "--types",
-    "-G",
-    "-n",
-    "-p",
-    "-s"
+    "--tool"
   ],
   "file": [
     "(command)"

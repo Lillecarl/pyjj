@@ -1,0 +1,56 @@
+[1m[38;5;2m<<evolog commit node working_copy mutable::@>>[0m  [1m[38;5;13m<<evolog working_copy mutable commit change_id shortest prefix::y>>[38;5;8m<<evolog working_copy mutable commit change_id shortest rest::qymtrmq>>[39m<<evolog working_copy mutable:: >>[38;5;3m<<evolog working_copy mutable commit author email local::alice>><<evolog working_copy mutable commit author email::@>><<evolog working_copy mutable commit author email domain::example.com>>[39m<<evolog working_copy mutable:: >>[38;5;14m<<evolog working_copy mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog working_copy mutable:: >>[38;5;12m<<evolog working_copy mutable commit commit_id shortest prefix::b>>[38;5;8m<<evolog working_copy mutable commit commit_id shortest rest::e8720ac>>[39m<<evolog working_copy mutable::>>[0m
+│  [1m<<evolog working_copy mutable commit description first_line::two rewritten twice>><<evolog working_copy mutable::>>[0m
+│  [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::describe commit ca2efbef90ae94b995ca176d22591d6f3d330169>><<evolog::>>
+│  [1m<<diff file_header::diff --git a/JJ-COMMIT-DESCRIPTION b/JJ-COMMIT-DESCRIPTION>>[0m
+│  [1m<<diff file_header::--- JJ-COMMIT-DESCRIPTION>>[0m
+│  [1m<<diff file_header::+++ JJ-COMMIT-DESCRIPTION>>[0m
+│  [38;5;6m<<diff hunk_header::@@ -1,1 +1,1 @@>>[39m
+│  [38;5;1m<<diff removed::-two rewritten>>[39m
+│  [38;5;2m<<diff added::+two rewritten>>[4m<<diff added token:: twice>>[24m<<diff added::>>[39m
+<<evolog commit node mutable::○>>  [1m[39m<<evolog mutable hidden commit change_id shortest prefix::y>>[0m[38;5;8m<<evolog mutable hidden commit change_id shortest rest::qymtrmq>>[1m[39m<<evolog mutable hidden change_offset::/>><<evolog mutable hidden commit change_offset::1>>[0m<<evolog mutable:: >>[38;5;3m<<evolog mutable commit author email local::alice>><<evolog mutable commit author email::@>><<evolog mutable commit author email domain::example.com>>[39m<<evolog mutable:: >>[38;5;6m<<evolog mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog mutable:: >>[1m[38;5;4m<<evolog mutable commit commit_id shortest prefix::ca>>[0m[38;5;8m<<evolog mutable commit commit_id shortest rest::2efbef>>[39m<<evolog mutable:: >><<evolog mutable hidden::(hidden)>><<evolog mutable::>>
+│  <<evolog mutable commit description first_line::two rewritten>><<evolog mutable::>>
+│  [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::snapshot working copy>><<evolog::>>
+│  [1m<<diff git file_header::diff --git a/two.txt b/two.txt>>[0m
+│  [1m<<diff git file_header::index 7f995bacaa..aaf1afaa29 100644>>[0m
+│  [1m<<diff git file_header::--- a/two.txt>>[0m
+│  [1m<<diff git file_header::+++ b/two.txt>>[0m
+│  [38;5;6m<<diff git hunk_header::@@ -1,1 +1,1 @@>>[39m
+│  [38;5;1m<<diff git removed::-two >>[4m<<diff git removed token::again>>[24m<<diff git removed::>>[39m
+│  [38;5;2m<<diff git added::+two >>[4m<<diff git added token::once more>>[24m<<diff git added::>>[39m
+<<evolog commit node mutable::○>>  [1m[39m<<evolog mutable hidden commit change_id shortest prefix::y>>[0m[38;5;8m<<evolog mutable hidden commit change_id shortest rest::qymtrmq>>[1m[39m<<evolog mutable hidden change_offset::/>><<evolog mutable hidden commit change_offset::2>>[0m<<evolog mutable:: >>[38;5;3m<<evolog mutable commit author email local::alice>><<evolog mutable commit author email::@>><<evolog mutable commit author email domain::example.com>>[39m<<evolog mutable:: >>[38;5;6m<<evolog mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog mutable:: >>[1m[38;5;4m<<evolog mutable commit commit_id shortest prefix::9>>[0m[38;5;8m<<evolog mutable commit commit_id shortest rest::dd4ccb3>>[39m<<evolog mutable:: >><<evolog mutable hidden::(hidden)>><<evolog mutable::>>
+│  <<evolog mutable commit description first_line::two rewritten>><<evolog mutable::>>
+│  [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::describe commit 66c265668c0b1075c4c8fc5b6d6d73ef288672b8>><<evolog::>>
+│  [1m<<diff file_header::diff --git a/JJ-COMMIT-DESCRIPTION b/JJ-COMMIT-DESCRIPTION>>[0m
+│  [1m<<diff file_header::--- JJ-COMMIT-DESCRIPTION>>[0m
+│  [1m<<diff file_header::+++ JJ-COMMIT-DESCRIPTION>>[0m
+│  [38;5;6m<<diff hunk_header::@@ -1,1 +1,1 @@>>[39m
+│  [38;5;1m<<diff removed::-two>>[39m
+│  [38;5;2m<<diff added::+two>>[4m<<diff added token:: rewritten>>[24m<<diff added::>>[39m
+<<evolog commit node mutable::○>>  [1m[39m<<evolog mutable hidden commit change_id shortest prefix::y>>[0m[38;5;8m<<evolog mutable hidden commit change_id shortest rest::qymtrmq>>[1m[39m<<evolog mutable hidden change_offset::/>><<evolog mutable hidden commit change_offset::3>>[0m<<evolog mutable:: >>[38;5;3m<<evolog mutable commit author email local::alice>><<evolog mutable commit author email::@>><<evolog mutable commit author email domain::example.com>>[39m<<evolog mutable:: >>[38;5;6m<<evolog mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog mutable:: >>[1m[38;5;4m<<evolog mutable commit commit_id shortest prefix::6>>[0m[38;5;8m<<evolog mutable commit commit_id shortest rest::6c26566>>[39m<<evolog mutable:: >><<evolog mutable hidden::(hidden)>><<evolog mutable::>>
+│  <<evolog mutable commit description first_line::two>><<evolog mutable::>>
+│  [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::snapshot working copy>><<evolog::>>
+│  [1m<<diff git file_header::diff --git a/two.txt b/two.txt>>[0m
+│  [1m<<diff git file_header::index f719efd430..7f995bacaa 100644>>[0m
+│  [1m<<diff git file_header::--- a/two.txt>>[0m
+│  [1m<<diff git file_header::+++ b/two.txt>>[0m
+│  [38;5;6m<<diff git hunk_header::@@ -1,1 +1,1 @@>>[39m
+│  [38;5;1m<<diff git removed::-two>>[39m
+│  [38;5;2m<<diff git added::+two>>[4m<<diff git added token:: again>>[24m<<diff git added::>>[39m
+<<evolog commit node mutable::○>>  [1m[39m<<evolog mutable hidden commit change_id shortest prefix::y>>[0m[38;5;8m<<evolog mutable hidden commit change_id shortest rest::qymtrmq>>[1m[39m<<evolog mutable hidden change_offset::/>><<evolog mutable hidden commit change_offset::4>>[0m<<evolog mutable:: >>[38;5;3m<<evolog mutable commit author email local::alice>><<evolog mutable commit author email::@>><<evolog mutable commit author email domain::example.com>>[39m<<evolog mutable:: >>[38;5;6m<<evolog mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog mutable:: >>[1m[38;5;4m<<evolog mutable commit commit_id shortest prefix::f9>>[0m[38;5;8m<<evolog mutable commit commit_id shortest rest::66b4d0>>[39m<<evolog mutable:: >><<evolog mutable hidden::(hidden)>><<evolog mutable::>>
+│  <<evolog mutable commit description first_line::two>><<evolog mutable::>>
+│  [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::snapshot working copy>><<evolog::>>
+│  [1m<<diff git file_header::diff --git a/two.txt b/two.txt>>[0m
+│  [1m<<diff git file_header::new file mode 100644>>[0m
+│  [1m<<diff git file_header::index 0000000000..f719efd430>>[0m
+│  [1m<<diff git file_header::--- /dev/null>>[0m
+│  [1m<<diff git file_header::+++ b/two.txt>>[0m
+│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@>>[39m
+│  [38;5;2m<<diff git added::+>>[4m<<diff git added token::two>>[24m[39m
+<<evolog commit node mutable::○>>  [1m[39m<<evolog mutable hidden commit change_id shortest prefix::y>>[0m[38;5;8m<<evolog mutable hidden commit change_id shortest rest::qymtrmq>>[1m[39m<<evolog mutable hidden change_offset::/>><<evolog mutable hidden commit change_offset::5>>[0m<<evolog mutable:: >>[38;5;3m<<evolog mutable commit author email local::alice>><<evolog mutable commit author email::@>><<evolog mutable commit author email domain::example.com>>[39m<<evolog mutable:: >>[38;5;6m<<evolog mutable commit committer timestamp local format::2001-02-03 09:35:06>>[39m<<evolog mutable:: >>[1m[38;5;4m<<evolog mutable commit commit_id shortest prefix::2>>[0m[38;5;8m<<evolog mutable commit commit_id shortest rest::430aeeb>>[39m<<evolog mutable:: >><<evolog mutable hidden::(hidden)>><<evolog mutable::>>
+   [38;5;2m<<evolog mutable empty::(empty)>>[39m<<evolog mutable:: >><<evolog mutable commit description first_line::two>><<evolog mutable::>>
+   [38;5;8m<<evolog separator::-->>[39m<<evolog:: operation >>[38;5;4m<<evolog operation id short::«op»>>[39m<<evolog:: >><<evolog operation description first_line::new empty commit>><<evolog::>>
+   [1m<<diff file_header::diff --git a/JJ-COMMIT-DESCRIPTION b/JJ-COMMIT-DESCRIPTION>>[0m
+   [1m<<diff file_header::--- JJ-COMMIT-DESCRIPTION>>[0m
+   [1m<<diff file_header::+++ JJ-COMMIT-DESCRIPTION>>[0m
+   [38;5;6m<<diff hunk_header::@@ -0,0 +1,1 @@>>[39m
+   [38;5;2m<<diff added::+>>[4m<<diff added token::two>>[24m[39m

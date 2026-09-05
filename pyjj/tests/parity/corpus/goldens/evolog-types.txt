@@ -1,0 +1,21 @@
+@  yqymtrmq alice@example.com 2001-02-03 09:35:06 be8720ac
+│  two rewritten twice
+│  -- operation «op» describe commit ca2efbef90ae94b995ca176d22591d6f3d330169
+○  yqymtrmq/1 alice@example.com 2001-02-03 09:35:06 ca2efbef (hidden)
+│  two rewritten
+│  -- operation «op» snapshot working copy
+│  FF two.txt
+○  yqymtrmq/2 alice@example.com 2001-02-03 09:35:06 9dd4ccb3 (hidden)
+│  two rewritten
+│  -- operation «op» describe commit 66c265668c0b1075c4c8fc5b6d6d73ef288672b8
+○  yqymtrmq/3 alice@example.com 2001-02-03 09:35:06 66c26566 (hidden)
+│  two
+│  -- operation «op» snapshot working copy
+│  FF two.txt
+○  yqymtrmq/4 alice@example.com 2001-02-03 09:35:06 f966b4d0 (hidden)
+│  two
+│  -- operation «op» snapshot working copy
+│  -F two.txt
+○  yqymtrmq/5 alice@example.com 2001-02-03 09:35:06 2430aeeb (hidden)
+   (empty) two
+   -- operation «op» new empty commit

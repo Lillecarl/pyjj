@@ -1,0 +1,20 @@
+@  movruppx alice@example.com 2001-02-03 09:35:06 32776e39
+│  whitespace
+│  -- operation «op» describe commit 728e9c28bb9da315bdc693ebff60afd1a70537ad
+│  Modified commit description:
+│          1: whitespace
+○  movruppx/1 alice@example.com 2001-02-03 09:35:06 728e9c28 (hidden)
+│  (no description set)
+│  -- operation «op» snapshot working copy
+│  Modified regular file ws.txt:
+│     1     :     indented
+│     2     : spaced  out
+│     3     : str ipped
+│          1:         indented
+│          2: spaced out
+│          3: stripped
+│     4     : real change
+│          4: real changed
+○  movruppx/2 alice@example.com 2001-02-03 09:35:06 3a688285 (hidden)
+   (empty) (no description set)
+   -- operation «op» new empty commit

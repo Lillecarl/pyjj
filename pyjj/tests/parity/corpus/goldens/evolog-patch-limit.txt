@@ -1,0 +1,12 @@
+@  yqymtrmq alice@example.com 2001-02-03 09:35:06 be8720ac
+│  two rewritten twice
+│  -- operation «op» describe commit ca2efbef90ae94b995ca176d22591d6f3d330169
+│  Modified commit description:
+│     1     : two rewritten
+│          1: two rewritten twice
+○  yqymtrmq/1 alice@example.com 2001-02-03 09:35:06 ca2efbef (hidden)
+│  two rewritten
+│  -- operation «op» snapshot working copy
+│  Modified regular file two.txt:
+│     1     : two again
+│          1: two once more
