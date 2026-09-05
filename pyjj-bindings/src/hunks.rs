@@ -3,6 +3,20 @@ use std::collections::HashSet;
 use pyo3::prelude::*;
 
 use jj_lib::diff::{ContentDiff, DiffHunkKind};
+use jj_lib::diff_presentation::LineCompareMode;
+
+/// How `jj diff` compares two lines: literally, or with `-w` / `-b`,
+/// which let it call two lines the same across whitespace.
+fn compare_mode(name: &str) -> PyResult<LineCompareMode> {
+    match name {
+        "exact" => Ok(LineCompareMode::Exact),
+        "ignore-all-space" => Ok(LineCompareMode::IgnoreAllSpace),
+        "ignore-space-change" => Ok(LineCompareMode::IgnoreSpaceChange),
+        _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown compare mode {name:?}"
+        ))),
+    }
+}
 
 /// One line-level diff hunk between two versions of a file's content. Only
 /// "different" segments are returned (unchanged text is omitted); `index`
@@ -143,11 +157,18 @@ impl PyUnifiedHunk {
 /// --git` prints. Line splitting, hunk boundaries and the merging of
 /// nearby changes therefore match jj exactly -- a diff built with a
 /// different algorithm would not, however the output was formatted.
+///
+/// `compare` is how two lines are compared: `"exact"`,
+/// `"ignore-all-space"` or `"ignore-space-change"`.
 #[pyfunction]
-#[pyo3(signature = (before, after, context=3))]
-pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifiedHunk> {
+#[pyo3(signature = (before, after, context=3, compare="exact"))]
+pub fn unified_hunks(
+    before: &[u8],
+    after: &[u8],
+    context: usize,
+    compare: &str,
+) -> PyResult<Vec<PyUnifiedHunk>> {
     use bstr::BStr;
-    use jj_lib::diff_presentation::LineCompareMode;
     use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
     use jj_lib::diff_presentation::DiffTokenType;
     use jj_lib::merge::Diff;
@@ -163,7 +184,7 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
     }
 
     let contents = Diff::new(before, after).map(BStr::new);
-    unified_diff_hunks(contents, context, LineCompareMode::Exact)
+    Ok(unified_diff_hunks(contents, context, compare_mode(compare)?)
         .into_iter()
         .map(|hunk| PyUnifiedHunk {
             left_start: to_line_number(&hunk.left_line_range),
@@ -193,7 +214,7 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
                 })
                 .collect(),
         })
-        .collect()
+        .collect())
 }
 
 /// The raw hunks of a content diff: `(kind, before, after)`, where kind
@@ -204,15 +225,23 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
 /// `"word"` is how it splits a changed region again, to mark only the
 /// words that moved. `jj diff`'s default format runs both, so a caller
 /// that formats it needs both.
+///
+/// `compare` is how two lines are compared, and only the line
+/// tokenizer reads it: jj's `-w` and `-b` decide which lines changed,
+/// never which words did.
 #[pyfunction]
-#[pyo3(signature = (before, after, by="line"))]
+#[pyo3(signature = (before, after, by="line", compare="exact"))]
 pub fn content_hunks(
     before: &[u8],
     after: &[u8],
     by: &str,
+    compare: &str,
 ) -> PyResult<Vec<(String, Vec<u8>, Vec<u8>)>> {
     let diff = match by {
-        "line" => ContentDiff::by_line([before, after]),
+        "line" => jj_lib::diff_presentation::diff_by_line(
+            [before, after],
+            &compare_mode(compare)?,
+        ),
         "word" => ContentDiff::by_word([before, after]),
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
