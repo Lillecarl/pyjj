@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 
-from ..formatter import Formatter, render_block, separate
+from ..formatter import Formatter, Line, render_block, separate
 
 
 def complete_newline(s: str) -> str:
@@ -1610,13 +1610,6 @@ _FILE_TYPES = {
     "040000": "Git submodule",
 }
 
-# `unified_hunks` trims context; the color-words format trims its own,
-# with different rules at the start and the end of a file. Asking for
-# every line keeps the classification and the numbering and leaves the
-# trimming here.
-_ALL_CONTEXT = 1 << 30
-
-
 def _color_words_header(f, to_ui_path) -> str:
     """The line jj writes above a file's color-words diff.
 
@@ -1663,73 +1656,299 @@ def _color_words_header(f, to_ui_path) -> str:
     return f"{description} {path}:"
 
 
-def _color_words_line(left, right, content: bytes) -> bytes:
-    """One numbered line. A missing number leaves its column blank."""
-    prefix = f"{left:>4} " if left is not None else "     "
-    prefix += f"{right:>4}: " if right is not None else "    : "
-    return prefix.encode() + content
+def _split_inclusive(data: bytes) -> list[bytes]:
+    """Rust's `split_inclusive(b'\\n')`: each line keeps its newline."""
+    if not data:
+        return []
+    lines = data.split(b"\n")
+    tail = lines.pop()
+    out = [line + b"\n" for line in lines]
+    if tail:
+        out.append(tail)
+    return out
 
 
-def _color_words_hunks(before: bytes, after: bytes, context: int = 3) -> list[bytes]:
-    """The numbered body of a color-words diff.
+# jj's `diff.color-words.max-inline-alternation`, at its default. A row
+# that changes side more often than this is harder to read than two
+# rows, so jj splits it instead of inlining it.
+_MAX_INLINE_ALTERNATION = 3
+
+# The label a row's left and right side carry.
+_COLOR_WORDS_SIDES = {"left": "removed", "right": "added"}
+
+
+def _split_by_matching_newline(hunks):
+    """Groups of hunks that belong to one run of changed lines.
+
+    jj's `split_diff_hunks_by_matching_newline`: a matching hunk that
+    holds a newline ends the group it is in.
+    """
+    group = []
+    for kind, lhs, rhs in hunks:
+        group.append((kind, lhs, rhs))
+        if kind == "matching" and b"\n" in lhs and b"\n" in rhs:
+            yield group
+            group = []
+    if group:
+        yield group
+
+
+def _count_alternation(group) -> int:
+    """How often a group of hunks changes side, matching hunks aside.
+
+    jj's measure of how busy a row would look: `[left]` counts 1,
+    `[left, matching, left]` still counts 1, and `[left, right,
+    matching, right, left]` counts 3.
+    """
+    count = 0
+    previous = None
+    for kind, lhs, rhs in group:
+        if kind != "different":
+            continue
+        for index, content in enumerate((lhs, rhs)):
+            if not content or index == previous:
+                continue
+            count += 1
+            previous = index
+    return count
+
+
+def _can_inline(hunks) -> bool:
+    """Whether a changed region fits one row per line."""
+    return max((_count_alternation(group)
+                for group in _split_by_matching_newline(hunks)),
+               default=0) <= _MAX_INLINE_ALTERNATION
+
+
+def _diff_line_rows(hunks, left: int, right: int):
+    """jj_lib's `DiffLineIterator`: word-diff hunks grouped into rows.
+
+    A row is `(left, right, parts)`, and each part is `(side, text)`
+    with side `both`, `left` or `right`. A row can hold text from both
+    sides, which is what puts a replaced word beside the word it
+    replaced.
+
+    Returns the rows and the numbers the next region starts from.
+    """
+    rows = []
+    current: list[tuple[str, bytes]] = []
+    for kind, lhs, rhs in hunks:
+        # jj's iterator refills only when its queue is empty, so the
+        # blank-line check below sees this hunk's own rows and no others.
+        queue: list[tuple[int, int, list]] = []
+        if kind == "matching":
+            for token in _split_inclusive(lhs):
+                current.append(("both", token))
+                if token.endswith(b"\n"):
+                    queue.append((left, right, current))
+                    current = []
+                    left += 1
+                    right += 1
+        else:
+            for token in _split_inclusive(lhs):
+                current.append(("left", token))
+                if token.endswith(b"\n"):
+                    queue.append((left, right, current))
+                    current = []
+                    left += 1
+            rights = _split_inclusive(rhs)
+            # A right side that opens with a newline would add a blank
+            # row under a row that already carries right-hand text. jj
+            # drops the blank row and only counts the line.
+            if (rhs.startswith(b"\n") and not current and queue
+                    and any(side != "left" for side, _ in queue[0][2])):
+                rights = rights[1:]
+                right += 1
+            for token in rights:
+                current.append(("right", token))
+                if token.endswith(b"\n"):
+                    queue.append((left, right, current))
+                    current = []
+                    right += 1
+        rows.extend(queue)
+    if current:
+        rows.append((left, right, current))
+    return rows, left, right
+
+
+def _unzip_word_hunks(hunks):
+    """jj_lib's `unzip_diff_hunks_to_lines`: one token list per line.
+
+    This is what a row looks like when the two sides cannot share it.
+    """
+    lines: list[list] = [[], []]
+    pending: list[list] = [[], []]
+
+    def push(index: int, kind: str, data: bytes) -> None:
+        for token in _split_inclusive(data):
+            pending[index].append((kind, token))
+            if token.endswith(b"\n"):
+                lines[index].append(pending[index])
+                pending[index] = []
+
+    for kind, lhs, rhs in hunks:
+        token_kind = "matching" if kind == "matching" else "different"
+        push(0, token_kind, lhs)
+        push(1, token_kind, rhs)
+    for index in (0, 1):
+        if pending[index]:
+            lines[index].append(pending[index])
+    return lines[0], lines[1]
+
+
+def _color_words_number_spans(left, right):
+    """The `   1    1: ` gutter. A missing number leaves its column blank."""
+    spans = []
+    if left is None:
+        spans.append(("     ", ""))
+    else:
+        spans.append((f"{left:>4}", "removed line_number"))
+        spans.append((" ", ""))
+    if right is None:
+        spans.append(("    : ", ""))
+    else:
+        spans.append((f"{right:>4}", "added line_number"))
+        spans.append((": ", ""))
+    return spans
+
+
+def _strip_newline(parts):
+    """Drops the row's trailing newline; `render_block` writes it back.
+
+    jj writes a newline outside every label, so the escape that closes
+    the last span comes before it. The last part can land empty, and its
+    escape sequence is written all the same.
+    """
+    parts = list(parts)
+    head, data = parts[-1]
+    if data.endswith(b"\n"):
+        parts[-1] = (head, data[:-1])
+    return parts
+
+
+def _color_words_content_spans(parts):
+    """One row's text, which may come from both sides at once."""
+    spans = []
+    for side, data in _strip_newline(parts):
+        labels = _COLOR_WORDS_SIDES.get(side)
+        spans.append((data.decode("utf-8", "surrogateescape"),
+                      f"{labels} token" if labels else ""))
+    return spans
+
+
+def _color_words_token_spans(tokens, side: str):
+    """One single-sided row. Only the words that moved carry `token`."""
+    return [(data.decode("utf-8", "surrogateescape"),
+             f"{side} token" if kind == "different" else side)
+            for kind, data in _strip_newline(tokens)]
+
+
+def _changed_rows(rows, before: bytes, after: bytes, numbers, coloured) -> None:
+    """Rows for one changed region, word-diffed.
+
+    An inline row tells the two sides apart by colour alone, so a plain
+    rendering always splits it into a removed row and an added row. That
+    is why the coloured and the plain output are not the same shape.
+    """
+    hunks = pyjj.content_hunks(before, after, "word")
+    if coloured and _can_inline(hunks):
+        grouped, left, right = _diff_line_rows(hunks, numbers[0], numbers[1])
+        for row_left, row_right, parts in grouped:
+            has_left = any(side != "right" for side, _ in parts)
+            has_right = any(side != "left" for side, _ in parts)
+            rows.append(
+                _color_words_number_spans(row_left if has_left else None,
+                                          row_right if has_right else None)
+                + _color_words_content_spans(parts))
+        numbers[0], numbers[1] = left, right
+        return
+    left_lines, right_lines = _unzip_word_hunks(hunks)
+    for tokens in left_lines:
+        rows.append(_color_words_number_spans(numbers[0], None)
+                    + _color_words_token_spans(tokens, "removed"))
+        numbers[0] += 1
+    for tokens in right_lines:
+        rows.append(_color_words_number_spans(None, numbers[1])
+                    + _color_words_token_spans(tokens, "added"))
+        numbers[1] += 1
+
+
+def _unchanged_rows(rows, left_lines, right_lines, numbers, coloured) -> None:
+    """Rows for lines both sides share, under the `context` label."""
+    if left_lines != right_lines:
+        # Only a whitespace-insensitive comparison reaches this: the
+        # lines match the line diff and differ to the eye.
+        _changed_rows(rows, b"".join(left_lines), b"".join(right_lines),
+                      numbers, coloured)
+        return
+    for line in left_lines:
+        rows.append(Line(_color_words_number_spans(numbers[0], numbers[1])
+                         + _color_words_content_spans([("both", line)]),
+                         "context"))
+        numbers[0] += 1
+        numbers[1] += 1
+
+
+def _context_rows(rows, pending, numbers, num_after, num_before,
+                  coloured) -> None:
+    """`num_after` unchanged rows, `    ...`, then `num_before` more."""
+    if pending is None:
+        return
+
+    def split(side: bytes):
+        lines = _split_inclusive(side)
+        head = lines[:num_after]
+        rest = lines[num_after:]
+        # jj takes one line more than it will show. If nothing is
+        # skipped that line belongs to the block; if something is, the
+        # ellipsis takes its place, because it costs the same row.
+        tail = rest[max(0, len(rest) - num_before - 1):]
+        return head, tail, len(rest) - len(tail)
+
+    left_head, left_tail, left_skipped = split(pending[0])
+    right_head, right_tail, right_skipped = split(pending[1])
+    _unchanged_rows(rows, left_head, right_head, numbers, coloured)
+    if left_skipped or right_skipped:
+        rows.append([("    ...", "")])
+        numbers[0] += left_skipped
+        numbers[1] += right_skipped
+        if len(left_tail) > num_before:
+            left_tail = left_tail[1:]
+            numbers[0] += 1
+        if len(right_tail) > num_before:
+            right_tail = right_tail[1:]
+            numbers[1] += 1
+    _unchanged_rows(rows, left_tail, right_tail, numbers, coloured)
+
+
+def _color_words_rows(before: bytes, after: bytes, context: int = 3,
+                      coloured: bool = False):
+    """The numbered body of a color-words diff, as labelled rows.
 
     jj keeps `context` unchanged lines after a change and `context`
     before the next one, and replaces what is left with `    ...`. It
     keeps nothing before the first change and nothing after the last.
-
-    A run that would lose exactly one line prints that line instead: the
-    ellipsis costs the same row, so eliding it gains nothing. That is
-    the `num_after + num_before + 1` below, and it is jj's rule, not a
-    rounding choice.
     """
-    hunks = pyjj.unified_hunks(before, after, _ALL_CONTEXT)
-    if not hunks:
-        return []
-    out: list[bytes] = []
-    left = right = 1
-    run: list[bytes] = []
+    rows: list = []
+    numbers = [1, 1]
+    pending = None
     emitted = False
-
-    def flush(num_after: int, num_before: int) -> None:
-        nonlocal left, right, run
-        total = len(run)
-        if total > num_after + num_before + 1:
-            head, tail = run[:num_after], run[total - num_before:]
-            skipped = total - num_after - num_before
-        else:
-            head, tail, skipped = run, [], 0
-        for content in head:
-            out.append(_color_words_line(left, right, content))
-            left += 1
-            right += 1
-        if skipped:
-            out.append(b"    ...\n")
-            left += skipped
-            right += skipped
-        for content in tail:
-            out.append(_color_words_line(left, right, content))
-            left += 1
-            right += 1
-        run = []
-
-    for kind, tokens in hunks[0].lines:
-        content = b"".join(token for _token_kind, token in tokens)
-        if kind == "context":
-            run.append(content)
+    for kind, lhs, rhs in pyjj.content_hunks(before, after, "line"):
+        if kind == "matching":
+            pending = (lhs, rhs)
             continue
-        flush(context if emitted else 0, context)
+        _context_rows(rows, pending, numbers,
+                      context if emitted else 0, context, coloured)
+        pending = None
         emitted = True
-        if kind == "removed":
-            out.append(_color_words_line(left, None, content))
-            left += 1
-        else:
-            out.append(_color_words_line(None, right, content))
-            right += 1
-    flush(context if emitted else 0, 0)
-    return out
+        _changed_rows(rows, lhs, rhs, numbers, coloured)
+    _context_rows(rows, pending, numbers,
+                  context if emitted else 0, 0, coloured)
+    return rows
 
 
-def _color_words_bytes(files, to_ui_path, context: int = 3) -> bytes:
+def _color_words_lines(files, to_ui_path, context: int = 3,
+                       coloured: bool = False):
     """`jj diff`'s default output for a list of `Commit.git_diff()` files.
 
     A conflicted path reads as a regular file here. jj names it a
@@ -1737,28 +1956,31 @@ def _color_words_bytes(files, to_ui_path, context: int = 3) -> bytes:
     `git_diff()` has already materialized the markers by this point, so
     that distinction is gone. The status scenarios mark the gap.
     """
-    out = bytearray()
+    rows: list = []
     for f in files:
-        out.extend(_color_words_header(f, to_ui_path).encode())
-        out.extend(b"\n")
+        rows.append([(_color_words_header(f, to_ui_path), "header")])
         added = f.before_mode is None
         removed = f.after_mode is None
         content = f.after_content if added else f.before_content
         if (added or removed) and not content:
-            out.extend(b"    (empty)\n")
+            rows.append([("    (empty)", "empty")])
             continue
         if f.is_binary:
-            out.extend(b"    (binary)\n")
+            rows.append([("    (binary)", "binary")])
             continue
         before = b"" if added else f.before_content
         after = b"" if removed else f.after_content
         if before == after:
             continue
-        for line in _color_words_hunks(before, after, context):
-            out.extend(line)
-            if not line.endswith(b"\n"):
-                out.extend(b"\n")
-    return bytes(out)
+        rows.extend(_color_words_rows(before, after, context, coloured))
+    return rows
+
+
+def _color_words_bytes(files, to_ui_path, context: int = 3,
+                       coloured: bool = False) -> bytes:
+    """`_color_words_lines` as bytes, ready to write to stdout."""
+    return _render_diff(_color_words_lines(files, to_ui_path, context, coloured),
+                        coloured, "diff color_words")
 
 
 def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
@@ -1767,7 +1989,8 @@ def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
     sys.stdout.buffer.write(
-        _color_words_bytes(files, _ui_path_formatter(ws), context)
+        _color_words_bytes(files, _ui_path_formatter(ws), context,
+                           use_color(settings))
     )
     sys.stdout.buffer.flush()
 
@@ -1874,12 +2097,9 @@ def _description_diff_bytes(args, before: str, after: str,
         ]
         lines += _unified_hunk_lines(left, right)
         return _render_diff(lines, coloured, "diff")
-    out = bytearray(b"Modified commit description:\n")
-    for line in _color_words_hunks(left, right):
-        out.extend(line)
-        if not line.endswith(b"\n"):
-            out.extend(b"\n")
-    return bytes(out)
+    lines = [[("Modified commit description:", "header")]]
+    lines += _color_words_rows(left, right, coloured=coloured)
+    return _render_diff(lines, coloured, "diff")
 
 
 class _FileStat:
@@ -1936,7 +2156,8 @@ def _print_diff_files(args, ws, files, settings=None) -> None:
         _print_summary([_FileStat(f) for f in files], to_ui_path, settings)
         return
     sys.stdout.flush()
-    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context))
+    sys.stdout.buffer.write(_color_words_bytes(files, to_ui_path, context,
+                                               use_color(settings)))
     sys.stdout.buffer.flush()
 
 

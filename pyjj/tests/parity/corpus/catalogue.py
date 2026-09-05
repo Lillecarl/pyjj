@@ -30,7 +30,8 @@ CATALOGUE: tuple[Entry, ...] = (
     E("status-conflict", ("status",), fixture="conflict", claims=("status",), colour="bytes"),
 
     # -- diff -----------------------------------------------------------
-    E("diff", ("diff", "-r", "@"), fixture="executable", claims=("diff",)),
+    E("diff", ("diff", "-r", "@"), fixture="executable", claims=("diff",),
+      colour="bytes"),
     E("diff-git", ("diff", "--git", "-r", "@"), fixture="executable",
       claims=("diff", "--git"), colour="bytes"),
     E("diff-summary", ("diff", "--summary", "-r", "@"), fixture="executable",
@@ -43,12 +44,13 @@ CATALOGUE: tuple[Entry, ...] = (
     # against its parents. Diffing across one parent is what surfaces
     # the conflict jj reports.
     E("diff-conflict", ("diff", "--from", 'description(glob:"one*")', "--to", "@"),
-      fixture="conflict", claims=("diff",)),
+      fixture="conflict", claims=("diff",), colour="bytes"),
     E("diff-context", ("diff", "--context", "1", "-r", "@"), fixture="executable",
-      claims=("diff", "--context")),
+      claims=("diff", "--context"), colour="bytes"),
 
     # -- show -----------------------------------------------------------
-    E("show", ("show", 'description(glob:"one*")'), claims=("show",)),
+    E("show", ("show", 'description(glob:"one*")'), claims=("show",),
+      colour="bytes"),
     E("show-no-patch", ("show", "--no-patch", 'description(glob:"one*")'),
       claims=("show", "--no-patch"), colour="bytes"),
     E("show-git", ("show", "--git", 'description(glob:"one*")'),
@@ -92,7 +94,7 @@ CATALOGUE: tuple[Entry, ...] = (
     # -- interdiff ------------------------------------------------------
     E("interdiff", ("interdiff", "--from", 'description(glob:"one*")',
                     "--to", 'description(glob:"two*")'),
-      claims=("interdiff",)),
+      claims=("interdiff",), colour="bytes"),
     E("interdiff-git", ("interdiff", "--git", "--from", 'description(glob:"one*")',
                         "--to", 'description(glob:"two*")'),
       claims=("interdiff", "--git"), colour="bytes"),
