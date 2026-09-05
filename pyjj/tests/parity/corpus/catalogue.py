@@ -178,6 +178,11 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("log", "--limit", "-n"), colour="bytes"),
     E("log-patch-revision", ("log", "-T", _COMPACT, "-r", "@-", "-p"),
       claims=("log", "-r"), colour="bytes"),
+    # A path narrows the revset rather than the rows, so the graph
+    # elides the commits it leaves out instead of dropping them.
+    E("log-fileset", ("log", "-T", _COMPACT, "two.txt"), colour="bytes"),
+    E("log-fileset-patch", ("log", "-T", _COMPACT, "-p", "one.txt", "two.txt"),
+      colour="bytes"),
     # `--count` prints no rows, so it needs no template to agree.
     E("log-count", ("log", "--count"), claims=("log", "--count"),
       colour="bytes"),
