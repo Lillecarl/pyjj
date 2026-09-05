@@ -82,10 +82,10 @@ def capture(pair_factory) -> dict:
             never = run_jj(pair, entry.argv, "never")
             # Strip the markers from the debug form and you should have
             # exactly what a terminal shows. Where that fails, the
-            # output's own text closed a marker early -- a conflicted
-            # file contains `>>>>>>>` -- and jj's debug format cannot
-            # express it. Record the coloured rendering instead of a
-            # label specification that would be wrong.
+            # output's own text closed a marker early -- jj's debug
+            # format cannot express every output. Record the coloured
+            # rendering instead of a label specification that would be
+            # wrong.
             labelled = strip_markers(debug) == always
             debug_path = GOLDENS / f"{entry.id}{GOLDEN_SUFFIX}"
             colour_path = GOLDENS / f"{entry.id}{COLOUR_SUFFIX}"

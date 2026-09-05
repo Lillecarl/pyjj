@@ -33,10 +33,12 @@ comparison.
 
   That assertion earns its keep. jj's debug format wraps spans as
   `<<labels::text>>`, and a conflicted file's materialized content
-  contains `>>>>>>>`, which closes a marker early. The format is
-  ambiguous there, and no parser can fix it. Such an entry gets no
-  `.debug` golden; it gets the `.ansi` rendering instead, and the
-  manifest lists it, so the missing label specification is visible
+  contains `>>>>>>>`. Only the open is unambiguous, so `markers()`
+  reads the close as the *last* `>>` before the next span opens, which
+  gets the conflict markers right. It cannot be right always, and it
+  is not trusted to be: an entry whose round trip fails gets no
+  `.debug` golden, gets the `.ansi` rendering instead, and the
+  manifest lists it, so a missing label specification is visible
   rather than silently wrong.
 
 An entry declares the bar it is held to, which is the judgement about
@@ -193,10 +195,54 @@ def normalize(text: str, names, context: dict) -> str:
     return text
 
 
+# jj opens a span with `<<` + the label stack + `::`, and closes it with
+# `>>`. Only the open is unambiguous, so that is what this looks for: a
+# label is words, spaces, dashes and underscores, which no file content
+# that also carries `::` is going to be.
+_MARKER = re.compile(r"<<([\w -]*)::")
+
+
+def markers(debug_text: str):
+    """Every labelled span, as `(labels, text)`.
+
+    A span's own text can contain `>>` -- a conflicted file carries
+    `>>>>>>>` -- so the first `>>` is not the close. The close is the
+    *last* `>>` before the next span opens, which reads the conflict
+    markers correctly and only misreads a `>>` written between two
+    spans under no label at all.
+
+    That ambiguity cannot be removed, so it is not trusted either:
+    `capture.py` asserts that stripping the markers gives back what
+    `--color=always` printed, and records the plain colours instead
+    where it does not.
+    """
+    out = []
+    position = 0
+    while (open_ := _MARKER.search(debug_text, position)) is not None:
+        following = _MARKER.search(debug_text, open_.end())
+        limit = following.start() if following else len(debug_text)
+        close = debug_text.rfind(">>", open_.end(), limit)
+        if close < 0:
+            # An unterminated marker means the text fooled the scanner.
+            # Say so by stopping rather than by guessing.
+            break
+        out.append((open_.group(1), debug_text[open_.end():close],
+                    open_.start(), close + 2))
+        position = close + 2
+    return out
+
+
 def strip_markers(debug_text: str) -> str:
     """The debug form without its label markers: what `--color=always`
     prints."""
-    return re.sub(r"<<[^:]*::(.*?)>>", r"\1", debug_text, flags=re.S)
+    out = []
+    position = 0
+    for _labels, text, start, end in markers(debug_text):
+        out.append(debug_text[position:start])
+        out.append(text)
+        position = end
+    out.append(debug_text[position:])
+    return "".join(out)
 
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -217,7 +263,4 @@ def labels(debug_text: str) -> list[tuple[str, str]]:
     This is what makes the corpus a colour specification rather than a
     pile of bytes.
     """
-    return [
-        (m.group(1), m.group(2))
-        for m in re.finditer(r"<<([^:]*)::(.*?)>>", debug_text, flags=re.S)
-    ]
+    return [(stack, text) for stack, text, _start, _end in markers(debug_text)]
