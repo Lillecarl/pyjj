@@ -1,0 +1,24 @@
+Commit ID: fdecc72b88227165bdc4ca29cfb259c832f622bc
+Change ID: movruppxykmymsouzwvrxkmwtkkxuxuo
+Author   : Alice <alice@example.com> (2001-02-03 09:35:06)
+Committer: Alice <alice@example.com> (2001-02-03 09:35:06)
+
+    every shape
+
+Added regular file added.txt:
+        1: brand new
+Modified regular file edited.txt:
+   1    1: one
+   2     : two
+        2: TWO
+   3    3: three
+    ...
+   7    7: seven
+   8     : eight
+        8: EIGHT
+Non-executable file became executable at mode.txt:
+Modified regular file nonewline.txt:
+   1     : no trailing newline
+        1: no trailing newline, now longer
+Removed regular file removed.txt:
+   1     : gone

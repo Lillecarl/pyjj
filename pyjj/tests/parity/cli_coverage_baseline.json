@@ -137,15 +137,9 @@
     "--message"
   ],
   "diff": [
-    "--from",
-    "--revisions",
     "--template",
-    "--to",
     "--tool",
-    "-T",
-    "-f",
-    "-r",
-    "-t"
+    "-T"
   ],
   "diffedit": [
     "--from",
@@ -301,15 +295,7 @@
     "(command)"
   ],
   "interdiff": [
-    "--context",
-    "--from",
-    "--name-only",
-    "--stat",
-    "--to",
-    "--tool",
-    "-f",
-    "-s",
-    "-t"
+    "--tool"
   ],
   "log": [
     "--color-words",
@@ -492,11 +478,8 @@
     "-j"
   ],
   "show": [
-    "--context",
-    "--name-only",
     "--reversed",
-    "--tool",
-    "-r"
+    "--tool"
   ],
   "sign": [
     "(command)",
