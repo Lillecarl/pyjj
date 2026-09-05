@@ -14,6 +14,8 @@ def add_parsers(sub) -> None:
                       Flag.WHITESPACE_LONG, Flag.CONTEXT])
     p_log.add_argument("--reversed", action="store_true",
                        help="Show oldest commits first")
+    p_log.add_argument("--count", action="store_true",
+                       help="Print the number of commits instead of showing them")
     # log's filesets is suppressed (not shown in help) — keep manual for that nuance
     p_log.add_argument("filesets", nargs="*", metavar="FILESETS", help=argparse.SUPPRESS)
     p_log.set_defaults(_handler="pyjj_cli.commands.history.log:log")

@@ -49,6 +49,15 @@ _BUILTINS = {
 }
 
 
+# What `jj log --count` refuses to be combined with: every flag that
+# shapes a row, and `--count` prints no rows.
+_COUNT_CONFLICTS = (
+    "--patch", "--summary", "--stat", "--name-only", "--types", "--git",
+    "--color-words", "--context", "--ignore-all-space",
+    "--ignore-space-change", "--no-graph", "--reversed", "--template",
+)
+
+
 def _write(text: str) -> None:
     """One piece of output, through the byte stream.
 
@@ -94,6 +103,25 @@ def log(args) -> int:
     limit = getattr(args, "limit", None)
     if limit == 0:
         limit = None
+
+    if getattr(args, "count", False):
+        # jj makes `--count` exclusive with everything that shapes the
+        # rows, since it prints no rows at all. clap says so in one
+        # attribute; argparse cannot, so the check lives here.
+        conflicting = [name for name in _COUNT_CONFLICTS
+                       if getattr(args, name.lstrip("-").replace("-", "_"),
+                                  None) not in (None, False)]
+        if conflicting:
+            print(f"Error: --count cannot be used with {conflicting[0]}",
+                  file=sys.stderr)
+            return 2
+        try:
+            found = repo.revset(settings, revset_expr)
+        except pyjj.JjError as e:
+            print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+            return 1
+        print(len(found) if limit is None else min(len(found), limit))
+        return 0
 
     try:
         nodes = repo.log_graph(settings, revset_expr, limit=limit)

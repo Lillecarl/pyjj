@@ -155,7 +155,6 @@
       "--tool"
     ],
     "log": [
-      "--count",
       "--revision",
       "--tool"
     ],
