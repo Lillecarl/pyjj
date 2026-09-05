@@ -150,10 +150,6 @@
     "-t"
   ],
   "duplicate": [
-    "--after",
-    "--before",
-    "--destination",
-    "-o",
     "-r"
   ],
   "edit": [
@@ -321,18 +317,10 @@
     "-n"
   ],
   "rebase": [
-    "--after",
-    "--before",
-    "--branch",
-    "--destination",
     "--keep-divergent",
-    "--onto",
-    "--revision",
     "--revisions",
     "--simplify-parents",
-    "--skip-emptied",
-    "--source",
-    "-o"
+    "--skip-emptied"
   ],
   "resolve": [
     "--list",
@@ -348,14 +336,6 @@
     "-c",
     "-f",
     "-t"
-  ],
-  "revert": [
-    "--after",
-    "--before",
-    "--destination",
-    "--insert-before",
-    "--revision",
-    "-o"
   ],
   "run": [
     "--clean",

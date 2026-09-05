@@ -1143,6 +1143,71 @@ def test_rebase_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- the other spellings of the placement flags -------------------------
+#
+# jj gives each placement option several names: `-o` is also `--onto`,
+# `-d` and `--destination`; `-A` is also `--after`; `-B` is also
+# `--before`. Every spelling is its own item on the checklist, because
+# pyjj-cli accepted two of three for `split` until the surface
+# comparison found the third.
+
+REBASE_SPELLING_ARGV = [
+    ["rebase", "--revision", rev("two"), "--destination", rev("base")],
+    ["rebase", "--branch", rev("two"), "--onto", rev("base")],
+    ["rebase", "--source", rev("two"), "-o", rev("base")],
+    ["rebase", "-r", rev("two"), "--after", rev("base")],
+    ["rebase", "-r", rev("two"), "--before", rev("one")],
+]
+
+
+@pytest.mark.covers("rebase", "--revision", "--destination", "--branch")
+@pytest.mark.covers("rebase", "--source", "--onto", "-o")
+@pytest.mark.covers("rebase", "--after", "--before")
+@pytest.mark.parametrize("argv", REBASE_SPELLING_ARGV,
+                         ids=lambda a: a[1] + "_" + a[3])
+def test_rebase_by_each_spelling(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
+REVERT_SPELLING_ARGV = [
+    ["revert", "--revision", rev("one"), "-o", rev("base")],
+    ["revert", "-r", rev("one"), "--destination", rev("base")],
+    ["revert", "-r", rev("one"), "--after", rev("base")],
+    ["revert", "-r", rev("one"), "--before", rev("two")],
+    ["revert", "-r", rev("one"), "--insert-before", rev("two")],
+]
+
+
+@pytest.mark.covers("revert", "--revision", "--destination", "-o")
+@pytest.mark.covers("revert", "--after", "--before", "--insert-before")
+@pytest.mark.parametrize("argv", REVERT_SPELLING_ARGV,
+                         ids=lambda a: a[1] + "_" + a[3])
+def test_revert_by_each_spelling(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
+DUPLICATE_SPELLING_ARGV = [
+    ["duplicate", rev("one"), "--destination", rev("base")],
+    ["duplicate", rev("one"), "-o", rev("base")],
+    ["duplicate", rev("one"), "--after", rev("base")],
+    ["duplicate", rev("one"), "--before", rev("two")],
+]
+
+
+@pytest.mark.covers("duplicate", "--destination", "-o")
+@pytest.mark.covers("duplicate", "--after", "--before")
+@pytest.mark.parametrize("argv", DUPLICATE_SPELLING_ARGV,
+                         ids=lambda a: a[2])
+def test_duplicate_by_each_spelling(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
 # -- squash and restore variants ----------------------------------------
 
 
