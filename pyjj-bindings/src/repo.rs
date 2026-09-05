@@ -1399,12 +1399,17 @@ impl PyTransaction {
     /// the target's descendants -- call `rebase_descendants()` afterward
     /// only for other pending rewrites in this transaction, same as
     /// everywhere else in this API.
+    #[pyo3(signature = (target_commit_ids, target_root_ids, new_parent_ids, new_child_ids,
+                        skip_emptied=false, keep_divergent=true, simplify_parents=false))]
     fn move_commits(
         &self,
         target_commit_ids: Vec<PyCommitId>,
         target_root_ids: Vec<PyCommitId>,
         new_parent_ids: Vec<PyCommitId>,
         new_child_ids: Vec<PyCommitId>,
+        skip_emptied: bool,
+        keep_divergent: bool,
+        simplify_parents: bool,
     ) -> PyResult<crate::rewrite::PyMoveCommitsStats> {
         with_mut_repo(self, |mut_repo| {
             crate::rewrite::move_commits(
@@ -1413,6 +1418,9 @@ impl PyTransaction {
                 target_root_ids,
                 new_parent_ids,
                 new_child_ids,
+                skip_emptied,
+                keep_divergent,
+                simplify_parents,
             )
         })
     }

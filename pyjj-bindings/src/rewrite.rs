@@ -12,7 +12,10 @@ use jj_lib::merged_tree_builder::MergedTreeBuilder;
 use jj_lib::object_id::ObjectId as _;
 use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
-use jj_lib::rewrite::{self, CommitWithSelection, MoveCommitsLocation, MoveCommitsTarget, RebaseOptions};
+use jj_lib::rewrite::{
+    self, CommitWithSelection, EmptyBehavior, MoveCommitsLocation, MoveCommitsTarget,
+    RebaseOptions, RewriteRefsOptions,
+};
 
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err};
@@ -677,9 +680,8 @@ pub struct PyMoveCommitsStats {
     num_rebased_descendants: u32,
     /// Number of commits skipped because they were already in place.
     num_skipped_rebases: u32,
-    /// Number of commits abandoned for having become empty (only possible
-    /// with a non-default `EmptyBehavior`; always `0` here since this binds
-    /// `RebaseOptions::default()`, same as `jj rebase` without `--skip-emptied`).
+    /// Number of commits abandoned for having become empty, which only
+    /// `skip_emptied` produces.
     num_abandoned_empty: u32,
 }
 
@@ -706,12 +708,22 @@ pub struct PyMoveCommitsStats {
 /// Already rebases the target's descendants internally -- but still call
 /// `rebase_descendants()` before `commit()` for anything else pending in
 /// this transaction, same rule as every other rewrite here.
+///
+/// `skip_emptied` and `simplify_parents` are `jj rebase`'s flags of those
+/// names. `keep_divergent` is that flag too, and it defaults the other
+/// way round: `jj rebase` abandons a divergent commit that the
+/// destination already holds with identical contents, but every other
+/// caller of this -- duplicate, split, squash -- keeps one, so the
+/// caller that wants jj's rebase behaviour asks for it.
 pub fn move_commits(
     mut_repo: &mut MutableRepo,
     target_commit_ids: Vec<PyCommitId>,
     target_root_ids: Vec<PyCommitId>,
     new_parent_ids: Vec<PyCommitId>,
     new_child_ids: Vec<PyCommitId>,
+    skip_emptied: bool,
+    keep_divergent: bool,
+    simplify_parents: bool,
 ) -> PyResult<PyMoveCommitsStats> {
     if target_commit_ids.is_empty() == target_root_ids.is_empty() {
         return Err(JjError::new_err(
@@ -731,12 +743,29 @@ pub fn move_commits(
         new_child_ids: new_child_ids.into_iter().map(|id| id.0).collect(),
         target,
     };
-    let stats = pollster::block_on(rewrite::move_commits(
-        mut_repo,
-        &loc,
-        &RebaseOptions::default(),
-    ))
-    .map_err(map_backend_err)?;
+    let options = RebaseOptions {
+        empty: if skip_emptied {
+            EmptyBehavior::AbandonNewlyEmpty
+        } else {
+            EmptyBehavior::Keep
+        },
+        rewrite_refs: RewriteRefsOptions {
+            delete_abandoned_bookmarks: false,
+        },
+        simplify_ancestor_merge: simplify_parents,
+    };
+    let mut computed =
+        pollster::block_on(rewrite::compute_move_commits(mut_repo, &loc)).map_err(map_backend_err)?;
+    if !keep_divergent {
+        let abandoned = pollster::block_on(rewrite::find_duplicate_divergent_commits(
+            mut_repo,
+            &loc.new_parent_ids,
+            &loc.target,
+        ))
+        .map_err(map_backend_err)?;
+        computed.record_to_abandon(abandoned.iter().map(|commit| commit.id().clone()));
+    }
+    let stats = pollster::block_on(computed.apply(mut_repo, &options)).map_err(map_backend_err)?;
     Ok(PyMoveCommitsStats {
         num_rebased_targets: stats.num_rebased_targets,
         num_rebased_descendants: stats.num_rebased_descendants,
