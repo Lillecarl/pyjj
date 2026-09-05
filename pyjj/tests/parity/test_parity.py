@@ -1160,6 +1160,111 @@ def test_squash_from_into_named_revisions(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "-f")
+def test_squash_from_defaults_to_the_working_copy(pair: RepoPair) -> None:
+    """`--into` defaults to `@`, not to the source's own parent. Only the
+    plain `-r` form squashes into the parent."""
+    chain(pair)
+    pair.op(jj=["squash", "-f", rev("one"), "-u"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--to")
+def test_squash_to_is_another_spelling_of_into(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["squash", "--from", rev("two"), "--to", rev("one"), "-u"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "-t")
+def test_squash_into_short_spelling(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["squash", "-f", rev("two"), "-t", rev("one"), "-u"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "-k")
+def test_squash_keeping_the_emptied_source(pair: RepoPair) -> None:
+    """Without `-k` the source is abandoned once it holds nothing."""
+    chain(pair)
+    pair.op(jj=["squash", "-k", "-u"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--revision", "--message")
+def test_squash_with_the_long_flag_spellings(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["squash", "--revision", rev("one"),
+                "--message", "explicit message"])
+    pair.assert_parity()
+
+
+# -- squash's experimental placement UI ----------------------------------
+#
+# `-o`, `-A` and `-B` squash into a commit that does not exist yet: jj
+# creates an empty one at the named place, rebases whatever followed it,
+# and squashes the source into that. The source is usually one of the
+# commits the insertion rebases -- `@` sits below almost any insertion
+# point -- so a scenario that inserted above `@` and then squashed the
+# pre-rebase `@` would write a second version of it.
+
+SQUASH_PLACEMENT_ARGV = [
+    ["squash", "--onto", rev("base")],
+    ["squash", "-o", rev("base")],
+    ["squash", "--destination", rev("base")],
+    ["squash", "-d", rev("base")],
+    ["squash", "--insert-after", rev("base")],
+    ["squash", "-A", rev("base")],
+    ["squash", "--after", rev("base")],
+    ["squash", "--insert-before", rev("one")],
+    ["squash", "-B", rev("one")],
+    ["squash", "--before", rev("one")],
+]
+
+
+@pytest.mark.covers("squash", "-o", "--onto", "--destination")
+@pytest.mark.covers("squash", "-A", "--insert-after", "--after")
+@pytest.mark.covers("squash", "-B", "--insert-before", "--before")
+@pytest.mark.parametrize("argv", SQUASH_PLACEMENT_ARGV,
+                         ids=lambda a: "_".join(a[:2]))
+def test_squash_into_a_commit_it_creates(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=argv)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--onto", "-B")
+def test_squash_placed_below_a_named_source(pair: RepoPair) -> None:
+    """`--from` names the source outright, so the insertion point is not
+    the working copy's own ancestry."""
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(files={"side.txt": b"side\n"}, jj=["status"])
+    pair.op(jj=["squash", "--from", rev("side"), "--onto", rev("one")])
+    pair.assert_parity()
+
+
+SQUASH_REFUSED_ARGV = [
+    ["squash", "-r", rev("one"), "--into", rev("base")],
+    ["squash", "-r", rev("one"), "--from", rev("two")],
+    ["squash", "--onto", rev("base"), "--into", rev("one")],
+    ["squash", "-A", rev("base"), "--onto", rev("one")],
+    ["squash", "-B", rev("two"), "--into", rev("one")],
+    ["squash", "-m", "text", "--use-destination-message"],
+]
+
+
+@pytest.mark.parametrize("argv", SQUASH_REFUSED_ARGV,
+                         ids=lambda a: "_".join(a[:4])[:40])
+def test_squash_refuses_the_flag_pairs_jj_refuses(pair: RepoPair, argv) -> None:
+    """`-r` names a commit and its parent, so nothing that names a
+    destination fits beside it, and `-o` names the parents outright, so
+    an insertion point does not."""
+    chain(pair)
+    assert pair.op(jj=argv, may_fail=True) != 0
+    pair.assert_parity()
+
+
 def test_restore_into_named_revision(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["restore", "--into", rev("two"), "--from", rev("base")])
@@ -1943,6 +2048,7 @@ INSERT_AROUND_TAG_ARGV = [
     ["duplicate", rev("base"), "-A", rev("one")],
     ["revert", "-r", rev("base"), "-A", rev("one")],
     ["rebase", "-r", rev("three"), "-A", rev("one")],
+    ["squash", "-A", rev("one")],
 ]
 
 

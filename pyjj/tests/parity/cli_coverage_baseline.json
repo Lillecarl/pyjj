@@ -399,23 +399,8 @@
     "-o"
   ],
   "squash": [
-    "--after",
-    "--before",
-    "--destination",
     "--editor",
-    "--insert-after",
-    "--insert-before",
-    "--message",
-    "--onto",
-    "--revision",
-    "--to",
-    "--tool",
-    "-A",
-    "-B",
-    "-f",
-    "-k",
-    "-o",
-    "-t"
+    "--tool"
   ],
   "tag": [
     "(command)"
