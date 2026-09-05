@@ -47,7 +47,7 @@ def commit(args) -> int:
                 .set_description(description)
                 .write(repo)
             )
-            child = tx.split_remainder(wc, kept).write(repo)
+            child = _remainder(tx, repo, wc, kept)
         else:
             described = (
                 tx.rewrite_commit(settings, wc)
@@ -61,3 +61,9 @@ def commit(args) -> int:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
     return 0
+
+
+def _remainder(tx, repo, wc, kept):
+    """The new working copy. `jj commit` gives it no description --
+    unlike `jj split`, which asks for one for each half."""
+    return tx.split_remainder(wc, kept).set_description("").write(repo)
