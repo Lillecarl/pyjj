@@ -1572,6 +1572,29 @@ impl PyCommitBuilder {
         Ok(slf)
     }
 
+    /// The commits this one records as the ones it rewrites.
+    fn predecessors(&self) -> PyResult<Vec<PyCommitId>> {
+        let builder = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| crate::errors::TransactionError::new_err("CommitBuilder already consumed"))?;
+        Ok(builder.predecessors().iter().cloned().map(PyCommitId).collect())
+    }
+
+    /// Replace that list outright. `jj squash -A`/`-B`/`-o` uses this to
+    /// drop the empty commit it created to squash into: that commit is a
+    /// step nobody asked for, and an evolog that named it would read as a
+    /// history the user never made.
+    fn set_predecessors(
+        mut slf: PyRefMut<'_, Self>,
+        predecessors: Vec<PyCommitId>,
+    ) -> PyResult<PyRefMut<'_, Self>> {
+        let ids: Vec<CommitId> = predecessors.into_iter().map(|p| p.0).collect();
+        let builder = take_inner(&mut slf.inner)?;
+        slf.inner = Some(builder.set_predecessors(ids));
+        Ok(slf)
+    }
+
     fn set_change_id<'a>(
         mut slf: PyRefMut<'a, Self>,
         change_id: &'a PyChangeId,
