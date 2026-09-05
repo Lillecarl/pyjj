@@ -34,8 +34,10 @@ def rebase(args) -> int:
         # Count how many source modes were given
         mode_count = sum(1 for m in (revisions, sources, branches) if m)
         if mode_count == 0:
-            # Default is -b @ when nothing given, like real jj
-            sources = ["@"]
+            # jj's default is `-b @`, which moves the roots of @'s branch
+            # relative to the destination -- not `-s @`, which would move
+            # only @ itself.
+            branches = ["@"]
             mode_count = 1
         if mode_count > 1:
             print("Error: specify only one of -r, -s, -b", file=sys.stderr)
