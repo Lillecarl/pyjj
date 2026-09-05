@@ -195,3 +195,44 @@ pub fn unified_hunks(before: &[u8], after: &[u8], context: usize) -> Vec<PyUnifi
         })
         .collect()
 }
+
+/// The raw hunks of a content diff: `(kind, before, after)`, where kind
+/// is `"matching"` or `"different"`. A matching hunk carries the same
+/// content on both sides.
+///
+/// `by` picks the tokenizer. `"line"` is how jj splits a file first;
+/// `"word"` is how it splits a changed region again, to mark only the
+/// words that moved. `jj diff`'s default format runs both, so a caller
+/// that formats it needs both.
+#[pyfunction]
+#[pyo3(signature = (before, after, by="line"))]
+pub fn content_hunks(
+    before: &[u8],
+    after: &[u8],
+    by: &str,
+) -> PyResult<Vec<(String, Vec<u8>, Vec<u8>)>> {
+    let diff = match by {
+        "line" => ContentDiff::by_line([before, after]),
+        "word" => ContentDiff::by_word([before, after]),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unknown tokenizer {by:?}, expected \"line\" or \"word\""
+            )));
+        }
+    };
+    Ok(diff
+        .hunks()
+        .map(|hunk| {
+            let kind = match hunk.kind {
+                DiffHunkKind::Matching => "matching",
+                DiffHunkKind::Different => "different",
+            };
+            let [left, right] = hunk.contents[..].try_into().expect("two inputs");
+            (
+                kind.to_owned(),
+                AsRef::<[u8]>::as_ref(left).to_vec(),
+                AsRef::<[u8]>::as_ref(right).to_vec(),
+            )
+        })
+        .collect())
+}
