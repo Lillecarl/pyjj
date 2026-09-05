@@ -58,6 +58,39 @@ _COUNT_CONFLICTS = (
 )
 
 
+def _log_revset(settings, revisions, paths) -> str:
+    """Which commits `jj log` walks, given what was asked for.
+
+    The configured `revsets.log` applies only when neither a revision
+    nor a path is named. A path alone means every commit, narrowed to
+    the ones that touch it -- jj adds that as a filter on the revset,
+    not as a filter on the rows, so the graph elides what it leaves out
+    instead of dropping it silently.
+    """
+    if revisions:
+        expression = revisions
+    elif paths:
+        expression = "all()"
+    else:
+        expression = settings.get_string("revsets.log") or "all()"
+    if not paths:
+        return expression
+    matching = " | ".join(f"files({_fileset_literal(path)})"
+                          for path in paths)
+    return f"({expression}) & ({matching})"
+
+
+def _fileset_literal(path: str) -> str:
+    """One path as a string literal in jj's fileset language.
+
+    pyjj-cli reads a path argument as a path and not as a fileset
+    expression -- every other command matches them by prefix -- so the
+    text goes in quoted rather than parsed.
+    """
+    escaped = path.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write(text: str) -> None:
     """One piece of output, through the byte stream.
 
@@ -97,8 +130,9 @@ def log(args) -> int:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1
 
-    revset_expr = (getattr(args, "revisions", None)
-                   or settings.get_string("revsets.log") or "all()")
+    paths = getattr(args, "filesets", None) or None
+    revset_expr = _log_revset(settings, getattr(args, "revisions", None),
+                              paths)
 
     limit = getattr(args, "limit", None)
     if limit == 0:
@@ -165,7 +199,6 @@ def log(args) -> int:
     # diff, so this pair may name no format at all.
     formats = _diff_formats_for_log(args, getattr(args, "patch", False))
     with_diff = formats != (None, None)
-    paths = getattr(args, "filesets", None) or None
     coloured = use_color(settings)
 
     given = (getattr(args, "template", None)
