@@ -316,11 +316,13 @@ rather than writing escape sequences.
   `diff.color-words.max-inline-alternation` (3) decides whether it
   inlines at all. Read `show_color_words_diff_lines` in
   `cli/src/diff_util.rs` before changing any of it.
-- **jj's debug format cannot express every output.** It wraps spans as
-  `<<labels::text>>`, and a conflicted file contains `>>>>>>>`, which
-  closes a marker early. The capture asserts the round-trip and, where
-  it fails, records the `.ansi` rendering instead and lists the entry
-  under `unlabelled` in `manifest.json`.
+- **jj's debug format is ambiguous, so the capture checks it.** It wraps
+  spans as `<<labels::text>>`, and a conflicted file contains `>>>>>>>`.
+  Only the open is unambiguous, so `markers()` reads the close as the
+  last `>>` before the next span opens. The capture asserts the round
+  trip against `--color=always` and, where it fails, records the `.ansi`
+  rendering instead and lists the entry under `unlabelled` in
+  `manifest.json`. That list is empty today.
 
 `manifest.json` records which jj produced the goldens, so a recapture
 under a different jj is a diff to read rather than a mystery.
