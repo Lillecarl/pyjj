@@ -514,14 +514,14 @@ pub fn git_diff_files(
 /// same source as the corresponding `jj diff` format.
 pub fn interdiff_files(
     repo: &PyReadonlyRepo,
-    from: &PyCommit,
+    from: &[jj_lib::commit::Commit],
     to: &PyCommit,
     settings: &crate::settings::PyUserSettings,
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyGitDiffFile>> {
     let from_tree = pollster::block_on(jj_lib::rewrite::rebase_to_dest_parent(
         repo.inner.as_ref(),
-        std::slice::from_ref(&from.inner),
+        from,
         &to.inner,
     ))
     .map_err(map_backend_err)?;

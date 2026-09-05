@@ -29,7 +29,7 @@ def interdiff(args) -> int:
         source = _resolve_one(repo, settings, args.from_ or "@")
         target = _resolve_one(repo, settings, args.to or "@")
         paths = list(getattr(args, "paths", None) or []) or None
-        files = repo.interdiff_files(source, target, settings, paths)
+        files = repo.interdiff_files([source], target, settings, paths)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

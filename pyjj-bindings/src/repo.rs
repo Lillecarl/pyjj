@@ -223,19 +223,62 @@ impl PyReadonlyRepo {
             .collect()
     }
 
-    /// The interdiff of two commits, per file, in the same shape
-    /// `Commit.git_diff()` returns. `interdiff()` says which paths
-    /// differ; this says what their content is, so `jj interdiff` can
-    /// print every format `jj diff` can.
+    /// The interdiff of some commits against one, per file, in the same
+    /// shape `Commit.git_diff()` returns. `interdiff()` says which
+    /// paths differ; this says what their content is, so `jj interdiff`
+    /// can print every format `jj diff` can.
+    ///
+    /// `from` is a list because `jj evolog --patch` compares a commit
+    /// against its predecessors, and a squash gives a commit more than
+    /// one. jj merges their trees before rebasing, exactly as it does
+    /// for a merge commit's parents.
     #[pyo3(signature = (from, to, settings, paths=None))]
     fn interdiff_files(
         &self,
-        from: &PyCommit,
+        from: Vec<PyRef<'_, PyCommit>>,
         to: &PyCommit,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
-        crate::tree::interdiff_files(self, from, to, settings, paths)
+        let from: Vec<_> = from.iter().map(|c| c.inner.clone()).collect();
+        crate::tree::interdiff_files(self, &from, to, settings, paths)
+    }
+
+    /// jj's `materialize_merge_result_to_bytes`: what a reader sees of
+    /// a merge that did not resolve.
+    ///
+    /// `jj evolog --patch` needs it. A squash gives a version two
+    /// predecessors, and jj merges their descriptions the way it
+    /// merges their trees -- the two descriptions against an empty
+    /// base. That merge rarely resolves, so the description the diff
+    /// starts from is the conflict, markers and all.
+    fn materialize_merge(
+        &self,
+        removes: Vec<Vec<u8>>,
+        adds: Vec<Vec<u8>>,
+        settings: &crate::settings::PyUserSettings,
+    ) -> PyResult<std::borrow::Cow<'_, [u8]>> {
+        use jj_lib::conflict_labels::ConflictLabels;
+        use jj_lib::conflicts::{
+            ConflictMarkerStyle, ConflictMaterializeOptions,
+            materialize_merge_result_to_bytes,
+        };
+        let marker_style: ConflictMarkerStyle = settings
+            .0
+            .get("ui.conflict-marker-style")
+            .map_err(crate::errors::map_py_err)?;
+        let options = ConflictMaterializeOptions {
+            marker_style,
+            marker_len: None,
+            merge: self.inner.store().merge_options().clone(),
+        };
+        let merge = jj_lib::merge::Merge::from_removes_adds(removes, adds);
+        let out = materialize_merge_result_to_bytes(
+            &merge,
+            &ConflictLabels::unlabeled(),
+            &options,
+        );
+        Ok(std::borrow::Cow::Owned(out.into()))
     }
 
     /// All remote-tracking bookmarks, in lexicographical order.
