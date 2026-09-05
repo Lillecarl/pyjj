@@ -89,9 +89,6 @@
       "--revision",
       "-r"
     ],
-    "duplicate": [
-      "-r"
-    ],
     "edit": [
       "-r"
     ],

@@ -27,7 +27,8 @@ from ..common import (
 def duplicate(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        revsets = args.revisions_pos or ["@"]
+        revsets = (list(args.revisions_pos)
+                   + list(getattr(args, "revisions_opt", None) or [])) or ["@"]
         targets = _resolve_all(repo, settings, revsets)
         parents, children = _placement(repo, settings, args)
         tx = _start_transaction(repo, settings)
