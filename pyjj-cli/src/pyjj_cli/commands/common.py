@@ -1249,7 +1249,12 @@ def _signature_spans(signature, kind: str):
     """
     email = signature.email or ""
     local, _, domain = email.partition("@")
-    spans = [(signature.name or "(no name set)", f"{kind} name"), (" <", "")]
+    # A signature with no name reads as a placeholder, and jj labels it
+    # one -- the same label its missing email carries, and so the same
+    # colour. Only the root commit has neither.
+    name = ((signature.name, f"{kind} name") if signature.name
+            else ("(no name set)", f"{kind} name placeholder"))
+    spans = [name, (" <", "")]
     if email:
         spans.append((local, f"{kind} email local"))
         if domain:
