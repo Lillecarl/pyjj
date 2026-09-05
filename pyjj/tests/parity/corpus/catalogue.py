@@ -182,6 +182,10 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("log", "--limit", "-n"), colour="bytes"),
     E("log-patch-revision", ("log", "-T", _COMPACT, "-r", "@-", "-p"),
       claims=("log", "-r"), colour="bytes"),
+    # jj spells log's flag `--revision`, where every other command
+    # writes the plural. Both spellings reach the same argument.
+    E("log-revision-long", ("log", "-T", _COMPACT, "--revision", "@-"),
+      claims=("log", "--revision"), colour="bytes"),
     # A path narrows the revset rather than the rows, so the graph
     # elides the commits it leaves out instead of dropping them.
     E("log-fileset", ("log", "-T", _COMPACT, "two.txt"), colour="bytes"),

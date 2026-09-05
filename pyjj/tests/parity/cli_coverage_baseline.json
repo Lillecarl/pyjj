@@ -280,7 +280,6 @@
     "--tool"
   ],
   "log": [
-    "--revision",
     "--tool"
   ],
   "metaedit": [
