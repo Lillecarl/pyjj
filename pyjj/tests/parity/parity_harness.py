@@ -167,6 +167,16 @@ class RepoPair:
         (self.home / ".config").mkdir(parents=True, exist_ok=True)
         self._step = 0
 
+    def add_config(self, toml: str) -> None:
+        """Add to the scratch-home jj config both sides load.
+
+        A setting a scenario needs -- `git.private-commits`, say -- has
+        nowhere else to live: `.jj/repo/config.toml` does not exist, and
+        the user's own config is deliberately out of reach.
+        """
+        path = self.home / ".config" / "jj" / "config.toml"
+        path.write_text(path.read_text() + "\n" + toml + "\n")
+
     def _env(self, *, bump: bool) -> dict[str, str]:
         if bump:
             self._step += 1
