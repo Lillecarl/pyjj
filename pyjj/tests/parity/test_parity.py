@@ -3243,3 +3243,101 @@ def test_show_prints_bookmarks_and_a_long_description(pair: RepoPair) -> None:
 def test_show_no_patch_output_matches(pair: RepoPair) -> None:
     chain(pair)
     pair.assert_output(["show", "--no-patch", rev("one")])
+
+
+# -- the other spellings of split, new and commit ------------------------------
+#
+# jj gives most of its options a long name and a short one, and several
+# a second long name on top. Every spelling is its own item on the
+# checklist, because a parser can accept one and miss another.
+
+SPLIT_SPELLING_ARGV = [
+    ["--insert-after", rev("base")],
+    ["--after", rev("base")],
+    ["--insert-before", rev("two")],
+    ["--before", rev("two")],
+    ["-o", "root()"],
+]
+
+
+@pytest.mark.covers("split", "--insert-after", "--after")
+@pytest.mark.covers("split", "--insert-before", "--before")
+@pytest.mark.covers("split", "-o", "--revision", "--message")
+@pytest.mark.parametrize("placement", SPLIT_SPELLING_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_split_by_each_spelling(pair: RepoPair, placement) -> None:
+    chain(pair)
+    pair.op(jj=["split", "--revision", rev("one"), *placement,
+                "--message", "sel", "one.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("split", "--editor")
+def test_split_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
+    """`-m` normally means no editor. `--editor` opens one anyway, and
+    what it writes is what the first half keeps.
+
+    The revision being split has no description, so jj asks about the
+    first half only. A described one would open the editor twice, once
+    a half.
+    """
+    pair.init()
+    pair.op(files={"one.txt": b"one\n", "two.txt": b"two\n"}, jj=["status"])
+    pair.op(jj=["split", "one.txt", "-m", "typed", "--editor"],
+            editor_spec={"op": "set", "value": "written by the editor\n"})
+    pair.assert_parity()
+
+
+NEW_SPELLING_ARGV = [
+    ["-o", rev("base")],
+    ["-r", rev("base")],
+    ["--insert-after", rev("base")],
+    ["--after", rev("base")],
+    ["--insert-before", rev("two")],
+    ["--before", rev("two")],
+]
+
+
+@pytest.mark.covers("new", "-o", "-r", "--message")
+@pytest.mark.covers("new", "--insert-after", "--after")
+@pytest.mark.covers("new", "--insert-before", "--before")
+@pytest.mark.parametrize("argv", NEW_SPELLING_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_new_by_each_spelling(pair: RepoPair, argv) -> None:
+    """`-o` and `-r` are the parents `jj new` also takes positionally.
+    jj hides both, and documents them on the positional itself."""
+    chain(pair)
+    pair.op(jj=["new", *argv, "--message", "fresh"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("commit", "--message", "--editor")
+def test_commit_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
+    """The same rule `split` and `squash` follow: `--editor` opens an
+    editor that `-m` alone would have skipped."""
+    pair.init()
+    pair.op(files={"a.txt": b"a\n"},
+            jj=["commit", "--message", "typed", "--editor"],
+            editor_spec={"op": "set", "value": "written by the editor\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("commit", "--tool")
+def test_commit_via_diff_tool_keeps_one_file(pair: RepoPair) -> None:
+    """The diff editor picks what stays in the commit; the rest becomes
+    the new working copy."""
+    two_file_change(pair)
+    pair.op(jj=["commit", "--tool", "parity-diff", "-m", "first"],
+            diff_spec={"op": "keep", "paths": ["one.txt"]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("commit", "--tool")
+def test_commit_diff_tool_selecting_nothing_is_allowed(pair: RepoPair) -> None:
+    """`jj squash --tool` refuses a selection that moves nothing. This
+    one does not: the commit ends up empty and the whole change goes to
+    the new working copy, which is a state a reader can undo."""
+    two_file_change(pair)
+    pair.op(jj=["commit", "--tool", "parity-diff", "-m", "first"],
+            diff_spec={"op": "drop", "paths": ["one.txt", "two.txt"]})
+    pair.assert_parity()

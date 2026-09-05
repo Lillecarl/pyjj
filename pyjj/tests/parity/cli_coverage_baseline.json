@@ -85,11 +85,6 @@
   "bookmark untrack": [
     "--remote"
   ],
-  "commit": [
-    "--editor",
-    "--message",
-    "--tool"
-  ],
   "config": [
     "(command)"
   ],
@@ -265,15 +260,6 @@
     "--update-change-id",
     "-m"
   ],
-  "new": [
-    "--after",
-    "--before",
-    "--insert-after",
-    "--insert-before",
-    "--message",
-    "-o",
-    "-r"
-  ],
   "next": [
     "--conflict",
     "--no-edit",
@@ -352,16 +338,6 @@
   ],
   "sparse set": [
     "--remove"
-  ],
-  "split": [
-    "--after",
-    "--before",
-    "--editor",
-    "--insert-after",
-    "--insert-before",
-    "--message",
-    "--revision",
-    "-o"
   ],
   "tag": [
     "(command)"

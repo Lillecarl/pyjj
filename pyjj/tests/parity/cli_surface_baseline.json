@@ -122,10 +122,6 @@
       "--fetch",
       "--push"
     ],
-    "new": [
-      "-o",
-      "-r"
-    ],
     "next": [
       "--conflict"
     ],
@@ -143,9 +139,6 @@
       "--restore-descendants",
       "--tool",
       "-c"
-    ],
-    "split": [
-      "--editor"
     ],
     "tag list": [
       "--all-remotes",
