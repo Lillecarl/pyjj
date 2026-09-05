@@ -8,7 +8,7 @@ def add_parsers(sub) -> None:
     p_status.set_defaults(_handler="pyjj_cli.commands.history.status:status")
 
     p_log = sub.add_parser("log", help="Show commit history")
-    add_flags(p_log, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH,
+    add_flags(p_log, [Flag.REVISIONS_SINGULAR, Flag.LIMIT, Flag.NO_GRAPH,
                       Flag.TEMPLATE, Flag.PATCH, Flag.SUMMARY, Flag.STAT,
                       Flag.NAME_ONLY, Flag.TYPES, Flag.GIT,
                       Flag.WHITESPACE_LONG, Flag.CONTEXT])

@@ -29,6 +29,8 @@ class Flag(Enum):
     REVISION = auto()
     # multi-revision, -r/--revisions (REVSETS, may be None)
     REVISIONS = auto()
+    # the same flag where jj names it `--revision`, as `log` does
+    REVISIONS_SINGULAR = auto()
     # -r/--revision with append (repeatable, e.g. bookmark/revert)
     REVISION_APPEND = auto()
     # -n/--limit
@@ -120,8 +122,16 @@ def add_revision_flag(parser: argparse.ArgumentParser, dest: str = "revision", d
     parser.add_argument("-r", "--revision", dest=dest, default=default if not required else None, metavar="REVSET", required=required, help=help)
 
 
-def add_revisions_flag(parser: argparse.ArgumentParser, dest: str = "revisions", required: bool = False) -> None:
-    parser.add_argument("-r", "--revisions", dest=dest, default=None, metavar="REVSETS", required=required, help="Which revisions to operate on (revset)")
+def add_revisions_flag(parser: argparse.ArgumentParser, dest: str = "revisions", required: bool = False, singular: bool = False) -> None:
+    """`-r`, spelled the way the command spells it.
+
+    Most commands write `--revisions` and take `--revision` as an
+    alias; `log` writes the singular and has no plural. Both spellings
+    are accepted either way, so only which one the help names differs.
+    """
+    names = (["-r", "--revision", "--revisions"] if singular
+             else ["-r", "--revisions", "--revision"])
+    parser.add_argument(*names, dest=dest, default=None, metavar="REVSETS", required=required, help="Which revisions to operate on (revset)")
 
 
 def add_revision_append_flag(parser: argparse.ArgumentParser, dest: str = "revisions", help: str = "Revision to operate on (can be repeated)") -> None:
@@ -393,6 +403,7 @@ def add_json_schema_flag(parser: argparse.ArgumentParser) -> None:
 _FLAG_HANDLERS = {
     Flag.REVISION: lambda p: add_revision_flag(p),
     Flag.REVISIONS: lambda p: add_revisions_flag(p),
+    Flag.REVISIONS_SINGULAR: lambda p: add_revisions_flag(p, singular=True),
     Flag.REVISION_APPEND: lambda p: add_revision_append_flag(p),
     Flag.LIMIT: lambda p: add_limit_flag(p),
     Flag.TEMPLATE: lambda p: add_template_flag(p),

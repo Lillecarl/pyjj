@@ -141,7 +141,6 @@
       "--tool"
     ],
     "log": [
-      "--revision",
       "--tool"
     ],
     "new": [
