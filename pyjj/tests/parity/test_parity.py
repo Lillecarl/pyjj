@@ -1143,6 +1143,106 @@ def test_rebase_insert_before(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- rebase's rebase options --------------------------------------------
+#
+# These three reach `RebaseOptions`, which the binding used to leave at
+# its default. The scenarios are jj's own, from
+# `cli/tests/test_rebase_command.rs`: a graph that shows the flag off
+# is not a graph that shows it on.
+
+
+def test_rebase_defaults_to_the_whole_branch(pair: RepoPair) -> None:
+    """With no `-r`, `-s` or `-b`, jj rebases `-b @`: the roots of @'s
+    branch relative to the destination, and everything under them. `-s @`
+    would move only @ itself, which is a different graph."""
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(jj=["edit", rev("two")])
+    pair.op(jj=["rebase", "-d", rev("side")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("rebase", "--skip-emptied")
+def test_rebase_skip_emptied(pair: RepoPair) -> None:
+    """A commit the rebase newly empties is abandoned. One that was
+    already empty is kept, which is the whole distinction."""
+    pair.init()
+    pair.op(files={"file.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "target"])
+    pair.op(files={"file.txt": b"target\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "becomes empty"])
+    pair.op(jj=["restore", "--from", rev("target")])
+    pair.op(jj=["new", "-m", "emptyone"])
+    pair.op(jj=["new", "-m", "emptytwo"])
+    pair.op(jj=["rebase", "-d", rev("target"), "--skip-emptied"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("rebase", "--simplify-parents")
+def test_rebase_simplify_parents(pair: RepoPair) -> None:
+    """A merge whose parents are ancestors of each other loses the
+    redundant one."""
+    pair.init()
+    pair.op(files={"root.txt": b"root\n"}, jj=["describe", "-m", "aroot"])
+    pair.op(jj=["new", "-m", "aone"])
+    pair.op(files={"one.txt": b"one\n"}, jj=["status"])
+    pair.op(jj=["new", "-m", "atwo"])
+    pair.op(files={"two.txt": b"two\n"}, jj=["status"])
+    pair.op(jj=["new", rev("atwo"), rev("aone"), "-m", "athree"])
+    pair.op(files={"three.txt": b"three\n"}, jj=["status"])
+    pair.op(jj=["new", "root()", "-m", "side"])
+    pair.op(files={"side.txt": b"side\n"}, jj=["status"])
+    pair.op(jj=["rebase", "-s", rev("aroot"), "-o", rev("side"),
+                "--simplify-parents"])
+    pair.assert_parity()
+
+
+def divergence(pair: RepoPair) -> None:
+    """A repository holding two versions of one change.
+
+    `at_operation` resurrects the commit the rebase rewrote, so the
+    change id now names two visible commits. This is jj's own setup, from
+    `test_rebase_skip_duplicate_divergent`.
+    """
+    pair.init()
+    pair.op(files={"file1": b"initial\n"}, jj=["describe", "-m", "aroot"])
+    pair.op(jj=["new", "-m", "btwo"])
+    pair.op(files={"file1": b"initial\nb\n"}, jj=["status"])
+    pair.op(jj=["new", rev("aroot"), "-m", "cee"])
+    pair.op(files={"file2": b"c\n"}, jj=["status"])
+    pair.op(jj=["rebase", "-r", rev("btwo"), "-o", rev("cee")])
+    pair.op(jj=["bookmark", "create", "bone",
+                "-r", f'at_operation(@-, {rev("btwo")})'])
+    pair.op(jj=["new", "bone", "-m", "dee"])
+    pair.op(files={"file3": b"d\n"}, jj=["status"])
+
+
+def test_rebase_abandons_a_duplicate_divergent_commit(pair: RepoPair) -> None:
+    """The default. One of the two versions is already in the
+    destination with identical contents, so the rebase drops it."""
+    divergence(pair)
+    pair.op(jj=["rebase", "-r", f'{rev("cee")}::', "-o", rev("dee")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("rebase", "--keep-divergent")
+def test_rebase_keeps_a_divergent_commit_when_asked(pair: RepoPair) -> None:
+    """With the flag, both versions survive the rebase."""
+    divergence(pair)
+    pair.op(jj=["rebase", "-s", rev("cee"), "-o", rev("dee"),
+                "--keep-divergent"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("duplicate", "-r")
+def test_duplicate_by_the_hidden_revision_flag(pair: RepoPair) -> None:
+    """The revisions are positional here. jj hides a `-r` beside them
+    for the reader who types it out of habit."""
+    chain(pair)
+    pair.op(jj=["duplicate", "-r", rev("one")])
+    pair.assert_parity()
+
+
 # -- the other spellings of the placement flags -------------------------
 #
 # jj gives each placement option several names: `-o` is also `--onto`,
@@ -1153,6 +1253,7 @@ def test_rebase_insert_before(pair: RepoPair) -> None:
 
 REBASE_SPELLING_ARGV = [
     ["rebase", "--revision", rev("two"), "--destination", rev("base")],
+    ["rebase", "--revisions", rev("two"), "--destination", rev("base")],
     ["rebase", "--branch", rev("two"), "--onto", rev("base")],
     ["rebase", "--source", rev("two"), "-o", rev("base")],
     ["rebase", "-r", rev("two"), "--after", rev("base")],
@@ -1160,7 +1261,8 @@ REBASE_SPELLING_ARGV = [
 ]
 
 
-@pytest.mark.covers("rebase", "--revision", "--destination", "--branch")
+@pytest.mark.covers("rebase", "--revision", "--revisions")
+@pytest.mark.covers("rebase", "--destination", "--branch")
 @pytest.mark.covers("rebase", "--source", "--onto", "-o")
 @pytest.mark.covers("rebase", "--after", "--before")
 @pytest.mark.parametrize("argv", REBASE_SPELLING_ARGV,

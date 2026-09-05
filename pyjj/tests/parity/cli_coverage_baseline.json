@@ -149,9 +149,6 @@
     "-r",
     "-t"
   ],
-  "duplicate": [
-    "-r"
-  ],
   "edit": [
     "-r"
   ],
@@ -315,12 +312,6 @@
     "--no-edit",
     "-e",
     "-n"
-  ],
-  "rebase": [
-    "--keep-divergent",
-    "--revisions",
-    "--simplify-parents",
-    "--skip-emptied"
   ],
   "resolve": [
     "--list",
