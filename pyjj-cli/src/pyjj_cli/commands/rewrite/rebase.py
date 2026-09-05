@@ -118,7 +118,13 @@ def rebase(args) -> int:
         # `-A`/`-B` also rebase whatever followed the insertion point.
         _check_rewritable(
             tx, settings, target_commit_ids + target_root_ids + new_child_ids)
-        tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
+        tx.move_commits(
+            target_commit_ids, target_root_ids, new_parent_ids, new_child_ids,
+            skip_emptied=getattr(args, "skip_emptied", False),
+            # jj abandons a divergent commit the destination already holds
+            # with identical contents, unless this asks it not to.
+            keep_divergent=getattr(args, "keep_divergent", False),
+            simplify_parents=getattr(args, "simplify_parents", False))
         _finish(tx, "rebase commit", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

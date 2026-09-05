@@ -147,12 +147,6 @@
     "prev": [
       "--conflict"
     ],
-    "rebase": [
-      "--keep-divergent",
-      "--revisions",
-      "--simplify-parents",
-      "--skip-emptied"
-    ],
     "restore": [
       "--changes-in",
       "--restore-descendants",
