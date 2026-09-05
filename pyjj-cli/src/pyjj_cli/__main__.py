@@ -12,9 +12,8 @@ actual handler via `importlib` only after parsing, so `--help` and
 
 import argparse
 import importlib
+import os
 import sys
-
-import argcomplete
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -153,11 +152,38 @@ def _load_handler(dotted: str):
     return getattr(mod, func_name)
 
 
+# What a shell must not be offered. `-h` and `--help` are argparse's
+# own, and they are noise beside the candidates a reader is after.
+_NOT_OFFERED = ("-h", "--help")
+
+
+def _complete(parser) -> None:
+    """Answer a shell completion, when this start is one, and exit.
+
+    **argcomplete is imported here and not at the top of the module.**
+    It is dozens of modules, and a run that is not a completion needs
+    none of them. The variable is set by the generated script and by
+    nothing else, so the import happens on a Tab press and never on a
+    real command.
+    """
+    if not os.environ.get("_ARGCOMPLETE"):
+        return
+    import argcomplete
+
+    from pyjj_cli.cli import completers
+
+    # The completers are attached here rather than where each argument
+    # is declared: only a completion needs them, and the metavar the
+    # parser already carries says what each one takes.
+    completers.attach(parser)
+    argcomplete.autocomplete(parser, exclude=_NOT_OFFERED)
+
+
 def main(argv=None) -> int:
     parser = build_parser()
     # Completion runs the CLI itself on every <TAB>; keep everything heavy
     # out of that path — handlers are not imported yet.
-    argcomplete.autocomplete(parser)
+    _complete(parser)
     raw = sys.argv[1:] if argv is None else argv
     # Kept before the globals are stripped: this is the command line the
     # operation log records, and it should read as what was typed.
