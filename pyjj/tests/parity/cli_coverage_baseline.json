@@ -87,10 +87,8 @@
   ],
   "commit": [
     "--editor",
-    "--interactive",
     "--message",
-    "--tool",
-    "-i"
+    "--tool"
   ],
   "config": [
     "(command)"

@@ -59,7 +59,7 @@ _INTERACTIVE = (
     "parity harness cannot drive a TUI either -- its editor-based "
     "scenarios all script an external tool."
 )
-for _command in ("split", "squash", "restore"):
+for _command in ("commit", "split", "squash", "restore"):
     EXCLUDED_FLAGS.setdefault(_command, {})
     EXCLUDED_FLAGS[_command]["-i"] = "See --interactive."
     EXCLUDED_FLAGS[_command]["--interactive"] = _INTERACTIVE
