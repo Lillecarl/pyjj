@@ -2158,7 +2158,9 @@ def _description_diff_bytes(args, before: str, after: str,
     if before == after:
         return b""
     _short, long = _diff_formats(args) if formats is None else formats
-    if long is None:
+    if long is None or long.startswith(_TOOL_FORMAT):
+        # jj hands a tool two directories of files, and a description
+        # is not one, so it prints no description block for a tool.
         return b""
     left, right = before.encode(), after.encode()
     compare = _compare_mode(args)
@@ -2220,6 +2222,20 @@ class _FileStat:
 # listing: one line a file, and no content.
 _SHORT_FORMATS = ("summary", "stat", "types", "name_only")
 
+# What a long format's name reads as when an external program provides
+# it. The tool's own name follows.
+_TOOL_FORMAT = "tool:"
+
+
+# The long formats, by the name jj spells them with on the command
+# line. A `--tool=:<name>` names one of these or one of the short ones.
+_LONG_FORMATS = ("git", "color-words")
+
+
+def _format_flag(name: str) -> str:
+    """A format's name as the flag that asks for it."""
+    return "--" + name.replace("_", "-")
+
 
 def _diff_formats_from_args(args) -> tuple[str | None, str | None]:
     """The formats these flags name, before any default applies.
@@ -2227,14 +2243,39 @@ def _diff_formats_from_args(args) -> tuple[str | None, str | None]:
     jj sorts the flags into a *short* format, which lists the files,
     and a *long* one, which carries their content. It asks for at most
     one of each, so `--stat --git` names both.
+
+    `--tool` names a long format too. A `:` before the name asks for a
+    builtin -- `--tool=:git` is `--git` -- and anything else is an
+    external program, which jj runs to print the diff. Either way it
+    refuses to be combined with a flag naming the same half.
     """
     short = next((name for name in _SHORT_FORMATS
                   if getattr(args, name, False)), None)
-    if getattr(args, "git", False):
-        return short, "git"
-    if getattr(args, "color_words", False):
-        return short, "color_words"
-    return short, None
+    long = ("git" if getattr(args, "git", False)
+            else "color_words" if getattr(args, "color_words", False)
+            else None)
+    tool = getattr(args, "tool", None)
+    if not tool:
+        return short, long
+
+    def refuse(named: str) -> None:
+        raise CommandError(
+            f"--tool={tool} cannot be used with {_format_flag(named)}")
+
+    if not tool.startswith(":"):
+        if long is not None:
+            refuse(long)
+        return short, f"{_TOOL_FORMAT}{tool}"
+    name = tool[1:].replace("-", "_")
+    if name in _SHORT_FORMATS:
+        if short is not None:
+            refuse(short)
+        return name, long
+    if name.replace("_", "-") in _LONG_FORMATS:
+        if long is not None:
+            refuse(long)
+        return short, name
+    raise CommandError(f"invalid builtin diff format: {tool}")
 
 
 def _diff_formats(args) -> tuple[str | None, str | None]:
@@ -2280,6 +2321,52 @@ def _compare_mode(args) -> str:
     return "exact"
 
 
+def _diff_tool_bytes(settings, tool: str, files) -> bytes:
+    """What an external program prints for a diff.
+
+    jj writes the two sides of every changed path into a `left` and a
+    `right` directory, runs the tool with its working directory set to
+    the pair, and copies its output through unchanged. The two names
+    are relative for that reason, so a tool that echoes them prints
+    nothing about where the pair happened to live.
+
+    A non-zero exit is not an error: `diff` itself exits 1 whenever the
+    two sides differ, which is the whole point of running it.
+    """
+    args_template = settings.get_string_list(f"merge-tools.{tool}.diff-args")
+    if args_template is None:
+        # An unconfigured name is the program itself, with jj's own
+        # default arguments.
+        args_template = ["$left", "$right"]
+    elif not args_template:
+        raise CommandError(
+            f"The tool `{tool}` cannot be used for diff formatting")
+    program = settings.get_string(f"merge-tools.{tool}.program") or tool
+    with tempfile.TemporaryDirectory(prefix="pyjj-difftool-") as room:
+        for side, content in (("left", "before_content"),
+                              ("right", "after_content")):
+            for entry in files:
+                present = (entry.before_mode if side == "left"
+                           else entry.after_mode)
+                if present is None:
+                    continue
+                path = Path(room) / side / entry.path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(getattr(entry, content))
+            (Path(room) / side).mkdir(parents=True, exist_ok=True)
+        argv = [program] + [
+            arg.replace("$left", "left").replace("$right", "right")
+            for arg in args_template
+        ]
+        try:
+            done = subprocess.run(argv, cwd=room, stdin=subprocess.DEVNULL,
+                                  capture_output=True)
+        except OSError as e:
+            raise CommandError(f"Failed to execute tool `{program}`: {e}")
+        sys.stderr.write(done.stderr.decode("utf-8", "replace"))
+        return done.stdout
+
+
 def _diff_files_bytes(args, ws, files, settings=None, formats=None) -> bytes:
     """The same format choice as `_diff_bytes`, from file content alone.
 
@@ -2315,6 +2402,9 @@ def _diff_files_bytes(args, ws, files, settings=None, formats=None) -> bytes:
             "utf-8", "surrogateescape")
     if long is None:
         return out
+    if long.startswith(_TOOL_FORMAT):
+        return out + _diff_tool_bytes(settings, long[len(_TOOL_FORMAT):],
+                                      files)
     if long == "git":
         return out + _git_diff_bytes(files, context, coloured, compare)
     return out + _color_words_bytes(files, to_ui_path, context, coloured,
@@ -2375,6 +2465,9 @@ def _diff_bytes(args, ws, settings, base, target, paths,
     if long is None:
         return out
     files = base.git_diff(target, settings, paths)
+    if long.startswith(_TOOL_FORMAT):
+        return out + _diff_tool_bytes(settings, long[len(_TOOL_FORMAT):],
+                                      files)
     if long == "git":
         return out + _git_diff_bytes(files, context, coloured, compare)
     return out + _color_words_bytes(files, to_ui_path, context, coloured,
