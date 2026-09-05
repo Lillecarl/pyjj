@@ -46,7 +46,10 @@ def show(args) -> int:
     """`jj show` — a commit's metadata and its diff."""
     try:
         settings, ws, repo = _load(args)
-        revs = args.revisions or ["@"]
+        # jj accepts a revision positionally or after `-r`, and takes
+        # both together.
+        revs = (list(args.revisions or [])
+                + list(getattr(args, "revision_flags", None) or [])) or ["@"]
         commits = _resolve_all(repo, settings, revs)
         bookmarks = _bookmarks_by_commit(repo, remotes=True)
         locals_ = _bookmarks_by_commit(repo)
