@@ -84,9 +84,6 @@
     "describe": [
       "--editor"
     ],
-    "diff": [
-      "--tool"
-    ],
     "diffedit": [
       "--restore-descendants",
       "--revision",
@@ -97,9 +94,6 @@
     ],
     "edit": [
       "-r"
-    ],
-    "evolog": [
-      "--tool"
     ],
     "file annotate": [
       "--template",
@@ -137,12 +131,6 @@
       "--fetch",
       "--push"
     ],
-    "interdiff": [
-      "--tool"
-    ],
-    "log": [
-      "--tool"
-    ],
     "new": [
       "-o",
       "-r"
@@ -150,20 +138,11 @@
     "next": [
       "--conflict"
     ],
-    "operation diff": [
-      "--tool"
-    ],
-    "operation log": [
-      "--tool"
-    ],
     "operation restore": [
       "--what"
     ],
     "operation revert": [
       "--what"
-    ],
-    "operation show": [
-      "--tool"
     ],
     "prev": [
       "--conflict"
@@ -180,9 +159,6 @@
       "--to",
       "--tool",
       "-c"
-    ],
-    "show": [
-      "--tool"
     ],
     "split": [
       "--editor"

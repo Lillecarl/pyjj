@@ -5,7 +5,8 @@ def register(sub) -> None:
     p = sub.add_parser("evolog", help="Show how a change has evolved over time")
     add_flags(p, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.PATCH,
                   Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY, Flag.TYPES,
-                  Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT])
+                  Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT,
+                  Flag.DIFF_TOOL])
     p.add_argument("--reversed", action="store_true",
                    help="Show oldest versions first")
     # jj drives `evolog` from `templates.evolog`; pyjj-cli uses Jinja

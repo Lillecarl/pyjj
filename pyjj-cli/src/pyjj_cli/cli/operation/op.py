@@ -5,7 +5,8 @@ from ..flags import Flag, add_flags, add_no_graph_flag, add_template_flag
 # diff format set, and `-p` asks for the default long format when no
 # other flag names one.
 _DIFF_FLAGS = [Flag.PATCH, Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY,
-               Flag.TYPES, Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT]
+               Flag.TYPES, Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT,
+               Flag.DIFF_TOOL]
 
 
 def register(sub) -> None:

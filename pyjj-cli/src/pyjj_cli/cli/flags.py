@@ -65,6 +65,8 @@ class Flag(Enum):
     FILESETS_REQUIRED = auto()  # nargs="+"
     # tool
     TOOL = auto()
+    # `--tool` where it names a diff formatter, not an editor
+    DIFF_TOOL = auto()
     # generic
     STDIN = auto()
     JSON_SCHEMA = auto()
@@ -236,6 +238,18 @@ def add_filesets_flag(parser: argparse.ArgumentParser, nargs: str = "*", help: s
 
 def add_tool_flag(parser: argparse.ArgumentParser, help: str = "Diff editor to use") -> None:
     parser.add_argument("--tool", default=None, metavar="NAME", help=help)
+
+
+def add_diff_tool_flag(parser: argparse.ArgumentParser) -> None:
+    """`--tool` where it names a diff *formatter* rather than an editor.
+
+    The two spellings are the same flag with different jobs: an editor
+    is handed two directories to change, a formatter is handed them to
+    describe. A leading `:` asks for one of jj's builtin formats.
+    """
+    parser.add_argument("--tool", default=None, metavar="TOOL",
+                        help="Generate diff with an external command, or "
+                             "with a builtin format as `:<name>`")
 
 
 def add_stdin_flag(parser: argparse.ArgumentParser) -> None:
@@ -425,6 +439,7 @@ _FLAG_HANDLERS = {
     Flag.FILESETS: lambda p: add_filesets_flag(p, nargs="*"),
     Flag.FILESETS_REQUIRED: lambda p: add_filesets_flag(p, nargs="+"),
     Flag.TOOL: lambda p: add_tool_flag(p),
+    Flag.DIFF_TOOL: lambda p: add_diff_tool_flag(p),
     Flag.STDIN: lambda p: add_stdin_flag(p),
     Flag.SOURCE: lambda p: add_source_flag(p),
     Flag.BRANCH: lambda p: add_branch_flag(p),
