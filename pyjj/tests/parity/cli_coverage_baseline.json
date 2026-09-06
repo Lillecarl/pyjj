@@ -179,16 +179,6 @@
   "git": [
     "(command)"
   ],
-  "git clone": [
-    "(command)",
-    "--branch",
-    "--colocate",
-    "--depth",
-    "--fetch-tags",
-    "--no-colocate",
-    "--remote",
-    "-b"
-  ],
   "git colocation": [
     "(command)"
   ],

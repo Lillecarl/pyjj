@@ -24,7 +24,7 @@ import re
 
 import pytest
 
-from parity_harness import DRIVER, RepoPair, make_bare_remote
+from parity_harness import DRIVER, PIN_TIME, RepoPair, make_bare_remote
 
 pytestmark = pytest.mark.skipif(
     shutil.which(os.environ.get("PYJJ_PARITY_JJ", "jj")) is None,
@@ -3697,3 +3697,138 @@ def test_restore_and_diffedit_refuse_two_ways_of_naming(pair: RepoPair,
     chain(pair)
     assert pair.op(jj=argv, may_fail=True) != 0
     pair.assert_parity()
+
+
+# -- git clone -----------------------------------------------------------------
+#
+# A clone builds its own repository rather than acting on the pair's, so
+# `pair.op` cannot drive it: each side needs its own destination on the
+# command line. These run the same argv twice by hand and compare the
+# two results, which is what `test_git_clone` above already does.
+
+
+def clone_both(pair: RepoPair, source: str, name: str, *argv: str) -> None:
+    """Clone `source` through both CLIs and compare the repositories."""
+    env = pair._env(bump=True)
+    cli_dest = pair.root / f"cli-{name}"
+    py_dest = pair.root / f"py-{name}"
+    subprocess.run(
+        [pair.jj_bin, "git", "clone", *argv, source, str(cli_dest)],
+        check=True, capture_output=True, env=env)
+    pair._run([sys.executable, str(DRIVER), str(py_dest), "git", "clone",
+               *argv, source, str(py_dest)], env, cwd=pair.root)
+    got_cli = pair._extract_repo(cli_dest)
+    got_py = pair._extract_repo(py_dest)
+    if got_cli != got_py:
+        import difflib
+        import json
+        a = json.dumps(got_cli, indent=1, sort_keys=True).splitlines()
+        b = json.dumps(got_py, indent=1, sort_keys=True).splitlines()
+        diff = "\n".join(difflib.unified_diff(a, b, "cli", "py", lineterm=""))
+        raise AssertionError(f"clones diverged on {argv}:\n{diff}")
+
+
+def make_deep_remote(base: Path) -> Path:
+    """A bare remote with two commits on `main` and a second branch.
+
+    `--depth` needs history to cut off, `-b` needs a branch that is not
+    the default one, and `--fetch-tags` needs a tag. The seed is pinned
+    the same way `make_bare_remote`'s is, so both sides clone the same
+    bytes.
+    """
+    remote = base / "remote.git"
+    seed = base / "seed"
+    env = {**os.environ, "GIT_AUTHOR_DATE": PIN_TIME,
+           "GIT_COMMITTER_DATE": PIN_TIME, "GIT_EDITOR": "true"}
+    identity = ["-c", "user.email=a@b.c", "-c", "user.name=A",
+                "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false"]
+
+    def git(*args, cwd=None):
+        subprocess.run(["git", *identity, *args], cwd=cwd, check=True,
+                       capture_output=True, env=env)
+
+    git("init", "--bare", "-b", "main", str(remote))
+    git("init", "-b", "main", str(seed))
+    (seed / "file.txt").write_text("hello\n")
+    git("add", "file.txt", cwd=str(seed))
+    git("commit", "-m", "seed", cwd=str(seed))
+    git("tag", "v1", cwd=str(seed))
+    (seed / "file.txt").write_text("hello again\n")
+    git("commit", "-am", "second", cwd=str(seed))
+    git("branch", "side", cwd=str(seed))
+    git("push", str(remote), "main", "side", "v1", cwd=str(seed))
+    return remote
+
+
+@pytest.fixture
+def deep_remote(tmp_path_factory):
+    base = Path(tempfile.mkdtemp())
+    try:
+        yield make_deep_remote(base)
+    finally:
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+@pytest.mark.covers("git clone")
+def test_git_clone_names_the_remote(pair: RepoPair, deep_remote) -> None:
+    """`--remote` names the remote the clone creates, which shows up in
+    every remote-tracking bookmark the clone imports."""
+    pair.init()
+    clone_both(pair, str(deep_remote), "named", "--remote", "upstream")
+
+
+@pytest.mark.covers("git clone", "--remote")
+def test_git_clone_default_remote_is_origin(pair: RepoPair, deep_remote) -> None:
+    pair.init()
+    clone_both(pair, str(deep_remote), "origin", "--remote", "origin")
+
+
+GIT_CLONE_COLOCATE_ARGV = [["--colocate"], ["--no-colocate"]]
+
+
+@pytest.mark.covers("git clone", "--colocate", "--no-colocate")
+@pytest.mark.parametrize("argv", GIT_CLONE_COLOCATE_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_clone_colocation(pair: RepoPair, deep_remote, argv) -> None:
+    """`--colocate` puts a `.git` beside `.jj` so Git tools work in the
+    same directory; `--no-colocate` hides it inside `.jj`. The commits
+    are the same either way -- what differs is where they live."""
+    pair.init()
+    clone_both(pair, str(deep_remote), "colo", *argv)
+
+
+GIT_CLONE_BRANCH_ARGV = [["-b", "side"], ["--branch", "side"]]
+
+
+@pytest.mark.covers("git clone", "-b", "--branch")
+@pytest.mark.parametrize("argv", GIT_CLONE_BRANCH_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_clone_one_branch(pair: RepoPair, deep_remote, argv) -> None:
+    """`-b` fetches only the branches it names and starts the working
+    copy on the first of them. It is not the remote's default branch, so
+    no local bookmark is created for it."""
+    pair.init()
+    clone_both(pair, str(deep_remote), "branch", *argv)
+
+
+@pytest.mark.covers("git clone", "--depth")
+def test_git_clone_shallow(pair: RepoPair, deep_remote) -> None:
+    """A shallow clone stops after the given number of commits. git
+    ignores `--depth` on a plain path, so the source is a `file://` URL
+    -- which is the shape a reader would use for a real shallow clone
+    anyway."""
+    pair.init()
+    clone_both(pair, f"file://{deep_remote}", "shallow", "--depth", "1")
+
+
+GIT_CLONE_FETCH_TAGS_ARGV = ["all", "included", "none"]
+
+
+@pytest.mark.covers("git clone", "--fetch-tags")
+@pytest.mark.parametrize("mode", GIT_CLONE_FETCH_TAGS_ARGV)
+def test_git_clone_fetch_tags(pair: RepoPair, deep_remote, mode) -> None:
+    """A clone fetches every tag unless told otherwise, the way git
+    does. `none` fetches none, and `included` leaves it to whatever the
+    remote is configured for."""
+    pair.init()
+    clone_both(pair, str(deep_remote), f"tags-{mode}", "--fetch-tags", mode)
