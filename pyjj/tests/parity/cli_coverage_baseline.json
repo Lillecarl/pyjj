@@ -129,15 +129,6 @@
     "--template",
     "-T"
   ],
-  "diffedit": [
-    "--from",
-    "--restore-descendants",
-    "--revision",
-    "--to",
-    "-f",
-    "-r",
-    "-t"
-  ],
   "edit": [
     "-r"
   ],
@@ -281,16 +272,6 @@
     "--list",
     "--revision",
     "-r"
-  ],
-  "restore": [
-    "--changes-in",
-    "--from",
-    "--restore-descendants",
-    "--to",
-    "--tool",
-    "-c",
-    "-f",
-    "-t"
   ],
   "run": [
     "--clean",

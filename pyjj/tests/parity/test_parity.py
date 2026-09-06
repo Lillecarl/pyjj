@@ -3543,3 +3543,157 @@ def test_git_push_sends_push_options(pair: RepoPair, argv) -> None:
         pair.op(jj=["bookmark", "create", "feature"])
         pair.op(jj=["git", "push", "-b", "feature", *argv])
         pair.assert_parity()
+
+
+# -- restore and diffedit, in every spelling -----------------------------------
+#
+# The two commands are the same idea twice: restore moves whole files
+# between revisions, diffedit edits the diff itself. They share
+# `--from`, `--to` and `--restore-descendants`, and each has its own way
+# of naming a single revision -- `--changes-in` for restore, `-r` for
+# diffedit.
+
+
+RESTORE_SPELLING_ARGV = [
+    ["-f", rev("base"), "-t", rev("two")],
+    ["--from", rev("base"), "--to", rev("two")],
+]
+
+
+@pytest.mark.covers("restore", "-f", "-t", "--from", "--to")
+@pytest.mark.parametrize("argv", RESTORE_SPELLING_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_restore_by_each_spelling(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=["restore", *argv])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("restore", "-t")
+def test_restore_defaults_the_source_to_the_working_copy(pair: RepoPair) -> None:
+    """Naming one side defaults the *other* to `@`. So `--into X` alone
+    restores X from the working copy, not from X's own parent."""
+    chain(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(files={"one.txt": b"from the side\n"}, jj=["status"])
+    pair.op(jj=["restore", "-t", rev("one")])
+    pair.assert_parity()
+
+
+RESTORE_CHANGES_IN_ARGV = [["-c", rev("one")], ["--changes-in", rev("one")]]
+
+
+@pytest.mark.covers("restore", "-c", "--changes-in")
+@pytest.mark.parametrize("argv", RESTORE_CHANGES_IN_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_restore_undoes_the_changes_in_a_revision(pair: RepoPair, argv) -> None:
+    """`--changes-in X` empties X: it restores X from the merge of X's
+    own parents, leaving the description and everything else in place."""
+    chain(pair)
+    pair.op(jj=["restore", *argv])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("restore")
+def test_restore_reads_the_merge_of_both_parents(pair: RepoPair) -> None:
+    """A bare restore on a merge undoes only what the merge itself
+    resolved. Reading the first parent alone would call everything the
+    second parent contributed a change, and undo that too."""
+    pair.init()
+    pair.op(files={"base.txt": b"base\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "left"])
+    pair.op(files={"left.txt": b"left\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "right"])
+    pair.op(files={"right.txt": b"right\n"}, jj=["status"])
+    pair.op(jj=["new", rev("left"), rev("right"), "-m", "merge"])
+    pair.op(files={"own.txt": b"resolved here\n"}, jj=["status"])
+    pair.op(jj=["restore"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("restore", "--tool")
+def test_restore_via_diff_tool(pair: RepoPair) -> None:
+    """The editor opens with everything already restored -- the source
+    on the right -- and the reader takes back what should stay. Dropping
+    a path from the right side keeps the destination's own version."""
+    chain(pair)
+    pair.op(files={"two.txt": b"edited\n", "one.txt": b"also edited\n"},
+            jj=["status"])
+    pair.op(jj=["restore", "--tool", "parity-diff"],
+            diff_spec={"op": "drop", "paths": ["one.txt"]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("restore", "--restore-descendants")
+def test_restore_keeping_the_descendants_content(pair: RepoPair) -> None:
+    """Without the flag a descendant keeps its diff, so it loses what
+    the restore removed from its parent. With it a descendant keeps its
+    content, and only its parent pointer moves."""
+    chain(pair)
+    pair.op(jj=["restore", "-c", rev("one"), "--restore-descendants"])
+    pair.assert_parity()
+
+
+DIFFEDIT_REVISION_ARGV = [["-r", rev("one")], ["--revision", rev("one")]]
+
+
+@pytest.mark.covers("diffedit", "-r", "--revision")
+@pytest.mark.parametrize("argv", DIFFEDIT_REVISION_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_diffedit_a_revisions_own_changes(pair: RepoPair, argv) -> None:
+    """`-r` edits the diff between a revision and its parents, which is
+    a different diff from `--from @- --to @` whenever the revision is
+    not the working copy."""
+    chain(pair)
+    pair.op(jj=["diffedit", *argv, "--tool", "parity-diff"],
+            diff_spec={"op": "edit",
+                       "edits": [{"path": "one.txt",
+                                  "find": "one", "replace": "ONE-edited"}]})
+    pair.assert_parity()
+
+
+DIFFEDIT_SPELLING_ARGV = [
+    ["-f", rev("base"), "-t", rev("two")],
+    ["--from", rev("base"), "--to", rev("two")],
+]
+
+
+@pytest.mark.covers("diffedit", "-f", "-t", "--from", "--to")
+@pytest.mark.parametrize("argv", DIFFEDIT_SPELLING_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_diffedit_between_two_revisions(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=["diffedit", *argv, "--tool", "parity-diff"],
+            diff_spec={"op": "drop", "paths": ["one.txt"]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("diffedit", "--restore-descendants")
+def test_diffedit_keeping_the_descendants_content(pair: RepoPair) -> None:
+    """The same choice `restore` offers: move the descendants down with
+    their content untouched rather than replaying their diffs."""
+    chain(pair)
+    pair.op(jj=["diffedit", "-r", rev("one"), "--tool", "parity-diff",
+                "--restore-descendants"],
+            diff_spec={"op": "drop", "paths": ["one.txt"]})
+    pair.assert_parity()
+
+
+RESTORE_REFUSED_ARGV = [
+    ["restore", "-c", rev("one"), "--from", rev("base")],
+    ["restore", "-c", rev("one"), "--into", rev("two")],
+    ["diffedit", "-r", rev("one"), "--from", rev("base")],
+    ["diffedit", "-r", rev("one"), "--to", rev("two")],
+]
+
+
+@pytest.mark.parametrize("argv", RESTORE_REFUSED_ARGV,
+                         ids=lambda a: "_".join(a[:1] + a[3:4]))
+def test_restore_and_diffedit_refuse_two_ways_of_naming(pair: RepoPair,
+                                                        argv) -> None:
+    """One revision or two, never both: `--changes-in` and `-r` each
+    name the whole job, so a `--from` or `--to` beside one is a reader
+    asking for two different things at once."""
+    chain(pair)
+    assert pair.op(jj=argv, may_fail=True) != 0
+    pair.assert_parity()

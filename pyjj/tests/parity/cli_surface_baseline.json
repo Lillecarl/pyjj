@@ -78,11 +78,6 @@
     "describe": [
       "--editor"
     ],
-    "diffedit": [
-      "--restore-descendants",
-      "--revision",
-      "-r"
-    ],
     "edit": [
       "-r"
     ],
@@ -127,12 +122,6 @@
     ],
     "prev": [
       "--conflict"
-    ],
-    "restore": [
-      "--changes-in",
-      "--restore-descendants",
-      "--tool",
-      "-c"
     ],
     "tag list": [
       "--all-remotes",
