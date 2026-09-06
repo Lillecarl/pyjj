@@ -433,13 +433,22 @@ def _export_git_refs(tx, ws) -> None:
     tx.git_export_refs()
 
 
-def _finish(tx, description, settings, ws, base_repo, *, delete_abandoned_bookmarks=False):
+def _finish(tx, description, settings, ws, base_repo, *,
+            delete_abandoned_bookmarks=False, restore_descendants=False):
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
     commit (e.g. an abandon or rebase rebased it), update the on-disk
-    working copy to match."""
+    working copy to match.
+
+    `restore_descendants` is `--restore-descendants`: move the
+    descendants down without replaying their diffs, so their content
+    stays exactly as it was. jj calls one or the other, never both.
+    """
     old_wc_hex = base_repo.view()[ws.workspace_name]
-    tx.rebase_descendants(delete_abandoned_bookmarks)
+    if restore_descendants:
+        tx.reparent_descendants()
+    else:
+        tx.rebase_descendants(delete_abandoned_bookmarks)
     _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
