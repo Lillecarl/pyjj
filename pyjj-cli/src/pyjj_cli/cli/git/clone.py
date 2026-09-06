@@ -12,5 +12,8 @@ def register(git_sub) -> None:
                    metavar="BRANCH", help="Branch to fetch (repeatable)")
     p.add_argument("-t", "--tag", dest="tags", action="append", default=None,
                    metavar="TAG", help="Tag to fetch (repeatable)")
+    p.add_argument("--fetch-tags", dest="fetch_tags", default=None,
+                   choices=("all", "included", "none"), metavar="FETCH_TAGS",
+                   help="When to fetch tags (default on a clone: all)")
     add_flags(p, [Flag.OBJECT_HASH])
     p.set_defaults(_handler="pyjj_cli.commands.git.clone:git_clone")

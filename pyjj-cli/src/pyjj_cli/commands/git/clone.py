@@ -43,7 +43,12 @@ def git_clone(args) -> int:
     colocate = getattr(args, "colocate", True)
     remote_name = getattr(args, "remote_name", "origin") or "origin"
     try:
-        ws, repo = pyjj.Workspace.clone_git(settings, source, str(dest), remote_name=remote_name, colocate=colocate)
+        ws, repo = pyjj.Workspace.clone_git(
+            settings, source, str(dest), remote_name=remote_name,
+            colocate=colocate,
+            branches=list(getattr(args, "branches", None) or []) or None,
+            depth=getattr(args, "depth", None),
+            fetch_tags=getattr(args, "fetch_tags", None))
     except (pyjj.WorkspaceInitError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
