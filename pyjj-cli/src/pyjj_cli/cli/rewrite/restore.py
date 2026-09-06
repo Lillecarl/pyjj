@@ -1,4 +1,4 @@
-from ..flags import add_from_flag, add_into_flag
+from ..flags import Flag, add_flags, add_from_flag, add_into_flag
 
 
 def register(sub) -> None:
@@ -12,6 +12,7 @@ def register(sub) -> None:
                    metavar="REVSET",
                    help="Undo the changes in a revision, as compared to the "
                         "merge of its parents")
+    add_flags(p, [Flag.TOOL])
     p.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                    help="Paths to restore (default: all)")
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.restore:restore")
