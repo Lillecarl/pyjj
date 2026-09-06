@@ -44,6 +44,49 @@ pub fn read_file(commit: &PyCommit, path: &str) -> PyResult<Vec<u8>> {
     }
 }
 
+/// The bytes at each of `paths` in `commit`'s merged parent tree, keyed
+/// by path. `None` where the parent tree does not hold that path as a
+/// readable file.
+///
+/// `jj restore` (with no `--from`) and `jj diffedit -r` both edit the
+/// diff between a commit and the *merge* of its parents, and a diff
+/// editor needs the content of both sides. The first parent alone would
+/// report a merge commit as changing everything its other parents
+/// contributed, which is why this is not `read_file` on a parent.
+pub fn parent_contents(
+    commit: &PyCommit,
+    repo: &crate::commit::PyReadonlyRepo,
+    paths: Vec<String>,
+) -> PyResult<std::collections::HashMap<String, Option<Vec<u8>>>> {
+    let tree = pollster::block_on(commit.inner.parent_tree(repo.inner.as_ref()))
+        .map_err(map_backend_err)?;
+    let mut out = std::collections::HashMap::new();
+    for path in paths {
+        let repo_path = RepoPathBuf::from_internal_string(&path)
+            .map_err(|err| JjError::new_err(err.to_string()))?;
+        let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let content = match value.as_resolved() {
+            Some(Some(TreeValue::File { id, .. })) => {
+                let mut reader =
+                    pollster::block_on(commit.inner.store().read_file(&repo_path, id))
+                        .map_err(map_backend_err)?;
+                let mut buf = Vec::new();
+                pollster::block_on(reader.read_to_end(&mut buf))
+                    .map_err(|err| JjError::new_err(err.to_string()))?;
+                Some(buf)
+            }
+            Some(Some(TreeValue::Symlink(id))) => Some(
+                pollster::block_on(commit.inner.store().read_symlink(&repo_path, id))
+                    .map_err(map_backend_err)?
+                    .into_bytes(),
+            ),
+            _ => None,
+        };
+        out.insert(path, content);
+    }
+    Ok(out)
+}
+
 /// Whether `path` names a regular file, executable file, or symlink (not a
 /// directory/submodule/conflict/absence) within `commit`'s tree.
 pub fn file_exists(commit: &PyCommit, path: &str) -> PyResult<bool> {

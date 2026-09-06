@@ -1220,9 +1220,10 @@ impl PyTransaction {
     /// `from_commit`, leaving `from_commit` untouched. Returns a
     /// `CommitBuilder` -- caller `write()`s it and calls
     /// `rebase_descendants()` if `into_commit` has descendants.
+    #[pyo3(signature = (from_commit, into_commit, paths=None))]
     fn restore(
         &self,
-        from_commit: &PyCommit,
+        from_commit: Option<&PyCommit>,
         into_commit: &PyCommit,
         paths: Option<Vec<String>>,
     ) -> PyResult<PyCommitBuilder> {

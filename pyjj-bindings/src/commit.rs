@@ -314,6 +314,18 @@ impl PyCommit {
         crate::aio::spawn_blocking_py(py, move || crate::file::read_file(&commit, &path))
     }
 
+    /// The bytes at each of `paths` in this commit's *merged parent*
+    /// tree, keyed by path, with `None` where the parent tree does not
+    /// hold one. Pairs with `diff_from_parents()`, which names the
+    /// paths.
+    fn parent_contents(
+        &self,
+        repo: &PyReadonlyRepo,
+        paths: Vec<String>,
+    ) -> PyResult<std::collections::HashMap<String, Option<Vec<u8>>>> {
+        crate::file::parent_contents(self, repo, paths)
+    }
+
     /// Whether `path` names a regular/executable file or symlink in this
     /// commit's tree (`False` for directories, submodules, absent paths,
     /// and unresolved conflicts).

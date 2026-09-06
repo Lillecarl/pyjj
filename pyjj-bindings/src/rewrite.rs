@@ -527,12 +527,19 @@ pub fn set_executable(
 /// needs to `write()` it and `rebase_descendants()` if it has descendants.
 pub fn restore(
     mut_repo: &mut MutableRepo,
-    from_commit: &PyCommit,
+    from_commit: Option<&PyCommit>,
     into_commit: &PyCommit,
     paths: Option<Vec<String>>,
 ) -> PyResult<PyCommitBuilder> {
     let matcher = paths_matcher(paths)?;
-    let from_tree = from_commit.inner.tree();
+    // No source is `jj restore`'s own default: restore from the merge of
+    // the destination's parents. The first parent alone would report a
+    // merge commit as changing everything its other parents contributed.
+    let from_tree = match from_commit {
+        Some(commit) => commit.inner.tree(),
+        None => pollster::block_on(into_commit.inner.parent_tree(mut_repo))
+            .map_err(map_backend_err)?,
+    };
     let into_tree = into_commit.inner.tree();
     let new_tree = pollster::block_on(rewrite::restore_tree(
         &from_tree,
