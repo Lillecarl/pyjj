@@ -59,7 +59,10 @@ def diffedit(args) -> int:
         edited = tx.edit_commit_tree(to_commit, selections).write(repo)
         if to_commit.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, edited.id)
-        _finish(tx, f"edit commit {to_commit.id.hex()}", settings, ws, repo)
+        _finish(
+            tx, f"edit commit {to_commit.id.hex()}", settings, ws, repo,
+            restore_descendants=getattr(args, "restore_descendants", False),
+        )
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
