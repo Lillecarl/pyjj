@@ -59,7 +59,8 @@ def restore(args) -> int:
         restored = builder.write(repo)
         if dst.id.hex() == repo.view().get(ws.workspace_name):
             tx.set_wc_commit(ws.workspace_name, restored.id)
-        _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo)
+        _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo,
+                restore_descendants=getattr(args, "restore_descendants", False))
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1

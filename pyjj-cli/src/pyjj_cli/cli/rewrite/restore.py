@@ -12,6 +12,10 @@ def register(sub) -> None:
                    metavar="REVSET",
                    help="Undo the changes in a revision, as compared to the "
                         "merge of its parents")
+    p.add_argument("--restore-descendants", dest="restore_descendants",
+                   action="store_true", default=False,
+                   help="Preserve the content (not the diff) when rebasing "
+                        "descendants")
     add_flags(p, [Flag.TOOL])
     p.add_argument("paths_pos", nargs="*", metavar="FILESETS",
                    help="Paths to restore (default: all)")
