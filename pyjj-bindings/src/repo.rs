@@ -883,6 +883,24 @@ impl PyTransaction {
         })
     }
 
+    /// Move descendants down after a rewrite without replaying their
+    /// diffs. Call this instead of `rebase_descendants()`, before
+    /// `commit()`.
+    ///
+    /// `rebase_descendants()` keeps each descendant's diff against its
+    /// parent, so a change to an ancestor's content reaches every
+    /// descendant. This keeps each descendant's *content* instead: only
+    /// the parent pointer moves, and the trees stay exactly as they
+    /// were. `jj restore --restore-descendants` and `jj diffedit
+    /// --restore-descendants` are the two commands that ask for it.
+    ///
+    /// Returns how many descendants moved.
+    fn reparent_descendants(&self) -> PyResult<usize> {
+        with_mut_repo(self, |mut_repo| {
+            pollster::block_on(mut_repo.reparent_descendants()).map_err(map_transaction_err)
+        })
+    }
+
     /// `jj abandon --restore-descendants`: abandon `targets` and move
     /// their descendants down with their content untouched. Returns how
     /// many descendants moved. See
@@ -1202,7 +1220,6 @@ impl PyTransaction {
     /// `from_commit`, leaving `from_commit` untouched. Returns a
     /// `CommitBuilder` -- caller `write()`s it and calls
     /// `rebase_descendants()` if `into_commit` has descendants.
-    #[pyo3(signature = (from_commit, into_commit, paths=None))]
     fn restore(
         &self,
         from_commit: &PyCommit,
