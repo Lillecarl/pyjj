@@ -212,8 +212,16 @@ impl PyWorkspace {
     /// already exist as an empty directory, or not exist yet (it will be
     /// created) -- unlike the CLI, there's no URL-based destination
     /// auto-detection here.
+    ///
+    /// `branches` restricts what is fetched and picks the working-copy
+    /// parent: the first pattern that names one branch exactly and
+    /// exists on the remote wins, and the remote's default branch is
+    /// the fallback. `depth` makes a shallow clone. `fetch_tags` is
+    /// `"all"`, `"included"` or `"none"`; a clone defaults to all,
+    /// the way git does.
     #[staticmethod]
-    #[pyo3(signature = (settings, url, destination_path, remote_name=None, colocate=true))]
+    #[pyo3(signature = (settings, url, destination_path, remote_name=None, colocate=true,
+                        branches=None, depth=None, fetch_tags=None))]
     fn clone_git(
         py: Python<'_>,
         settings: &PyUserSettings,
@@ -221,6 +229,9 @@ impl PyWorkspace {
         destination_path: String,
         remote_name: Option<String>,
         colocate: bool,
+        branches: Option<Vec<String>>,
+        depth: Option<u32>,
+        fetch_tags: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         py.detach(move || {
             let remote_name = remote_name.unwrap_or_else(|| "origin".to_string());
@@ -270,27 +281,74 @@ impl PyWorkspace {
             let index = repo.readonly_index();
             let view = repo.view();
             let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-            let fetch_result = crate::git::fetch_all_inner(&mut mut_repo, settings, &remote_name)?;
+            let bookmark = crate::git::bookmark_expression(branches.clone())?;
+            // A clone fetches every tag by default, the way git does.
+            // Naming branches narrows the whole clone, though, so jj
+            // stops fetching tags implicitly too.
+            let effective_tags = match (&fetch_tags, &branches) {
+                (Some(mode), _) => mode.clone(),
+                (None, Some(_)) => "none".to_string(),
+                (None, None) => "all".to_string(),
+            };
+            let fetch_result = crate::git::fetch_all_inner(
+                &mut mut_repo,
+                settings,
+                &remote_name,
+                bookmark,
+                // A clone asks for no tag refspec at all and lets
+                // `--fetch-tags` decide, which is how git itself fetches
+                // tags on a clone. Naming them in the refspec would
+                // fetch them whatever `--fetch-tags` said.
+                jj_lib::str_util::StringExpression::none(),
+                depth,
+                Some(effective_tags.as_str()),
+            )?;
 
-            let default_branch_commit: Option<Commit> = match &fetch_result.default_branch {
-                Some(name) => {
-                    let symbol = jj_lib::ref_name::RefName::new(name.as_str())
-                        .to_remote_symbol(RemoteName::new(&remote_name));
-                    let remote_ref = mut_repo.get_remote_bookmark(symbol);
-                    match remote_ref.target.as_normal() {
-                        Some(commit_id) => {
-                            let commit_id = commit_id.clone();
+            // Which branch the working copy starts on. `-b` names it: the
+            // first pattern that is an exact name and exists on the remote
+            // wins. Otherwise it is the branch the remote calls default.
+            let present = |name: &str| {
+                let symbol = jj_lib::ref_name::RefName::new(name)
+                    .to_remote_symbol(RemoteName::new(&remote_name));
+                mut_repo.get_remote_bookmark(symbol).target.as_normal().cloned()
+            };
+            let mut working: Option<String> = None;
+            for pattern in branches.iter().flatten() {
+                if pattern.contains('*') {
+                    continue;
+                }
+                if present(pattern).is_some() {
+                    working = Some(pattern.clone());
+                    break;
+                }
+            }
+            let default_name = fetch_result
+                .default_branch
+                .as_ref()
+                .map(|name| name.as_str().to_string())
+                .filter(|name| present(name).is_some());
+            if working.is_none() {
+                working = default_name.clone();
+            }
+            // jj creates the local bookmark only when the working branch
+            // is the remote's own default, the way git clone does.
+            let default_branch_commit: Option<Commit> = match &working {
+                Some(name) => match present(name) {
+                    Some(commit_id) => {
+                        if Some(name) == default_name.as_ref() {
+                            let symbol = jj_lib::ref_name::RefName::new(name.as_str())
+                                .to_remote_symbol(RemoteName::new(&remote_name));
                             mut_repo
                                 .track_remote_bookmark(symbol)
                                 .map_err(|err| JjError::new_err(err.to_string()))?;
-                            Some(
-                                pollster::block_on(mut_repo.store().get_commit_async(&commit_id))
-                                    .map_err(map_backend_err)?,
-                            )
                         }
-                        None => None,
+                        Some(
+                            pollster::block_on(mut_repo.store().get_commit_async(&commit_id))
+                                .map_err(map_backend_err)?,
+                        )
                     }
-                }
+                    None => None,
+                },
                 None => None,
             };
             // A colocated clone has to leave the git side consistent, the

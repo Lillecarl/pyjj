@@ -296,6 +296,31 @@ pub fn fetch(
     })
 }
 
+/// The bookmark patterns `jj git clone -b` accepts, as one expression.
+///
+/// jj documents the pattern as glob syntax with only `*` expanded. A
+/// pattern with no `*` is an exact name, which is also what makes it
+/// eligible to become the working-copy parent. jj's own parser accepts
+/// `|` and `~` between patterns too; this takes them one an argument
+/// instead, which is the shape the flag is repeated in.
+pub fn bookmark_expression(patterns: Option<Vec<String>>) -> PyResult<StringExpression> {
+    let Some(patterns) = patterns else {
+        return Ok(StringExpression::all());
+    };
+    let mut parts = Vec::new();
+    for pattern in patterns {
+        let part = if pattern.contains('*') {
+            jj_lib::str_util::StringPattern::glob(&pattern).map_err(|err| {
+                crate::errors::JjError::new_err(format!("invalid branch pattern: {err}"))
+            })?
+        } else {
+            jj_lib::str_util::StringPattern::exact(pattern)
+        };
+        parts.push(StringExpression::pattern(part));
+    }
+    Ok(StringExpression::union_all(parts))
+}
+
 /// Plain-Rust result of `fetch_all_inner` -- used both to build
 /// `fetch_all()`'s Python-facing stats dict and, in `workspace.rs`'s
 /// `Workspace.clone_git()`, to decide what to check out without round-
@@ -318,23 +343,39 @@ pub fn fetch_all_inner(
     mut_repo: &mut MutableRepo,
     settings: &PyUserSettings,
     remote: &str,
+    bookmark: StringExpression,
+    tag: StringExpression,
+    depth: Option<u32>,
+    fetch_tags: Option<&str>,
 ) -> PyResult<FetchAllResult> {
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
     let import_options = default_import_options();
 
-    let expr = GitFetchRefExpression {
-        bookmark: StringExpression::all(),
-        tag: StringExpression::all(),
-    };
+    let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
+
+    // A clone fetches all tags unless told otherwise, which is what git
+    // itself does. `included` means "whatever the remote is configured
+    // for", so it is the one value that sends no override.
+    let tags_override = match fetch_tags {
+        None | Some("all") => Some(jj_lib::git::FetchTagsOverride::AllTags),
+        Some("none") => Some(jj_lib::git::FetchTagsOverride::NoTags),
+        Some("included") => None,
+        Some(other) => {
+            return Err(crate::errors::JjError::new_err(format!(
+                "invalid value for --fetch-tags: {other}"
+            )));
+        }
+    };
+    let depth = depth.and_then(std::num::NonZeroU32::new);
 
     let mut git_fetch =
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, None, None)
+        .fetch(remote_name, expanded, &mut callback, depth, tags_override)
         .map_err(map_git_fetch_err)?;
     let default_branch = git_fetch
         .get_default_branch(remote_name)
@@ -363,7 +404,15 @@ pub fn fetch_all(
     settings: &PyUserSettings,
     remote: &str,
 ) -> PyResult<Py<PyAny>> {
-    let result = fetch_all_inner(mut_repo, settings, remote)?;
+    let result = fetch_all_inner(
+        mut_repo,
+        settings,
+        remote,
+        StringExpression::all(),
+        StringExpression::all(),
+        None,
+        None,
+    )?;
     Python::attach(|py| {
         let dict = PyDict::new(py);
         dict.set_item("abandoned_commits", result.abandoned_commits)?;
