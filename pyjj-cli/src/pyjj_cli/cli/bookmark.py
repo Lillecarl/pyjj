@@ -50,8 +50,9 @@ def add_parsers(sub) -> None:
 
     p_bmm = bm_sub.add_parser("move", help="Move bookmarks to a revision")
     p_bmm.add_argument("names", nargs="*", metavar="NAMES", help="Bookmark names to move")
-    p_bmm.add_argument("-f", "--from", dest="from_", default=None, metavar="REVSETS",
-                       help=argparse.SUPPRESS)
+    p_bmm.add_argument("-f", "--from", dest="from_", action="append",
+                       default=None, metavar="REVSETS",
+                       help="Move bookmarks from the given revisions")
     p_bmm.add_argument("-t", "--to", dest="to", default="@", metavar="REVSET",
                        help="Target revision (default: @)")
     p_bmm.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")

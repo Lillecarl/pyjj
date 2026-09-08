@@ -216,32 +216,38 @@ def bookmark(args) -> int:
     if cmd == "move":
         try:
             settings, ws, repo = _load(args)
+            names = list(getattr(args, "names", None) or [])
+            froms = list(getattr(args, "from_", None) or [])
+            if not names and not froms:
+                print("Error: bookmark move requires bookmark names or --from",
+                      file=sys.stderr)
+                return 2
             target = _resolve_one(repo, settings, args.to)
-            # Simple move: named bookmarks to target. --from filtering.
-            names = getattr(args, "names", None) or []
-            if args.from_:
-                # --from mode: move bookmarks pointing at those revisions
-                sources = _resolve_all(repo, settings, [args.from_])
-                source_ids = {c.id.hex() for c in sources}
-                if names:
-                    to_move = []
-                    for n in names:
-                        bm = repo.get_bookmark(n)
-                        if bm and bm.target_ids and bm.target_ids[0].hex() in source_ids:
-                            to_move.append(n)
-                else:
-                    to_move = [bm.name for bm in repo.bookmarks() if bm.target_ids and bm.target_ids[0].hex() in source_ids]
-            else:
-                to_move = names
-                if not to_move:
-                    print("Error: bookmark move requires bookmark names or --from", file=sys.stderr)
-                    return 2
+            source_ids = set()
+            if froms:
+                source_ids = {c.id.hex()
+                              for c in _resolve_all(repo, settings, froms)}
+            to_move = []
+            for bookmark in repo.bookmarks():
+                # A name is a pattern, so one argument can move a set.
+                if names and not any(_name_matches(bookmark.name, pattern)
+                                     for pattern in names):
+                    continue
+                if froms and not any(i.hex() in source_ids
+                                     for i in bookmark.target_ids):
+                    continue
+                if [i.hex() for i in bookmark.target_ids] == [target.id.hex()]:
+                    # Already there. Not an error, and not a move either.
+                    continue
+                to_move.append(bookmark)
+            if not to_move:
+                print("No bookmarks to update.")
+                return 0
             tx = _start_transaction(repo, settings)
-            for name in to_move:
-                if repo.get_bookmark(name) is None:
-                    raise CommandError(f"No such bookmark: {name}")
-                tx.set_bookmark(name, target.id)
-            _finish(tx, f"point bookmark {', '.join(to_move)} to commit "
+            for bookmark in to_move:
+                tx.set_bookmark(bookmark.name, target.id)
+            _finish(tx, "point bookmark "
+                        f"{', '.join(b.name for b in to_move)} to commit "
                         f"{target.id.hex()}", settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
@@ -249,3 +255,16 @@ def bookmark(args) -> int:
         return 0
     print(f"usage: pyjj bookmark {{create,set,delete,forget,list,move,rename}}", file=sys.stderr)
     return 2
+
+
+def _name_matches(name: str, pattern: str) -> bool:
+    """jj's string patterns, as far as a bookmark name needs them: a
+    bare pattern is a glob, and the three prefixes name the rest."""
+    for prefix, test in (
+        ("exact:", lambda n, p: n == p),
+        ("glob:", fnmatch.fnmatchcase),
+        ("substring:", lambda n, p: p in n),
+    ):
+        if pattern.startswith(prefix):
+            return test(name, pattern[len(prefix):].strip("\"'"))
+    return fnmatch.fnmatchcase(name, pattern)
