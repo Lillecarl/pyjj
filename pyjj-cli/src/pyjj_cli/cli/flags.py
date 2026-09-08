@@ -120,8 +120,11 @@ class Flag(Enum):
     RANGE = auto()
 
 
-def add_revision_flag(parser: argparse.ArgumentParser, dest: str = "revision", default: str = "@", required: bool = False, help: str = "Revision to operate on (default: @)") -> None:
-    parser.add_argument("-r", "--revision", dest=dest, default=default if not required else None, metavar="REVSET", required=required, help=help)
+def add_revision_flag(parser: argparse.ArgumentParser, dest: str = "revision", default: str = "@", required: bool = False, help: str = "Revision to operate on (default: @)", to_alias: bool = False) -> None:
+    # `bookmark create`, `bookmark set` and `tag set` also answer to
+    # `--to`, so that moving between the three needs no retyping.
+    names = ["-r", "--revision"] + (["--to"] if to_alias else [])
+    parser.add_argument(*names, dest=dest, default=default if not required else None, metavar="REVSET", required=required, help=help)
 
 
 def add_revisions_flag(parser: argparse.ArgumentParser, dest: str = "revisions", required: bool = False, singular: bool = False) -> None:

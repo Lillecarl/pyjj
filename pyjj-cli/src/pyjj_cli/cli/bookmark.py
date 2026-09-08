@@ -16,7 +16,7 @@ def add_parsers(sub) -> None:
 
     p_bmc = bm_sub.add_parser("create", help="Create a new bookmark")
     p_bmc.add_argument("names", nargs="+", metavar="NAMES")
-    add_revision_flag(p_bmc, dest="revision", default="@", help="Revision to point at (default: @)")
+    add_revision_flag(p_bmc, dest="revision", default="@", help="Revision to point at (default: @)", to_alias=True)
     p_bmc.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bms = bm_sub.add_parser("set", help="Create or move a bookmark")
