@@ -271,13 +271,6 @@
   "workspace": [
     "(command)"
   ],
-  "workspace add": [
-    "--message",
-    "--revision",
-    "--sparse-patterns",
-    "-m",
-    "-r"
-  ],
   "workspace root": [
     "--name"
   ],

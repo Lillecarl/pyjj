@@ -101,11 +101,6 @@
     "prev": [
       "--conflict"
     ],
-    "workspace add": [
-      "--message",
-      "--sparse-patterns",
-      "-m"
-    ],
     "workspace root": [
       "--name"
     ]

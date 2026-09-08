@@ -1894,10 +1894,63 @@ def test_workspace_rename(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("workspace add", "-r")
 def test_workspace_add_at_a_named_revision(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "add", "--name", "second", "-r", rev("one"),
                 "../second"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--revision")
+def test_workspace_add_by_the_long_revision_spelling(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "--revision",
+                rev("one"), "../second"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "-m")
+def test_workspace_add_with_a_description(pair: RepoPair) -> None:
+    """The new workspace's working-copy commit takes the message, which
+    is what stops it being discarded the moment it stops being `@`."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "-m", "second work",
+                "../second"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--message")
+def test_workspace_add_joins_message_paragraphs(pair: RepoPair) -> None:
+    """`-m` repeats, and the paragraphs join with a blank line between."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second",
+                "--message", "first", "--message", "second", "../second"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--sparse-patterns")
+def test_workspace_add_with_empty_sparse_patterns(pair: RepoPair) -> None:
+    """`--sparse-patterns empty` gives the new workspace no path at all,
+    so nothing written there is snapshotted -- where `full` would take
+    the file into the workspace's own working-copy commit."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second",
+                "--sparse-patterns", "empty", "../second"])
+    pair.op(files={"../second/loose.txt": b"loose\n"}, jj=["status"],
+            cwd="../second")
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--sparse-patterns")
+def test_workspace_add_with_full_sparse_patterns(pair: RepoPair) -> None:
+    """The other side of it: an unrestricted workspace snapshots the
+    file, so its working-copy commit is a different one."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second",
+                "--sparse-patterns", "full", "../second"])
+    pair.op(files={"../second/loose.txt": b"loose\n"}, jj=["status"],
+            cwd="../second")
     pair.assert_parity()
 
 
