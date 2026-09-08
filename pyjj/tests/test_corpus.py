@@ -262,6 +262,7 @@ READ_ONLY_COMMANDS = {
     "log", "diff", "show", "status", "evolog", "interdiff", "root", "version",
     "help", "file list", "file show", "file annotate",
     "bookmark list", "tag list", "workspace list", "workspace root",
+    "file search",
     "operation log", "git root", "util markdown-help",
 }
 

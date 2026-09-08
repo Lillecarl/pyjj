@@ -330,6 +330,21 @@ CATALOGUE: tuple[Entry, ...] = (
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),
     E("file-show", ("file", "show", "one.txt"), claims=("file show",), colour="bytes"),
     E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",), colour="bytes"),
+    # `chain` writes one word a file, so a pattern that names a word
+    # names exactly one of them -- and `-r` moves to a revision where
+    # the newest file is not there yet.
+    E("file-search", ("file", "search", "--pattern", "ne$"),
+      claims=("file search", "--pattern"), colour="bytes"),
+    E("file-search-p", ("file", "search", "-p", "glob:*ne*"),
+      claims=("file search", "-p"), colour="bytes"),
+    E("file-search-revision",
+      ("file", "search", "-p", ".", "--revision", 'description(glob:"one*")'),
+      claims=("file search", "--revision"), colour="bytes"),
+    E("file-search-r", ("file", "search", "-p", ".", "-r",
+                        'description(glob:"base*")'),
+      claims=("file search", "-r"), colour="bytes"),
+    E("file-search-fileset", ("file", "search", "-p", ".", "two.txt"),
+      claims=("file search",), colour="bytes"),
 
     # -- refs -----------------------------------------------------------
     E("bookmark-list", ("bookmark", "list"), claims=("bookmark list",), colour="bytes"),

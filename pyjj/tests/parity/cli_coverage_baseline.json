@@ -126,13 +126,6 @@
     "-T",
     "-r"
   ],
-  "file search": [
-    "(command)",
-    "--pattern",
-    "--revision",
-    "-p",
-    "-r"
-  ],
   "file show": [
     "--revision",
     "--template",
