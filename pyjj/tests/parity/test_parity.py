@@ -897,6 +897,7 @@ def run_script(tmp_path, name: str, body: str) -> str:
     return str(script)
 
 
+@pytest.mark.covers("run", "-r")
 def test_run_command_that_changes_nothing(pair: RepoPair, tmp_path) -> None:
     """A command that touches no file must leave both repos alone."""
     chain(pair)
@@ -946,6 +947,7 @@ def test_run_adding_a_file_across_the_whole_chain(pair: RepoPair, tmp_path) -> N
     pair.assert_parity()
 
 
+@pytest.mark.covers("run", "--restore-descendants")
 def test_run_restore_descendants_keeps_their_content(pair: RepoPair, tmp_path) -> None:
     """`--restore-descendants` reparents the descendants instead of
     rebasing them, so their trees do not move -- a different set of
@@ -977,6 +979,7 @@ def test_run_failing_command_writes_nothing(pair: RepoPair, tmp_path) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("run", "--clean")
 def test_run_clean_slot_each_time(pair: RepoPair, tmp_path) -> None:
     """`--clean` wipes each slot before the checkout, so nothing a
     previous revision left behind can leak into the next one."""
@@ -987,6 +990,69 @@ def test_run_clean_slot_each_time(pair: RepoPair, tmp_path) -> None:
         "pathlib.Path('added.txt').write_bytes(b'added\\n')\n",
     )
     pair.op(jj=["run", "--clean", sys.executable, script])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--revision")
+def test_run_by_the_long_revision_spelling(pair: RepoPair, tmp_path) -> None:
+    chain(pair)
+    script = run_script(
+        tmp_path, "add.py",
+        "import pathlib\n"
+        "pathlib.Path('added.txt').write_bytes(b'added\\n')\n",
+    )
+    pair.op(jj=["run", "--revision", rev("one"), sys.executable, script])
+    pair.assert_parity()
+
+
+RUN_JOBS_ARGV = [["-j", "2"], ["--jobs", "2"]]
+
+
+@pytest.mark.covers("run", "--jobs", "-j")
+@pytest.mark.parametrize("argv", RUN_JOBS_ARGV, ids=lambda a: a[0].lstrip("-"))
+def test_run_with_several_jobs(pair: RepoPair, tmp_path, argv) -> None:
+    """How many processes run at once decides nothing about the result:
+    each revision gets its own slot, and every tree lands in the same
+    rewrite. So the repositories must match a one-job run exactly."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "add.py",
+        "import pathlib\n"
+        "pathlib.Path('added.txt').write_bytes(b'added\\n')\n",
+    )
+    pair.op(jj=["run", *argv, sys.executable, script])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--root")
+def test_run_root_runs_from_the_tree_root(pair: RepoPair, tmp_path) -> None:
+    """`--root` runs the command at the top of each checked-out tree
+    rather than where the caller stood. The script writes a file beside
+    itself, so where it ran decides where the file lands."""
+    chain(pair)
+    pair.op(files={"sub/deep.txt": b"deep\n"}, jj=["status"])
+    script = run_script(
+        tmp_path, "mark.py",
+        "import pathlib\n"
+        "pathlib.Path('here.txt').write_bytes(b'here\\n')\n",
+    )
+    pair.op(jj=["run", "--root", "-r", "@", sys.executable, script], cwd="sub")
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run")
+def test_run_without_root_runs_where_the_caller_stood(pair: RepoPair,
+                                                      tmp_path) -> None:
+    """The other half of `--root`: with no flag the command runs in the
+    same subdirectory of every revision, so the file lands under `sub`."""
+    chain(pair)
+    pair.op(files={"sub/deep.txt": b"deep\n"}, jj=["status"])
+    script = run_script(
+        tmp_path, "mark.py",
+        "import pathlib\n"
+        "pathlib.Path('here.txt').write_bytes(b'here\\n')\n",
+    )
+    pair.op(jj=["run", "-r", "@", sys.executable, script], cwd="sub")
     pair.assert_parity()
 
 

@@ -215,14 +215,6 @@
     "--revision",
     "-r"
   ],
-  "run": [
-    "--clean",
-    "--jobs",
-    "--restore-descendants",
-    "--revision",
-    "--root",
-    "-j"
-  ],
   "sign": [
     "(command)",
     "--key",
