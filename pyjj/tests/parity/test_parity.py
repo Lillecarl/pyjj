@@ -3994,3 +3994,130 @@ def test_metaedit_force_rewrite(pair: RepoPair) -> None:
     pair.assert_parity()
     pair.op(jj=["metaedit", "-r", rev("one"), "--force-rewrite"])
     pair.assert_parity()
+
+
+# -- git fetch -----------------------------------------------------------------
+#
+# One set of remotes serves both sides here. A fetch reads a remote and
+# never writes it, so the two sides cannot decide anything for each
+# other -- which is what forced `push_pair` to give each side its own.
+
+
+def make_fetch_remotes(base: Path) -> dict:
+    """Two bare remotes and the seed that fills the first one.
+
+    `origin` carries four branches and a tag, so a pattern has something
+    to select and something to leave behind. `upstream` carries its own
+    history, which makes `--all-remotes` visibly different from fetching
+    one. The seed comes back so a scenario can move `origin` on and
+    fetch again.
+    """
+    env = {**os.environ, "GIT_AUTHOR_DATE": PIN_TIME,
+           "GIT_COMMITTER_DATE": PIN_TIME, "GIT_EDITOR": "true"}
+    identity = ["-c", "user.email=a@b.c", "-c", "user.name=A",
+                "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false"]
+
+    def git(*args, cwd=None):
+        subprocess.run(["git", *identity, *args], cwd=cwd, check=True,
+                       capture_output=True, env=env)
+
+    origin = base / "origin.git"
+    seed = base / "seed"
+    git("init", "--bare", "-b", "main", str(origin))
+    git("init", "-b", "main", str(seed))
+    (seed / "file.txt").write_text("hello\n")
+    git("add", "file.txt", cwd=str(seed))
+    git("commit", "-m", "seed", cwd=str(seed))
+    git("tag", "v1", cwd=str(seed))
+    for name in ("feature-one", "feature-two", "side"):
+        git("branch", name, cwd=str(seed))
+    git("push", str(origin), "main", "feature-one", "feature-two", "side",
+        "v1", cwd=str(seed))
+
+    upstream = base / "upstream.git"
+    other = base / "other"
+    git("init", "--bare", "-b", "main", str(upstream))
+    git("init", "-b", "main", str(other))
+    (other / "other.txt").write_text("other\n")
+    git("add", "other.txt", cwd=str(other))
+    git("commit", "-m", "other seed", cwd=str(other))
+    git("push", str(upstream), "main", cwd=str(other))
+
+    def advance() -> None:
+        """A second commit on `origin`'s `main` and `feature-one`."""
+        (seed / "file.txt").write_text("hello again\n")
+        git("commit", "-am", "second", cwd=str(seed))
+        git("branch", "-f", "feature-one", "main", cwd=str(seed))
+        git("push", "--force", str(origin), "main", "feature-one", cwd=str(seed))
+
+    return {"origin": origin, "upstream": upstream, "advance": advance}
+
+
+@contextlib.contextmanager
+def fetch_pair(pair: RepoPair):
+    """A pair of repositories that both know the same two remotes."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remotes = make_fetch_remotes(base)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remotes["origin"])])
+        pair.op(jj=["git", "remote", "add", "upstream", str(remotes["upstream"])])
+        yield remotes
+    finally:
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+@pytest.mark.covers("git fetch", "--branch")
+def test_git_fetch_names_one_branch(pair: RepoPair) -> None:
+    """Naming a branch fetches that one and no other -- and no tag
+    either, which a plain fetch would have brought along."""
+    with fetch_pair(pair):
+        pair.op(jj=["git", "fetch", "--remote", "origin",
+                    "--branch", "feature-one"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git fetch", "-b")
+def test_git_fetch_matches_a_branch_pattern(pair: RepoPair) -> None:
+    """`-b` takes a glob, so one flag fetches a set. `side` and `main`
+    match nothing here and stay away."""
+    with fetch_pair(pair):
+        pair.op(jj=["git", "fetch", "--remote", "origin", "-b", "feature-*"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git fetch", "--remote")
+def test_git_fetch_names_one_remote(pair: RepoPair) -> None:
+    """The two remotes share no history, so fetching one and not the
+    other is visible in the commits alone."""
+    with fetch_pair(pair):
+        pair.op(jj=["git", "fetch", "--remote", "upstream"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git fetch", "--remote")
+def test_git_fetch_matches_a_remote_pattern(pair: RepoPair) -> None:
+    """A remote is named by a pattern too, and the flag repeats."""
+    with fetch_pair(pair):
+        pair.op(jj=["git", "fetch", "--remote", "up*"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git fetch", "--all-remotes")
+def test_git_fetch_all_remotes(pair: RepoPair) -> None:
+    with fetch_pair(pair):
+        pair.op(jj=["git", "fetch", "--all-remotes"])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git fetch", "--tracked")
+def test_git_fetch_only_tracked_branches(pair: RepoPair) -> None:
+    """A fetch imports a remote bookmark untracked. `--tracked` then
+    asks only for the ones this repository tracks, so the remote can
+    move both branches on and only the tracked one follows."""
+    with fetch_pair(pair) as remotes:
+        pair.op(jj=["git", "fetch", "--remote", "origin"])
+        pair.op(jj=["bookmark", "track", "feature-one@origin"])
+        remotes["advance"]()
+        pair.op(jj=["git", "fetch", "--remote", "origin", "--tracked"])
+        pair.assert_parity()
