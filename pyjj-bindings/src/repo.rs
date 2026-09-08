@@ -348,6 +348,26 @@ impl PyReadonlyRepo {
             .collect()
     }
 
+    /// Every remote tag, as `name@remote`.
+    ///
+    /// The mirror of `remote_bookmarks()`: a colocated repository has a
+    /// `git` remote, so a tag the repository exported appears here as
+    /// well as in `tags()`. `jj tag list --all-remotes` lists both.
+    fn remote_tags(&self) -> Vec<crate::tag::PyRemoteTag> {
+        self.inner
+            .view()
+            .all_remote_tags()
+            .map(|(symbol, remote_ref)| crate::tag::PyRemoteTag {
+                name: symbol.name.as_str().to_string(),
+                remote: symbol.remote.as_str().to_string(),
+                target_ids: remote_ref.target.added_ids().map(Into::into).collect(),
+                removed_ids: remote_ref.target.removed_ids().map(Into::into).collect(),
+                has_conflict: remote_ref.target.has_conflict(),
+                tracked: remote_ref.is_tracked(),
+            })
+            .collect()
+    }
+
     /// The named local tag, or `None` if it doesn't exist.
     fn get_tag(&self, name: &str) -> Option<crate::tag::PyTag> {
         let ref_name = RefName::new(name);

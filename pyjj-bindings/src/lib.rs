@@ -52,6 +52,7 @@ use oplog::PyOpAbandonStats;
 use repo::{PyCommitBuilder, PyTransaction};
 use rewrite::PyMoveCommitsStats;
 use settings::PyUserSettings;
+use tag::PyRemoteTag;
 use tag::PyTag;
 use tree::PyDiffEntry;
 use workspace::PyWorkspace;
@@ -93,6 +94,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBookmark>()?;
     m.add_class::<crate::bookmark::PyRemoteBookmark>()?;
     m.add_class::<PyTag>()?;
+    m.add_class::<PyRemoteTag>()?;
     m.add_class::<PyCommit>()?;
     m.add_class::<PyVerification>()?;
     m.add_class::<PyDiffEntry>()?;
