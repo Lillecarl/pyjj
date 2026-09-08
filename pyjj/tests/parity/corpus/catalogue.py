@@ -328,8 +328,27 @@ CATALOGUE: tuple[Entry, ...] = (
 
     # -- file -----------------------------------------------------------
     E("file-list", ("file", "list"), claims=("file list",), colour="bytes"),
+    E("file-list-revision", ("file", "list", "--revision", 'description(glob:"one*")'),
+      claims=("file list", "--revision"), colour="bytes"),
+    E("file-list-r", ("file", "list", "-r", 'description(glob:"base*")'),
+      claims=("file list", "-r"), colour="bytes"),
     E("file-show", ("file", "show", "one.txt"), claims=("file show",), colour="bytes"),
+    # The `conflict` fixture is the one where a file's content differs
+    # a revision, so these say which revision was read. On `chain` every
+    # file is written once, and a revision flag that was ignored would
+    # print the same bytes.
+    E("file-show-revision",
+      ("file", "show", "--revision", 'description(glob:"one*")', "f.txt"),
+      fixture="conflict", claims=("file show", "--revision"), colour="bytes"),
+    E("file-show-r", ("file", "show", "-r", 'description(glob:"base*")', "f.txt"),
+      fixture="conflict", claims=("file show", "-r"), colour="bytes"),
     E("file-annotate", ("file", "annotate", "one.txt"), claims=("file annotate",), colour="bytes"),
+    E("file-annotate-revision",
+      ("file", "annotate", "--revision", 'description(glob:"one*")', "f.txt"),
+      fixture="conflict", claims=("file annotate", "--revision"), colour="bytes"),
+    E("file-annotate-r",
+      ("file", "annotate", "-r", 'description(glob:"base*")', "f.txt"),
+      fixture="conflict", claims=("file annotate", "-r"), colour="bytes"),
     # `chain` writes one word a file, so a pattern that names a word
     # names exactly one of them -- and `-r` moves to a revision where
     # the newest file is not there yet.

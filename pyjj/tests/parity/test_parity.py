@@ -3195,6 +3195,40 @@ def test_tag_list_renders_a_jinja_template(pair: RepoPair) -> None:
     assert cli == py
 
 
+@pytest.mark.covers("file list", "--template", "-T")
+def test_file_list_renders_a_jinja_template(pair: RepoPair) -> None:
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["file", "list", "-T", 'format_path(path) ++ "!\n"'],
+        ["file", "list", "-T", "{{ path }}!"],
+    )
+    assert cli == py
+
+
+@pytest.mark.covers("file show", "--template", "-T")
+def test_file_show_renders_a_jinja_template(pair: RepoPair) -> None:
+    """`templates.file_show` heads each file's content, and is empty by
+    default -- so a template is the only way to see which file a block
+    of content came from."""
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["file", "show", "-T", 'format_path(path) ++ ":\n"', "base.txt", "one.txt"],
+        ["file", "show", "-T", "{{ path }}:", "base.txt", "one.txt"],
+    )
+    assert cli == py
+
+
+@pytest.mark.covers("file annotate", "--template", "-T")
+def test_file_annotate_renders_a_jinja_template(pair: RepoPair) -> None:
+    chain(pair)
+    cli, py = pair.outputs_asymmetric(
+        ["file", "annotate", "-T",
+         'line_number ++ ": " ++ content', "one.txt"],
+        ["file", "annotate", "-T", "{{ line_number }}: {{ content }}", "one.txt"],
+    )
+    assert cli == py
+
+
 @pytest.mark.covers("workspace list", "--template", "-T")
 def test_workspace_list_renders_a_jinja_template(pair: RepoPair) -> None:
     chain(pair)

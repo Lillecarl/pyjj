@@ -110,26 +110,8 @@
   "file": [
     "(command)"
   ],
-  "file annotate": [
-    "--revision",
-    "--template",
-    "-T",
-    "-r"
-  ],
   "file chmod": [
     "--revision",
-    "-r"
-  ],
-  "file list": [
-    "--revision",
-    "--template",
-    "-T",
-    "-r"
-  ],
-  "file show": [
-    "--revision",
-    "--template",
-    "-T",
     "-r"
   ],
   "file track": [

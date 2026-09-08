@@ -62,18 +62,6 @@
     "edit": [
       "-r"
     ],
-    "file annotate": [
-      "--template",
-      "-T"
-    ],
-    "file list": [
-      "--template",
-      "-T"
-    ],
-    "file show": [
-      "--template",
-      "-T"
-    ],
     "fix": [
       "--all-lines",
       "-a"
