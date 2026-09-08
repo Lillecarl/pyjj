@@ -950,9 +950,17 @@ def _print_ref(repo, settings, ref, template=None, tracked=(), *,
         for text, labels in pieces:
             fmt.write(text, *labels.split())
 
+    # jj wraps a working-copy commit's summary in `working_copy`, which
+    # is what turns its two ids bright and the whole row bold. A ref
+    # pointing at `@` is common enough that leaving it out shows.
+    wc_ids = set(repo.view().values())
+
     def summary(commit_id, under: str) -> None:
         commit = repo.get_commit(commit_id)
-        with fmt.labeled(*under.split()):
+        labels = under.split()
+        if commit_id.hex() in wc_ids:
+            labels.append("working_copy")
+        with fmt.labeled(*labels):
             spans(_commit_summary_spans(repo, settings, commit, []))
 
     def line(commit_id, head=None, prefix: str = "",
