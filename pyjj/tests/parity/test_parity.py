@@ -3932,3 +3932,65 @@ def test_bookmark_move_to_where_it_already_is(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "move", "main", "--to", rev("one")])
     pair.assert_parity()
+
+
+# -- metaedit ------------------------------------------------------------------
+
+
+@pytest.mark.covers("metaedit", "-m", "--message")
+@pytest.mark.parametrize("flag", ["-m", "--message"])
+def test_metaedit_sets_the_description(pair: RepoPair, flag) -> None:
+    """`metaedit -m` is `describe -m` without the editor, and it takes
+    several revisions at once."""
+    chain(pair)
+    pair.op(jj=["metaedit", rev("one"), rev("two"), flag, "renamed"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("metaedit", "--update-change-id")
+def test_metaedit_generates_a_new_change_id(pair: RepoPair) -> None:
+    """The commit keeps its content and its description, and stops
+    being the same change."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-change-id"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("metaedit", "--author-timestamp")
+def test_metaedit_sets_the_author_date(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"),
+                "--author-timestamp", "2000-01-23T01:23:45+00:00"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("metaedit", "--update-author-timestamp")
+def test_metaedit_updates_the_author_date(pair: RepoPair) -> None:
+    """The author date becomes now, and the author name and email stay.
+    The harness pins the clock, so both sides stamp the same instant."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-author-timestamp"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("metaedit", "--update-author")
+def test_metaedit_updates_the_author(pair: RepoPair) -> None:
+    """The author becomes the configured user and the author date stays
+    where it was, which is what separates this from the timestamp flag."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "--author",
+                "Someone Else <else@example.com>"])
+    pair.op(jj=["metaedit", "-r", rev("one"), "--update-author"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("metaedit", "--force-rewrite")
+def test_metaedit_force_rewrite(pair: RepoPair) -> None:
+    """Asking for metadata a commit already has changes nothing.
+    `--force-rewrite` rewrites it anyway, which restamps the committer
+    and so moves the commit id."""
+    chain(pair)
+    pair.op(jj=["metaedit", "-r", rev("one"), "-m", "one"])
+    pair.assert_parity()
+    pair.op(jj=["metaedit", "-r", rev("one"), "--force-rewrite"])
+    pair.assert_parity()

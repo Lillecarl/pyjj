@@ -199,15 +199,6 @@
   "help": [
     "(command)"
   ],
-  "metaedit": [
-    "--author-timestamp",
-    "--force-rewrite",
-    "--message",
-    "--update-author",
-    "--update-author-timestamp",
-    "--update-change-id",
-    "-m"
-  ],
   "next": [
     "--conflict",
     "--no-edit",
