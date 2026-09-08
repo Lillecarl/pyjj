@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import pyjj
 import pyjj.hunk as hunk_mod
 from ..common import (
+    _name_matches,
     _start_transaction,
     _formatter,
     _print_ref,
@@ -271,19 +272,6 @@ def bookmark(args) -> int:
         return 0
     print(f"usage: pyjj bookmark {{create,set,delete,forget,list,move,rename}}", file=sys.stderr)
     return 2
-
-
-def _name_matches(name: str, pattern: str) -> bool:
-    """jj's string patterns, as far as a bookmark name needs them: a
-    bare pattern is a glob, and the three prefixes name the rest."""
-    for prefix, test in (
-        ("exact:", lambda n, p: n == p),
-        ("glob:", fnmatch.fnmatchcase),
-        ("substring:", lambda n, p: p in n),
-    ):
-        if pattern.startswith(prefix):
-            return test(name, pattern[len(prefix):].strip("\"'"))
-    return fnmatch.fnmatchcase(name, pattern)
 
 
 def _is_fast_forward(repo, settings, old_ids, new_id) -> bool:

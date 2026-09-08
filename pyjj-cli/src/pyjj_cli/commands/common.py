@@ -274,6 +274,25 @@ def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
     if new_wc_hex != old_wc_hex:
         fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
 
+def _name_matches(name: str, pattern: str) -> bool:
+    """jj's string patterns, as far as a name needs them: a bare pattern
+    is a glob, and the three prefixes name the rest.
+
+    A bookmark, a tag and a remote all take a pattern in the same
+    places, so they all read it the same way.
+    """
+    import fnmatch
+
+    for prefix, test in (
+        ("exact:", lambda n, p: n == p),
+        ("glob:", fnmatch.fnmatchcase),
+        ("substring:", lambda n, p: p in n),
+    ):
+        if pattern.startswith(prefix):
+            return test(name, pattern[len(prefix):].strip("\"'"))
+    return fnmatch.fnmatchcase(name, pattern)
+
+
 def _split_remote_ref(name: str, default_remote):
     """`BOOKMARK@REMOTE` -> `("BOOKMARK", "REMOTE")`.
 
