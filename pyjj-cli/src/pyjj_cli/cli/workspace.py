@@ -16,7 +16,11 @@ def add_parsers(sub) -> None:
     p_ws_add = ws_sub.add_parser("add", help="Add a workspace")
     p_ws_add.add_argument("destination", help="Where to create the new workspace")
     p_ws_add.add_argument("--name", dest="name", default=None, help="A name for the workspace")
-    add_flags(p_ws_add, [Flag.REVISION_APPEND])
+    add_flags(p_ws_add, [Flag.REVISION_APPEND, Flag.MESSAGE_APPEND])
+    p_ws_add.add_argument("--sparse-patterns", dest="sparse_patterns",
+                          choices=("copy", "full", "empty"), default="copy",
+                          help="What the new workspace's sparse patterns "
+                               "start as (default: copy)")
     p_ws_add.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_add:workspace_add")
     p_ws_forget = ws_sub.add_parser("forget", help="Stop tracking a workspace")
     p_ws_forget.add_argument("names", nargs="+", help="Workspaces to forget")
