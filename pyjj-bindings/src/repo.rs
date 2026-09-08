@@ -994,16 +994,25 @@ impl PyTransaction {
         })
     }
 
-    /// `jj git fetch` equivalent: fetches the given bookmark names from
-    /// `remote` (as a `git fetch` subprocess) and imports the result.
+    /// `jj git fetch` equivalent: fetches from `remote` (as a `git fetch`
+    /// subprocess) and imports the result.
+    ///
+    /// `branches` and `tags` are name patterns -- `*` globs, every other
+    /// character is itself. `tracked` asks for only the bookmarks and
+    /// tags this repository already tracks. Naming none of the three
+    /// fetches what the remote's Git refspec says, plus every tag the
+    /// fetched commits reach.
+    #[pyo3(signature = (settings, remote, branches=None, tags=None, tracked=false))]
     fn git_fetch(
         &self,
         settings: &PyUserSettings,
         remote: &str,
-        bookmark_names: Vec<String>,
+        branches: Option<Vec<String>>,
+        tags: Option<Vec<String>>,
+        tracked: bool,
     ) -> PyResult<Py<PyAny>> {
         with_mut_repo(self, |mut_repo| {
-            crate::git::fetch(mut_repo, settings, remote, bookmark_names)
+            crate::git::fetch(mut_repo, settings, remote, branches, tags, tracked)
         })
     }
 

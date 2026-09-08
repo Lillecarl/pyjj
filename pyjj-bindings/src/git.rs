@@ -242,36 +242,104 @@ pub fn untrack_remote_bookmark(mut_repo: &mut MutableRepo, remote: &str, bookmar
     mut_repo.untrack_remote_bookmark(symbol);
 }
 
+/// The refs one `jj git fetch` asks `remote` for.
+///
+/// jj builds two expressions a remote, one for bookmarks and one for
+/// tags, and a flag saying whether git may follow tags on its own. The
+/// three cases are `--tracked`, a fetch that names branches or tags, and
+/// a plain fetch.
+///
+/// A plain fetch reads the remote's own refspec out of the Git config
+/// and asks for no tag, which leaves git's implicit tag following on --
+/// so a tag that a fetched branch reaches still arrives. Naming
+/// anything turns that off, which is why `-b side` brings no tag with
+/// it.
+///
+/// jj also reads `remotes.<name>.fetch-bookmarks` and `fetch-tags` here.
+/// Those are configuration rather than a flag, so this skips them and
+/// falls straight to the Git refspec.
+fn fetch_expressions(
+    mut_repo: &MutableRepo,
+    remote_name: &RemoteName,
+    branches: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    tracked: bool,
+) -> PyResult<(StringExpression, StringExpression, bool)> {
+    if tracked {
+        // Only what this repository already tracks, named exactly. A
+        // remote bookmark nobody tracks is not asked for again.
+        let view = mut_repo.view();
+        let bookmark = StringExpression::union_all(
+            view.local_remote_bookmarks(remote_name)
+                .filter(|(_, targets)| targets.remote_ref.is_tracked())
+                .map(|(name, _)| StringExpression::exact(name.as_str()))
+                .collect(),
+        );
+        let tag = StringExpression::union_all(
+            view.local_remote_tags(remote_name)
+                .filter(|(_, targets)| targets.remote_ref.is_tracked())
+                .map(|(name, _)| StringExpression::exact(name.as_str()))
+                .collect(),
+        );
+        return Ok((bookmark, tag, true));
+    }
+
+    let is_specific = branches.is_some() || tags.is_some();
+    let bookmark = match branches {
+        Some(patterns) => bookmark_expression(Some(patterns))?,
+        None if is_specific => StringExpression::none(),
+        None => {
+            let git_repo = git::get_git_backend(mut_repo.store())
+                .map_err(map_py_err)?
+                .git_repo();
+            // The second half is the refspecs jj cannot express, which
+            // it warns about. There is no ui here, so they are dropped.
+            let (_ignored, expr) =
+                git::load_default_fetch_bookmarks(remote_name, &git_repo).map_err(map_py_err)?;
+            expr
+        }
+    };
+    let tag = match tags {
+        Some(patterns) => bookmark_expression(Some(patterns))?,
+        None => StringExpression::none(),
+    };
+    Ok((bookmark, tag, is_specific))
+}
+
 /// `jj git fetch` equivalent: runs `git fetch` (as a subprocess, so it
 /// reuses the system's normal Git authentication — SSH agent, credential
-/// helpers, etc.) for the given bookmark names against `remote`, then
-/// imports the fetched refs into the view. Tags are not fetched.
+/// helpers, etc.) against `remote`, then imports the fetched refs into
+/// the view.
+///
+/// `branches` and `tags` are name patterns, `tracked` asks for only what
+/// this repository already tracks; see `fetch_expressions` for what each
+/// combination asks the remote for.
 ///
 /// Returns the same summary dict shape as `git_import_refs()`.
 pub fn fetch(
     mut_repo: &mut MutableRepo,
     settings: &PyUserSettings,
     remote: &str,
-    bookmark_names: Vec<String>,
+    branches: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    tracked: bool,
 ) -> PyResult<Py<PyAny>> {
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
     let import_options = default_import_options();
 
-    let expr = GitFetchRefExpression {
-        bookmark: StringExpression::union_all(
-            bookmark_names.iter().map(StringExpression::exact).collect(),
-        ),
-        tag: StringExpression::none(),
-    };
+    let (bookmark, tag, no_implicit_tags) =
+        fetch_expressions(mut_repo, remote_name, branches, tags, tracked)?;
+    let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
 
     let mut git_fetch =
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
+    let fetch_tags = no_implicit_tags.then_some(jj_lib::git::FetchTagsOverride::NoTags);
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, None, None)
+        .fetch(remote_name, expanded, &mut callback, None, fetch_tags)
         .map_err(map_git_fetch_err)?;
     let stats = pollster::block_on(git_fetch.import_refs()).map_err(map_git_import_err)?;
 
