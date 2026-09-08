@@ -57,6 +57,8 @@ impl PyWorkspace {
         destination_path: String,
         name: Option<String>,
         revision_ids: Option<Vec<PyCommitId>>,
+        description: Option<String>,
+        sparse_patterns: Option<Vec<String>>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let dest_path = std::path::Path::new(&destination_path);
         let workspace_name = match name {
@@ -130,8 +132,11 @@ impl PyWorkspace {
         let tree =
             pollster::block_on(merge_commit_trees(&mut_repo, &parents)).map_err(map_backend_err)?;
         let parent_ids = parents.iter().map(|c| c.id().clone()).collect();
-        let new_wc_commit = pollster::block_on(mut_repo.new_commit(parent_ids, tree).write())
-            .map_err(map_backend_err)?;
+        let mut builder = mut_repo.new_commit(parent_ids, tree);
+        if let Some(text) = &description {
+            builder = builder.set_description(text);
+        }
+        let new_wc_commit = pollster::block_on(builder.write()).map_err(map_backend_err)?;
         pollster::block_on(mut_repo.edit(workspace_name.clone(), &new_wc_commit))
             .map_err(|err| JjError::new_err(err.to_string()))?;
         // `edit()` may abandon the placeholder (root-pointing) wc commit
@@ -150,12 +155,15 @@ impl PyWorkspace {
         .map_err(map_transaction_err)?;
 
         let py_repo = wrap_repo(&new_ws, new_repo);
-        Ok((
-            Self {
-                inner: Mutex::new(new_ws),
-            },
-            py_repo,
-        ))
+        let py_ws = Self {
+            inner: Mutex::new(new_ws),
+        };
+        if let Some(patterns) = sparse_patterns {
+            // The new workspace starts unrestricted, so only a caller
+            // asking for something else has anything to do here.
+            Python::attach(|py| py_ws.set_sparse_patterns(py, patterns))?;
+        }
+        Ok((py_ws, py_repo))
     }
 }
 
@@ -683,7 +691,11 @@ impl PyWorkspace {
     /// Returns the new `(Workspace, ReadonlyRepo)` pair -- `self`'s own repo
     /// object is unaffected by this call (call `load_at_head()` again on it
     /// to see the new workspace show up in `view()`).
-    #[pyo3(signature = (settings, destination_path, name=None, revision_ids=None))]
+    /// `description` becomes the new working-copy commit's message, and
+    /// `sparse_patterns` its sparse patterns -- `None` leaves the
+    /// workspace unrestricted, which is what a fresh one is.
+    #[pyo3(signature = (settings, destination_path, name=None, revision_ids=None,
+                        description=None, sparse_patterns=None))]
     fn add_workspace(
         &self,
         py: Python<'_>,
@@ -691,11 +703,15 @@ impl PyWorkspace {
         destination_path: String,
         name: Option<String>,
         revision_ids: Option<Vec<PyCommitId>>,
+        description: Option<String>,
+        sparse_patterns: Option<Vec<String>>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
-        py.detach(move || {
+        let (ws, repo) = py.detach(move || {
             let inner = self.inner.lock().unwrap();
-            Self::add_workspace_inner(&inner, settings, destination_path, name, revision_ids)
-        })
+            Self::add_workspace_inner(&inner, settings, destination_path, name, revision_ids,
+                                      description, sparse_patterns)
+        })?;
+        Ok((ws, repo))
     }
 
     /// `jj workspace forget [names...]` equivalent: stops tracking the
