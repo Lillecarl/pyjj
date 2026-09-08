@@ -120,6 +120,21 @@ class Flag(Enum):
     RANGE = auto()
 
 
+def add_list_filter_flags(parser: argparse.ArgumentParser, kind: str) -> None:
+    """`-r` and `--sort`, which `bookmark list` and `tag list` share.
+
+    `-r` selects by where a ref points rather than by its name, and
+    repeats. `--sort` takes its keys comma-separated or repeated, and
+    defaults to the `ui.<kind>-list-sort-keys` setting.
+    """
+    parser.add_argument("-r", "--revision", "--revisions", dest="revisions",
+                        action="append", default=None, metavar="REVSETS",
+                        help=f"Show {kind}s whose targets are in these revisions")
+    parser.add_argument("--sort", dest="sort", action="append", default=None,
+                        metavar="SORT_KEY",
+                        help="Sort by this key; suffix it with `-` to reverse")
+
+
 def add_revision_flag(parser: argparse.ArgumentParser, dest: str = "revision", default: str = "@", required: bool = False, help: str = "Revision to operate on (default: @)", to_alias: bool = False) -> None:
     # `bookmark create`, `bookmark set` and `tag set` also answer to
     # `--to`, so that moving between the three needs no retyping.

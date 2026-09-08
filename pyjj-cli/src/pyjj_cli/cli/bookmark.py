@@ -1,6 +1,6 @@
 import argparse
 
-from .flags import Flag, add_flags, add_revision_flag
+from .flags import Flag, add_flags, add_list_filter_flags, add_revision_flag
 
 
 def _bm_help(args):
@@ -45,6 +45,9 @@ def add_parsers(sub) -> None:
     p_bml.add_argument("-t", "--tracked", action="store_true", help=argparse.SUPPRESS)
     p_bml.add_argument("--remote", dest="remotes", action="append",
                        metavar="REMOTE", help=argparse.SUPPRESS)
+    p_bml.add_argument("-c", "--conflicted", action="store_true",
+                       help="Show conflicted bookmarks only")
+    add_list_filter_flags(p_bml, "bookmark")
     # jj drives this from `templates.bookmark_list`; pyjj-cli uses Jinja
     # under `pyjj.templates.bookmark_list`.
     p_bml.add_argument("-T", "--template", default=None, metavar="TEMPLATE",

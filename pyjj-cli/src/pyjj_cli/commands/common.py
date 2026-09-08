@@ -274,6 +274,190 @@ def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
     if new_wc_hex != old_wc_hex:
         fresh_ws.check_out(fresh_repo, fresh_repo.get_commit(pyjj.CommitId(new_wc_hex)))
 
+class _DeletedRef:
+    """A ref whose local target is gone but whose remotes remain.
+
+    `repo.bookmarks()` and `repo.tags()` list what is present, so a name
+    that survives on a remote alone has nothing to stand for it. jj
+    still heads the item with `name (deleted)`.
+    """
+
+    has_conflict = False
+    removed_ids = ()
+    target_ids = ()
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def _ref_list_items(repo, settings, args, kind: str = "bookmark"):
+    """The items `jj bookmark list` and `jj tag list` print, in jj's order.
+
+    This is `collect_items` from jj's `cli/src/commit_ref_list.rs`,
+    which both listings share, driven by the same predicates:
+
+      * a local ref appears on its own only without `--tracked` and
+        without `--remote`;
+      * a tracked remote ref appears only when its target differs from
+        the local one, unless `--tracked`, `--all-remotes` or
+        `--remote` asks for the synced ones too;
+      * an untracked remote ref appears as an item of its own under
+        `--all-remotes` or `--remote`, never under `--tracked`.
+
+    A name with no local ref still heads an item when a tracked remote
+    survives under it, which is how a deleted bookmark stays visible.
+
+    Names and revisions select together, not apart: a ref is listed
+    when its name matches *or* one of its local targets is in `-r`.
+    Naming neither takes every ref; naming revisions alone matches no
+    name at all, so the revisions decide on their own.
+
+    Items sort by name. jj sorts the whole list, and its sort is
+    stable, so a name's own item comes before the untracked remotes
+    that share its name.
+    """
+    all_remotes = getattr(args, "all_remotes", False)
+    tracked_only = getattr(args, "tracked", False)
+    patterns = getattr(args, "remotes", None)
+    names = list(getattr(args, "names", None) or [])
+    targets = _ref_list_targets(repo, settings, args)
+
+    include_local_only = not tracked_only and patterns is None
+    include_synced = tracked_only or all_remotes or patterns is not None
+    include_untracked = not tracked_only and (all_remotes or patterns is not None)
+
+    def matches(remote: str) -> bool:
+        if patterns is not None:
+            return any(_name_matches(remote, p) for p in patterns)
+        # `--tracked` on its own means `--remote=~git`: the local
+        # Git-tracking remote is noise in a listing about remotes.
+        return not (tracked_only and remote == "git")
+
+    def selected(name: str, local) -> bool:
+        if names:
+            if any(_name_matches(name, pattern) for pattern in names):
+                return True
+        elif targets is None:
+            # Neither names nor revisions: every ref.
+            return True
+        if targets is None or local is None:
+            return False
+        return any(i.hex() in targets for i in local.target_ids)
+
+    def conflicted_only(local) -> bool:
+        if not getattr(args, "conflicted", False):
+            return True
+        return local is not None and local.has_conflict
+
+    def synced(local, remote_ref) -> bool:
+        return (
+            local is not None
+            and list(remote_ref.target_ids) == list(local.target_ids)
+            and list(remote_ref.removed_ids) == list(local.removed_ids)
+        )
+
+    if kind == "tag":
+        locals_ = {ref.name: ref for ref in repo.tags()}
+        remotes = repo.remote_tags()
+    else:
+        locals_ = {ref.name: ref for ref in repo.bookmarks()}
+        remotes = repo.remote_bookmarks()
+    by_name: dict[str, list] = {}
+    for remote_ref in remotes:
+        by_name.setdefault(remote_ref.name, []).append(remote_ref)
+
+    items = []
+    for name in sorted(set(locals_) | set(by_name)):
+        local = locals_.get(name)
+        if not selected(name, local) or not conflicted_only(local):
+            continue
+        refs = sorted(
+            (r for r in by_name.get(name, []) if matches(r.remote)),
+            key=lambda r: r.remote,
+        )
+        tracked = [r for r in refs if r.tracked]
+        if not include_synced:
+            tracked = [r for r in tracked if not synced(local, r)]
+        if (include_local_only and local is not None and local.target_ids) or tracked:
+            local_ids = list(local.target_ids) if local is not None else []
+            items.append((local or _DeletedRef(name),
+                          [(r, local_ids) for r in tracked]))
+        if include_untracked:
+            items.extend((r, ()) for r in refs if not r.tracked)
+    return items
+
+
+def _ref_list_targets(repo, settings, args):
+    """The commits `-r` names, as a set of hex ids, or `None`.
+
+    `None` says the listing asked for no revisions, which is what tells
+    "every ref" from "the refs these revisions carry".
+    """
+    revisions = getattr(args, "revisions", None)
+    if not revisions:
+        return None
+    return {commit.id.hex()
+            for commit in _resolve_all(repo, settings, revisions)}
+
+
+# What each `--sort` key reads. jj spells a descending key with a
+# trailing `-`, and takes the keys comma-separated or repeated. The
+# first key is the most significant.
+_SORT_KEYS = (
+    "name", "author-name", "author-email", "author-date",
+    "committer-name", "committer-email", "committer-date",
+)
+
+
+def _sort_ref_items(repo, settings, items, args, kind: str = "bookmark"):
+    """Sort listing items by `--sort`, or by the setting that defaults it.
+
+    jj sorts one key at a time from the least significant, which its
+    stable sort turns into a sort by all of them. This does the same.
+    """
+    keys = []
+    for value in getattr(args, "sort", None) or []:
+        keys.extend(part for part in value.split(",") if part)
+    if not keys:
+        setting = f"ui.{kind}-list-sort-keys"
+        keys = list(settings.get_string_list(setting) or ["name"])
+    for key in keys:
+        name = key[:-1] if key.endswith("-") else key
+        if name not in _SORT_KEYS:
+            raise CommandError(
+                f"invalid value '{key}' for '--sort <SORT_KEY>'")
+    for key in reversed(keys):
+        descending = key.endswith("-")
+        name = key[:-1] if descending else key
+        items.sort(key=lambda item: _sort_value(repo, item[0], name),
+                   reverse=descending)
+    return items
+
+
+def _sort_value(repo, ref, key):
+    """One item's value under one sort key.
+
+    A ref with no target has no commit to read, and jj sorts it before
+    every ref that has one.
+    """
+    if key == "name":
+        remote = getattr(ref, "remote", None)
+        # jj sorts by `(name, Option<remote>)`, and a local ref -- whose
+        # remote is `None` -- comes first among the ones sharing a name.
+        return (ref.name, remote is not None, remote or "")
+    ids = list(ref.target_ids)
+    if not ids:
+        return (0, ())
+    commit = repo.get_commit(ids[0])
+    signature = commit.author() if key.startswith("author") else commit.committer()
+    if key.endswith("-name"):
+        return (1, (signature.name,))
+    if key.endswith("-email"):
+        return (1, (signature.email,))
+    stamp = signature.timestamp
+    return (1, (stamp.millis_since_epoch, stamp.tz_offset_minutes))
+
+
 def _name_matches(name: str, pattern: str) -> bool:
     """jj's string patterns, as far as a name needs them: a bare pattern
     is a glob, and the three prefixes name the rest.

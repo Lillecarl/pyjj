@@ -1,6 +1,6 @@
 import argparse
 
-from .flags import Flag, add_flags, add_revision_flag
+from .flags import Flag, add_flags, add_list_filter_flags, add_revision_flag
 
 
 def _tag_help(args):
@@ -15,6 +15,18 @@ def add_parsers(sub) -> None:
     tag_sub = p_tag.add_subparsers(dest="tag_command")
     p_tag_list = tag_sub.add_parser("list", help="List tags")
     p_tag_list.add_argument("names", nargs="*", help="Tags to list")
+    p_tag_list.add_argument("-a", "--all-remotes", "--all", dest="all_remotes",
+                            action="store_true",
+                            help="Show remote tags as well as local ones")
+    # jj hides these two until remote tags are stable, so they carry no
+    # help of their own here either.
+    p_tag_list.add_argument("--remote", dest="remotes", action="append",
+                            metavar="REMOTE", help=argparse.SUPPRESS)
+    p_tag_list.add_argument("-t", "--tracked", action="store_true",
+                            help=argparse.SUPPRESS)
+    p_tag_list.add_argument("-c", "--conflicted", action="store_true",
+                            help="Show conflicted tags only")
+    add_list_filter_flags(p_tag_list, "tag")
     p_tag_list.add_argument("-T", "--template", default=None, metavar="TEMPLATE",
                             help="Render each tag with this Jinja template")
     p_tag_list.set_defaults(_handler="pyjj_cli.commands.tag.tag_list:tag_list")
