@@ -26,6 +26,9 @@ def add_parsers(sub) -> None:
     p_bms.add_argument("-r", "--revision", "--to", dest="revision",
                        default="@", metavar="REVSET",
                        help="The bookmark's target revision (default: @)")
+    p_bms.add_argument("-B", "--allow-backwards", dest="allow_backwards",
+                       action="store_true", default=False,
+                       help="Allow moving the bookmark backwards or sideways")
     p_bms.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bmd = bm_sub.add_parser("delete", help="Delete a bookmark")
@@ -55,6 +58,9 @@ def add_parsers(sub) -> None:
                        help="Move bookmarks from the given revisions")
     p_bmm.add_argument("-t", "--to", dest="to", default="@", metavar="REVSET",
                        help="Target revision (default: @)")
+    p_bmm.add_argument("-B", "--allow-backwards", dest="allow_backwards",
+                       action="store_true", default=False,
+                       help="Allow moving bookmarks backwards or sideways")
     p_bmm.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bmr = bm_sub.add_parser("rename", help="Rename a bookmark")

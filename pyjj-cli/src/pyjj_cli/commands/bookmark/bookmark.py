@@ -163,7 +163,16 @@ def bookmark(args) -> int:
             target = _resolve_one(repo, settings, args.revision)
             names = list(getattr(args, "names", None) or [])
             # Unlike `move`, this creates a bookmark that is not there
-            # yet.
+            # yet. What it will not do without `-B` is move an existing
+            # one anywhere but forward.
+            if not getattr(args, "allow_backwards", False):
+                for name in names:
+                    existing = repo.get_bookmark(name)
+                    targets = list(existing.target_ids) if existing else []
+                    if not _is_fast_forward(repo, settings, targets, target.id):
+                        raise CommandError(
+                            "Refusing to move bookmark backwards or "
+                            f"sideways: {name}")
             tx = _start_transaction(repo, settings)
             for name in names:
                 tx.set_bookmark(name, target.id)
@@ -243,6 +252,13 @@ def bookmark(args) -> int:
             if not to_move:
                 print("No bookmarks to update.")
                 return 0
+            if not getattr(args, "allow_backwards", False):
+                for bookmark in to_move:
+                    if not _is_fast_forward(repo, settings,
+                                            bookmark.target_ids, target.id):
+                        raise CommandError(
+                            "Refusing to move bookmark backwards or "
+                            f"sideways: {bookmark.name}")
             tx = _start_transaction(repo, settings)
             for bookmark in to_move:
                 tx.set_bookmark(bookmark.name, target.id)
@@ -268,3 +284,18 @@ def _name_matches(name: str, pattern: str) -> bool:
         if pattern.startswith(prefix):
             return test(name, pattern[len(prefix):].strip("\"'"))
     return fnmatch.fnmatchcase(name, pattern)
+
+
+def _is_fast_forward(repo, settings, old_ids, new_id) -> bool:
+    """Whether moving a bookmark from `old_ids` to `new_id` only goes
+    forward.
+
+    jj allows the move when *any* old target is an ancestor of the new
+    one, so resolving a conflicted bookmark onto one of its own sides
+    counts as forward. A bookmark that does not exist yet has nowhere to
+    go backwards from.
+    """
+    if not old_ids:
+        return True
+    union = " | ".join(i.hex() for i in old_ids)
+    return bool(repo.revset(settings, f"({union}) & ::{new_id.hex()}"))
