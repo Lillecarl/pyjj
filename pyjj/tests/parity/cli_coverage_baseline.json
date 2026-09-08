@@ -46,7 +46,6 @@
   ],
   "bookmark create": [
     "--revision",
-    "--to",
     "-r"
   ],
   "bookmark forget": [
@@ -271,13 +270,6 @@
     "--sort",
     "-a",
     "-c",
-    "-r"
-  ],
-  "tag set": [
-    "(command)",
-    "--allow-move",
-    "--revision",
-    "--to",
     "-r"
   ],
   "unsign": [

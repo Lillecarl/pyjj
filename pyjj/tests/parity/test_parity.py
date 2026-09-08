@@ -1726,9 +1726,50 @@ def test_read_only_command_does_not_perturb_the_repo(pair: RepoPair, argv) -> No
 # explicitly (`tags` in the extracted per-commit state).
 
 
+@pytest.mark.covers("bookmark create", "--to")
+def test_bookmark_create_by_the_to_spelling(pair: RepoPair) -> None:
+    """`create`, `set` and `move` all answer to `--to`, so a reader who
+    picks the wrong one of the three does not have to retype it."""
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "feature", "--to", rev("one")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("tag set", "-r")
 def test_tag_set(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("tag set", "--revision")
+def test_tag_set_by_the_long_revision_spelling(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "--revision", rev("one")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("tag set", "--to")
+def test_tag_set_by_the_to_spelling(pair: RepoPair) -> None:
+    """`--to` is the same flag under the name `bookmark move` uses, so
+    that moving between the three commands needs no retyping."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "--to", rev("one")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("tag set")
+def test_tag_set_defaults_to_the_working_copy(pair: RepoPair) -> None:
+    """Naming no revision tags `@`."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("tag set")
+def test_tag_set_takes_several_names(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "v2", "-r", rev("one")])
     pair.assert_parity()
 
 
@@ -1740,6 +1781,7 @@ def test_tag_delete(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("tag set", "--allow-move")
 def test_tag_set_then_move(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
@@ -1747,6 +1789,7 @@ def test_tag_set_then_move(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("tag set", "--allow-move")
 def test_tag_set_refuses_to_move_without_the_flag(pair: RepoPair) -> None:
     """A tag is meant to stay put: moving it needs `--allow-move`."""
     chain(pair)

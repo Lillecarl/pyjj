@@ -39,9 +39,6 @@
     "arrange": [
       "-r"
     ],
-    "bookmark create": [
-      "--to"
-    ],
     "bookmark forget": [
       "--include-remotes"
     ],
@@ -119,9 +116,6 @@
       "-a",
       "-c",
       "-r"
-    ],
-    "tag set": [
-      "--to"
     ],
     "workspace add": [
       "--message",
