@@ -370,6 +370,7 @@ class RepoPair:
         diff_spec: dict | None = None,
         merge_spec: dict | None = None,
         may_fail: bool = False,
+        cwd: str | None = None,
     ) -> int | None:
         """Run one logical operation on both sides.
 
@@ -388,7 +389,11 @@ class RepoPair:
         ids. `diff_spec` arms the scripted dir-based diff tool;
         `merge_spec` arms the scripted 3-way merge tool. `may_fail`
         accepts nonzero exits from BOTH sides (expected-failure flows like
-        partial resolution); state comparison still applies.
+        partial resolution); state comparison still applies. `cwd` names a
+        directory under each working copy to run from, for the commands
+        that answer differently depending on where they were invoked --
+        `jj run --root` is the one that has no other way to be told
+        apart.
         """
         env = self._env(bump=True)
         self._write_files({**(files or {}), **(cli_files or {})}, self.cli_repo)
@@ -406,7 +411,9 @@ class RepoPair:
                                editor_spec=cli_spec, may_fail=may_fail)
             else:
                 rc = self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
-                               stdin=stdin, cwd=self.cli_repo, editor_spec=cli_spec,
+                               stdin=stdin,
+                               cwd=self.cli_repo / cwd if cwd else self.cli_repo,
+                               editor_spec=cli_spec,
                                diff_spec=diff_spec, merge_spec=merge_spec,
                                may_fail=may_fail)
         if jj or py:
@@ -414,7 +421,7 @@ class RepoPair:
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
                 stdin=stdin,
-                cwd=self.py_repo,
+                cwd=self.py_repo / cwd if cwd else self.py_repo,
                 editor_spec=py_spec,
                 diff_spec=diff_spec,
                 merge_spec=merge_spec,
