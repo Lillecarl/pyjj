@@ -169,6 +169,64 @@ def remote(pair) -> None:
     pair.op(jj=["bookmark", "track", "main@origin"])
 
 
+def _git(*args, cwd=None):
+    """One git command against the remote's seed, with the clock pinned.
+
+    A golden names commit ids, so every commit the remote gains has to
+    be the same bytes on every run -- the same reason `make_bare_remote`
+    pins its own.
+    """
+    import os
+
+    from parity_harness import PIN_TIME
+
+    env = {**os.environ, "GIT_AUTHOR_DATE": PIN_TIME,
+           "GIT_COMMITTER_DATE": PIN_TIME, "GIT_EDITOR": "true"}
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=A",
+         "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false", *args],
+        cwd=cwd, check=True, capture_output=True, env=env,
+    )
+
+
+def conflicted_refs(pair) -> None:
+    """Several bookmarks and tags, two of which the local repository and
+    the remote moved apart.
+
+    A fetch is what makes a conflicted ref: the local one moves one
+    way, the remote one another, and the import merges the two into a
+    conflict. Concurrent operations do not -- jj reconciles those
+    cleanly -- so this is the shape `--conflicted` has to be recorded
+    against.
+    """
+    chain(pair)
+    pair.remote = make_bare_remote(pair.root)
+    seed = pair.root / "seed"
+    _git("tag", "v1", cwd=str(seed))
+    _git("push", str(pair.remote), "v1", cwd=str(seed))
+    pair.op(jj=["git", "remote", "add", "origin", str(pair.remote)])
+    pair.op(jj=["git", "fetch"])
+    pair.op(jj=["bookmark", "track", "main@origin"])
+    # Both refs now move locally, away from what the remote holds.
+    pair.op(jj=["bookmark", "set", "main", "-r", 'description(glob:"one*")',
+                "--allow-backwards"])
+    pair.op(jj=["tag", "set", "v1", "-r", 'description(glob:"two*")',
+                "--allow-move"])
+    # More refs, on more than one commit. Without them `--sort` prints
+    # what any other order prints, and `-r` has nothing to leave out.
+    pair.op(jj=["bookmark", "create", "alpha", "-r", 'description(glob:"base*")'])
+    pair.op(jj=["bookmark", "create", "zeta", "-r", 'description(glob:"two*")'])
+    pair.op(jj=["tag", "set", "v2", "-r", 'description(glob:"base*")'])
+    # And the remote moves both of them somewhere else.
+    (seed / "file.txt").write_text("remote change\n")
+    _git("commit", "-am", "remote work", cwd=str(seed))
+    _git("tag", "-f", "v1", cwd=str(seed))
+    _git("push", "--force", str(pair.remote), "main", "v1", cwd=str(seed))
+    # Both halves have to be named: a fetch that names a tag names
+    # nothing else, so `-b main` is what brings the moved bookmark back.
+    pair.op(jj=["git", "fetch", "-b", "main", "-t", "v1"])
+
+
 FIXTURES = {
     "chain": chain,
     "remote": remote,
@@ -179,4 +237,5 @@ FIXTURES = {
     "squashed": squashed,
     "executable": executable,
     "whitespace": whitespace,
+    "conflicted_refs": conflicted_refs,
 }

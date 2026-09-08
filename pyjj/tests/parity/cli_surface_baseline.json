@@ -42,13 +42,6 @@
     "bookmark forget": [
       "--include-remotes"
     ],
-    "bookmark list": [
-      "--conflicted",
-      "--revision",
-      "--sort",
-      "-c",
-      "-r"
-    ],
     "bookmark rename": [
       "--overwrite-existing"
     ],
@@ -107,15 +100,6 @@
     ],
     "prev": [
       "--conflict"
-    ],
-    "tag list": [
-      "--all-remotes",
-      "--conflicted",
-      "--revision",
-      "--sort",
-      "-a",
-      "-c",
-      "-r"
     ],
     "workspace add": [
       "--message",

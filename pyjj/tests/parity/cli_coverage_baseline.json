@@ -51,13 +51,6 @@
   "bookmark forget": [
     "--include-remotes"
   ],
-  "bookmark list": [
-    "--conflicted",
-    "--revision",
-    "--sort",
-    "-c",
-    "-r"
-  ],
   "bookmark rename": [
     "--overwrite-existing"
   ],
@@ -262,15 +255,6 @@
   ],
   "tag": [
     "(command)"
-  ],
-  "tag list": [
-    "--all-remotes",
-    "--conflicted",
-    "--revision",
-    "--sort",
-    "-a",
-    "-c",
-    "-r"
   ],
   "unsign": [
     "--revision"
