@@ -6,6 +6,8 @@ import pyjj
 from ...formatter import render_block
 from ..common import (
     CommandError,
+    _commit_context,
+    _resolve_template,
     _finish,
     _format_timestamp,
     _load,
@@ -26,8 +28,9 @@ def file_annotate(args) -> int:
     a change id is what jj resolves.
     """
     try:
-        settings, _ws, repo = _load(args)
+        settings, ws, repo = _load(args)
         commit = _resolve_one(repo, settings, args.revision)
+        template = _resolve_template(settings, ws, args, "file_annotate")
         lines = commit.annotate(repo, args.path)
         commits: dict[str, object] = {}
         for number, ann in enumerate(lines, start=1):
@@ -36,6 +39,15 @@ def file_annotate(args) -> int:
             origin = commits.get(key)
             if origin is None:
                 origin = commits[key] = repo.get_commit(ann.commit_id)
+            if template is not None:
+                # A template replaces the four columns, not just their
+                # shape, so the commit's own variables come with the
+                # line's -- the same names every other listing offers.
+                context = _commit_context(repo, settings, origin, [])
+                context["line_number"] = number
+                context["content"] = line.decode("utf-8", "surrogateescape")
+                print(template.render(context))
+                continue
             local = (origin.author.email or "").split("@")[0][:8]
             stamp = _format_timestamp(origin.committer.timestamp)
             # jj's `templates.file_annotate`: four columns joined by a

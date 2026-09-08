@@ -16,17 +16,18 @@ def add_parsers(sub) -> None:
 
     p_flist = file_sub.add_parser("list", help="List files in a revision")
     add_revision_flag(p_flist, dest="revision", default="@", help="Revision to list files for (default: @)")
-    add_flags(p_flist, {Flag.FILESETS})
+    add_flags(p_flist, {Flag.FILESETS, Flag.TEMPLATE})
     p_flist.set_defaults(_handler="pyjj_cli.commands.file.list:file_list")
 
     p_fshow = file_sub.add_parser("show", help="Print contents of files in a revision")
     add_revision_flag(p_fshow, dest="revision", default="@", help="Revision to show files from (default: @)")
-    add_flags(p_fshow, {Flag.FILESETS_REQUIRED})
+    add_flags(p_fshow, {Flag.FILESETS_REQUIRED, Flag.TEMPLATE})
     p_fshow.set_defaults(_handler="pyjj_cli.commands.file.show:file_show")
 
     p_fannot = file_sub.add_parser("annotate", help="Show line annotation (blame)")
     add_revision_flag(p_fannot, dest="revision", default="@", help="Revision to annotate (default: @)")
     p_fannot.add_argument("path", metavar="PATH", help="File to annotate")
+    add_flags(p_fannot, {Flag.TEMPLATE})
     p_fannot.set_defaults(_handler="pyjj_cli.commands.file.annotate:file_annotate")
 
     p_fchmod = file_sub.add_parser("chmod", help="Sets or removes the executable bit for paths in the repo")
