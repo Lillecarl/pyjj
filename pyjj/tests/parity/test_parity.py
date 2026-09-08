@@ -3832,3 +3832,103 @@ def test_git_clone_fetch_tags(pair: RepoPair, deep_remote, mode) -> None:
     remote is configured for."""
     pair.init()
     clone_both(pair, str(deep_remote), f"tags-{mode}", "--fetch-tags", mode)
+
+
+# -- bookmark set and move -----------------------------------------------------
+#
+# The two are close enough to confuse: `set` names bookmarks and creates
+# what is missing, `move` selects bookmarks -- by name pattern, by where
+# they point, or both -- and only ever moves what is already there.
+# Neither will move a bookmark anywhere but forward without `-B`.
+
+
+BOOKMARK_SET_ARGV = [
+    ["-r", rev("two")],
+    ["--revision", rev("two")],
+    ["--to", rev("two")],
+]
+
+
+@pytest.mark.covers("bookmark set", "-r", "--revision", "--to")
+@pytest.mark.parametrize("argv", BOOKMARK_SET_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_bookmark_set_by_each_spelling(pair: RepoPair, argv) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "main", *argv])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark set")
+def test_bookmark_set_creates_what_is_missing(pair: RepoPair) -> None:
+    """`set` is the one that creates. It takes several names at once,
+    and defaults the revision to `@`."""
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "fresh", "other"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark set", "-B", "--allow-backwards")
+def test_bookmark_set_refuses_to_move_backwards(pair: RepoPair) -> None:
+    """`main` sits on 'one'. Moving it to 'base' is backwards, which jj
+    refuses until the flag says otherwise."""
+    chain(pair)
+    assert pair.op(jj=["bookmark", "set", "main", "-r", rev("base")],
+                   may_fail=True) != 0
+    pair.assert_parity()
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("base"),
+                "--allow-backwards"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark move")
+def test_bookmark_move_by_name(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "move", "main", "--to", rev("two")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark move", "-t", "--to")
+def test_bookmark_move_matches_a_name_pattern(pair: RepoPair) -> None:
+    """A name is a pattern, so one argument moves a set of bookmarks --
+    and leaves the ones it does not match where they are."""
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "feature-one", "-r", rev("base")])
+    pair.op(jj=["bookmark", "create", "feature-two", "-r", rev("base")])
+    pair.op(jj=["bookmark", "create", "other", "-r", rev("base")])
+    pair.op(jj=["bookmark", "move", "feature-*", "-t", rev("two")])
+    pair.assert_parity()
+
+
+BOOKMARK_MOVE_FROM_ARGV = [["-f"], ["--from"]]
+
+
+@pytest.mark.covers("bookmark move", "-f", "--from")
+@pytest.mark.parametrize("argv", BOOKMARK_MOVE_FROM_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_bookmark_move_from_a_revision(pair: RepoPair, argv) -> None:
+    """`--from` selects by where a bookmark points rather than by name,
+    so it moves every bookmark sitting on that revision."""
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "also-here", "-r", rev("one")])
+    pair.op(jj=["bookmark", "create", "elsewhere", "-r", rev("base")])
+    pair.op(jj=["bookmark", "move", *argv, rev("one"), "--to", rev("two")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark move", "-B", "--allow-backwards")
+def test_bookmark_move_refuses_to_go_backwards(pair: RepoPair) -> None:
+    chain(pair)
+    assert pair.op(jj=["bookmark", "move", "main", "--to", rev("base")],
+                   may_fail=True) != 0
+    pair.assert_parity()
+    pair.op(jj=["bookmark", "move", "main", "--to", rev("base"), "-B"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark move")
+def test_bookmark_move_to_where_it_already_is(pair: RepoPair) -> None:
+    """A bookmark already on the target is not a move and not an error:
+    jj says there is nothing to update and writes nothing."""
+    chain(pair)
+    pair.op(jj=["bookmark", "move", "main", "--to", rev("one")])
+    pair.assert_parity()

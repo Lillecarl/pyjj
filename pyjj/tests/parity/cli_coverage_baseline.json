@@ -59,25 +59,8 @@
     "-c",
     "-r"
   ],
-  "bookmark move": [
-    "(command)",
-    "--allow-backwards",
-    "--from",
-    "--to",
-    "-B",
-    "-f",
-    "-t"
-  ],
   "bookmark rename": [
     "--overwrite-existing"
-  ],
-  "bookmark set": [
-    "(command)",
-    "--allow-backwards",
-    "--revision",
-    "--to",
-    "-B",
-    "-r"
   ],
   "bookmark track": [
     "--remote"

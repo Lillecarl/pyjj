@@ -52,17 +52,8 @@
       "-c",
       "-r"
     ],
-    "bookmark move": [
-      "--allow-backwards",
-      "-B"
-    ],
     "bookmark rename": [
       "--overwrite-existing"
-    ],
-    "bookmark set": [
-      "--allow-backwards",
-      "--to",
-      "-B"
     ],
     "config edit": [
       "--repo",
