@@ -19,9 +19,13 @@ def add_parsers(sub) -> None:
     add_revision_flag(p_bmc, dest="revision", default="@", help="Revision to point at (default: @)")
     p_bmc.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
-    p_bms = bm_sub.add_parser("set", help="Move an existing bookmark")
-    p_bms.add_argument("name")
-    p_bms.add_argument("-r", "--revision", required=True, metavar="REVSET")
+    p_bms = bm_sub.add_parser("set", help="Create or move a bookmark")
+    p_bms.add_argument("names", nargs="+", metavar="NAMES",
+                       help="Bookmarks to update")
+    # jj writes this `-r`, `--revision` with `--to` as a visible alias.
+    p_bms.add_argument("-r", "--revision", "--to", dest="revision",
+                       default="@", metavar="REVSET",
+                       help="The bookmark's target revision (default: @)")
     p_bms.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bmd = bm_sub.add_parser("delete", help="Delete a bookmark")

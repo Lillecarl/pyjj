@@ -161,11 +161,13 @@ def bookmark(args) -> int:
         try:
             settings, ws, repo = _load(args)
             target = _resolve_one(repo, settings, args.revision)
-            if repo.get_bookmark(args.name) is None:
-                raise CommandError(f"No such bookmark: {args.name}")
+            names = list(getattr(args, "names", None) or [])
+            # Unlike `move`, this creates a bookmark that is not there
+            # yet.
             tx = _start_transaction(repo, settings)
-            tx.set_bookmark(args.name, target.id)
-            _finish(tx, f"point bookmark {args.name} to commit "
+            for name in names:
+                tx.set_bookmark(name, target.id)
+            _finish(tx, f"point bookmark {', '.join(names)} to commit "
                         f"{target.id.hex()}", settings, ws, repo)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
