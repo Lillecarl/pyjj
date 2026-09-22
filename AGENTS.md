@@ -403,6 +403,32 @@ each costs a tree comparison per row and a diff attribute can outweigh
 the rest of the graph. That `diff` is git format, not jj's colour-words
 default, which exists for a terminal rather than for a parser.
 
+`graph plan` prints the rebases that would make the repository match a
+DOT graph; `graph apply` runs them. `resolve_plan` in `graph_dot.py` is
+the resolver and is pure, so `test_graph_plan.py` states each reshape
+as a dict of current parents rather than building a repository.
+
+**The order is the target graph's, not the file's.** A rebase reads its
+destination as it stands now, so a child emitted before the parent it
+is moving onto lands on that parent's old position. The resolver
+topologically sorts the target and refuses a cycle, a self-parent and a
+repeated parent outright -- jj would otherwise take the first few steps
+before discovering the graph was impossible.
+
+`apply` is all-or-nothing. It records the operation first and restores
+it on **any** exception, not only the predicted ones: a half-applied
+graph is neither the shape that was asked for nor the one that was
+there. Two refusals are the default -- an immutable commit
+(`--ignore-immutable`) and a conflict the reshape introduced
+(`--allow-conflicts`). Each test asserts the commit ids are unchanged
+afterwards rather than trusting the message.
+
+`config set --repo` writes somewhere the revset loader does not read
+back, so `immutable_heads()` set that way has no effect and
+`pyjj rebase` will rewrite a commit real jj refuses. Through
+`JJ_CONFIG` both agree. The `graph apply` tests use `JJ_CONFIG` for
+that reason; the config bug is its own.
+
 `--dot-key change_id` names nodes by change id instead of commit id,
 on `log`. **A commit id is a content hash, so a rewrite replaces it,
 and the old one still resolves -- to the obsolete predecessor, not to

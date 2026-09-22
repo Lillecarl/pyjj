@@ -4,6 +4,7 @@
     "debug",
     "desc",
     "graph",
+    "graph apply",
     "graph plan",
     "hunk",
     "hunk commit",
