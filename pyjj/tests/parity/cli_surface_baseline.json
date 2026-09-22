@@ -21,6 +21,8 @@
     "op revert",
     "op show",
     "python",
+    "skill",
+    "skill path",
     "tag track",
     "tag untrack",
     "templates",
