@@ -18,6 +18,7 @@ from ..common import (
     _resolve_all,
     _resolve_in_arg_order,
     _resolve_one,
+    _resolve_operation,
     _restore_view_command,
     _wc_commit,
     complete_newline,
@@ -35,7 +36,7 @@ def op_restore(args) -> int:
     """`jj op restore <OPERATION>`: make the view match a past operation."""
     try:
         settings, ws, repo = _load(args)
-        target = repo.load_operation(args.operation_pos)
+        target = _resolve_operation(repo, args.operation_pos)
         tx = _start_transaction(repo, settings)
         tx.restore_operation(target)
         _restore_view_command(

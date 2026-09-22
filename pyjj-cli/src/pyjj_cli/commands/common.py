@@ -1344,12 +1344,22 @@ def _resolve_operation(repo, name: str | None):
     operation before this one, `@--` the one before that, and `+` walks
     the other way. A step that has no one operation to land on is an
     error, since the name has to mean exactly one.
+
+    A hex id may be a unique prefix, the way `jj` takes one: the full
+    id loads directly, and anything shorter is matched against the
+    operations reachable from here.
     """
     if not name:
         return repo.operation
     symbol = name.rstrip("-+")
     steps = name[len(symbol):]
-    operation = repo.operation if symbol == "@" else repo.load_operation(symbol)
+    if symbol == "@":
+        operation = repo.operation
+    else:
+        try:
+            operation = repo.load_operation(symbol)
+        except pyjj.JjError as load_error:
+            operation = _resolve_operation_prefix(repo, symbol, load_error)
     children = None
     for index, step in enumerate(steps):
         if step == "-":
@@ -1372,6 +1382,24 @@ def _resolve_operation(repo, name: str | None):
             )
         operation = neighbours[0]
     return operation
+
+
+def _resolve_operation_prefix(repo, symbol: str, load_error):
+    """The one reachable operation whose id starts with `symbol`.
+
+    Called with the error a direct `load_operation(symbol)` raised, so
+    a full id that simply names nothing unreachable stays that error.
+    Several matches is ambiguous, and says so rather than picking.
+    """
+    matches = [op for op in repo.operation_log()
+               if op.id.startswith(symbol)]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise load_error from None
+    raise CommandError(
+        f"operation id prefix {symbol!r} is ambiguous "
+        f"({len(matches)} operations match)") from None
 
 
 # The bar after a file's line count is scaled to fit the terminal in jj.
