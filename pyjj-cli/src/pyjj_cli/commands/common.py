@@ -81,6 +81,59 @@ def select_fields(selection, default, catalogue) -> list[str]:
     return [name for name in catalogue if name in chosen]
 
 
+def remote_state(repo, kind: str = "bookmark") -> dict:
+    """Each local bookmark's remotes: `{name: [{remote, ...}, ...]}`.
+
+    Whether a bookmark still needs pushing is *not* a revset question.
+    A commit can be reachable from some remote ref -- through an
+    integration branch that was pushed -- while the bookmark naming it
+    was never pushed at all, so `heads(..) ~ ::remote_bookmarks()`
+    answers a different question and answers it wrongly. The comparison
+    is per name, against that name's own remote target, which is what
+    this does and what `git push --dry-run` reports.
+
+    `synced` is the one to branch on: false means the push would create
+    or move the remote ref.
+    """
+    refs = (repo.remote_bookmarks() if kind == "bookmark"
+            else repo.remote_tags())
+    local = {ref.name: ref.target_ids
+             for ref in (repo.bookmarks() if kind == "bookmark"
+                         else repo.tags())}
+    out: dict[str, list[dict]] = {}
+    for ref in refs:
+        local_ids = local.get(ref.name, [])
+        counts = dict((word, count) for word, count, _exact
+                      in _tracking_counts(repo, ref.target_ids, local_ids))
+        out.setdefault(ref.name, []).append({
+            "remote": ref.remote,
+            "tracked": ref.tracked,
+            "synced": [i.hex() for i in ref.target_ids]
+                      == [i.hex() for i in local_ids],
+            "ahead": counts.get("ahead", 0),
+            "behind": counts.get("behind", 0),
+        })
+    return out
+
+
+def unpushed(remotes: dict, name: str, ignore=("git",)) -> bool:
+    """Whether pushing `name` would create or move a remote ref.
+
+    Only *tracked* remotes count. An untracked remote ref is another
+    fork that happens to be fetched, and jj never pushes to one: kr8s
+    carries `main@lilatomic` 31 commits behind its own `main`, which
+    read as "needs pushing" until this filtered on `tracked`.
+
+    The `git` remote is a colocated repository's own export, not a
+    place anything is published, so it never decides this either.
+    """
+    entries = [entry for entry in remotes.get(name, [])
+               if entry["remote"] not in ignore and entry["tracked"]]
+    if not entries:
+        return True
+    return not all(entry["synced"] for entry in entries)
+
+
 def dot_attribute(value) -> str:
     """One field's value, as the text of a DOT attribute.
 
@@ -1005,6 +1058,7 @@ def _print_ref(repo, settings, ref, template=None, tracked=(), *,
     if own:
         fmt = Formatter(sys.stdout, False)
     fmt.push(f"{kind}_list")
+    remotes = remote_state(repo, kind) if template is not None else {}
 
     def spans(pieces) -> None:
         for text, labels in pieces:
@@ -1029,6 +1083,11 @@ def _print_ref(repo, settings, ref, template=None, tracked=(), *,
             commit = repo.get_commit(commit_id)
             context = _commit_context(repo, settings, commit, [])
             context["name"] = ref.name
+            # The prose path computes the tracking distance and writes
+            # it as words. A template gets the numbers instead, since
+            # no revset can reach them (see `remote_state`).
+            context["remotes"] = remotes.get(ref.name, [])
+            context["unpushed"] = unpushed(remotes, ref.name)
             fmt.write(prefix + template.render(context) + "\n")
             return
         if head is not None:

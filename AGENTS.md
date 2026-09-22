@@ -403,6 +403,17 @@ each costs a tree comparison per row and a diff attribute can outweigh
 the rest of the graph. That `diff` is git format, not jj's colour-words
 default, which exists for a terminal rather than for a parser.
 
+`remote_bookmarks` and `unpushed_bookmarks` come from `remote_state()`
+in `common.py`, which `bookmark list -T` also exposes as `remotes` and
+`unpushed`. **Whether a bookmark needs pushing is not a revset
+question.** A commit is reachable from a remote ref whenever some
+pushed integration branch contains it, so `heads(..) ~
+::remote_bookmarks()` answers something else and answers it wrongly.
+The comparison is per name against that name's own remote target, the
+way `git push --dry-run` reports it. Only *tracked* remotes count: kr8s
+carries `main@lilatomic` 31 commits behind its own `main`, and counting
+an untracked fork made a synced bookmark read as needing a push.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in

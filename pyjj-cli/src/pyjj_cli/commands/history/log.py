@@ -29,7 +29,9 @@ from ..common import (
     _immutable_ids,
     conflicting_flags,
     dot_attribute,
+    remote_state,
     select_fields,
+    unpushed,
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
@@ -79,7 +81,8 @@ _DOT_CATALOGUE = (
     "author", "author_name", "author_email",
     "datetime", "datetime_full",
     "description", "description_full",
-    "bookmarks", "is_wc", "is_current_wc", "is_root",
+    "bookmarks", "remote_bookmarks", "unpushed_bookmarks",
+    "is_wc", "is_current_wc", "is_root",
     "files", "diff",
 )
 
@@ -87,7 +90,7 @@ _DOT_CATALOGUE = (
 # attribute can be larger than the rest of the graph, so neither is
 # emitted until it is named.
 _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
-                "description", "bookmarks")
+                "description", "bookmarks", "unpushed_bookmarks")
 
 
 def _log_revset(settings, revisions, paths) -> str:
@@ -123,21 +126,31 @@ def _fileset_literal(path: str) -> str:
     return f'"{escaped}"'
 
 
-def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths):
+def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths,
+                    names, remotes):
     """One row's selected fields, as DOT node attributes.
 
-    `files` and `diff` are not in the template context: each needs the
-    tree comparison a row does not otherwise do, so they are computed
-    here and only when named. The diff is git format rather than jj's
-    colour-words default, which exists for a terminal and not for a
-    reader parsing attributes.
+    Four fields are not in the template context. `files` and `diff`
+    each need the tree comparison a row does not otherwise do, so they
+    are computed only when named; the diff is git format rather than
+    jj's colour-words default, which exists for a terminal and not for
+    a reader parsing attributes. The two bookmark fields need the
+    remote refs, which a row never reads.
     """
     attributes = {}
     base = None
     for field in fields:
         if field in ("files", "diff") and base is None:
             base = _diff_base(repo, settings, commit)
-        if field == "files":
+        if field == "remote_bookmarks":
+            attributes[field] = dot_attribute(
+                [f"{name}@{entry['remote']}" for name in names
+                 for entry in remotes.get(name, [])
+                 if entry["remote"] != "git"])
+        elif field == "unpushed_bookmarks":
+            attributes[field] = dot_attribute(
+                [name for name in names if unpushed(remotes, name)])
+        elif field == "files":
             attributes[field] = dot_attribute(
                 [entry.path for entry in base.diff(commit)])
         elif field == "diff":
@@ -286,6 +299,10 @@ def log(args) -> int:
     renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
     dot_labels: dict[str, str] = {}
     dot_attrs: dict[str, dict[str, str]] = {}
+    # One pass over the remote refs, not one per row.
+    dot_remotes = (remote_state(repo) if {"remote_bookmarks",
+                                          "unpushed_bookmarks"}
+                   & set(dot_fields) else {})
     sys.stdout.flush()
     for hex_id, edges in items:
         commit = by_id[hex_id].commit
@@ -298,7 +315,7 @@ def log(args) -> int:
                 repo, settings, args, ws, commit,
                 _context(repo, settings, commit, names, short_year,
                          hex_id in all_wc_ids, hex_id in wc_ids),
-                dot_fields, paths)
+                dot_fields, paths, names, dot_remotes)
 
         def emit(lines, indent: bool = True) -> None:
             """One row, buffered: renderdag takes a finished string.
