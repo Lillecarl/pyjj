@@ -68,8 +68,18 @@ from pyjj_bindings import (
 )
 from . import _async as _async  # noqa: F401  (installs *_async methods below)
 from . import hunk as hunk  # noqa: F401
+from .session import (  # noqa: F401
+    Atomic as Atomic,
+    PyjjError as PyjjError,
+    Repo as Repo,
+    open as open,
+)
 
 __all__ = [
+    "open",
+    "Repo",
+    "Atomic",
+    "PyjjError",
     "JjError",
     "RepoInitError",
     "RepoLoadError",
