@@ -11,7 +11,9 @@ def register(sub) -> None:
     p.add_argument("-c", "--changes-in", dest="changes_in", default=None,
                    metavar="REVSET",
                    help="Undo the changes in a revision, as compared to the "
-                        "merge of its parents")
+                        "merge of its parents, by rewriting that revision "
+                        "in place (for a new undo commit instead, use "
+                        "revert)")
     p.add_argument("--restore-descendants", dest="restore_descendants",
                    action="store_true", default=False,
                    help="Preserve the content (not the diff) when rebasing "

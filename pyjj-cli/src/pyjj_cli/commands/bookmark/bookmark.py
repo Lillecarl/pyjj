@@ -169,7 +169,12 @@ def bookmark(args) -> int:
                     continue
                 to_move.append(bookmark)
             if not to_move:
-                print("No bookmarks to update.")
+                if names and any(_name_matches(bookmark.name, pattern)
+                                 for bookmark in repo.bookmarks()
+                                 for pattern in names):
+                    print(f"Already at {target.id.hex()[:12]}.")
+                else:
+                    print("No bookmarks to update.")
                 return 0
             if not getattr(args, "allow_backwards", False):
                 for bookmark in to_move:
@@ -184,6 +189,8 @@ def bookmark(args) -> int:
             _finish(tx, "point bookmark "
                         f"{', '.join(b.name for b in to_move)} to commit "
                         f"{target.id.hex()}", settings, ws, repo)
+            print(f"Moved {', '.join(b.name for b in to_move)} to "
+                  f"{target.id.hex()[:12]}")
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1

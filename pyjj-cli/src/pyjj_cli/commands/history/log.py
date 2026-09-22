@@ -480,9 +480,14 @@ def _default_lines(repo, settings, commit, kind, names, root: bool,
                    "%y-%m-%d %H:%M" if short_year else "%Y-%m-%d %H:%M")
     first_line = (commit.description.splitlines()[0]
                   if commit.description else "")
+    # What `jj log` prints after a conflicted row, under the palette's
+    # own `conflict` style: without it a `grep -i conflict` over `log`
+    # output finds nothing on conflicted commits.
+    marker = [[("conflict", "conflict")]] if commit.has_conflict else []
     return [
         Line(separate([change, ids, *refs, [(author, "author")],
-                       [(stamp, "author timestamp local format")]]), kind),
+                       [(stamp, "author timestamp local format")],
+                       *marker]), kind),
         Line([(first_line, "description first_line")] if first_line
              else [("(no description set)", "description placeholder")],
              kind),
@@ -532,4 +537,5 @@ def _context(repo, settings, commit, names, short_year, is_wc: bool,
         "is_wc": is_wc,
         "is_current_wc": is_current_wc,
         "is_root": not commit.parent_ids,
+        "conflict": commit.has_conflict,
     }
