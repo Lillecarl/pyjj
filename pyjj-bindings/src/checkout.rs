@@ -12,6 +12,8 @@ use jj_lib::transaction::Transaction;
 use jj_lib::working_copy::SnapshotOptions;
 use jj_lib::workspace::Workspace;
 
+use jj_lib::working_copy::UntrackedReason;
+
 use crate::commit::{PyCommit, PyReadonlyRepo};
 use crate::errors::{map_backend_err, map_checkout_err, map_transaction_err, map_working_copy_err};
 use crate::settings::PyUserSettings;
@@ -28,6 +30,42 @@ fn max_new_file_size(settings: &PyUserSettings) -> u64 {
         .get_value_with("snapshot.max-new-file-size", TryInto::try_into)
         .unwrap_or(HumanByteSize(1024 * 1024));
     if size == 0 { u64::MAX } else { size }
+}
+
+/// Why a path stayed untracked, worded as `jj`'s own
+/// `build_untracked_reason_message` words it.
+///
+/// `FileNotAutoTracked` yields nothing on purpose: jj leaves that one
+/// to `jj status` rather than warning about it on every snapshot.
+fn untracked_reason(reason: &UntrackedReason) -> Option<String> {
+    match reason {
+        UntrackedReason::FileTooLarge { size, max_size } => {
+            // Both spellings, as jj does, so a limit of 1MiB does not
+            // read as "1.0MiB, maximum size allowed is 1.0MiB".
+            let size_approx = HumanByteSize(*size);
+            let max_size_approx = HumanByteSize(*max_size);
+            Some(format!(
+                "{size_approx} ({size} bytes); the maximum size allowed is \
+                 {max_size_approx} ({max_size} bytes)"
+            ))
+        }
+        UntrackedReason::FileNotAutoTracked => None,
+    }
+}
+
+/// `{path: reason}` for every path a snapshot refused and jj would
+/// name. Empty when it refused nothing worth reporting.
+fn refused_paths(
+    py: Python<'_>,
+    stats: &jj_lib::working_copy::SnapshotStats,
+) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    for (path, reason) in &stats.untracked_paths {
+        if let Some(message) = untracked_reason(reason) {
+            dict.set_item(path.as_internal_file_string(), message)?;
+        }
+    }
+    Ok(dict.unbind().into_any())
 }
 
 /// `jj status`/`jj diff`'s implicit "snapshot the working copy" step, as a
@@ -93,6 +131,7 @@ pub fn snapshot(
         let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
             dict.set_item("untracked_paths", stats.untracked_paths.len())?;
+            dict.set_item("refused", refused_paths(py, &stats)?)?;
             dict.set_item("changed", false)?;
             Ok(dict.unbind().into_any())
         })?;
@@ -132,6 +171,7 @@ pub fn snapshot(
     let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         dict.set_item("untracked_paths", stats.untracked_paths.len())?;
+        dict.set_item("refused", refused_paths(py, &stats)?)?;
         // `jj util snapshot` reports exactly this: whether the walk found
         // anything, which is the difference between "Snapshot complete."
         // and "No snapshot needed."

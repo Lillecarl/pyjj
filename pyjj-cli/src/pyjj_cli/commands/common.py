@@ -324,6 +324,21 @@ def _start_transaction(repo, settings):
     return repo.start_transaction(settings, _operation_args())
 
 
+def report_refused(stats) -> None:
+    """jj's warning for the files a snapshot would not take.
+
+    A refusal is silent otherwise: the file simply does not appear, and
+    `snapshot.max-new-file-size` is exactly the setting whose effect a
+    user needs told. jj words it per path; so does the binding.
+    """
+    refused = (stats or {}).get("refused") or {}
+    if not refused:
+        return
+    print("Warning: Refused to snapshot some files:", file=sys.stderr)
+    for path, reason in sorted(refused.items()):
+        print(f"  {path}: {reason}", file=sys.stderr)
+
+
 def settings_for(args):
     """Settings carrying the repo and workspace layers when there is a
     repository to take them from, and the user layers alone when there

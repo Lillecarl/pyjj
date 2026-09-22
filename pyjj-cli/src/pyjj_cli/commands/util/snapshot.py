@@ -9,7 +9,8 @@ import sys
 import pyjj
 
 from ...commands.common import (CommandError, _operation_args,
-                                _workspace_path, settings_for)
+                                _workspace_path, report_refused,
+                                settings_for)
 
 
 def util_snapshot(args) -> int:
@@ -24,5 +25,6 @@ def util_snapshot(args) -> int:
             CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
+    report_refused(stats)
     print("Snapshot complete." if stats["changed"] else "No snapshot needed.")
     return 0
