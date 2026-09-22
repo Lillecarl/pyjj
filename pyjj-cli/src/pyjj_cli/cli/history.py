@@ -16,6 +16,10 @@ def add_parsers(sub) -> None:
                        help="Show oldest commits first")
     p_log.add_argument("--dot", action="store_true",
                        help="Print the graph as Graphviz DOT instead of rows")
+    p_log.add_argument("--dot-fields", default=None, metavar="FIELDS",
+                       help="Which fields --dot writes as node attributes: "
+                            "a comma-separated list, or +name/-name to "
+                            "adjust the default set")
     p_log.add_argument("--count", action="store_true",
                        help="Print the number of commits instead of showing them")
     # log's filesets is suppressed (not shown in help) — keep manual for that nuance

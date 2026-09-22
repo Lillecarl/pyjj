@@ -32,6 +32,10 @@ def register(sub) -> None:
                        help="Show only changed revisions matching this revset")
     p_op_log2.add_argument("--dot", action="store_true",
                        help="Print the graph as Graphviz DOT instead of rows")
+    p_op_log2.add_argument("--dot-fields", default=None, metavar="FIELDS",
+                       help="Which fields --dot writes as node attributes: "
+                            "a comma-separated list, or +name/-name to "
+                            "adjust the default set")
     add_flags(p_op_log2, _DIFF_FLAGS)
     p_op_log2.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_op_show2 = op_sub.add_parser("show", help="Show changes to the repository in an operation")
@@ -89,6 +93,10 @@ def register(sub) -> None:
                        help="Show only changed revisions matching this revset")
     p_oplog_log.add_argument("--dot", action="store_true",
                        help="Print the graph as Graphviz DOT instead of rows")
+    p_oplog_log.add_argument("--dot-fields", default=None, metavar="FIELDS",
+                       help="Which fields --dot writes as node attributes: "
+                            "a comma-separated list, or +name/-name to "
+                            "adjust the default set")
     add_flags(p_oplog_log, _DIFF_FLAGS)
     p_oplog_log.set_defaults(_handler="pyjj_cli.commands.operation.op_log:op_log")
     p_oplog_show = oplog_sub.add_parser("show", help="Show changes to the repository in an operation")

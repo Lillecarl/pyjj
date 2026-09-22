@@ -20,6 +20,7 @@ from pyjj.graph_layout import reverse_graph
 
 from ...formatter import Line, render_block, separate
 from ..common import (
+    CommandError,
     _commit_body_spans,
     _commit_glyph,
     _commit_header_spans,
@@ -27,6 +28,8 @@ from ..common import (
     _commit_root_spans,
     _immutable_ids,
     conflicting_flags,
+    dot_attribute,
+    select_fields,
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
@@ -68,6 +71,24 @@ _DOT_CONFLICTS = (
     "--name-only", "--types", "--git", "--color-words",
 )
 
+# What `--dot-fields` can name, in the order the attributes are
+# written. Every name but `files` and `diff` comes from the same
+# context a `-T` template sees, so the two flags share one vocabulary.
+_DOT_CATALOGUE = (
+    "change_id", "change_id_short", "commit_id", "commit_id_short",
+    "author", "author_name", "author_email",
+    "datetime", "datetime_full",
+    "description", "description_full",
+    "bookmarks", "is_wc", "is_current_wc", "is_root",
+    "files", "diff",
+)
+
+# `files` and `diff` each cost a tree comparison per row, and a diff
+# attribute can be larger than the rest of the graph, so neither is
+# emitted until it is named.
+_DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
+                "description", "bookmarks")
+
 
 def _log_revset(settings, revisions, paths) -> str:
     """Which commits `jj log` walks, given what was asked for.
@@ -100,6 +121,32 @@ def _fileset_literal(path: str) -> str:
     """
     escaped = path.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths):
+    """One row's selected fields, as DOT node attributes.
+
+    `files` and `diff` are not in the template context: each needs the
+    tree comparison a row does not otherwise do, so they are computed
+    here and only when named. The diff is git format rather than jj's
+    colour-words default, which exists for a terminal and not for a
+    reader parsing attributes.
+    """
+    attributes = {}
+    base = None
+    for field in fields:
+        if field in ("files", "diff") and base is None:
+            base = _diff_base(repo, settings, commit)
+        if field == "files":
+            attributes[field] = dot_attribute(
+                [entry.path for entry in base.diff(commit)])
+        elif field == "diff":
+            attributes[field] = _diff_bytes(
+                args, ws, settings, base, commit, paths, (None, "git"),
+            ).decode("utf-8", "surrogateescape")
+        else:
+            attributes[field] = dot_attribute(context[field])
+    return attributes
 
 
 def _write(text: str) -> None:
@@ -150,12 +197,22 @@ def log(args) -> int:
         limit = None
 
     dot = getattr(args, "dot", False)
+    dot_fields: list[str] = []
     if dot:
         conflicting = conflicting_flags(args, _DOT_CONFLICTS)
         if conflicting:
             print(f"Error: --dot cannot be used with {conflicting[0]}",
                   file=sys.stderr)
             return 2
+        try:
+            dot_fields = select_fields(getattr(args, "dot_fields", None),
+                                       _DOT_DEFAULT, _DOT_CATALOGUE)
+        except CommandError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    elif getattr(args, "dot_fields", None):
+        print("Error: --dot-fields requires --dot", file=sys.stderr)
+        return 2
 
     if getattr(args, "count", False):
         # jj makes `--count` exclusive with everything that shapes the
@@ -228,12 +285,20 @@ def log(args) -> int:
 
     renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
     dot_labels: dict[str, str] = {}
+    dot_attrs: dict[str, dict[str, str]] = {}
     sys.stdout.flush()
     for hex_id, edges in items:
         commit = by_id[hex_id].commit
         root = not commit.parent_ids
         kind = _commit_kind(repo, commit, wc_ids, immutable)
         names = sorted(bookmarks_by_commit.get(hex_id, []))
+
+        if dot_fields:
+            dot_attrs[hex_id] = _dot_attributes(
+                repo, settings, args, ws, commit,
+                _context(repo, settings, commit, names, short_year,
+                         hex_id in all_wc_ids, hex_id in wc_ids),
+                dot_fields, paths)
 
         def emit(lines, indent: bool = True) -> None:
             """One row, buffered: renderdag takes a finished string.
@@ -303,7 +368,7 @@ def log(args) -> int:
                                 root, short_year))
 
     if dot:
-        _write(render_dot(items, dot_labels))
+        _write(render_dot(items, dot_labels, attributes=dot_attrs))
     sys.stdout.buffer.flush()
     return 0
 

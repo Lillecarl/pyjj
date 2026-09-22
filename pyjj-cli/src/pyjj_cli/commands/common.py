@@ -46,6 +46,55 @@ class CommandError(Exception):
         super().__init__(message)
         self.message = message
 
+
+def select_fields(selection, default, catalogue) -> list[str]:
+    """Which fields `--dot-fields` asks for, as a list in catalogue order.
+
+    A bare list replaces the default set. A list where every item
+    carries `+` or `-` adjusts it instead, which is how you keep the
+    cheap fields and add `diff` without naming the others. Mixing the
+    two forms is an error: `a,-b` reads as both, and guessing which
+    would silently drop a field.
+
+    Raises `CommandError` on an unknown name, naming what is known. A
+    typo that quietly emitted nothing is the failure worth preventing.
+    """
+    if not selection:
+        return list(default)
+    names = [item.strip() for item in selection.split(",") if item.strip()]
+    signed = [name for name in names if name[0] in "+-"]
+    if signed and len(signed) != len(names):
+        raise CommandError(
+            "--dot-fields takes either a plain list or a list of +/- "
+            "adjustments, not both")
+    chosen = set(default) if signed else set()
+    for name in names:
+        bare = name[1:] if name[0] in "+-" else name
+        if bare not in catalogue:
+            raise CommandError(
+                f"unknown --dot-fields name {bare!r}; known fields are "
+                + ", ".join(catalogue))
+        if name[0] == "-":
+            chosen.discard(bare)
+        else:
+            chosen.add(bare)
+    return [name for name in catalogue if name in chosen]
+
+
+def dot_attribute(value) -> str:
+    """One field's value, as the text of a DOT attribute.
+
+    A bool reads as `true`/`false` rather than Python's capitalized
+    spelling, and a list of names joins on a space the way a row prints
+    it. Everything else is its own string.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(item) for item in value)
+    return "" if value is None else str(value)
+
+
 def _run_editor(settings, content: str) -> str:
     """Run $EDITOR (or ui.editor) over `content`, then clean it up exactly
     like the real CLI's description_util::edit_description: strip "JJ:"

@@ -15,6 +15,8 @@ from ..common import (
     _pyjj_template,
     _resolve_template,
     conflicting_flags,
+    dot_attribute,
+    select_fields,
     use_color,
 )
 from .op_diff import print_operation_diff
@@ -178,16 +180,60 @@ _DOT_CONFLICTS = (
     "--stat", "--name-only", "--types", "--git", "--color-words",
 )
 
+# The names a `-T` template already has for an operation, so the two
+# flags share one vocabulary. There is no expensive field here: what an
+# operation changed is `op diff`, which `--dot` refuses outright rather
+# than folding a whole report into an attribute.
+_DOT_CATALOGUE = (
+    "id", "id_short", "user", "username", "hostname", "workspace_name",
+    "time_ago", "duration", "description", "description_full",
+    "attributes", "is_current", "is_root",
+)
+_DOT_DEFAULT = ("id", "user", "time_ago", "description", "attributes")
+
+
+def _dot_attributes(op, current: bool, fields) -> dict[str, str]:
+    """One operation's selected fields, as DOT node attributes."""
+    values = {
+        "id": op.id,
+        "id_short": op.id[:12],
+        "user": f"{op.username}@{op.hostname}",
+        "username": op.username,
+        "hostname": op.hostname,
+        "workspace_name": op.workspace_name,
+        "time_ago": _ago(op.end_time.millis_since_epoch),
+        "duration": _duration(op.start_time.millis_since_epoch,
+                              op.end_time.millis_since_epoch),
+        "description": (op.description.splitlines()[0]
+                        if op.description else ""),
+        "description_full": op.description,
+        "attributes": "\n".join(f"{key}: {value}"
+                                for key, value in op.attributes),
+        "is_current": current,
+        "is_root": not op.parent_ids,
+    }
+    return {field: dot_attribute(values[field]) for field in fields}
+
 
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
     dot = getattr(args, "dot", False)
+    dot_fields: list[str] = []
     if dot:
         conflicting = conflicting_flags(args, _DOT_CONFLICTS)
         if conflicting:
             print(f"Error: --dot cannot be used with {conflicting[0]}",
                   file=sys.stderr)
             return 2
+        try:
+            dot_fields = select_fields(getattr(args, "dot_fields", None),
+                                       _DOT_DEFAULT, _DOT_CATALOGUE)
+        except CommandError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    elif getattr(args, "dot_fields", None):
+        print("Error: --dot-fields requires --dot", file=sys.stderr)
+        return 2
 
     try:
         settings, ws, repo = _load(args)
@@ -227,7 +273,11 @@ def op_log(args) -> int:
         labels = {op_id: render_operation(by_id[op_id], op_id == current_id,
                                           shape, template, "op_log", False)
                   for op_id, _edges in items}
-        sys.stdout.write(render_dot(items, labels, name="op_log"))
+        attrs = {op_id: _dot_attributes(by_id[op_id], op_id == current_id,
+                                        dot_fields)
+                 for op_id, _edges in items} if dot_fields else {}
+        sys.stdout.write(render_dot(items, labels, name="op_log",
+                                    attributes=attrs))
         return 0
 
     if getattr(args, "no_graph", False):

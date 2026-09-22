@@ -25,6 +25,8 @@ from ..common import (
     _resolve_template,
     _short_id,
     conflicting_flags,
+    dot_attribute,
+    select_fields,
     use_color,
 )
 
@@ -34,6 +36,22 @@ _DOT_CONFLICTS = (
     "--no-graph", "--reversed", "--patch", "--summary", "--stat",
     "--name-only", "--types", "--git", "--color-words",
 )
+
+# The names a `-T` template already has for a version, so the two flags
+# share one vocabulary. `diff` is the interdiff against the version
+# this one was rewritten from -- the thing `evolog --patch` prints --
+# and it stays out of the default set for the same reason `log`'s does.
+_DOT_CATALOGUE = (
+    "change_id", "change_id_short", "commit_id", "commit_id_short",
+    "author", "author_name", "author_email",
+    "datetime", "datetime_full",
+    "description", "description_full",
+    "hidden", "empty", "operation_id", "operation_description",
+    "diff",
+)
+_DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
+                "description", "hidden", "operation_id",
+                "operation_description")
 
 
 def _operation_spans(operation):
@@ -50,12 +68,22 @@ def _operation_spans(operation):
 
 def evolog(args) -> int:
     dot = getattr(args, "dot", False)
+    dot_fields: list[str] = []
     if dot:
         conflicting = conflicting_flags(args, _DOT_CONFLICTS)
         if conflicting:
             print(f"Error: --dot cannot be used with {conflicting[0]}",
                   file=sys.stderr)
             return 2
+        try:
+            dot_fields = select_fields(getattr(args, "dot_fields", None),
+                                       _DOT_DEFAULT, _DOT_CATALOGUE)
+        except CommandError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    elif getattr(args, "dot_fields", None):
+        print("Error: --dot-fields requires --dot", file=sys.stderr)
+        return 2
 
     try:
         settings, ws, repo = _load(args)
@@ -120,6 +148,7 @@ def evolog(args) -> int:
     # row goes through it, including the ones a template renders.
     renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
     dot_labels: dict[str, str] = {}
+    dot_attrs: dict[str, dict[str, str]] = {}
     coloured = use_color(settings)
     # jj's `current_working_copy` asks about this workspace alone,
     # which is what makes a row bold and its glyph an `@`.
@@ -136,6 +165,17 @@ def evolog(args) -> int:
         commit = entry.commit
         kind = _commit_kind(repo, commit, wc_hexes, immutable)
         operation = entry.operation
+
+        if dot_fields:
+            context = _context(repo, settings, commit, operation)
+            dot_attrs[hex_id] = {
+                field: (_patch_bytes(args, ws, settings, repo, entry,
+                                     (None, "git")
+                                     ).decode("utf-8", "surrogateescape")
+                        if field == "diff"
+                        else dot_attribute(context[field]))
+                for field in dot_fields
+            }
 
         def emit(lines) -> None:
             """One row, buffered: renderdag takes a finished string.
@@ -190,7 +230,8 @@ def evolog(args) -> int:
         emit(lines)
 
     if dot:
-        _write(render_dot(items, dot_labels, name="evolog"))
+        _write(render_dot(items, dot_labels, name="evolog",
+                          attributes=dot_attrs))
     sys.stdout.buffer.flush()
     return 0
 

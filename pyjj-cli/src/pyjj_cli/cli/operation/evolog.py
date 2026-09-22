@@ -11,6 +11,10 @@ def register(sub) -> None:
                    help="Show oldest versions first")
     p.add_argument("--dot", action="store_true",
                    help="Print the graph as Graphviz DOT instead of rows")
+    p.add_argument("--dot-fields", default=None, metavar="FIELDS",
+                   help="Which fields --dot writes as node attributes: "
+                        "a comma-separated list, or +name/-name to adjust "
+                        "the default set")
     # jj drives `evolog` from `templates.evolog`; pyjj-cli uses Jinja
     # for the same job, under `pyjj.templates.evolog`.
     p.add_argument("-T", "--template", default=None, metavar="TEMPLATE",

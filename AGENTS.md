@@ -390,6 +390,19 @@ cannot tell `direct` from `indirect`. jj has no such flag, and the
 surface ledger measures only what jj has that pyjj-cli lacks, so it
 does not move the baseline.
 
+Each node also carries its fields as DOT attributes, so `dot -Tjson`,
+pydot and networkx hand a reader a dict instead of a label to re-split.
+`--dot-fields` picks them: a bare list replaces the default set,
+`+name`/`-name` adjusts it, and mixing the two forms is an error
+because `a,-b` reads as both. An unknown name fails and prints the
+catalogue -- a typo that quietly emitted nothing is the failure worth
+preventing. The names are the ones a `-T` template already has, so the
+two flags share one vocabulary; `log`'s `files` and `diff` and
+`evolog`'s `diff` are the exceptions, computed only when named because
+each costs a tree comparison per row and a diff attribute can outweigh
+the rest of the graph. That `diff` is git format, not jj's colour-words
+default, which exists for a terminal rather than for a parser.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in
