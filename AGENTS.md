@@ -472,10 +472,15 @@ bootstraps the same way.
 A read-only command takes `settings_for(args)` instead, which is the
 same thing without the working-copy snapshot. Building
 `pyjj.UserSettings()` directly misses the repo layer -- that is how
-`config get` came to report a key unset that `jj config get` printed.
-`util exec`, `util backend` and `util snapshot` still build it
-directly; `git clone` and `git init` are right to, since neither has a
-repository yet.
+`config get` came to report a key unset that `jj config get` printed,
+and how `util snapshot` came to snapshot a file that
+`snapshot.max-new-file-size` forbids -- jj refuses it, pyjj said
+"Snapshot complete."
+
+The sites still building `UserSettings()` directly are right to.
+`git clone` and `git init` have no repository yet. `util backend`
+prints the store's own name, which no config decides, and `util exec`
+uses settings only to find the workspace root it exports.
 
 An env override outranks the repo layer, in jj as here, so `JJ_USER`
 hides a repo-level `user.name` in both. A test that wants to see the
