@@ -17,6 +17,9 @@ def config_unset(args) -> int:
         return 2
     try:
         root = _workspace_root(args) if scope != "user" else None
+        # Not `create=True`: a key that is not there fails below, and
+        # minting the directory on the way out leaves one jj refuses
+        # to read.
         path = config_path(root, scope)
         data = read_config(path)
         if not unset_key(data, args.name):

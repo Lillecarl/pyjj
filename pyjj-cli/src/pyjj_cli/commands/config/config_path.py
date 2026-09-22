@@ -17,7 +17,8 @@ def config_path_command(args) -> int:
         return 2
     try:
         root = _workspace_root(args) if scope != "user" else None
-        print(config_path(root, scope))
+        # jj creates the scope here rather than reporting nothing.
+        print(config_path(root, scope, create=True))
     except (pyjj.JjError, CommandError, OSError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

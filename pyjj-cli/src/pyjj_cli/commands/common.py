@@ -324,10 +324,44 @@ def _start_transaction(repo, settings):
     return repo.start_transaction(settings, _operation_args())
 
 
+def settings_for(args):
+    """Settings carrying the repo and workspace layers when there is a
+    repository to take them from, and the user layers alone when there
+    is not.
+
+    A read-only command wants this rather than `_load`, which also
+    snapshots the working copy. Building `UserSettings()` directly
+    misses the repo layer, which is how `config get` came to report a
+    key as unset that `jj config get` printed.
+    """
+    settings = pyjj.UserSettings()
+    try:
+        ws = pyjj.Workspace.load(settings, _workspace_path(args))
+    except Exception:  # noqa: BLE001 -- no repository is the normal case
+        return settings
+    return pyjj.UserSettings.for_repo(ws.repo_path, ws.workspace_root)
+
+
 def _load(args):
     """Load settings + workspace at the -R path, snapshotting the working
-    copy first like every real jj workspace command does."""
+    copy first like every real jj workspace command does.
+
+    Settings are built twice on purpose. Repo and workspace config live
+    under the user's config directory behind an id the repository holds,
+    so naming them needs a loaded workspace -- and the workspace is
+    opened with the config that names it. jj bootstraps the same way.
+    Skipping the second build is what made `immutable_heads()` set with
+    `config set --repo` have no effect here.
+    """
     settings = pyjj.UserSettings()
+    try:
+        probe = pyjj.Workspace.load(settings, _workspace_path(args))
+    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError):
+        # No workspace to take config from; let `_open` raise the error
+        # the caller is written to report.
+        return settings, *_open(settings, args)
+    settings = pyjj.UserSettings.for_repo(probe.repo_path,
+                                          probe.workspace_root)
     ws, repo = _open(settings, args)
     return settings, ws, repo
 

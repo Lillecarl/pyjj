@@ -1,15 +1,21 @@
 """Where jj keeps its config files, and how to edit them in place.
 
 Repo- and workspace-level config live *outside* the repository, under
-`$XDG_CONFIG_HOME/jj/{repos,workspaces}/<id>/config.toml`. The id is a
-20-hex name jj stores in `.jj/repo/config-id` (or
-`.jj/working_copy/config-id`), and it is created lazily -- a repository
-that has never had config set has no such file yet.
+`$XDG_CONFIG_HOME/jj/{repos,workspaces}/<id>/`. The id is a 20-hex name
+jj stores in the repository, and the directory also holds a
+`metadata.binpb` recording which repository it belongs to.
+
+**Minting the id here is not enough.** A directory without that
+metadata is one jj treats as absent, so config written that way was
+invisible to `jj` -- and to pyjj itself once it started loading the
+layer. `pyjj_bindings.secure_config_file` makes jj create the
+directory, which is the only way the two tools agree on it.
 """
 import os
-import secrets
 import tomllib
 from pathlib import Path
+
+import pyjj_bindings
 
 
 def config_home() -> Path:
@@ -17,33 +23,39 @@ def config_home() -> Path:
     return Path(xdg) if xdg else Path.home() / ".config"
 
 
-def _scoped_path(workspace_root: Path, marker: Path, kind: str) -> Path:
-    """The config file for one repo or workspace, minting its id if the
-    repository has never had scoped config before."""
-    if marker.exists():
-        config_id = marker.read_text().strip()
-    else:
-        config_id = secrets.token_hex(10)
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        # Exactly the 20 hex characters, no newline: jj rejects
-        # anything else with "Found an invalid config ID".
-        marker.write_text(config_id)
-    return config_home() / "jj" / kind / config_id / "config.toml"
+def config_path(workspace_root, scope: str, create: bool = False):
+    """`scope` is "user", "repo" or "workspace".
 
+    **Only a caller that will write passes `create`.** Minting the id
+    writes the directory and its metadata but not the config file, and
+    jj refuses a directory in that state outright ("Failed to determine
+    the secure config for a repo"). `config unset` on a missing key
+    resolved the path and then failed, which left exactly that.
 
-def config_path(workspace_root, scope: str) -> Path:
-    """`scope` is "user", "repo" or "workspace"."""
+    Without `create`, a scope that has never been written returns
+    `None` rather than minting anything.
+    """
     if scope == "user":
         return config_home() / "jj" / "config.toml"
     root = Path(workspace_root)
-    if scope == "repo":
-        return _scoped_path(root, root / ".jj" / "repo" / "config-id", "repos")
-    return _scoped_path(root, root / ".jj" / "working_copy" / "config-id",
-                        "workspaces")
+    found = pyjj_bindings.secure_config_file(
+        str(root), str(root / ".jj" / "repo"), scope, create)
+    if not found:
+        return None
+    path = Path(found)
+    if create and not path.exists():
+        # Minting the id writes the directory and its metadata; the
+        # config file is the caller's to write. Leaving the pair
+        # half-made is the state jj refuses outright, so the empty
+        # file goes down with the rest of it.
+        write_config(path, {})
+    return path
 
 
-def read_config(path: Path) -> dict:
-    if not path.exists():
+def read_config(path) -> dict:
+    """A scope that has never been written reads as empty, and
+    `config_path` gives `None` for one."""
+    if path is None or not path.exists():
         return {}
     with path.open("rb") as handle:
         return tomllib.load(handle)

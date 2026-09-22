@@ -423,11 +423,8 @@ there. Two refusals are the default -- an immutable commit
 (`--allow-conflicts`). Each test asserts the commit ids are unchanged
 afterwards rather than trusting the message.
 
-`config set --repo` writes somewhere the revset loader does not read
-back, so `immutable_heads()` set that way has no effect and
-`pyjj rebase` will rewrite a commit real jj refuses. Through
-`JJ_CONFIG` both agree. The `graph apply` tests use `JJ_CONFIG` for
-that reason; the config bug is its own.
+`immutable_heads()` set with `config set --repo` bites, so the
+`graph apply` tests write it the way a user would.
 
 `--dot-key change_id` names nodes by change id instead of commit id,
 on `log`. **A commit id is a content hash, so a rewrite replaces it,
@@ -448,6 +445,41 @@ The comparison is per name against that name's own remote target, the
 way `git push --dry-run` reports it. Only *tracked* remotes count: kr8s
 carries `main@lilatomic` 31 commits behind its own `main`, and counting
 an untracked fork made a synced bookmark read as needing a push.
+
+### Repo and workspace config
+
+jj keeps these outside the repository. `.jj/repo/config-id` holds a hex
+id, and `<config>/jj/repos/<id>/` holds `config.toml` **and** a
+`metadata.binpb` recording which repository the directory belongs to.
+`.jj` is never part of a git clone, so a clone carries no config; the
+metadata is what stops a copied or reused id from pointing elsewhere.
+
+**Both directions go through `jj_lib::secure_config`**
+(`secure_config_file`), never through a reimplementation of the layout.
+Minting an id and writing a `config.toml` by hand leaves out the
+metadata, and jj then treats the directory as absent -- which is what
+pyjj used to do, so `jj` silently ignored everything `pyjj config set
+--repo` wrote, in every repository. Reading never creates; writing
+creates the way jj does.
+
+`UserSettings()` loads the user layers alone, because repo and
+workspace config need a repository to belong to.
+`UserSettings.for_repo(repo_path, workspace_root)` adds them, and
+`_load` builds settings twice to get there: the id lives in the
+workspace, and the workspace opens with the config that names it. jj
+bootstraps the same way.
+
+A read-only command takes `settings_for(args)` instead, which is the
+same thing without the working-copy snapshot. Building
+`pyjj.UserSettings()` directly misses the repo layer -- that is how
+`config get` came to report a key unset that `jj config get` printed.
+`util exec`, `util backend` and `util snapshot` still build it
+directly; `git clone` and `git init` are right to, since neither has a
+repository yet.
+
+An env override outranks the repo layer, in jj as here, so `JJ_USER`
+hides a repo-level `user.name` in both. A test that wants to see the
+repo layer has to pick a key no env var sets.
 
 ### Operation metadata
 

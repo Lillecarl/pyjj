@@ -16,7 +16,8 @@ def config_set(args) -> int:
         return 2
     try:
         root = _workspace_root(args) if scope != "user" else None
-        path = config_path(root, scope)
+        # This one writes, so it may mint the scope's directory.
+        path = config_path(root, scope, create=True)
         data = read_config(path)
         set_key(data, args.name, _parse(args.value))
         write_config(path, data)

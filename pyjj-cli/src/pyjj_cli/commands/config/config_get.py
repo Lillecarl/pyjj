@@ -28,11 +28,12 @@ from ..common import (
     _merge_marker_len,
     _run_merge_tool,
     _fix_pattern_matches,
+    settings_for,
 )
 
 def config_get(args) -> int:
     try:
-        settings = pyjj.UserSettings()
+        settings = settings_for(args)
         val = settings.get_string(args.name)
         if val is None:
             print(f"Error: config {args.name} not set", file=sys.stderr)
