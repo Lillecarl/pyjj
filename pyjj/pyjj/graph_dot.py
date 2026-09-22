@@ -54,11 +54,21 @@ def quote(text: str) -> str:
     return f'"{escape(text)}"'
 
 
+def _join_attrs(pairs: list[str]) -> str:
+    """One attribute per line once there is more than the label.
+
+    A node carrying its fields runs past any terminal width on one
+    line, and the first thing anyone does with this output is read it.
+    """
+    return ",\n     ".join(pairs)
+
+
 def render_dot(
     items: Sequence[tuple[str, Sequence[tuple[str, EdgeType]]]],
     labels: Mapping[str, str],
     *,
     name: str = "log",
+    attributes: Mapping[str, Mapping[str, str]] | None = None,
 ) -> str:
     """The graph as one `digraph`, ending in a newline.
 
@@ -67,12 +77,18 @@ def render_dot(
     of its own gets a placeholder node -- jj's `~` -- so a truncated
     history reads as "this parent exists and is not shown" rather than
     as a node dot invented from a bare hex id.
+
+    `attributes` gives a key's fields as DOT node attributes, so a
+    reader gets them as a dict instead of re-splitting the label.
     """
     rows = {key for key, _ in items}
     lines = [f"digraph {quote(name)} {{", _HEADER.rstrip("\n")]
 
     for key, _parents in items:
-        lines.append(f"  {quote(key)} [label={quote(labels.get(key, key))}];")
+        pairs = [f"label={quote(labels.get(key, key))}"]
+        pairs += [f"{field}={quote(value)}"
+                  for field, value in (attributes or {}).get(key, {}).items()]
+        lines.append(f"  {quote(key)} [{_join_attrs(pairs)}];")
 
     outside: list[str] = []
     for _key, parents in items:
