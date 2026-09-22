@@ -531,7 +531,6 @@ pub fn restore(
     into_commit: &PyCommit,
     paths: Option<Vec<String>>,
 ) -> PyResult<PyCommitBuilder> {
-    let matcher = paths_matcher(paths)?;
     // No source is `jj restore`'s own default: restore from the merge of
     // the destination's parents. The first parent alone would report a
     // merge commit as changing everything its other parents contributed.
@@ -541,6 +540,27 @@ pub fn restore(
             .map_err(map_backend_err)?,
     };
     let into_tree = into_commit.inner.tree();
+    if let Some(paths) = &paths {
+        // A path naming nothing in either tree is a typo (or a path in
+        // the wrong form, like a display-prefixed one), not an empty
+        // restore: restoring it would succeed with the tree unchanged
+        // and say nothing. An unresolved conflict counts as present --
+        // restoring may be exactly what resolves it.
+        for path in paths {
+            let repo_path = RepoPathBuf::from_internal_string(path)
+                .map_err(|err| JjError::new_err(err.to_string()))?;
+            let absent = |tree: &MergedTree| -> PyResult<bool> {
+                let value = pollster::block_on(tree.path_value(&repo_path))
+                    .map_err(map_backend_err)?;
+                Ok(matches!(value.as_resolved(), Some(None)))
+            };
+            if absent(&from_tree)? && absent(&into_tree)? {
+                return Err(JjError::new_err(format!(
+                    "{path}: no such file in either revision")));
+            }
+        }
+    }
+    let matcher = paths_matcher(paths)?;
     let new_tree = pollster::block_on(rewrite::restore_tree(
         &from_tree,
         &into_tree,
