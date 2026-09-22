@@ -26,6 +26,7 @@ from ..common import (
     _commit_kind,
     _commit_root_spans,
     _immutable_ids,
+    conflicting_flags,
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
@@ -101,13 +102,6 @@ def _fileset_literal(path: str) -> str:
     return f'"{escaped}"'
 
 
-def _conflicting(args, names) -> list[str]:
-    """Which of `names` the invocation also carries."""
-    return [name for name in names
-            if getattr(args, name.lstrip("-").replace("-", "_"), None)
-            not in (None, False)]
-
-
 def _write(text: str) -> None:
     """One piece of output, through the byte stream.
 
@@ -157,7 +151,7 @@ def log(args) -> int:
 
     dot = getattr(args, "dot", False)
     if dot:
-        conflicting = _conflicting(args, _DOT_CONFLICTS)
+        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
         if conflicting:
             print(f"Error: --dot cannot be used with {conflicting[0]}",
                   file=sys.stderr)
@@ -167,7 +161,7 @@ def log(args) -> int:
         # jj makes `--count` exclusive with everything that shapes the
         # rows, since it prints no rows at all. clap says so in one
         # attribute; argparse cannot, so the check lives here.
-        conflicting = _conflicting(args, _COUNT_CONFLICTS)
+        conflicting = conflicting_flags(args, _COUNT_CONFLICTS)
         if conflicting:
             print(f"Error: --count cannot be used with {conflicting[0]}",
                   file=sys.stderr)

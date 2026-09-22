@@ -30,6 +30,17 @@ def join_message_paragraphs(paragraphs) -> str:
     one blank line."""
     return "\n".join(complete_newline(p) for p in paragraphs)
 
+def conflicting_flags(args, names) -> list[str]:
+    """Which of `names` the invocation also carries.
+
+    clap says a flag is exclusive in one attribute. argparse cannot, so
+    a command that needs it checks the parsed namespace itself.
+    """
+    return [name for name in names
+            if getattr(args, name.lstrip("-").replace("-", "_"), None)
+            not in (None, False)]
+
+
 class CommandError(Exception):
     def __init__(self, message):
         super().__init__(message)
