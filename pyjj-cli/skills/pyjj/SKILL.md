@@ -67,6 +67,11 @@ prints, no need for the full hex.
 
 ## Gotchas
 
+- Splicing before a merge is one rebase: `rebase -r C -A P` moves `C`
+  onto `P` and repoints `P`'s children (a merge among them) onto the
+  moved commit, keeping their other parents. The merge then has the
+  moved commit where `P` was. Verified against an octopus-shaped repo;
+  no second command is needed.
 - Undoing a commit is two different verbs: `restore -c REV` rewrites
   that revision in place (same as `jj restore --changes-in`), while
   `revert -r REV` appends a new undo commit and leaves the original
