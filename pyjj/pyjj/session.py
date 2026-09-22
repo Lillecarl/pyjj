@@ -181,6 +181,11 @@ class Repo:
             # error is exactly when a caller is relying on this.
             atomic._discarded = True
             raise self._explain(e, description) from e
+        # jj_lib asserts this before it will commit, and an assertion
+        # inside a native extension takes the interpreter with it
+        # rather than raising. It is idempotent, so the guard costs
+        # nothing and a verb that forgets it cannot panic the caller.
+        transaction.rebase_descendants(False)
         transaction.commit(description)
         self.reload()
 
@@ -208,6 +213,11 @@ class Atomic:
         self._allow_immutable = allow_immutable
         self._touched: list = []
         self._discarded = False
+        # What was already conflicted, so the block is judged on what
+        # it introduced rather than on what it inherited.
+        self._conflicted_before = {
+            commit_id.hex() for commit_id
+            in transaction.revset(repo.settings, "conflicts()")}
 
     @property
     def rolled_back(self) -> bool:
@@ -392,6 +402,7 @@ class Atomic:
         self._tx.move_commits([] if whole_branch else ids,
                               ids if whole_branch else [],
                               parents, children)
+        self._tx.rebase_descendants(False)
         self._record(*targets)
         return targets
 
@@ -426,11 +437,26 @@ class Atomic:
         return target
 
     def _refuse_conflicts(self) -> None:
-        conflicted = [c for c in self._touched if c is not None
-                      and self._repo._repo.get_commit(c.id).has_conflict]
-        if conflicted:
-            names = ", ".join(c.change_id.reverse_hex()[:12]
-                              for c in conflicted[:4])
-            raise PyjjError(
-                f"the block left {names} in conflict. Pass "
-                "allow_conflicts=True to keep a result that has one.")
+        """Conflicts this block introduced, asked of the transaction.
+
+        Not of the commits the verbs returned: a rebase replaces them,
+        so checking those ids inspects the versions from before the
+        block and finds nothing. And not of the repository either --
+        `conflicts()` there answers from the starting state.
+
+        Conflicts that were already present are left alone; the block
+        did not cause them and refusing them would make the wrapper
+        unusable in a repository that has one.
+        """
+        now = {commit_id.hex() for commit_id
+               in self._tx.revset(self._repo.settings, "conflicts()")}
+        introduced = sorted(now - self._conflicted_before)
+        if not introduced:
+            return
+        names = ", ".join(
+            self._repo._repo.get_commit(_bindings.CommitId(hexed))
+            .change_id.reverse_hex()[:12]
+            for hexed in introduced[:4])
+        raise PyjjError(
+            f"the block left {names} in conflict. Pass "
+            "allow_conflicts=True to keep a result that has one.")
