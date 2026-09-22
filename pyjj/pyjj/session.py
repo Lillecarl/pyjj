@@ -430,6 +430,40 @@ class Atomic:
         self._record(*copies)
         return copies
 
+    def absorb(self, revision: str = "@", *,
+               into: str | None = None,
+               paths: Sequence[str] | None = None):
+        """`jj absorb`: push each change back into the ancestor that
+        last touched those lines.
+
+        `into` narrows the candidates to a revset, as `jj absorb
+        --into` does. Returns jj's own stats for what moved where.
+        """
+        source = self._commit(revision)
+        stats = self._tx.absorb(self._repo.settings, source, into,
+                                list(paths) if paths else None,
+                                not self._allow_immutable)
+        self._tx.rebase_descendants(False)
+        return stats
+
+    def restore(self, paths: Sequence[str] | None = None, *,
+                into: str = "@", from_revision: str | None = None):
+        """`jj restore`: take paths from one revision into another.
+
+        `from_revision` defaults to the parent of `into`, as `jj
+        restore` does, so `restore(["a.txt"])` undoes that file's
+        changes in the working-copy commit.
+        """
+        target = self._commit(into)
+        source = self._commit(from_revision) if from_revision is not None \
+            else None
+        self._guard([target])
+        written = self._tx.restore(source, target,
+                                   list(paths) if paths else None)
+        self._tx.rebase_descendants(False)
+        self._record(written)
+        return written
+
     def bookmark(self, name: str, revision: str = "@"):
         """`jj bookmark set`: point a bookmark at a commit."""
         target = self._commit(revision)
