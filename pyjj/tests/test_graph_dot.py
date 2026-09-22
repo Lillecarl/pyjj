@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from pyjj.graph_dot import escape, render_dot
-from pyjj_cli.commands.common import CommandError, dot_attribute, select_fields
+from pyjj_cli.commands.common import (
+    CommandError,
+    dot_attribute,
+    select_fields,
+    unpushed,
+)
 
 _CATALOGUE = ("change_id", "author", "description", "files", "diff")
 _DEFAULT = ("change_id", "author", "description")
@@ -126,6 +131,40 @@ def test_an_attribute_value_reads_as_dot_not_as_python():
     assert dot_attribute(False) == "false"
     assert dot_attribute(["main", "dev"]) == "main dev"
     assert dot_attribute(None) == ""
+
+
+def _remote(name: str, *, tracked: bool = True, synced: bool = True) -> dict:
+    return {"remote": name, "tracked": tracked, "synced": synced,
+            "ahead": 0, "behind": 0}
+
+
+def test_a_bookmark_with_no_remote_at_all_needs_pushing():
+    assert unpushed({}, "fix/x") is True
+    assert unpushed({"fix/x": [_remote("git")]}, "fix/x") is True
+
+
+def test_a_synced_tracked_remote_means_nothing_to_push():
+    assert unpushed({"fix/x": [_remote("git"), _remote("origin")]},
+                    "fix/x") is False
+
+
+def test_an_unsynced_tracked_remote_needs_pushing():
+    assert unpushed({"fix/x": [_remote("origin", synced=False)]},
+                    "fix/x") is True
+
+
+def test_an_untracked_remote_never_decides_it():
+    """kr8s carries `main@lilatomic` 31 commits behind its own `main`.
+    jj does not push to an untracked remote, so counting one made a
+    synced bookmark read as needing a push."""
+    remotes = {"main": [_remote("origin"),
+                        _remote("lilatomic", tracked=False, synced=False)]}
+    assert unpushed(remotes, "main") is False
+
+
+def test_an_untracked_remote_alone_still_needs_pushing():
+    remotes = {"fix/x": [_remote("lilatomic", tracked=False, synced=False)]}
+    assert unpushed(remotes, "fix/x") is True
 
 
 def test_the_graph_is_one_digraph_ending_in_a_newline():
@@ -269,6 +308,52 @@ def test_cli_log_dot_fields_rejects_a_typo_and_a_stray_flag(
     )
     assert stray.returncode == 2
     assert "--dot-fields requires --dot" in stray.stderr
+
+
+def test_cli_log_dot_reports_a_bookmark_with_no_remote_as_unpushed(
+        workspace, repo, settings):
+    """The fixture repository has no remote, so every bookmark on it
+    would be created by a push."""
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("one\n")
+    repo, _ = workspace.snapshot(settings)
+
+    subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "bookmark",
+         "create", "topic", "-r", "@"],
+        capture_output=True, text=True, check=True,
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "log", "-r", "@",
+         "--dot", "--dot-fields", "bookmarks,unpushed_bookmarks"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'bookmarks="topic"' in result.stdout
+    assert 'unpushed_bookmarks="topic"' in result.stdout
+
+
+def test_cli_bookmark_list_template_can_name_the_remote_state(
+        workspace, repo, settings):
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("one\n")
+    repo, _ = workspace.snapshot(settings)
+    subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "bookmark",
+         "create", "topic", "-r", "@"],
+        capture_output=True, text=True, check=True,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "bookmark",
+         "list", "-T", "{{ name }} unpushed={{ unpushed }} "
+                       "{{ remotes | tojson }}"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "topic unpushed=True" in result.stdout
+    # The listing still renders, whether or not a remote exists.
+    assert "[" in result.stdout
 
 
 def test_cli_op_log_dot_refuses_the_op_diff_flag(workspace, repo, settings):
