@@ -421,7 +421,9 @@ graph is neither the shape that was asked for nor the one that was
 there. Two refusals are the default -- an immutable commit
 (`--ignore-immutable`) and a conflict the reshape introduced
 (`--allow-conflicts`). Each test asserts the commit ids are unchanged
-afterwards rather than trusting the message.
+afterwards rather than trusting the message. A successful apply prints
+the pre-apply operation id (`Restore with: pyjj op restore <id>`, plus
+`before_op` in `--format json`), so the way back is one paste away.
 
 `immutable_heads()` set with `config set --repo` bites, so the
 `graph apply` tests write it the way a user would.
@@ -497,7 +499,10 @@ vocabulary is jj's -- `revision`, `destination`, `into`, `after`,
 transaction becomes an operation only on a clean exit, so a failure
 writes nothing: no half-applied change, and no rollback entry either.
 That is stronger than `graph apply`'s record-and-restore, which needs
-a transaction per step because each rebase re-resolves.
+a transaction per step because each rebase re-resolves. A clean exit
+also exports git refs on colocated repos (HEAD reset + bookmark/tag
+export, the CLI's own finish behavior) -- without it a scripted
+rewrite leaves `<name>@git` stale behind the moved bookmark.
 
 **Revisions resolve through the transaction, never the repository it
 started from.** `ReadonlyRepo.revset` answers from the starting state,
@@ -1103,7 +1108,10 @@ Current state:
 - **Operation log**: `ReadonlyRepo.operation` (current op), `.operation_log()`
   (full ancestor walk via `jj_lib::op_walk::walk_ancestors`, newest first --
   same order as `jj op log`), `.load_operation(op_id_hex)` (load an
-  arbitrary past operation by id). `ReadonlyRepo.load_at_operation(op) ->
+  arbitrary past operation by id -- full hex only; the CLI's
+  `_resolve_operation` in `common.py` adds `@`/`@-` walking and unique
+  short-prefix matching on top, so `op restore`/`op show`/`--at-op`
+  take what `jj` takes). `ReadonlyRepo.load_at_operation(op) ->
   ReadonlyRepo` is `jj --at-op=<id>` -- loads a full, independent read-only
   repo view as it was at `op` (`jj_lib::repo::RepoLoader::load_at`), purely
   for historical inspection; doesn't affect the repo it was called on or
