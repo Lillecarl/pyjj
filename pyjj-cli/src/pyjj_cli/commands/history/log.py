@@ -136,6 +136,11 @@ def _dot_keys(repo, items, by_id):
 
     An edge target outside the rows has no node of its own to read the
     change id from, so it costs a lookup.
+
+    A divergent change names more than one commit, so it cannot key a
+    node: DOT merges two nodes of the same name and one commit would
+    vanish from the graph without a word. jj refuses to resolve such an
+    id too (`Change ID ... is divergent`), so this refuses to write it.
     """
     keys = {}
     for hex_id, parents in items:
@@ -145,6 +150,19 @@ def _dot_keys(repo, items, by_id):
             if target not in keys and target not in by_id:
                 keys[target] = repo.get_commit(
                     pyjj.CommitId(target)).change_id.reverse_hex()
+
+    by_change: dict[str, list[str]] = {}
+    for hex_id, change in keys.items():
+        by_change.setdefault(change, []).append(hex_id)
+    divergent = {change: hexes for change, hexes in by_change.items()
+                 if len(hexes) > 1}
+    if divergent:
+        change, hexes = sorted(divergent.items())[0]
+        raise CommandError(
+            f"change {change[:12]} is divergent: it names "
+            f"{len(hexes)} commits ({', '.join(sorted(h[:12] for h in hexes))})"
+            ", so it cannot name a node. Use --dot-key commit_id, or "
+            "narrow the revset")
     return keys
 
 
@@ -417,7 +435,12 @@ def log(args) -> int:
 
     if dot:
         if getattr(args, "dot_key", "commit_id") == "change_id":
-            keys = _dot_keys(repo, items, by_id)
+            try:
+                keys = _dot_keys(repo, items, by_id)
+            except CommandError as e:
+                sys.stdout.buffer.flush()
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
             _write(render_dot(
                 _rekey(items, keys),
                 {keys[hex_id]: text for hex_id, text in dot_labels.items()},
