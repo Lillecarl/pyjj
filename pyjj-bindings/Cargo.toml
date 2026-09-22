@@ -30,6 +30,10 @@ chrono = { version = "0.4.44", default-features = false, features = [
 thiserror = "2.0.17"
 futures = "0.3.32"
 etcetera = "0.11.0"
+# jj's `SecureConfig` takes the rng it would mint a config id with.
+# Same version jj pins, so the id format cannot drift.
+rand_chacha = "0.10.0"
+rand = "0.10.1"
 dunce = "1.0.5"
 whoami = "2.1.2"
 sapling-renderdag = "0.1.0"

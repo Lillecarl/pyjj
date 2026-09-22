@@ -15,14 +15,16 @@ impl PyUserSettings {
     /// (`trunk()`, `mutable()`, etc.), system config (`/etc/jj/config.toml`
     /// on Unix), hostname/username, user config (`~/.jjconfig.toml` /
     /// platform config dir), then `JJ_USER`/`JJ_EMAIL`/etc. env var
-    /// overrides -- everything except repo/workspace config (not loaded;
-    /// see `pyjj_bindings.config`'s module docs for why) and command-line
-    /// `--config` (not applicable to a library).
+    /// overrides -- everything except repo/workspace config and
+    /// command-line `--config` (not applicable to a library).
     ///
     /// Pass `load_config=False` to skip all of that and get only jj_lib's
     /// own built-in defaults (empty user name/email, no revset aliases) --
     /// useful for hermetic tests that shouldn't depend on the machine's
     /// real jj config.
+    ///
+    /// Repo and workspace config need a repository to belong to, so they
+    /// arrive through `for_repo` instead.
     #[new]
     #[pyo3(signature = (load_config=true))]
     fn new(load_config: bool) -> PyResult<Self> {
@@ -31,6 +33,25 @@ impl PyUserSettings {
         } else {
             jj_lib::config::StackedConfig::with_defaults()
         };
+        let user_settings = UserSettings::from_config(config).map_err(crate::errors::map_py_err)?;
+        Ok(Self(user_settings))
+    }
+
+    /// The same config the `jj` CLI would see *inside this repository*:
+    /// everything the constructor loads, plus the repo and workspace
+    /// layers jj keeps under the user's own config directory.
+    ///
+    /// `repo_path` is `.jj/repo` (`Workspace.repo_path`), and
+    /// `workspace_root` the directory holding `.jj`. Without these
+    /// layers `immutable_heads()` set by `jj config set --repo` has no
+    /// effect, and a rewrite real jj refuses goes through.
+    #[staticmethod]
+    fn for_repo(repo_path: &str, workspace_root: &str) -> PyResult<Self> {
+        let config = crate::config::load_config_for_repo(
+            std::path::Path::new(repo_path),
+            std::path::Path::new(workspace_root),
+        )
+        .map_err(crate::errors::map_py_err)?;
         let user_settings = UserSettings::from_config(config).map_err(crate::errors::map_py_err)?;
         Ok(Self(user_settings))
     }

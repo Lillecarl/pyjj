@@ -128,6 +128,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
     m.add_function(wrap_pyfunction!(unified_hunks, m)?)?;
     m.add_function(wrap_pyfunction!(content_hunks, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::secure_config::secure_config_file, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_config_repo_path, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::remove_repo_config_dir, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_configs_root_dir, m)?)?;

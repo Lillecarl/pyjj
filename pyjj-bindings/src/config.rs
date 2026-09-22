@@ -9,14 +9,24 @@
 //! crates `cli` uses for platform config-dir/hostname discovery, so the
 //! file locations and precedence order match exactly.
 //!
-//! **Deliberately out of scope**: repo-level (`.jj/repo/`) and
-//! workspace-level (`.jj/<workspace>/`) config. Real jj stores those behind
-//! an ID-indirection scheme (`SecureConfig`, in `jj_lib::secure_config`)
-//! specifically so that cloning a repo can't silently make its config (e.g.
-//! merge-tool commands, aliases) take effect without the user opting in --
-//! reimplementing that trust boundary casually would be a real security
-//! regression, not just a missing feature. System/user config and env vars
-//! (which are always under the *local user's* control) carry no such risk.
+//! Repo-level and workspace-level config load too, but only when a caller
+//! names a repository (`load_config_for_repo`). They are not part of
+//! `load_default_config`, which has no repository to name.
+//!
+//! jj puts those behind an id indirection (`SecureConfig`, in
+//! `jj_lib::secure_config`): the repository holds only a hex id in
+//! `.jj/repo/config-id`, and the config itself lives under the *user's*
+//! config directory at `<config>/jj/repos/<id>/config.toml`. `.jj` is not
+//! part of a git clone, so a clone carries no config and cannot make its
+//! aliases or merge-tool commands take effect. The check that keeps the
+//! indirection honest is the metadata beside the config, which records
+//! the repository the directory was created for; a directory recording a
+//! different path is not loaded. That check goes through
+//! `jj_lib::secure_config`, so the protobuf stays jj's business.
+//!
+//! Skipping these layers is not the safe choice it looks like. It makes
+//! `immutable_heads()` set with `jj config set --repo` have no effect, so
+//! a rewrite that real jj refuses goes through here instead.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -191,6 +201,65 @@ pub fn load_default_config() -> Result<StackedConfig, ConfigLoadError> {
     config.add_layer(env_base_layer());
     load_layers_at(&mut config, ConfigSource::System, &system_config_paths())?;
     load_layers_at(&mut config, ConfigSource::User, &user_config_paths())?;
+    config.add_layer(env_overrides_layer());
+    Ok(config)
+}
+
+/// Where per-repo and per-workspace config directories live:
+/// `<platform config dir>/jj/{repos,workspaces}`.
+///
+/// `JJ_CONFIG` replaces the user layer but not this one, exactly as in
+/// jj: the env var names config *files*, and the id indirection is a
+/// directory scheme underneath it.
+pub(crate) fn secure_config_root(kind: &str) -> Option<PathBuf> {
+    let base = etcetera::choose_base_strategy().ok()?;
+    let mut dir = base.config_dir();
+    dir.push("jj");
+    dir.push(kind);
+    Some(dir)
+}
+
+/// The config file a scope holds, if it has one already.
+///
+/// Reading never creates: a repository that has never had scoped
+/// config set gets no directory and no id minted just by being looked
+/// at. jj's own `maybe_load_config` decides, so the metadata check
+/// that keeps the id indirection honest is jj's, not a copy of it.
+fn existing_scoped_config(
+    workspace_root: &Path,
+    repo_path: &Path,
+    kind: &str,
+) -> Option<PathBuf> {
+    let path = crate::secure_config::secure_config_file(
+        &workspace_root.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        kind,
+        false,
+    )
+    .ok()??;
+    let path = PathBuf::from(path);
+    path.exists().then_some(path)
+}
+
+/// jj's config as the CLI sees it inside a repository: everything
+/// `load_default_config` loads, then the repo and workspace layers.
+///
+/// `repo_path` is `.jj/repo` (jj's own `reset_repo_path` takes the
+/// same), and `workspace_root` the directory holding `.jj`.
+pub fn load_config_for_repo(
+    repo_path: &Path,
+    workspace_root: &Path,
+) -> Result<StackedConfig, ConfigLoadError> {
+    let mut config = StackedConfig::with_defaults();
+    config.add_layer(revsets_default_layer());
+    config.add_layer(env_base_layer());
+    load_layers_at(&mut config, ConfigSource::System, &system_config_paths())?;
+    load_layers_at(&mut config, ConfigSource::User, &user_config_paths())?;
+    for kind in ["repo", "workspace"] {
+        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind) {
+            load_layers_at(&mut config, ConfigSource::Repo, &[path])?;
+        }
+    }
     config.add_layer(env_overrides_layer());
     Ok(config)
 }
