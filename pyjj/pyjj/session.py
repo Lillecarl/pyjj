@@ -186,8 +186,23 @@ class Repo:
         # rather than raising. It is idempotent, so the guard costs
         # nothing and a verb that forgets it cannot panic the caller.
         transaction.rebase_descendants(False)
+        self._export_git_refs(transaction)
         transaction.commit(description)
         self.reload()
+
+    def _export_git_refs(self, transaction) -> None:
+        """What the CLI's transaction-finish does: a colocated repo
+        exports bookmarks/tags and resets HEAD on every transaction.
+
+        Without it a scripted rewrite leaves `<name>@git` on the commit
+        the bookmark moved away from -- found by a blind CTF solver
+        whose single atomic block was otherwise perfect.
+        """
+        if not os.path.exists(
+                os.path.join(self._workspace.workspace_root, ".git")):
+            return
+        transaction.git_reset_head(self._workspace.workspace_name)
+        transaction.git_export_refs()
 
     def _explain(self, error: BaseException, description: str):
         """The failure, said in a way the caller can act on."""
