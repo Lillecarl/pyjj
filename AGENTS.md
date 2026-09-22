@@ -379,18 +379,16 @@ afterwards, so a line of evolution stays contiguous.
 `pyjjui` keeps `graph_layout.layout`, which it renders itself in
 Textual rather than as text.
 
-`log --dot` prints the same DAG as Graphviz DOT
-(`pyjj/pyjj/graph_dot.py`). It is pyjj-cli's own flag; jj has none, and
-the surface ledger measures only what jj has that pyjj-cli lacks, so it
-does not move the baseline. `render_dot` takes the same
-`[(key, [(parent, edge_type)])]` items `layout_keyed` and
-`GraphRenderer` take, so `op log`, `evolog` and `op diff` can reach it
-without a second walk. Node labels come from the row the text renderer
-would have printed, uncoloured, which is why `-T` shapes them and
-`--no-graph`, `--reversed` and the diff flags are refused. A template
-cannot replace the flag: it sees `commit.parent_ids`, not the revset's
-edges, so it cannot tell `direct` from `indirect` or see `missing` at
-all.
+`--dot` prints the same DAG as Graphviz DOT (`pyjj/pyjj/graph_dot.py`)
+on `log`, `op log` and `evolog`. `render_dot` takes the same
+`[(key, [(parent, edge_type)])]` items `GraphRenderer` takes, so `op
+diff` can reach it too. Node labels are the row the text renderer would
+have printed, uncoloured, so `-T` shapes them; `--no-graph`,
+`--reversed` and the diff flags are refused. A template cannot replace
+the flag: it sees `commit.parent_ids`, not the revset's edges, so it
+cannot tell `direct` from `indirect`. jj has no such flag, and the
+surface ledger measures only what jj has that pyjj-cli lacks, so it
+does not move the baseline.
 
 ### Operation metadata
 

@@ -2,6 +2,7 @@
 import sys
 
 import pyjj
+from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
 
 from ...formatter import Line, render_block, separate
@@ -23,7 +24,15 @@ from ..common import (
     _resolve_all,
     _resolve_template,
     _short_id,
+    conflicting_flags,
     use_color,
+)
+
+# Same list as `log`'s: a flag that shapes a row or its order has
+# nothing to act on in a DOT graph.
+_DOT_CONFLICTS = (
+    "--no-graph", "--reversed", "--patch", "--summary", "--stat",
+    "--name-only", "--types", "--git", "--color-words",
 )
 
 
@@ -40,6 +49,14 @@ def _operation_spans(operation):
 
 
 def evolog(args) -> int:
+    dot = getattr(args, "dot", False)
+    if dot:
+        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
+        if conflicting:
+            print(f"Error: --dot cannot be used with {conflicting[0]}",
+                  file=sys.stderr)
+            return 2
+
     try:
         settings, ws, repo = _load(args)
         revisions = getattr(args, "revisions", None) or ["@"]
@@ -101,7 +118,8 @@ def evolog(args) -> int:
     # The graph is drawn by jj's own renderer, which takes a row's whole
     # text at once. Rows arrive in order and it is stateful, so every
     # row goes through it, including the ones a template renders.
-    renderer = None if no_graph else pyjj.GraphRenderer()
+    renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
+    dot_labels: dict[str, str] = {}
     coloured = use_color(settings)
     # jj's `current_working_copy` asks about this workspace alone,
     # which is what makes a row bold and its glyph an `@`.
@@ -125,7 +143,10 @@ def evolog(args) -> int:
             The patch goes into the same buffer as the row, so the
             graph column runs down beside it, exactly as `log` does.
             """
-            text = render_block(lines, "evolog", coloured)
+            text = render_block(lines, "evolog", coloured and not dot)
+            if dot:
+                dot_labels[hex_id] = text
+                return
             patch = "" if not with_diff else _patch_bytes(
                 args, ws, settings, repo, entry, formats,
             ).decode("utf-8", "surrogateescape")
@@ -167,6 +188,9 @@ def evolog(args) -> int:
         if operation is not None:
             lines.append(Line(_operation_spans(operation)))
         emit(lines)
+
+    if dot:
+        _write(render_dot(items, dot_labels, name="evolog"))
     sys.stdout.buffer.flush()
     return 0
 

@@ -2,6 +2,7 @@
 import sys
 
 import pyjj
+from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
 
 from ...formatter import render_block, separate
@@ -13,6 +14,7 @@ from ..common import (
     _load,
     _pyjj_template,
     _resolve_template,
+    conflicting_flags,
     use_color,
 )
 from .op_diff import print_operation_diff
@@ -167,8 +169,26 @@ def _op_diff_text(args, settings, ws, repo, op) -> str:
     return buffer.getvalue()
 
 
+# The operation log's own version of `log`'s list: a flag that shapes
+# a row or its order has nothing to act on in a DOT graph. `--op-diff`
+# and `--patch` are in it because a node label holding a whole diff is
+# not a label.
+_DOT_CONFLICTS = (
+    "--no-graph", "--reversed", "--op-diff", "--patch", "--summary",
+    "--stat", "--name-only", "--types", "--git", "--color-words",
+)
+
+
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
+    dot = getattr(args, "dot", False)
+    if dot:
+        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
+        if conflicting:
+            print(f"Error: --dot cannot be used with {conflicting[0]}",
+                  file=sys.stderr)
+            return 2
+
     try:
         settings, ws, repo = _load(args)
     except (pyjj.JjError, CommandError) as e:
@@ -202,6 +222,13 @@ def op_log(args) -> int:
         if not with_diff:
             return ""
         return _op_diff_text(args, settings, ws, repo, by_id[op_id])
+
+    if dot:
+        labels = {op_id: render_operation(by_id[op_id], op_id == current_id,
+                                          shape, template, "op_log", False)
+                  for op_id, _edges in items}
+        sys.stdout.write(render_dot(items, labels, name="op_log"))
+        return 0
 
     if getattr(args, "no_graph", False):
         for op_id, _edges in items:
