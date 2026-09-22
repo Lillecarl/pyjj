@@ -486,6 +486,40 @@ An env override outranks the repo layer, in jj as here, so `JJ_USER`
 hides a repo-level `user.name` in both. A test that wants to see the
 repo layer has to pick a key no env var sets.
 
+### The session API
+
+`pyjj.open()` and `repo.atomic()` (`pyjj/pyjj/session.py`) are the
+wrapper an agent uses; `pyjj` proper stays the jj_lib mirror. The
+vocabulary is jj's -- `revision`, `destination`, `into`, `after`,
+`before`, `message`, `paths` -- so nobody learns a second set of names.
+
+**A block is one transaction.** The operations accumulate and the
+transaction becomes an operation only on a clean exit, so a failure
+writes nothing: no half-applied change, and no rollback entry either.
+That is stronger than `graph apply`'s record-and-restore, which needs
+a transaction per step because each rebase re-resolves.
+
+**Revisions resolve through the transaction, never the repository it
+started from.** `ReadonlyRepo.revset` answers from the starting state,
+so `squash` then `describe("@-")` addressed a commit the squash had
+already replaced and left the change divergent. `Transaction.revset`
+is the one that sees the block's own writes, and its docstring says
+so; the wrapper exists partly to make that unmissable.
+
+The `except BaseException` in `atomic` is deliberate, for the reason
+`graph apply` records: a rollback covering only predicted errors is
+absent exactly when it is needed.
+
+`pyjj python` carries the interpreter rather than the logic. pyjj is a
+native extension with its own closure, so outside a Nix shell built
+for it no `python3` can import it -- the CLI already has one, so it
+lends it. `pyjj`, `pyjj_bindings` and `repo` are bound before the
+script runs.
+
+`-c` must not use `dest="command"`: that is the top-level subparser's
+own dest, and a run without `-c` then overwrote the subcommand name
+with None, so the CLI printed usage instead of dispatching.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in

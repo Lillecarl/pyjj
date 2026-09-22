@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Imported here (not at top-level) so `import pyjj_cli.__main__` doesn't
     # pull them until `build_parser()` is actually called — and none of them
     # import `pyjj`/`pyjj.hunk`/`pydantic` themselves.
-    from pyjj_cli.cli import bisect, bookmark, config, describe, file, git, graph, history, hunk, operation, rewrite, run, sparse, stubs, tag, templates, util, workspace
+    from pyjj_cli.cli import bisect, bookmark, config, describe, file, git, graph, history, hunk, operation, python_cli, rewrite, run, sparse, stubs, tag, templates, util, workspace
 
     git.add_parsers(sub)
     history.add_parsers(sub)
@@ -42,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     rewrite.add_parsers(sub)
     hunk.add_parsers(sub)
     graph.add_parsers(sub)
+    python_cli.add_parsers(sub)
     sparse.add_parsers(sub)
     workspace.add_parsers(sub)
     tag.add_parsers(sub)
