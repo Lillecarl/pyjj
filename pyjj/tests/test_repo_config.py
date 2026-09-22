@@ -170,10 +170,9 @@ def test_util_snapshot_honours_a_repo_level_limit(repo_with_topics):
     snapshot, which built its settings without the repo layer and so
     took a file the limit forbids.
 
-    Asserted on the tree rather than the message: pyjj does not report
-    refused files the way jj does ("Refused to snapshot some files"),
-    which is a separate divergence in the reporting, not in whether the
-    limit applies.
+    The message is jj's own wording, to the byte. jj adds a `Hint:`
+    block after it which pyjj leaves out, as it leaves out every hint
+    -- one of its bullets names `--config`, which pyjj does not have.
     """
     root, home = repo_with_topics
     _run(root, "config", "set", "--repo", "snapshot.max-new-file-size", "10",
@@ -182,6 +181,10 @@ def test_util_snapshot_honours_a_repo_level_limit(repo_with_topics):
 
     result = _run(root, "util", "snapshot", home=home)
     assert result.returncode == 0, result.stderr
+    assert "Refused to snapshot some files:" in result.stderr
+    assert ("big.txt: 200.0B (200 bytes); the maximum size allowed is "
+            "10.0B (10 bytes)") in result.stderr
+
     listed = _run(root, "file", "list", home=home, check=True)
     assert "big.txt" not in listed.stdout, (
         "the repo-level size limit did not reach the snapshot")
