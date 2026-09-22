@@ -34,6 +34,10 @@ in
           --bash <(${register-python-argcomplete} pyjj) \
           --zsh <(${register-python-argcomplete} pyjj) \
           --fish <(${register-python-argcomplete} --shell fish pyjj)
+        # Agent skill, FHS layout per NixOS/nixpkgs#547426:
+        #   share/skills/<pname>/<skill>/SKILL.md
+        mkdir -p $out/share/skills/pyjj-cli/pyjj
+        cp skills/pyjj/SKILL.md $out/share/skills/pyjj-cli/pyjj/
       '';
       meta =
         attrs.meta
