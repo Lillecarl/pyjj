@@ -44,6 +44,74 @@ class DotError(ValueError):
     """A graph this module cannot read, or cannot read unambiguously."""
 
 
+class PlanError(ValueError):
+    """A graph that cannot become a sequence of rebases."""
+
+
+def resolve_plan(
+    nodes: Sequence[str],
+    edges: Mapping[str, Sequence[tuple[str, str]]],
+    current: Mapping[str, Sequence[str]],
+) -> list[tuple[str, list[str]]]:
+    """`[(key, wanted parents)]` for each node whose parents must move.
+
+    Pure: `current` gives each key's parents as the repository has them
+    now, and nothing here touches a repository. `nodes` is the set the
+    graph declares; an edge may point outside it, at a commit the graph
+    names as a fixed parent rather than describes.
+
+    **Ordered parents before children.** A node is emitted only once
+    every in-graph parent it wants is already emitted. Declaration
+    order is not enough: a graph that swaps two commits declares them
+    in the order it likes, and rebasing the child first puts it on the
+    parent's *old* position.
+
+    Raises `PlanError` on a cycle -- including a node that is its own
+    parent -- because no order of rebases can produce one, and jj would
+    take the first few steps before discovering that.
+    """
+    wanted = {key: [target for target, _kind in edges.get(key, [])]
+              for key in nodes}
+    known = set(nodes)
+
+    for key, parents in wanted.items():
+        if key in parents:
+            raise PlanError(f"node {key} is its own parent")
+        seen = set()
+        for parent in parents:
+            if parent in seen:
+                raise PlanError(
+                    f"node {key} names parent {parent} twice")
+            seen.add(parent)
+
+    # Kahn over the in-graph edges, child depending on parent. A node
+    # left over when nothing more can be emitted sits on a cycle.
+    remaining = {key: {p for p in parents if p in known}
+                 for key, parents in wanted.items()}
+    order: list[str] = []
+    ready = [key for key in nodes if not remaining[key]]
+    while ready:
+        key = ready.pop(0)
+        order.append(key)
+        for child, parents in remaining.items():
+            if key in parents:
+                parents.discard(key)
+                if not parents and child not in order and child not in ready:
+                    ready.append(child)
+
+    if len(order) != len(nodes):
+        stuck = sorted(set(nodes) - set(order))
+        raise PlanError(
+            "the graph has a cycle through "
+            + ", ".join(stuck[:4]) + ("..." if len(stuck) > 4 else ""))
+
+    steps = []
+    for key in order:
+        if list(current.get(key, [])) != wanted[key]:
+            steps.append((key, wanted[key]))
+    return steps
+
+
 def render_dot(
     items: Sequence[tuple[str, Sequence[tuple[str, EdgeType]]]],
     labels: Mapping[str, str],
