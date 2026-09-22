@@ -3,7 +3,9 @@
 Every step is a `move_commits`, the same primitive `rebase -r` uses.
 The reshape is all-or-nothing: the operation the repository sat at
 before is recorded first, and anything that goes wrong restores it, so
-a half-applied graph is not a state this can leave behind.
+a half-applied graph is not a state this can leave behind. The
+pre-apply operation id is also printed on success, so `op restore` is
+one paste away even when everything worked.
 
 Two refusals stand between a graph and a rewrite, and both are the
 default:
@@ -110,9 +112,11 @@ def apply(args) -> int:
         raise
 
     if getattr(args, "format", "text") == "json":
-        print(json.dumps({"applied": applied, "rolled_back": False}, indent=2))
+        print(json.dumps({"applied": applied, "rolled_back": False,
+                          "before_op": before}, indent=2))
     else:
         print(f"Reshaped {len(applied)} commits.")
+    print(f"Restore with: pyjj op restore {before}", file=sys.stderr)
     return 0
 
 
@@ -133,7 +137,7 @@ def _rollback(ws, settings, operation_id: str, why: str, applied,
         _finish(tx, "graph apply: roll back", settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: rollback failed: {getattr(e, 'message', e)}. "
-              f"Restore it by hand with `pyjj op restore {operation_id[:12]}`",
+              f"Restore it by hand with `pyjj op restore {operation_id}`",
               file=sys.stderr)
         return
     print(f"Rolled back {len(applied)} applied step(s); the repository is as "

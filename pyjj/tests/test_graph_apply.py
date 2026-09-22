@@ -9,6 +9,7 @@ would. `test_repo_config.py` covers that path itself.
 """
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -245,3 +246,41 @@ def test_a_missing_file_is_refused(topics, tmp_path):
     result = _run(root, "graph", "apply", str(tmp_path / "nope.dot"), home=home)
     assert result.returncode == 2
     assert "cannot read" in result.stderr
+
+
+def test_success_prints_a_restore_point(topics, tmp_path):
+    """The pre-apply operation id is printed, so `op restore` is one
+    paste away even when the reshape worked."""
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _stack_a_on_b(current, target)
+
+    before = _state(root, home)
+    result = _run(root, "graph", "apply", str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    match = re.search(r"op restore ([0-9a-f]+)", result.stderr)
+    assert match, f"no restore point in stderr: {result.stderr!r}"
+
+    restored = _run(root, "op", "restore", match.group(1), home=home)
+    assert restored.returncode == 0, restored.stderr
+    assert _state(root, home) == before
+
+
+def _is_full_hex(value: str) -> bool:
+    return bool(re.fullmatch(r"[0-9a-f]+", value))
+
+
+def test_json_reports_before_op(topics, tmp_path):
+    import json
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _stack_a_on_b(current, target)
+
+    result = _run(root, "graph", "apply", "--format", "json", str(target),
+                  home=home)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["rolled_back"] is False
+    assert _is_full_hex(payload["before_op"])
