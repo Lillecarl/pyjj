@@ -16,6 +16,10 @@ def add_parsers(sub) -> None:
                        help="Show oldest commits first")
     p_log.add_argument("--dot", action="store_true",
                        help="Print the graph as Graphviz DOT instead of rows")
+    p_log.add_argument("--dot-key", default="commit_id",
+                       choices=("commit_id", "change_id"),
+                       help="Which id names a --dot node; change_id "
+                            "survives a rewrite, commit_id does not")
     p_log.add_argument("--dot-fields", default=None, metavar="FIELDS",
                        help="Which fields --dot writes as node attributes: "
                             "a comma-separated list, or +name/-name to "

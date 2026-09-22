@@ -126,6 +126,34 @@ def _fileset_literal(path: str) -> str:
     return f'"{escaped}"'
 
 
+def _dot_keys(repo, items, by_id):
+    """`{commit hex: change id}` for every node the graph names.
+
+    A commit id is a content hash, so a rewrite replaces it, and the
+    old one still *resolves* -- to the obsolete predecessor, silently.
+    A change id survives the rewrite, which is what a graph meant to be
+    read back after one has to be keyed on.
+
+    An edge target outside the rows has no node of its own to read the
+    change id from, so it costs a lookup.
+    """
+    keys = {}
+    for hex_id, parents in items:
+        node = by_id.get(hex_id)
+        keys[hex_id] = node.commit.change_id.reverse_hex()
+        for target, _edge_type in parents:
+            if target not in keys and target not in by_id:
+                keys[target] = repo.get_commit(
+                    pyjj.CommitId(target)).change_id.reverse_hex()
+    return keys
+
+
+def _rekey(items, keys):
+    return [(keys[hex_id], [(keys[target], edge_type)
+                            for target, edge_type in parents])
+            for hex_id, parents in items]
+
+
 def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths,
                     names, remotes):
     """One row's selected fields, as DOT node attributes.
@@ -225,6 +253,9 @@ def log(args) -> int:
             return 2
     elif getattr(args, "dot_fields", None):
         print("Error: --dot-fields requires --dot", file=sys.stderr)
+        return 2
+    elif getattr(args, "dot_key", "commit_id") != "commit_id":
+        print("Error: --dot-key requires --dot", file=sys.stderr)
         return 2
 
     if getattr(args, "count", False):
@@ -385,7 +416,15 @@ def log(args) -> int:
                                 root, short_year))
 
     if dot:
-        _write(render_dot(items, dot_labels, attributes=dot_attrs))
+        if getattr(args, "dot_key", "commit_id") == "change_id":
+            keys = _dot_keys(repo, items, by_id)
+            _write(render_dot(
+                _rekey(items, keys),
+                {keys[hex_id]: text for hex_id, text in dot_labels.items()},
+                attributes={keys[hex_id]: attrs
+                            for hex_id, attrs in dot_attrs.items()}))
+        else:
+            _write(render_dot(items, dot_labels, attributes=dot_attrs))
     sys.stdout.buffer.flush()
     return 0
 

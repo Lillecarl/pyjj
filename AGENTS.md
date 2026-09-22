@@ -403,6 +403,15 @@ each costs a tree comparison per row and a diff attribute can outweigh
 the rest of the graph. That `diff` is git format, not jj's colour-words
 default, which exists for a terminal rather than for a parser.
 
+`--dot-key change_id` names nodes by change id instead of commit id,
+on `log`. **A commit id is a content hash, so a rewrite replaces it,
+and the old one still resolves -- to the obsolete predecessor, not to
+an error.** A graph meant to be read back after a rewrite, or fed to
+anything that reshapes history, has to be keyed on the change id. The
+default stays `commit_id`, which is right for a graph read once.
+`evolog` has no such flag: its rows are versions of one change, so
+change ids collide there by construction.
+
 `remote_bookmarks` and `unpushed_bookmarks` come from `remote_state()`
 in `common.py`, which `bookmark list -T` also exposes as `remotes` and
 `unpushed`. **Whether a bookmark needs pushing is not a revset
