@@ -86,6 +86,9 @@ let
           ps.markdown-it-py
           # The suite is almost all subprocess wait, so it parallelises well.
           ps.pytest-xdist
+          # The DOT tests read graphs back with the same library that
+          # writes them, rather than asserting on graphviz's whitespace.
+          ps.pygraphviz
         ]
       );
       # Eval-time impure passthrough so `nix build --impure` can also bake args.
