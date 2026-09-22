@@ -3,6 +3,8 @@
     "bench",
     "debug",
     "desc",
+    "graph",
+    "graph plan",
     "hunk",
     "hunk commit",
     "hunk list",
