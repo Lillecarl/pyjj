@@ -15,6 +15,7 @@ import datetime
 import sys
 
 import pyjj
+from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
 
 from ...formatter import Line, render_block, separate
@@ -55,6 +56,15 @@ _COUNT_CONFLICTS = (
     "--patch", "--summary", "--stat", "--name-only", "--types", "--git",
     "--color-words", "--context", "--ignore-all-space",
     "--ignore-space-change", "--no-graph", "--reversed", "--template",
+    "--dot",
+)
+
+# `--dot` prints the whole DAG as one graph, so a flag that shapes the
+# drawing or the row order has nothing to act on. `--template` does:
+# it decides the node labels.
+_DOT_CONFLICTS = (
+    "--no-graph", "--reversed", "--patch", "--summary", "--stat",
+    "--name-only", "--types", "--git", "--color-words",
 )
 
 
@@ -89,6 +99,13 @@ def _fileset_literal(path: str) -> str:
     """
     escaped = path.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _conflicting(args, names) -> list[str]:
+    """Which of `names` the invocation also carries."""
+    return [name for name in names
+            if getattr(args, name.lstrip("-").replace("-", "_"), None)
+            not in (None, False)]
 
 
 def _write(text: str) -> None:
@@ -138,13 +155,19 @@ def log(args) -> int:
     if limit == 0:
         limit = None
 
+    dot = getattr(args, "dot", False)
+    if dot:
+        conflicting = _conflicting(args, _DOT_CONFLICTS)
+        if conflicting:
+            print(f"Error: --dot cannot be used with {conflicting[0]}",
+                  file=sys.stderr)
+            return 2
+
     if getattr(args, "count", False):
         # jj makes `--count` exclusive with everything that shapes the
         # rows, since it prints no rows at all. clap says so in one
         # attribute; argparse cannot, so the check lives here.
-        conflicting = [name for name in _COUNT_CONFLICTS
-                       if getattr(args, name.lstrip("-").replace("-", "_"),
-                                  None) not in (None, False)]
+        conflicting = _conflicting(args, _COUNT_CONFLICTS)
         if conflicting:
             print(f"Error: --count cannot be used with {conflicting[0]}",
                   file=sys.stderr)
@@ -209,7 +232,8 @@ def log(args) -> int:
                                              _BUILTINS))
     short_year = not _spans_millennia(nodes)
 
-    renderer = None if no_graph else pyjj.GraphRenderer()
+    renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
+    dot_labels: dict[str, str] = {}
     sys.stdout.flush()
     for hex_id, edges in items:
         commit = by_id[hex_id].commit
@@ -225,7 +249,10 @@ def log(args) -> int:
             bytes and need not be text, so the row goes out through
             `stdout.buffer` once it carries a diff.
             """
-            text = render_block(lines, "log commit", coloured)
+            text = render_block(lines, "log commit", coloured and not dot)
+            if dot:
+                dot_labels[hex_id] = text
+                return
             patch = ""
             if with_diff:
                 patch = _diff_bytes(
@@ -281,6 +308,8 @@ def log(args) -> int:
             emit(_default_lines(repo, settings, commit, kind, sorted(own),
                                 root, short_year))
 
+    if dot:
+        _write(render_dot(items, dot_labels))
     sys.stdout.buffer.flush()
     return 0
 
