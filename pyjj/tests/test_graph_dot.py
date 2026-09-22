@@ -356,6 +356,66 @@ def test_cli_bookmark_list_template_can_name_the_remote_state(
     assert "[" in result.stdout
 
 
+def test_cli_log_dot_key_change_id_names_nodes_by_change(
+        workspace, repo, settings):
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("one\n")
+    repo, _ = workspace.snapshot(settings)
+    commit = repo.resolve_single(settings, "@")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "log", "-r", "@",
+         "--dot", "--dot-key", "change_id"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f'"{commit.change_id.reverse_hex()}" [label=' in result.stdout
+    assert commit.id.hex() not in result.stdout.split("[label=")[0]
+
+
+def test_cli_log_dot_key_survives_a_rewrite(workspace, repo, settings):
+    """A commit id is a content hash, so a rewrite replaces it -- and
+    the old one still resolves, to the obsolete predecessor. A graph
+    meant to be read back after a rewrite has to be keyed on the change
+    id, which is the id that does not move."""
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("one\n")
+    repo, _ = workspace.snapshot(settings)
+    before = repo.resolve_single(settings, "@")
+
+    tx = repo.start_transaction(settings)
+    builder = tx.rewrite_commit(settings, before)
+    builder.set_description("rewritten")
+    rewritten = builder.write(repo)
+    tx.set_wc_commit("default", rewritten.id)
+    tx.rebase_descendants()
+    tx.commit("rewrite")
+
+    assert rewritten.id.hex() != before.id.hex(), "the rewrite moved the commit id"
+    assert (rewritten.change_id.reverse_hex()
+            == before.change_id.reverse_hex()), "the change id stayed put"
+
+    key = before.change_id.reverse_hex()
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R", str(root), "log",
+         "-r", key, "--no-graph", "-T", "{{ commit_id }}"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert rewritten.id.hex() in result.stdout
+    assert before.id.hex() not in result.stdout
+
+
+def test_cli_log_dot_key_requires_dot(workspace, repo, settings):
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "-R",
+         str(workspace.workspace_root), "log", "--dot-key", "change_id"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2
+    assert "--dot-key requires --dot" in result.stderr
+
+
 def test_cli_op_log_dot_refuses_the_op_diff_flag(workspace, repo, settings):
     """A node label holding a whole operation diff is not a label."""
     result = subprocess.run(
