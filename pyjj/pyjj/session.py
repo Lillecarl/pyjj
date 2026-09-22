@@ -185,10 +185,32 @@ class Repo:
         # inside a native extension takes the interpreter with it
         # rather than raising. It is idempotent, so the guard costs
         # nothing and a verb that forgets it cannot panic the caller.
+        old_wc_hex = self._repo.view()[self._workspace.workspace_name]
         transaction.rebase_descendants(False)
         self._export_git_refs(transaction)
         transaction.commit(description)
         self.reload()
+        self._checkout_if_moved(old_wc_hex)
+
+    def _checkout_if_moved(self, old_wc_hex: str) -> None:
+        """What the CLI does after every transaction: when the block
+        moved the working-copy commit, write its tree out to disk.
+
+        Without it a scripted `new(edit=True)` leaves the new commit
+        empty on paper while the old files sit on disk, and the next
+        snapshot absorbs them into it -- found the same blind session
+        as the dropped restore write.
+        """
+        workspace_name = self._workspace.workspace_name
+        new_wc_hex = self._repo.view()[workspace_name]
+        if new_wc_hex == old_wc_hex:
+            return
+        fresh = _bindings.Workspace.load(self._settings,
+                                         self._workspace.workspace_root)
+        fresh_repo = fresh.load_at_head()
+        fresh.check_out(
+            fresh_repo,
+            fresh_repo.get_commit(_bindings.CommitId(new_wc_hex)))
 
     def _export_git_refs(self, transaction) -> None:
         """What the CLI's transaction-finish does: a colocated repo
@@ -473,11 +495,36 @@ class Atomic:
         source = self._commit(from_revision) if from_revision is not None \
             else None
         self._guard([target])
-        written = self._tx.restore(source, target,
+        builder = self._tx.restore(source, target,
                                    list(paths) if paths else None)
+        written = builder.write(self._repo._repo)
         self._tx.rebase_descendants(False)
         self._record(written)
         return written
+
+    def revert(self, revisions: str | Sequence[str], *,
+               destination: str = "@"):
+        """`jj revert`: apply the reverse of commits as new commit(s).
+
+        Each target becomes a chained child starting at `destination`,
+        with jj's own revert description. Purely additive -- nothing
+        existing is rewritten, so there is nothing to guard.
+        """
+        targets = self._commits(revisions)
+        current = self._commit(destination)
+        out = []
+        for target in targets:
+            builder = self._tx.revert_commit(target, [current.id])
+            first = target.description.splitlines()[0] \
+                if target.description else ""
+            builder.set_description(
+                f'Revert "{first}"\n\n'
+                f"This reverts commit {target.id.hex()}.\n")
+            current = builder.write(self._repo._repo)
+            out.append(current)
+        self._tx.rebase_descendants(False)
+        self._record(*out)
+        return out
 
     def bookmark(self, name: str, revision: str = "@"):
         """`jj bookmark set`: point a bookmark at a commit."""
