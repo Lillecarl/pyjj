@@ -31,6 +31,11 @@ exports the shape. Edit edges, then:
 - `pyjj graph apply base.dot` — all-or-nothing; conflicts or immutable
   commits roll everything back.
 
+Every step is a rebase: the graph can rearrange parents but cannot
+create commits, so it cannot build a merge-based topology — only
+verify one afterwards via `--dot` export. New commits (merges,
+reverts) come from the commands below or a script, not from a graph.
+
 Key the graph on **change ids** (`--dot-key change_id`): commit ids are
 content hashes, so a rewrite replaces them and the old one still resolves
 to the obsolete predecessor. Order in the file is topological, parents
@@ -62,6 +67,11 @@ prints, no need for the full hex.
 
 ## Gotchas
 
+- Undoing a commit is two different verbs: `restore -c REV` rewrites
+  that revision in place (same as `jj restore --changes-in`), while
+  `revert -r REV` appends a new undo commit and leaves the original
+  alone (same as `jj revert`). The session API mirrors both:
+  `tx.restore(...)` rewrites, `tx.revert(...)` appends.
 - Revisions inside an `atomic` block resolve through the transaction, which
   sees the block's own writes; the repo object still answers from the
   starting state.

@@ -502,7 +502,15 @@ That is stronger than `graph apply`'s record-and-restore, which needs
 a transaction per step because each rebase re-resolves. A clean exit
 also exports git refs on colocated repos (HEAD reset + bookmark/tag
 export, the CLI's own finish behavior) -- without it a scripted
-rewrite leaves `<name>@git` stale behind the moved bookmark.
+rewrite leaves `<name>@git` stale behind the moved bookmark -- and
+checks out the working copy when the block moved it, for the same
+reason: the next snapshot must not absorb stale files into the new
+commit.
+
+`Atomic.revert(revisions, destination="@")` is `jj revert`'s chaining
+in one block: each target becomes a child starting at `destination`
+with jj's own revert description, purely additive, so there is
+nothing existing to guard.
 
 **Revisions resolve through the transaction, never the repository it
 started from.** `ReadonlyRepo.revset` answers from the starting state,
