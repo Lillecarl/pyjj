@@ -24,8 +24,11 @@ and `debug` show up as pyjj-only here, and that is not a divergence.
 
 One known under-report: `markdown-help` hides some of an option's
 aliases, so `jj rebase -d` (for `--destination`) and `jj rebase
---revisions` (for `--revision`) do not appear. The list is therefore a
-lower bound on jj's surface. It is still authoritative for what it does
+--revisions` (for `--revision`) do not appear. Command aliases
+(`[default alias: b]` beside `bookmark`) are likewise unread: only
+`Arguments`/`Options` sections are parsed, so a heading's own bracket
+never becomes an item. The list is therefore a lower bound on jj's
+surface. It is still authoritative for what it does
 list, which is what the baselines and the coverage checklist are
 measured against.
 """
@@ -179,12 +182,19 @@ def pyjj_surface() -> dict[str, set[str]]:
     from pyjj_cli.__main__ import GLOBAL_FLAGS_OUTSIDE_ARGPARSE, build_parser
 
     surface: dict[str, set[str]] = {}
+    seen: set[int] = set()
 
     def walk(parser: argparse.ArgumentParser, path: str) -> None:
         flags: set[str] = set()
         for action in parser._actions:
             if isinstance(action, argparse._SubParsersAction):
                 for name, sub in action.choices.items():
+                    # An alias shares its parser object; argparse lists
+                    # the canonical name first, so the first visit wins
+                    # and `b list` never doubles `bookmark list`.
+                    if id(sub) in seen:
+                        continue
+                    seen.add(id(sub))
                     walk(sub, f"{path} {name}".strip())
                 continue
             flags |= set(action.option_strings)

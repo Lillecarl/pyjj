@@ -2,7 +2,6 @@
   "extra_commands": [
     "bench",
     "debug",
-    "desc",
     "graph",
     "graph apply",
     "graph plan",
