@@ -25,6 +25,13 @@ pub struct PyFileToFix {
     key: String,
     path: String,
     content: Vec<u8>,
+    /// The file's content in the base commit(s) `content` is diffed
+    /// against (`jj_lib::fix::FileToFix::base_file_id`, read out here) --
+    /// `None` for a file with no base (created in this commit). `jj fix`
+    /// diffs the two to decide which line ranges a tool's
+    /// `line-range-arg` gets; without this Python could not reproduce
+    /// that per-tool decision.
+    base_content: Option<Vec<u8>>,
 }
 
 /// Result of `Transaction.fix_apply()`.
@@ -132,10 +139,25 @@ pub fn fix_enumerate(
             )
             .map_err(map_py_err)?;
             pollster::block_on(reader.read_to_end(&mut buf)).map_err(map_py_err)?;
+            let base_content = file_to_fix
+                .base_file_id
+                .as_ref()
+                .map(|base_id| -> PyResult<Vec<u8>> {
+                    let mut base_buf = Vec::new();
+                    let mut base_reader = pollster::block_on(
+                        mut_repo.store().read_file(&file_to_fix.repo_path, base_id),
+                    )
+                    .map_err(map_py_err)?;
+                    pollster::block_on(base_reader.read_to_end(&mut base_buf))
+                        .map_err(map_py_err)?;
+                    Ok(base_buf)
+                })
+                .transpose()?;
             Ok(PyFileToFix {
                 key: file_to_fix.file_id.hex(),
                 path: file_to_fix.repo_path.as_internal_file_string().to_string(),
                 content: buf,
+                base_content,
             })
         })
         .collect()

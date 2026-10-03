@@ -13,6 +13,7 @@ the trailing newline `jj -m` stores in every description.
 """
 
 import contextlib
+import json
 import os
 import shutil
 import subprocess
@@ -687,6 +688,40 @@ def _add_fix_tool(pair: RepoPair) -> None:
         f.write('\n[fix.tools.trivial]\ncommand = ["tr", "a-z", "A-Z"]\npatterns = ["glob:\'**/*.txt\'"]\n')
 
 
+_RANGE_TOOL_SCRIPT = (
+    "import sys\n"
+    "ranges = []\n"
+    "for a in sys.argv[1:]:\n"
+    " if a.startswith('--lines='):\n"
+    "  f, l = a[8:].split('-')\n"
+    "  ranges.append((int(f), int(l)))\n"
+    "lines = sys.stdin.read().splitlines(keepends=True)\n"
+    "out = []\n"
+    "for i, ln in enumerate(lines, 1):\n"
+    " if any(f <= i <= l for f, l in ranges):\n"
+    "  out.append(ln.upper())\n"
+    " else:\n"
+    "  out.append(ln)\n"
+    "sys.stdout.write(''.join(out))\n"
+)
+
+
+def _add_line_range_fix_tool(pair: RepoPair) -> None:
+    """A fix tool that uppercases only the lines its `--lines=N-M`
+    arguments name -- the shape a clang-format-style `line-range-arg`
+    tool has. Both sides run the same interpreter, so `sys.executable`
+    is a valid tool path on each."""
+    config_path = pair.home / ".config" / "jj" / "config.toml"
+    with open(config_path, "a") as f:
+        f.write(
+            "\n[fix.tools.ranges]\n"
+            f"command = [{json.dumps(sys.executable)}, \"-c\", "
+            f"{json.dumps(_RANGE_TOOL_SCRIPT)}]\n"
+            "patterns = [\"glob:'**/*.txt'\"]\n"
+            "line-range-arg = \"--lines=$first-$last\"\n"
+        )
+
+
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("fix")
 @pytest.mark.covers("new")
@@ -737,6 +772,40 @@ def test_fix_propagates_to_descendant(pair: RepoPair) -> None:
     # Fixing base's a.txt should propagate to child even though child didn't touch a.txt
     pair.op(jj=["fix", "-s", rev("base")])
     pair.assert_parity()
+
+
+@pytest.mark.covers("fix", "-a", "--all-lines")
+def test_fix_all_lines_formats_beyond_the_changed_lines(
+    pair: RepoPair,
+) -> None:
+    """A range-aware tool only sees the changed lines by default. The
+    child touches line 2 alone, so plain `fix -s` leaves lines 1 and 3
+    lowercase; `-a` hands the tool the whole file and everything goes
+    uppercase. The two modes must agree with jj each way."""
+    _add_line_range_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"aaa\nbbb\nccc\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "child"])
+    pair.op(files={"a.txt": b"aaa\nBBB\nccc\n"}, jj=["status"])
+    pair.op(jj=["fix", "-s", rev("child"), "-a"])
+    pair.assert_parity()
+    assert pair.read_wc_file("cli", "a.txt") == b"AAA\nBBB\nCCC\n"
+    assert pair.read_wc_file("py", "a.txt") == b"AAA\nBBB\nCCC\n"
+
+
+@pytest.mark.covers("fix")
+def test_fix_default_formats_only_changed_lines(pair: RepoPair) -> None:
+    """The same setup without `-a`: the tool only ever sees line 2,
+    which is already uppercase, so the child is untouched."""
+    _add_line_range_fix_tool(pair)
+    pair.init()
+    pair.op(files={"a.txt": b"aaa\nbbb\nccc\n"}, jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "child"])
+    pair.op(files={"a.txt": b"aaa\nBBB\nccc\n"}, jj=["status"])
+    pair.op(jj=["fix", "-s", rev("child")])
+    pair.assert_parity()
+    assert pair.read_wc_file("cli", "a.txt") == b"aaa\nBBB\nccc\n"
+    assert pair.read_wc_file("py", "a.txt") == b"aaa\nBBB\nccc\n"
 
 
 # -- revert -------------------------------------------------------------------

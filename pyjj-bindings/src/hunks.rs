@@ -4,6 +4,7 @@ use pyo3::prelude::*;
 
 use jj_lib::diff::{ContentDiff, DiffHunkKind};
 use jj_lib::diff_presentation::LineCompareMode;
+use jj_lib::fix::{LineRange, RegionsToFormat, compute_changed_ranges, compute_file_line_count};
 
 /// How `jj diff` compares two lines: literally, or with `-w` / `-b`,
 /// which let it call two lines the same across whitespace.
@@ -57,6 +58,29 @@ pub fn diff_hunks(before: &[u8], after: &[u8]) -> Vec<PyHunk> {
             after: after.to_vec(),
         })
         .collect()
+}
+
+/// 1-based inclusive `[first, last]` line ranges in `current` that differ
+/// from `base` -- what `jj fix` hands a tool's `line-range-arg`
+/// (`$first`/`$last`). `None` base means the whole file is one range
+/// (a new file, or `fix -a`); empty `current` or no differences mean no
+/// ranges. Pure content computation, no repo access -- the same rule
+/// the real CLI's `compute_regions_to_format` applies per tool per file.
+#[pyfunction]
+#[pyo3(signature = (base, current))]
+pub fn changed_line_ranges(base: Option<Vec<u8>>, current: Vec<u8>) -> Vec<(usize, usize)> {
+    let regions = if current.is_empty() {
+        RegionsToFormat::LineRanges(vec![])
+    } else if let Some(base) = base.as_deref() {
+        compute_changed_ranges(base, &current)
+    } else {
+        RegionsToFormat::LineRanges(vec![LineRange::new(
+            1,
+            compute_file_line_count(&current),
+        )])
+    };
+    let RegionsToFormat::LineRanges(ranges) = regions;
+    ranges.into_iter().map(|r| (r.first, r.last)).collect()
 }
 
 pub(crate) fn diff_hunks_raw<'a>(

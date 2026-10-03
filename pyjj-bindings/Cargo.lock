@@ -1817,6 +1817,8 @@ dependencies = [
  "pollster 1.0.1",
  "pyo3",
  "pyo3-async-runtimes",
+ "rand",
+ "rand_chacha",
  "sapling-renderdag",
  "thiserror",
  "tokio",
