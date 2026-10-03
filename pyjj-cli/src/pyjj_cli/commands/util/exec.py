@@ -11,7 +11,7 @@ import sys
 
 import pyjj
 
-from ...commands.common import _workspace_path
+from ...commands.common import _workspace_path, apply_config_args
 
 
 def util_exec(args) -> int:
@@ -21,7 +21,7 @@ def util_exec(args) -> int:
 
     env = os.environ.copy()
     try:
-        settings = pyjj.UserSettings()
+        settings = apply_config_args(pyjj.UserSettings())
         ws = pyjj.Workspace.load(settings, _workspace_path(args))
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError):
         # jj only sets the variable when a workspace is found, and runs

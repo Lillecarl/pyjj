@@ -1398,6 +1398,38 @@ def test_bookmark_rename(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("", "--config")
+def test_config_flag_overrides_author_on_both_sides(pair: RepoPair) -> None:
+    """The same `--config` argv runs on both sides, so the author
+    override lands in both commits and the ids still agree."""
+    chain(pair)
+    pair.op(jj=["--config", "user.name=Parity",
+                "--config", "user.email=parity@example.com",
+                "new", "-m", "flagged"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("", "--config-file")
+def test_config_file_flag_overrides_author_on_both_sides(pair: RepoPair) -> None:
+    """The overlay is staged into both working copies first, so the
+    relative path resolves on both sides and the ids still agree."""
+    chain(pair)
+    pair.op(jj=["--config-file", "overlay.toml", "new", "-m", "flagged"],
+            files={"overlay.toml": b'user.name = "Parity"\n'
+                                    b'user.email = "parity@example.com"\n'})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("", "--config")
+def test_config_flag_error_leaves_both_sides_untouched(pair: RepoPair) -> None:
+    """A `--config` without `=` fails before either side writes, so the
+    repos stay identical."""
+    chain(pair)
+    pair.op(jj=["--config", "user.name", "describe", "-m", "x"],
+            may_fail=True)
+    pair.assert_parity()
+
+
 @pytest.mark.covers("", "--ignore-immutable")
 def test_ignore_immutable_rewrites_a_tagged_commit(pair: RepoPair) -> None:
     """A tag makes its commit immutable, so plain `describe` refuses on

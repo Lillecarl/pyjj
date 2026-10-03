@@ -6,7 +6,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError
+from ..common import CommandError, apply_config_args
 from .config_set import _scope, _workspace_root
 from .paths import config_path, write_config
 
@@ -46,7 +46,7 @@ def config_edit(args) -> int:
         return 2
     scope = scopes[0]
     try:
-        settings = pyjj.UserSettings()
+        settings = apply_config_args(pyjj.UserSettings())
         root = None
         if scope != "user":
             root = _workspace_root(args)

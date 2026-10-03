@@ -99,3 +99,138 @@ def test_log_marks_a_conflicted_commit(tmp_path):
                  home=home)
     assert shown.returncode == 0, shown.stderr
     assert "conflict" in shown.stdout.lower()
+
+
+FOOTER = ("For help, see https://docs.jj-vcs.dev/latest/config/ "
+          "or use `jj help -k config`.")
+
+
+def _config_repo(root, home):
+    root.mkdir()
+    home.mkdir()
+    _init(root, home)
+
+
+def test_config_flag_overrides_a_key(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    result = _run(root, "--config", "user.name=CmdUser", "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "CmdUser"
+
+
+def test_config_file_flag_overrides_a_key(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    overlay = tmp_path / "overlay.toml"
+    overlay.write_text('user.name = "FileUser"\n')
+    result = _run(root, "--config-file", str(overlay), "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "FileUser"
+
+
+def test_config_flags_apply_after_the_subcommand_too(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    result = _run(root, "config", "get", "user.name",
+                  "--config", "user.name=Late", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "Late"
+
+
+def test_config_flag_does_not_eat_a_flag_as_its_value(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    # clap reads `--color` as a new flag, not the value, so the value
+    # is missing -- and `--color` must survive to be parsed itself.
+    result = _run(root, "--config", "--color", "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == "Error: a value is required for '--config'\n"
+
+
+def test_config_flag_without_equals_reports_like_jj(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    result = _run(root, "--config", "user.name", "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        "Config error: --config must be specified as NAME=VALUE\n"
+        f"{FOOTER}\n"
+    )
+
+
+def test_config_flag_with_bad_name_reports_like_jj(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    result = _run(root, "--config", "user..name=x", "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        "Config error: --config name cannot be parsed\n"
+        "Caused by: TOML parse error at line 1, column 6\n"
+        "  |\n"
+        "1 | user..name\n"
+        "  |      ^\n"
+        "unquoted keys cannot be empty, expected letters, numbers, `-`, `_`\n"
+        "\n"
+        f"{FOOTER}\n"
+    )
+
+
+def test_config_flag_with_bad_value_reports_like_jj(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    result = _run(root, "--config", 'user.name="unclosed', "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        "Config error: --config value cannot be parsed\n"
+        "Caused by: TOML parse error at line 1, column 10\n"
+        "  |\n"
+        '1 | "unclosed\n'
+        "  |          ^\n"
+        "invalid basic string, expected `\"`\n"
+        "\n"
+        f"{FOOTER}\n"
+    )
+
+
+def test_config_file_flag_with_missing_file_reports_like_jj(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    missing = tmp_path / "does-not-exist.toml"
+    result = _run(root, "--config-file", str(missing), "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        "Config error: Failed to read configuration file\n"
+        "Caused by:\n"
+        f"1: Cannot access {missing}\n"
+        "2: No such file or directory (os error 2)\n"
+        f"{FOOTER}\n"
+    )
+
+
+def test_config_file_flag_with_bad_toml_names_itself(tmp_path):
+    root, home = tmp_path / "repo", tmp_path / "home"
+    _config_repo(root, home)
+    bad = tmp_path / "bad.toml"
+    bad.write_text('user.name = "unclosed\n')
+    result = _run(root, "--config-file", str(bad), "config", "get",
+                  "user.name", home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        "Config error: Configuration cannot be parsed as TOML document\n"
+        "Caused by: TOML parse error at line 1, column 22\n"
+        "  |\n"
+        '1 | user.name = "unclosed\n'
+        "  |                      ^\n"
+        "invalid basic string, expected `\"`\n"
+        "\n"
+        f"Hint: Check the config file: {bad}\n"
+        f"{FOOTER}\n"
+    )

@@ -3,8 +3,6 @@
     "--at-op",
     "--at-operation",
     "--color",
-    "--config",
-    "--config-file",
     "--debug",
     "--ignore-working-copy",
     "--no-pager",

@@ -59,15 +59,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # jj takes its global options anywhere on the command line, before or
-# after the subcommand. These three change only what gets printed, never
-# what gets written, so pyjj accepts them and does nothing with them --
-# a script that passes `--no-pager` must not die on a usage dump.
-# `--config` and `--config-file` are still deliberately absent:
-# silently ignoring one of those would make pyjj quietly disagree with
-# jj, and honouring them needs settings-layer plumbing in every command
-# that builds settings (a project of its own, not a flag). `--at-operation`, `--ignore-working-copy` and `--color` are
-# honoured, and handled below rather than here, because they change what
-# happens.
+# after the subcommand. Three of them change only what gets printed,
+# never what gets written, so pyjj accepts them and does nothing with
+# them -- a script that passes `--no-pager` must not die on a usage
+# dump. `--config` and `--config-file` are honoured, and handled below
+# rather than here, because they change what happens: each occurrence
+# appends a config layer, in argv order, above every file and env
+# layer. `--at-operation`, `--ignore-working-copy` and `--color` are
+# honoured too.
 _IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
 _IGNORED_GLOBAL_OPTIONS: set[str] = set()
 
@@ -79,6 +78,12 @@ _HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy",
 _HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
                            "--at-op": "at_operation",
                            "--color": "color"}
+
+# Config layers, in the argv order the flags were given: each item is a
+# `(kind, text)` pair, `kind` one of `"config"`/`"config-file"`. Kept
+# as a list rather than folded into the dict above because the flags
+# repeat and their relative order decides precedence.
+_CONFIG_ARG_OPTIONS = {"--config": "config", "--config-file": "config-file"}
 
 # What `--color` accepts, in jj's order.
 _COLOR_CHOICES = ("always", "never", "debug", "auto")
@@ -93,23 +98,39 @@ GLOBAL_FLAGS_OUTSIDE_ARGPARSE = frozenset(
     | _IGNORED_GLOBAL_OPTIONS
     | set(_HOISTED_GLOBAL_FLAGS)
     | set(_HOISTED_GLOBAL_OPTIONS)
+    | set(_CONFIG_ARG_OPTIONS)
 )
 
 
 def _hoist_global_options(argv):
     """Pull the behaviour-changing globals out of `argv`.
 
-    Returns the remaining argv and a dict of what was found. jj takes
-    these anywhere on the command line; argparse would only see them in
+    Returns the remaining argv, a dict of what was found, and the
+    `--config`/`--config-file` layers in argv order. jj takes these
+    anywhere on the command line; argparse would only see them in
     front of the subcommand.
     """
     kept = []
     found = {}
+    config_args = []
     pending = None
+    pending_config = None
     for arg in argv:
         if pending is not None:
             found[pending] = arg
             pending = None
+            continue
+        if pending_config is not None:
+            if arg == "-" or not arg.startswith("-"):
+                config_args.append((_CONFIG_ARG_OPTIONS[pending_config], arg))
+                pending_config = None
+            else:
+                # clap reads this as a new flag, not the value, so the
+                # value is missing -- and the flag must not be eaten:
+                # `--config --ignore-immutable` skips the guard in jj.
+                raise SystemExit(
+                    f"Error: a value is required for '{pending_config}'"
+                )
             continue
         if arg in _HOISTED_GLOBAL_FLAGS:
             found[_HOISTED_GLOBAL_FLAGS[arg]] = True
@@ -117,9 +138,15 @@ def _hoist_global_options(argv):
         if arg in _HOISTED_GLOBAL_OPTIONS:
             pending = _HOISTED_GLOBAL_OPTIONS[arg]
             continue
+        if arg in _CONFIG_ARG_OPTIONS:
+            pending_config = arg
+            continue
         name, sep, value = arg.partition("=")
         if sep and name in _HOISTED_GLOBAL_OPTIONS:
             found[_HOISTED_GLOBAL_OPTIONS[name]] = value
+            continue
+        if sep and name in _CONFIG_ARG_OPTIONS:
+            config_args.append((_CONFIG_ARG_OPTIONS[name], value))
             continue
         kept.append(arg)
     if pending is not None:
@@ -128,7 +155,11 @@ def _hoist_global_options(argv):
         raise SystemExit(
             f"Error: a value is required for '--{pending.replace('_', '-')}'"
         )
-    return kept, found
+    if pending_config is not None:
+        raise SystemExit(
+            f"Error: a value is required for '{pending_config}'"
+        )
+    return kept, found, config_args
 
 
 def _drop_ignored_global_flags(argv):
@@ -193,7 +224,9 @@ def main(argv=None) -> int:
     # Kept before the globals are stripped: this is the command line the
     # operation log records, and it should read as what was typed.
     invocation = list(raw)
-    raw, globals_ = _hoist_global_options(_drop_ignored_global_flags(raw))
+    raw, globals_, config_args = _hoist_global_options(
+        _drop_ignored_global_flags(raw)
+    )
     args = parser.parse_args(raw)
     args.at_operation = globals_.get("at_operation")
     # Loading the repo at a past operation implies not touching the
@@ -206,6 +239,7 @@ def main(argv=None) -> int:
     from pyjj_cli.commands import common
     common.set_ignore_working_copy(args.ignore_working_copy)
     common.set_ignore_immutable(bool(globals_.get("ignore_immutable")))
+    common.set_config_args(config_args)
     common.set_operation_args(invocation)
     colour = globals_.get("color")
     if colour is not None and colour not in _COLOR_CHOICES:
@@ -228,7 +262,10 @@ def main(argv=None) -> int:
         return 2
 
     handler = _load_handler(handler_ref)
-    return handler(args)
+    try:
+        return handler(args)
+    except common.ConfigArgsError:
+        return 1
 
 
 if __name__ == "__main__":

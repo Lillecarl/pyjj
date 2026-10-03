@@ -32,10 +32,5 @@
     "templates unset"
   ],
   "missing_commands": [],
-  "missing_flags": {
-    "": [
-      "--config",
-      "--config-file"
-    ]
-  }
+  "missing_flags": {}
 }

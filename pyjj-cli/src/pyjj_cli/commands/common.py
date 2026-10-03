@@ -47,6 +47,53 @@ class CommandError(Exception):
         self.message = message
 
 
+class ConfigArgsError(Exception):
+    """A `--config`/`--config-file` layer failed to load.
+
+    Raised after the `Config error: ` text is already printed; `main()`
+    catches it and returns 1. Control flow, not a message carrier --
+    handlers let it propagate rather than catching it alongside
+    `CommandError`.
+    """
+
+
+# The footer jj prints under every config failure.
+_CONFIG_HELP_FOOTER = ("For help, see https://docs.jj-vcs.dev/latest/config/ "
+                       "or use `jj help -k config`.")
+
+
+# The `--config`/`--config-file` layers in argv order, set once per
+# process next to the recorded argv. Each item is a `(kind, text)`
+# pair, `kind` one of `"config"`/`"config-file"`.
+_CONFIG_ARGS: list[tuple] = []
+
+
+def set_config_args(config_args) -> None:
+    global _CONFIG_ARGS
+    _CONFIG_ARGS = list(config_args)
+
+
+def apply_config_args(settings):
+    """Settings with this run's `--config`/`--config-file` layers on top.
+
+    Every command builds settings through here (via `settings_for` or
+    `_load`, or directly where there is no repository yet), so no
+    command can quietly miss a layer jj would honour. With neither flag
+    given the settings come back untouched -- rebuilding would restart
+    the change-id RNG. On failure prints jj's `Config error: ` text and
+    raises `ConfigArgsError`, which `main()` turns into exit 1 before
+    the command reads or writes anything.
+    """
+    if not _CONFIG_ARGS:
+        return settings
+    try:
+        return settings.with_command_args(_CONFIG_ARGS)
+    except pyjj.JjError as e:
+        print(f"Config error: {getattr(e, 'message', str(e))}\n{_CONFIG_HELP_FOOTER}",
+              file=sys.stderr)
+        raise ConfigArgsError from e
+
+
 def select_fields(selection, default, catalogue) -> list[str]:
     """Which fields `--dot-fields` asks for, as a list in catalogue order.
 
@@ -366,12 +413,14 @@ def settings_for(args):
     misses the repo layer, which is how `config get` came to report a
     key as unset that `jj config get` printed.
     """
-    settings = pyjj.UserSettings()
+    settings = apply_config_args(pyjj.UserSettings())
     try:
         ws = pyjj.Workspace.load(settings, _workspace_path(args))
     except Exception:  # noqa: BLE001 -- no repository is the normal case
         return settings
-    return pyjj.UserSettings.for_repo(ws.repo_path, ws.workspace_root)
+    return apply_config_args(
+        pyjj.UserSettings.for_repo(ws.repo_path, ws.workspace_root)
+    )
 
 
 def _load(args):
@@ -385,15 +434,16 @@ def _load(args):
     Skipping the second build is what made `immutable_heads()` set with
     `config set --repo` have no effect here.
     """
-    settings = pyjj.UserSettings()
+    settings = apply_config_args(pyjj.UserSettings())
     try:
         probe = pyjj.Workspace.load(settings, _workspace_path(args))
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError):
         # No workspace to take config from; let `_open` raise the error
         # the caller is written to report.
         return settings, *_open(settings, args)
-    settings = pyjj.UserSettings.for_repo(probe.repo_path,
-                                          probe.workspace_root)
+    settings = apply_config_args(
+        pyjj.UserSettings.for_repo(probe.repo_path, probe.workspace_root)
+    )
     ws, repo = _open(settings, args)
     return settings, ws, repo
 

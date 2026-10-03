@@ -11,6 +11,7 @@ from ..common import (
     _resolve_all,
     _resolve_one,
     _start_transaction,
+    apply_config_args,
 )
 
 def git_init(args) -> int:
@@ -21,7 +22,7 @@ def git_init(args) -> int:
     `--no-colocate` turns it off for one repo; `--colocate` only matters
     when the config already turned it off.
     """
-    settings = pyjj.UserSettings()
+    settings = apply_config_args(pyjj.UserSettings())
     if getattr(args, "colocate", False) and getattr(args, "no_colocate", False):
         print("Error: --colocate cannot be used with --no-colocate",
               file=sys.stderr)

@@ -9,11 +9,12 @@ from ..common import (
     _load,
     _resolve_all,
     _resolve_one,
+    apply_config_args,
 )
 
 def git_clone(args) -> int:
     """`jj git clone <source> [destination]` — clone a Git repo."""
-    settings = pyjj.UserSettings()
+    settings = apply_config_args(pyjj.UserSettings())
     source = args.source
     # Derive destination from source if not provided, like real jj does
     if args.destination:
