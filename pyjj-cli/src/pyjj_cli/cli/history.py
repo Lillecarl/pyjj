@@ -4,7 +4,8 @@ from .flags import Flag, add_flags
 
 
 def add_parsers(sub) -> None:
-    p_status = sub.add_parser("status", help="Show working copy status")
+    p_status = sub.add_parser("status", aliases=["st"],
+                              help="Show working copy status")
     p_status.set_defaults(_handler="pyjj_cli.commands.history.status:status")
 
     p_log = sub.add_parser("log", help="Show commit history")

@@ -10,7 +10,7 @@ def _bm_help(args):
 
 
 def add_parsers(sub) -> None:
-    p_bm = sub.add_parser("bookmark", help="Manage bookmarks")
+    p_bm = sub.add_parser("bookmark", aliases=["b"], help="Manage bookmarks")
     p_bm.set_defaults(_handler="pyjj_cli.cli.bookmark:_bm_help")
     bm_sub = p_bm.add_subparsers(dest="bookmark_command")
 

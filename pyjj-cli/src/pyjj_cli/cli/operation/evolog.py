@@ -2,7 +2,8 @@ from ..flags import Flag, add_flags
 
 
 def register(sub) -> None:
-    p = sub.add_parser("evolog", help="Show how a change has evolved over time")
+    p = sub.add_parser("evolog", aliases=["evolution-log"],
+                       help="Show how a change has evolved over time")
     add_flags(p, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.PATCH,
                   Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY, Flag.TYPES,
                   Flag.GIT, Flag.WHITESPACE_LONG, Flag.CONTEXT,

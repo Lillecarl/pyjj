@@ -2,7 +2,7 @@ from ..flags import Flag, add_flags
 
 
 def register(sub) -> None:
-    p = sub.add_parser("commit",
+    p = sub.add_parser("commit", aliases=["ci"],
                        help="Describe @ and create a new empty change on top")
     add_flags(p, [Flag.MESSAGE])
     p.add_argument("--editor", action="store_true",

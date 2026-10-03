@@ -15,6 +15,7 @@ import pkgutil
 import pytest
 
 import pyjj_cli.cli
+from pyjj_cli.__main__ import build_parser
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -58,3 +59,23 @@ def test_handler_resolves(path, reference):
     assert callable(getattr(module, function_name, None)), (
         f"`pyjj {path}` points at {reference}, which does not exist"
     )
+
+
+@pytest.mark.parametrize("alias,canonical", [
+    ("st", "status"),
+    ("ci", "commit"),
+    ("b", "bookmark"),
+    ("evolution-log", "evolog"),
+])
+def test_default_command_aliases_dispatch_like_their_canonical(alias, canonical):
+    """jj's `[default alias: ...]` spellings work, not just the long names.
+
+    Only `desc` had one; `st`, `ci`, `b` and `evolution-log` all errored
+    with `invalid choice`. An alias shares its parser, so the handler
+    must be identical -- argparse records the spelling used, which
+    nothing here reads.
+    """
+    parser = build_parser()
+    via_alias = parser.parse_args([alias])
+    via_canonical = parser.parse_args([canonical])
+    assert getattr(via_alias, "_handler") == getattr(via_canonical, "_handler")
