@@ -311,6 +311,7 @@ def _context(repo, settings, commit, operation) -> dict:
         "hidden_marker": " (hidden)" if hidden else "",
         "empty": bool(empty_marker),
         "empty_marker": empty_marker,
+        "conflict": commit.has_conflict,
         "operation_id": operation.id[:12] if operation is not None else "",
         "operation_description": (operation.description
                                   if operation is not None else ""),

@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+import pyjj
+
 from pyjj_cli.commands.templates.templates_set import _validate_template
 
 
@@ -245,3 +247,57 @@ def test_log_template_rejects_unknown_variable(cli):
     result = cli("log", "-n", "1", "-T", "{{ nope_not_a_var }}")
     assert result.returncode != 0
     assert "nope_not_a_var" in result.stderr
+
+
+def test_evolog_template_names_conflict(cli, workspace, repo, settings):
+    """`evolog`'s Jinja context names `conflict`, like `log`'s does.
+
+    It was the one listing context without it: `log` and the shared
+    `_commit_context` both carry `conflict`, so a template using it
+    rendered under `log` and failed under `evolog` with StrictUndefined.
+    Both versions here stay conflicted (a describe rewrites metadata,
+    not the tree), so both rows render True.
+    """
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("line1\nline2\nline3\n")
+    repo, _ = workspace.snapshot(settings)
+    base = repo.resolve_single(settings, "@")
+
+    sides = []
+    for content in ("line1\nSIDE1\nline3\n", "line1\nSIDE2\nline3\n"):
+        tx = repo.start_transaction(settings)
+        seed = tx.new_commit(settings, [base.id])
+        seed.set_description("side seed")
+        side_seed = seed.write(repo)
+        tx.set_wc_commit("default", side_seed.id)
+        tx.rebase_descendants()
+        repo = tx.commit("advance to side")
+        workspace.check_out(repo, side_seed)
+        (root / "a.txt").write_text(content)
+        repo, _ = workspace.snapshot(settings)
+        sides.append(repo.resolve_single(settings, "@"))
+
+    tx = repo.start_transaction(settings)
+    merge_builder = tx.new_commit(settings, [s.id for s in sides])
+    merge_builder.set_description("merge")
+    merged = merge_builder.write(repo)
+    tx.set_wc_commit("default", merged.id)
+    tx.rebase_descendants()
+    repo = tx.commit("create merge conflict")
+    assert merged.has_conflict
+
+    tx = repo.start_transaction(settings)
+    v2 = tx.rewrite_commit(settings, repo.resolve_single(settings, "@"))
+    v2.set_description("merge v2")
+    rewritten = v2.write(repo)
+    tx.rebase_descendants()
+    repo = tx.commit("describe the merge")
+    # The merge was never checked out, so the disk still holds side2's
+    # text: without this the CLI's load-time snapshot would resolve the
+    # conflict from the stale files and add a third, non-conflicted
+    # version (correct behavior, wrong test).
+    workspace.check_out(repo, rewritten)
+
+    result = cli("evolog", "--no-graph", "-T", "{{conflict}}")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["True", "True"]

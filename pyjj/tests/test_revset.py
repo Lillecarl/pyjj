@@ -114,3 +114,34 @@ def test_description_pattern_matches_commit_message(repo, settings, wc_commit):
 
     assert repo2.revset(settings, 'description(glob:"fix:*")') == [child]
     assert repo2.revset(settings, 'description(glob:"nope*")') == []
+
+
+def test_description_exact_and_empty_match_jj_semantics(repo, settings, wc_commit):
+    """`exact:` compares against the whole description string, including any
+    trailing newline -- so `jj describe -m "subject"` (which stores
+    `"subject\\n"`) does NOT match `description(exact:'subject')`, while a
+    builder-set raw `"subject"` does. Verified expression-by-expression
+    against the real `jj` binary (differential probe: exact, substring,
+    glob, regex, case-insensitive, empty, multiline, author, mine -- all
+    identical), since `revset()` shares jj_lib's own parse/resolve/evaluate
+    path with the CLI. This test locks the non-obvious corners in.
+    """
+    tx = repo.start_transaction(settings)
+    builder = tx.new_commit(settings, [wc_commit.id])
+    builder.set_description("fix: a specific bug")
+    child = builder.write(repo)
+    tx.rebase_descendants()
+    repo2 = tx.commit("add child")
+
+    # Bare string and exact: whole-string equality against the raw text.
+    assert repo2.revset(settings, 'description("fix: a specific bug")') == [child]
+    assert repo2.revset(settings, 'description(exact:"fix: a specific bug")') == [child]
+    # A trailing newline breaks exactness -- this is jj semantics, not a bug:
+    # real `jj describe -m` stores "subject\n".
+    assert repo2.revset(settings, 'description(exact:"fix: a specific bug\\n")') == []
+    assert repo2.revset(settings, 'description(substring:"specific")') == [child]
+    # The empty pattern only matches commits with no description at all
+    # (here: the wc commit and root); the described child is excluded.
+    empty = repo2.revset(settings, 'description(exact:"")')
+    assert child not in empty
+    assert wc_commit in empty
