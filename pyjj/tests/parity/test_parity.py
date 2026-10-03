@@ -1669,6 +1669,104 @@ def test_next_refuses_when_the_working_copy_has_children(pair: RepoPair) -> None
     pair.assert_parity()
 
 
+@pytest.mark.covers("prev")
+def test_prev_refuses_when_the_working_copy_has_children(pair: RepoPair) -> None:
+    """Same guard as `next`: a new commit goes on top, so `@` must be
+    childless first. pyjj was missing this and created the commit
+    where jj refuses."""
+    chain(pair)
+    pair.op(jj=["edit", rev("base")])
+    pair.op(jj=["prev"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("next", "--conflict")
+def test_next_conflict_with_edit_jumps_to_the_conflicted_child(
+    pair: RepoPair,
+) -> None:
+    conflict_pair(pair)
+    pair.op(jj=["edit", rev("one")])
+    pair.op(jj=["next", "--conflict", "--edit"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("next", "--conflict")
+def test_next_conflict_from_a_sibling_line(pair: RepoPair) -> None:
+    """Without `--edit` the landing is a new child of the conflicted
+    descendant, the same shape plain `next` makes."""
+    conflict_pair(pair)
+    pair.op(jj=["new", rev("base"), "-m", "side"])
+    pair.op(jj=["next", "--conflict"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("next", "--conflict")
+def test_next_conflict_without_a_conflicted_descendant_fails_on_both(
+    pair: RepoPair,
+) -> None:
+    chain(pair)
+    pair.op(jj=["next", "--conflict"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("prev", "--conflict")
+def test_prev_conflict_with_edit_fails_past_clean_ancestors(
+    pair: RepoPair,
+) -> None:
+    """The merge itself is conflicted but it is `@`, not an ancestor,
+    and everything behind it is clean: both sides refuse."""
+    conflict_pair(pair)
+    pair.op(jj=["prev", "--conflict", "--edit"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("prev", "--conflict")
+def test_prev_conflict_skips_the_parents(pair: RepoPair) -> None:
+    """Without `--edit` the parents are context, never candidates: `@`
+    is a clean child of the conflicted merge, and both sides refuse
+    rather than landing beside it."""
+    conflict_pair(pair)
+    pair.op(jj=["new", "-m", "after"])
+    pair.op(jj=["prev", "--conflict"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("next", "--conflict")
+def test_next_conflict_skips_the_parents(pair: RepoPair) -> None:
+    """Same rule forward: `@` is a clean child of the conflicted merge,
+    the only candidate generation is its (clean) children, so both
+    sides refuse."""
+    conflict_pair(pair)
+    pair.op(jj=["new", "-m", "after"])
+    pair.op(jj=["next", "--conflict"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("prev", "--conflict")
+def test_prev_conflict_lands_beside_a_grandparent_conflict(
+    pair: RepoPair,
+) -> None:
+    """Two clean levels above the conflicted merge: the walk reaches
+    through them, and the landing is a new child of the merge -- the
+    same shape plain `prev` makes."""
+    conflict_pair(pair)
+    pair.op(jj=["new", "-m", "after"])
+    pair.op(jj=["new", "-m", "after2"])
+    pair.op(jj=["prev", "--conflict"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("next", "--conflict")
+@pytest.mark.covers("prev", "--conflict")
+def test_conflict_rejects_an_offset_on_both(pair: RepoPair) -> None:
+    """`--conflict` always means the nearest one; jj refuses it with
+    an offset (exit 2, usage error)."""
+    chain(pair)
+    assert pair.op(jj=["next", "--conflict", "2"], may_fail=True) == 2
+    assert pair.op(jj=["prev", "--conflict", "2"], may_fail=True) == 2
+    pair.assert_parity()
+
+
 # -- new: graph insertion -----------------------------------------------
 
 

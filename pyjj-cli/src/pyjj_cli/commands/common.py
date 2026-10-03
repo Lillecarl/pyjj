@@ -683,6 +683,33 @@ def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
         current = reached
     return current
 
+def _nearest_conflicted(repo, settings, start_hexes, direction, exclude=()):
+    """The nearest conflicted commit(s) walking `direction` from `start_hexes`.
+
+    `jj next/prev --conflict` jumps to the first conflicted descendant or
+    ancestor, ignoring the offset entirely (jj refuses `--conflict` with
+    one). Levels go one edge at a time; the first level holding any
+    conflicted commit wins, and every conflicted commit on it is
+    returned -- more than one is ambiguous, which `_move_to` reports
+    (jj prompts interactively there instead, which a CLI cannot do).
+    `exclude` drops commits from the walk, the same way `_walk` uses it.
+    """
+    seen = set(exclude)
+    current = [h for h in start_hexes if h not in seen]
+    seen.update(current)
+    while current:
+        expression = f"{direction}({'|'.join(current)})"
+        reached = [c for c in repo.revset(settings, expression)
+                   if c.id.hex() not in seen]
+        if not reached:
+            return []
+        seen.update(c.id.hex() for c in reached)
+        found = [c.id.hex() for c in reached if c.has_conflict]
+        if found:
+            return found
+        current = [c.id.hex() for c in reached]
+    return []
+
 def _commit_location(repo, settings, ontos, afters, befores):
     """jj's `compute_commit_location`: the new parents and new children a
     placement flag asks for.
