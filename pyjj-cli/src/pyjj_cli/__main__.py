@@ -62,9 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
 # after the subcommand. These three change only what gets printed, never
 # what gets written, so pyjj accepts them and does nothing with them --
 # a script that passes `--no-pager` must not die on a usage dump.
-# `--config` and `--ignore-immutable` are still deliberately absent:
+# `--config` and `--config-file` are still deliberately absent:
 # silently ignoring one of those would make pyjj quietly disagree with
-# jj. `--at-operation`, `--ignore-working-copy` and `--color` are
+# jj, and honouring them needs settings-layer plumbing in every command
+# that builds settings (a project of its own, not a flag). `--at-operation`, `--ignore-working-copy` and `--color` are
 # honoured, and handled below rather than here, because they change what
 # happens.
 _IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
@@ -73,7 +74,8 @@ _IGNORED_GLOBAL_OPTIONS: set[str] = set()
 # Globals that change behaviour. argparse only accepts top-level options
 # before the subcommand, so these are lifted out of `argv` wherever they
 # appear and applied to the parsed namespace afterwards.
-_HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy"}
+_HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy",
+                         "--ignore-immutable": "ignore_immutable"}
 _HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
                            "--at-op": "at_operation",
                            "--color": "color"}
@@ -203,6 +205,7 @@ def main(argv=None) -> int:
     # line sits after `autocomplete()`, which exits during completion.
     from pyjj_cli.commands import common
     common.set_ignore_working_copy(args.ignore_working_copy)
+    common.set_ignore_immutable(bool(globals_.get("ignore_immutable")))
     common.set_operation_args(invocation)
     colour = globals_.get("color")
     if colour is not None and colour not in _COLOR_CHOICES:

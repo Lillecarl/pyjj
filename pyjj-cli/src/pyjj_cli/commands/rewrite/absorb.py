@@ -10,6 +10,7 @@ from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
+    _ignore_immutable,
     _load,
     _resolve_all,
     _resolve_in_arg_order,
@@ -39,7 +40,7 @@ def absorb(args) -> int:
         # The destinations are computed inside the binding, so the
         # immutability check has to happen there too.
         stats = tx.absorb(settings, source, destinations=dest_expr, paths=paths,
-                          check_immutable=True)
+                          check_immutable=not _ignore_immutable())
         _finish(tx, f"absorb from {source.id.hex()[:12]} into {dest_expr or 'mutable()'}", settings, ws, repo)
         # Minimal feedback like jj (number of destinations)
         if stats.source is None:

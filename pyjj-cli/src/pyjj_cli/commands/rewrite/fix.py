@@ -10,6 +10,7 @@ from ..common import (
     CommandError,
     _checkout_if_moved,
     _finish,
+    _ignore_immutable,
     _load,
     _resolve_all,
     _resolve_in_arg_order,
@@ -37,7 +38,7 @@ def fix(args) -> int:
         # Same as absorb: the source roots resolve inside the binding.
         files = tx.fix_enumerate(settings, revset=revset, paths=paths,
                                  include_unchanged_files=include_unchanged,
-                                 check_immutable=True)
+                                 check_immutable=not _ignore_immutable())
         if not files:
             # No files to fix — matches real jj's quiet no-op.
             return 0

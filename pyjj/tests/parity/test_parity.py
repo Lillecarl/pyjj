@@ -1398,6 +1398,20 @@ def test_bookmark_rename(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("", "--ignore-immutable")
+def test_ignore_immutable_rewrites_a_tagged_commit(pair: RepoPair) -> None:
+    """A tag makes its commit immutable, so plain `describe` refuses on
+    both sides; the global flag skips the guard on both sides instead."""
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    pair.op(jj=["describe", "-r", rev("one"), "-m", "renamed"],
+            may_fail=True)
+    pair.assert_parity()
+    pair.op(jj=["--ignore-immutable", "describe", "-r", rev("one"),
+                "-m", "renamed"])
+    pair.assert_parity()
+
+
 @pytest.mark.covers("bookmark rename", "--overwrite-existing")
 def test_bookmark_rename_overwrite_existing(pair: RepoPair) -> None:
     chain(pair)

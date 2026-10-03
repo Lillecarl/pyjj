@@ -204,6 +204,23 @@ def set_ignore_working_copy(value: bool) -> None:
     _IGNORE_WORKING_COPY = bool(value)
 
 
+# `--ignore-immutable`, same shape: threading one boolean through every
+# rewrite command's guard call would say the same thing in forty places.
+_IGNORE_IMMUTABLE = False
+
+
+def set_ignore_immutable(value: bool) -> None:
+    """Called once by `main()` from the parsed globals."""
+    global _IGNORE_IMMUTABLE
+    _IGNORE_IMMUTABLE = bool(value)
+
+
+def _ignore_immutable() -> bool:
+    """Whether `--ignore-immutable` was passed: the two call sites that
+    check inside the binding (absorb, fix) read it here."""
+    return _IGNORE_IMMUTABLE
+
+
 def _workspace_path(args) -> str:
     """The workspace directory this command should load.
 
@@ -778,9 +795,13 @@ def _check_rewritable(tx, settings, commits) -> None:
     `tx.commit()` leaves the transaction unwritten, so no operation is
     recorded either way.
 
+    `--ignore-immutable` skips the guard outright, the way jj does.
+
     Takes `Commit`s or bare `CommitId`s, because the call sites hold one
     or the other.
     """
+    if _IGNORE_IMMUTABLE:
+        return
     ids = [getattr(commit, "id", commit) for commit in commits]
     tx.check_rewritable(settings, ids)
 
