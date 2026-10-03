@@ -32,6 +32,8 @@ def add_parsers(sub) -> None:
     p_ws_rename.add_argument("new_name", help="New workspace name")
     p_ws_rename.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_rename:workspace_rename")
     p_ws_root = ws_sub.add_parser("root", help="Show the workspace root directory")
+    p_ws_root.add_argument("--name", default=None, metavar="NAME",
+                           help="Name of the workspace (defaults to current)")
     p_ws_root.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_root:workspace_root")
     p_ws_update = ws_sub.add_parser("update-stale", help="Update a workspace that has become stale")
     p_ws_update.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_update_stale:workspace_update_stale")

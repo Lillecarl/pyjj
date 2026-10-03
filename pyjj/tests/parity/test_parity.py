@@ -3419,6 +3419,16 @@ def test_workspace_root_prints_the_workspace_root(pair: RepoPair) -> None:
     assert py.strip() == str(pair.py_repo)
 
 
+@pytest.mark.covers("workspace root", "--name")
+def test_workspace_root_names_another_workspace(pair: RepoPair) -> None:
+    """`--name` prints a sibling workspace's root, not this one's."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "../second"])
+    cli, py = pair.outputs(["workspace", "root", "--name", "second"])
+    assert cli.strip() == str(pair.cli_repo.parent / "second")
+    assert py.strip() == str(pair.py_repo.parent / "second")
+
+
 @pytest.mark.covers("diff", "--summary", "-s")
 def test_diff_summary_output_matches(pair: RepoPair) -> None:
     """`--summary` prints one status letter and the path. pyjj-cli used
