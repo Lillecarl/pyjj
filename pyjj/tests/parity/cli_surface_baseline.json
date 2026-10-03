@@ -35,67 +35,7 @@
   "missing_flags": {
     "": [
       "--config",
-      "--config-file",
-      "--ignore-immutable"
-    ],
-    "abandon": [
-      "-r"
-    ],
-    "arrange": [
-      "-r"
-    ],
-    "bookmark forget": [
-      "--include-remotes"
-    ],
-    "bookmark rename": [
-      "--overwrite-existing"
-    ],
-    "config edit": [
-      "--repo",
-      "--user",
-      "--workspace"
-    ],
-    "config list": [
-      "--include-defaults",
-      "--include-overridden",
-      "--template",
-      "-T"
-    ],
-    "describe": [
-      "--editor"
-    ],
-    "edit": [
-      "-r"
-    ],
-    "fix": [
-      "--all-lines",
-      "-a"
-    ],
-    "git init": [
-      "--git-repo"
-    ],
-    "git remote add": [
-      "--fetch-tags",
-      "--push-url"
-    ],
-    "git remote set-url": [
-      "--fetch",
-      "--push"
-    ],
-    "next": [
-      "--conflict"
-    ],
-    "operation restore": [
-      "--what"
-    ],
-    "operation revert": [
-      "--what"
-    ],
-    "prev": [
-      "--conflict"
-    ],
-    "workspace root": [
-      "--name"
+      "--config-file"
     ]
   }
 }

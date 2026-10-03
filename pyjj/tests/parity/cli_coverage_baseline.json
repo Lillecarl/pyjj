@@ -1,13 +1,11 @@
 {
   "": [
-    "(command)",
     "--at-op",
     "--at-operation",
     "--color",
     "--config",
     "--config-file",
     "--debug",
-    "--ignore-immutable",
     "--ignore-working-copy",
     "--no-pager",
     "--quiet",
@@ -15,18 +13,13 @@
     "-R"
   ],
   "abandon": [
-    "--retain-bookmarks",
-    "-r"
+    "--retain-bookmarks"
   ],
   "absorb": [
     "--from",
     "--to",
     "-f",
     "-t"
-  ],
-  "arrange": [
-    "(command)",
-    "-r"
   ],
   "bisect": [
     "(command)"
@@ -48,12 +41,6 @@
     "--revision",
     "-r"
   ],
-  "bookmark forget": [
-    "--include-remotes"
-  ],
-  "bookmark rename": [
-    "--overwrite-existing"
-  ],
   "bookmark track": [
     "--remote"
   ],
@@ -63,24 +50,13 @@
   "config": [
     "(command)"
   ],
-  "config edit": [
-    "(command)",
-    "--repo",
-    "--user",
-    "--workspace"
-  ],
   "config get": [
     "(command)"
   ],
   "config list": [
-    "(command)",
-    "--include-defaults",
-    "--include-overridden",
     "--repo",
-    "--template",
     "--user",
-    "--workspace",
-    "-T"
+    "--workspace"
   ],
   "config path": [
     "(command)",
@@ -97,15 +73,11 @@
     "--workspace"
   ],
   "describe": [
-    "--editor",
     "--message"
   ],
   "diff": [
     "--template",
     "-T"
-  ],
-  "edit": [
-    "-r"
   ],
   "file": [
     "(command)"
@@ -118,10 +90,8 @@
     "--include-ignored"
   ],
   "fix": [
-    "--all-lines",
     "--include-unchanged-files",
-    "--source",
-    "-a"
+    "--source"
   ],
   "gerrit": [
     "(command)"
@@ -136,31 +106,19 @@
     "(command)"
   ],
   "git init": [
-    "(command)",
     "--colocate",
-    "--git-repo",
     "--no-colocate"
   ],
   "git remote": [
     "(command)"
   ],
-  "git remote add": [
-    "--fetch-tags",
-    "--push-url"
-  ],
   "git remote rename": [
     "(command)"
-  ],
-  "git remote set-url": [
-    "(command)",
-    "--fetch",
-    "--push"
   ],
   "help": [
     "(command)"
   ],
   "next": [
-    "--conflict",
     "--no-edit",
     "-e",
     "-n"
@@ -174,20 +132,11 @@
   "operation integrate": [
     "(command)"
   ],
-  "operation restore": [
-    "(command)",
-    "--what"
-  ],
-  "operation revert": [
-    "(command)",
-    "--what"
-  ],
   "parallelize": [
     "(command)",
     "-r"
   ],
   "prev": [
-    "--conflict",
     "--no-edit",
     "-e",
     "-n"
@@ -252,9 +201,6 @@
   ],
   "workspace": [
     "(command)"
-  ],
-  "workspace root": [
-    "--name"
   ],
   "workspace update-stale": [
     "(command)"
