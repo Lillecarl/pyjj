@@ -1822,6 +1822,7 @@ dependencies = [
  "sapling-renderdag",
  "thiserror",
  "tokio",
+ "toml_edit",
  "whoami",
 ]
 

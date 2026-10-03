@@ -21,6 +21,9 @@ pyo3 = { version = "0.29", features = ["extension-module"] }
 pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 pollster = "1.0.1"
+# Same version jj-lib uses, so `ConfigLayer.data` is the same
+# `toml_edit::DocumentMut` type on both sides of the call.
+toml_edit = "0.25.13"
 bstr = { version = "1.12.1", features = ["serde"] }
 chrono = { version = "0.4.44", default-features = false, features = [
     "std",

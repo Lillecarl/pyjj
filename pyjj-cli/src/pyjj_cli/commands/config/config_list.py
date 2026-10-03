@@ -1,70 +1,96 @@
 """config subcommand: config_list."""
+import os
 import sys
 
 import pyjj
 
-from ..common import CommandError
-from .config_set import _scope, _workspace_root
-from .paths import config_path, read_config
+from ..common import (
+    CommandError,
+    _compile_template,
+    _pyjj_template,
+    settings_for,
+)
+from .config_set import _scope
+
+
+_BUILTINS = {
+    # jj's own detailed list: the winning value with its source, and
+    # the file when the source has one (env and default rows have none).
+    "builtin_config_list_detailed":
+        "{{name}} = {{value}} # {{source}}"
+        "{% if path %} {{path}}{% endif %}",
+}
+
+_DEFAULT_TEMPLATE = "{% if overridden %}# {% endif %}{{name}} = {{value}}"
 
 
 def config_list(args) -> int:
-    """`jj config list [NAME]`: list what the config files set.
+    """`jj config list [NAME]`: list what the config layers set.
 
-    With a scope flag this reads that one file. Without one it reads the
-    user file plus this repository's, which is what a caller asking
-    "what is set here" means -- pyjj has no way to enumerate the built-in
-    defaults the way jj's own layered config does, so those are absent.
+    Every layer of the loaded settings reports its own entries, lowest
+    precedence first, so shadowing is visible instead of guessed:
+    without `--include-overridden` only each key's winning value
+    prints; with it the shadowed values print too (jj marks those
+    rows with `# `, which the default template reproduces).
+    `--include-defaults` keeps the built-in default layers, which are
+    otherwise left out. A scope flag keeps just that file's layer.
     """
     prefix = getattr(args, "name", None)
+    include_defaults = bool(getattr(args, "include_defaults", False))
+    include_overridden = bool(getattr(args, "include_overridden", False))
     try:
-        entries = _entries(args)
+        settings = settings_for(args)
+        layers = settings.config_layers()
     except (pyjj.JjError, CommandError, OSError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
 
+    scope = _scope(args)
+    if scope is not None:
+        layers = [layer for layer in layers if layer.source == scope]
+    if not include_defaults:
+        layers = [layer for layer in layers if layer.source != "default"]
+
+    # Per key, every layer's value in precedence order; the winner is
+    # the last one standing.
+    by_name: dict[str, list] = {}
+    for layer in layers:
+        for name in sorted(layer.entries):
+            if prefix and not (name == prefix or name.startswith(prefix + ".")):
+                continue
+            by_name.setdefault(name, []).append(layer)
+
+    template_str = getattr(args, "template", None)
+    if template_str in _BUILTINS:
+        template_str = _BUILTINS[template_str]
+    if not template_str:
+        template_str = (
+            _pyjj_template(settings, "config_list", cwd=os.getcwd())
+            or _DEFAULT_TEMPLATE
+        )
+    try:
+        template = _compile_template(template_str)
+    except Exception as e:
+        print(f"Error: template compile failed: {e}", file=sys.stderr)
+        return 1
+
     shown = 0
-    for name, value in sorted(entries.items()):
-        if prefix and not (name == prefix or name.startswith(prefix + ".")):
-            continue
-        print(f"{name} = {_render(value)}")
-        shown += 1
+    for name in sorted(by_name):
+        hits = by_name[name]
+        rows = hits if include_overridden else hits[-1:]
+        for index, layer in enumerate(rows):
+            try:
+                print(template.render(
+                    name=name,
+                    value=layer.entries[name],
+                    overridden=index < len(rows) - 1,
+                    source=layer.source,
+                    path=layer.path or "",
+                ))
+            except Exception as e:
+                print(f"Error: template render failed: {e}", file=sys.stderr)
+                return 1
+            shown += 1
     if not shown:
         print("Warning: No matching config variables found", file=sys.stderr)
     return 0
-
-
-def _entries(args) -> dict:
-    scope = _scope(args)
-    if scope is not None:
-        root = _workspace_root(args) if scope != "user" else None
-        return _flatten(read_config(config_path(root, scope)))
-    entries = _flatten(read_config(config_path(None, "user")))
-    try:
-        root = _workspace_root(args)
-    except (pyjj.JjError, CommandError):
-        return entries
-    for scope in ("repo", "workspace"):
-        entries.update(_flatten(read_config(config_path(root, scope))))
-    return entries
-
-
-def _flatten(data: dict, prefix: str = "") -> dict:
-    flat = {}
-    for key, value in data.items():
-        name = f"{prefix}{key}"
-        if isinstance(value, dict):
-            flat.update(_flatten(value, name + "."))
-        else:
-            flat[name] = value
-    return flat
-
-
-def _render(value) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_render(v) for v in value) + "]"
-    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'

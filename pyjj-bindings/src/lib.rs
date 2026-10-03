@@ -52,6 +52,7 @@ use oplog::PyOpAbandonStats;
 use repo::{PyCommitBuilder, PyTransaction};
 use rewrite::PyMoveCommitsStats;
 use settings::PyUserSettings;
+use settings::PyConfigLayer;
 use tag::PyRemoteTag;
 use tag::PyTag;
 use tree::PyDiffEntry;
@@ -91,6 +92,7 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Core types
     m.add_class::<PyUserSettings>()?;
+    m.add_class::<PyConfigLayer>()?;
     m.add_class::<PyBookmark>()?;
     m.add_class::<crate::bookmark::PyRemoteBookmark>()?;
     m.add_class::<PyTag>()?;

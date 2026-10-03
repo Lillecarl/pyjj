@@ -4,6 +4,51 @@ use jj_lib::settings::UserSettings;
 
 use crate::ids::PySignature;
 
+/// One layer of the stacked config, as `UserSettings.config_layers()`
+/// returns it. `entries` maps dotted keys (`"user.name"`) to values in
+/// TOML syntax (`"\"Jane\""`), the way `jj config list -T` renders them.
+#[pyclass(name = "ConfigLayer", frozen, get_all)]
+pub struct PyConfigLayer {
+    source: String,
+    path: Option<String>,
+    entries: std::collections::HashMap<String, String>,
+}
+
+/// Flatten one layer's TOML document to dotted keys. Tables recurse;
+/// anything else (values, arrays, arrays of tables) renders whole at
+/// its own key, since dotted syntax cannot name inside them. Values
+/// render decor-free: `to_string()` would otherwise leak the whitespace
+/// (or comments) sitting between the key and the value in the source.
+fn flatten_layer(
+    table: &toml_edit::Table,
+    prefix: String,
+    out: &mut std::collections::HashMap<String, String>,
+) {
+    for (key, item) in table.iter() {
+        let dotted = if prefix.is_empty() {
+            key.to_string()
+        } else if key
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            format!("{prefix}.{key}")
+        } else {
+            format!("{prefix}.{key:?}")
+        };
+        match item {
+            toml_edit::Item::Table(table) => flatten_layer(table, dotted, out),
+            toml_edit::Item::Value(value) => {
+                let mut bare = value.clone();
+                *bare.decor_mut() = Default::default();
+                out.insert(dotted, bare.to_string());
+            }
+            _ => {
+                out.insert(dotted, item.to_string().trim_start().to_string());
+            }
+        }
+    }
+}
+
 /// User configuration loaded from jj config files.
 #[pyclass(name = "UserSettings", frozen)]
 pub struct PyUserSettings(pub(crate) UserSettings);
@@ -154,6 +199,31 @@ impl PyUserSettings {
             Err(ConfigGetError::NotFound { .. }) => Ok(vec![]),
             Err(err) => Err(crate::errors::map_py_err(err)),
         }
+    }
+
+    /// Every layer of the stacked config, lowest precedence first: the
+    /// built-in defaults, system/user/repo/workspace files (whichever
+    /// exist), then env overrides. Each layer carries its source name
+    /// (`"default"`, `"user"`, ...), the file it was read from (if any),
+    /// and its own entries as dotted-key to TOML-syntax-value strings.
+    /// `jj config list` is built on this: `--include-defaults` keeps
+    /// the default layers, `--include-overridden` keeps shadowed values,
+    /// and `-T` templates see each value's source and path.
+    fn config_layers(&self) -> PyResult<Vec<PyConfigLayer>> {
+        self.0
+            .config()
+            .layers()
+            .iter()
+            .map(|layer| {
+                let mut entries = std::collections::HashMap::new();
+                flatten_layer(layer.data.as_table(), String::new(), &mut entries);
+                Ok(PyConfigLayer {
+                    source: layer.source.to_string(),
+                    path: layer.path.as_ref().map(|p| p.display().to_string()),
+                    entries,
+                })
+            })
+            .collect()
     }
 
     fn __repr__(&self) -> String {

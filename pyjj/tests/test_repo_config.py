@@ -231,3 +231,83 @@ def test_the_repo_layer_does_not_leak_between_repositories(tmp_path):
 
     second = _run(roots[1], "config", "list", "--repo", home=home)
     assert "only-in-one" not in second.stdout
+
+
+@pytest.mark.covers("config list", "--include-defaults")
+def test_config_list_hides_defaults_unless_asked(repo_with_topics):
+    """Built-in defaults (jj's own layered config) stay out of the
+    default list and appear with `--include-defaults`."""
+    root, home = repo_with_topics
+    plain = _run(root, "config", "list", home=home, check=True)
+    assert "git.abandon-unreachable-commits" not in plain.stdout
+    full = _run(root, "config", "list", "--include-defaults", home=home,
+                check=True)
+    assert "git.abandon-unreachable-commits" in full.stdout
+
+
+@pytest.mark.covers("config list", "--include-overridden")
+def test_config_list_include_overridden_marks_shadowed_rows(
+    repo_with_topics,
+):
+    """A key set in user and repo config prints once by default and
+    twice with `--include-overridden`, the shadowed row `# `-prefixed
+    exactly like jj prints it."""
+    root, home = repo_with_topics
+    _run(root, "config", "set", "--repo", "debug.shadowed", '"repoval"',
+         home=home, check=True)
+    user_config = home / "jj" / "config.toml"
+    user_config.parent.mkdir(parents=True, exist_ok=True)
+    with open(user_config, "a") as handle:
+        handle.write('\n[debug]\nshadowed = "userval"\n')
+    plain = _run(root, "config", "list", "debug.shadowed", home=home,
+                 check=True)
+    assert plain.stdout.splitlines() == ['debug.shadowed = "repoval"']
+    both = _run(root, "config", "list", "debug.shadowed",
+                "--include-overridden", home=home, check=True)
+    assert both.stdout.splitlines() == [
+        '# debug.shadowed = "userval"',
+        'debug.shadowed = "repoval"',
+    ]
+
+
+@pytest.mark.covers("config list", "--template", "-T")
+def test_config_list_template_names_source(repo_with_topics):
+    """`-T` renders per-row provenance: name, value, source."""
+    root, home = repo_with_topics
+    _run(root, "config", "set", "--repo", "debug.templated", '"yes"',
+         home=home, check=True)
+    result = _run(root, "config", "list", "debug.templated",
+                  "-T", "{{name}}:{{source}}", home=home, check=True)
+    assert result.stdout.splitlines() == ["debug.templated:repo"]
+
+
+@pytest.mark.covers("config edit", "--user", "--repo", "--workspace")
+def test_config_edit_opens_the_scoped_file(repo_with_topics, monkeypatch):
+    """`config edit` opens the scoped file in $EDITOR, creating it
+    first when missing. One run per scope: user, repo, workspace."""
+    root, home = repo_with_topics
+    target = home / "jj" / "config.toml"
+    if target.exists():
+        target.unlink()
+    editor = home / "editor.sh"
+    editor.write_text('#!/bin/sh\nprintf \'[debug]\\nedited = true\\n\' >> "$1"\n')
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    monkeypatch.delenv("JJ_EDITOR", raising=False)
+    monkeypatch.delenv("VISUAL", raising=False)
+    for scope in ("--user", "--repo", "--workspace"):
+        result = _run(root, "config", "edit", scope, home=home, check=True)
+        assert result.returncode == 0
+    listed = _run(root, "config", "list", "debug.edited", home=home,
+                  check=True)
+    assert listed.stdout.splitlines() == ["debug.edited = true"]
+
+
+def test_config_edit_requires_exactly_one_scope(repo_with_topics):
+    """Zero or two scopes is a usage error, the way jj's own parser
+    requires exactly one."""
+    root, home = repo_with_topics
+    assert _run(root, "config", "edit", home=home).returncode == 2
+    result = _run(root, "config", "edit", "--user", "--repo", home=home)
+    assert result.returncode == 2
+    assert "cannot be used with" in result.stderr
