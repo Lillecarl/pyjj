@@ -27,7 +27,10 @@ from ..common import (
 def edit(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        target = _resolve_one(repo, settings, args.revision_pos)
+        target = _resolve_one(
+            repo, settings,
+            getattr(args, "revision_pos", None)
+            or getattr(args, "revision_flags", None))
         tx = _start_transaction(repo, settings)
         _check_rewritable(tx, settings, [target])
         # MutableRepo::edit abandons a discardable, unreferenced old wc

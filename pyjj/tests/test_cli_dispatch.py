@@ -79,3 +79,13 @@ def test_default_command_aliases_dispatch_like_their_canonical(alias, canonical)
     via_alias = parser.parse_args([alias])
     via_canonical = parser.parse_args([canonical])
     assert getattr(via_alias, "_handler") == getattr(via_canonical, "_handler")
+
+
+@pytest.mark.covers("arrange", "-r")
+def test_arrange_parses_r_flag():
+    """`arrange` is a stub that refuses everything, but `-r` is argv jj
+    accepts, so it must parse rather than fail with `invalid choice`.
+    Parsing is the whole of this flag's surface until arrange exists.
+    """
+    args = build_parser().parse_args(["arrange", "-r", "@"])
+    assert args.revision_flags == ["@"]

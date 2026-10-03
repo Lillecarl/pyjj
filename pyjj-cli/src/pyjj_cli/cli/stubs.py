@@ -11,6 +11,11 @@ def _stub(message: str):
 
 def add_parsers(sub) -> None:
     p_arrange = sub.add_parser("arrange", help="Interactively arrange the commit graph")
+    # Parse-only: the stub below still refuses, but `arrange -r` is argv
+    # jj accepts, so the surface ledger must see it parsed.
+    p_arrange.add_argument("-r", "--revision", dest="revision_flags",
+                           action="append", metavar="REVSETS",
+                           help="Revisions to arrange")
     p_arrange.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_arrange")
     p_gerrit = sub.add_parser("gerrit", help="Interact with Gerrit Code Review")
     p_gerrit.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_gerrit")

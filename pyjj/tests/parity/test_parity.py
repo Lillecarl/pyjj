@@ -81,6 +81,15 @@ def test_abandon_middle_commit(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("abandon", "-r")
+def test_abandon_r_flag_names_revisions(pair: RepoPair) -> None:
+    """`-r` is an alias of abandon's positional in jj, so both spellings
+    abandon the same commit."""
+    chain(pair)
+    pair.op(jj=["abandon", "-r", rev("one")])
+    pair.assert_parity()
+
+
 def test_duplicate_commit(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["duplicate", rev("one")])
@@ -96,6 +105,13 @@ def test_bookmark_move(pair: RepoPair) -> None:
 def test_edit_moves_working_copy(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["edit", rev("base")])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("edit", "-r")
+def test_edit_r_flag_checks_out_the_revision(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["edit", "-r", rev("base")])
     pair.assert_parity()
 
 

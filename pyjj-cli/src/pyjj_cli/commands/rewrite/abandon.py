@@ -27,7 +27,8 @@ from ..common import (
 def abandon(args) -> int:
     try:
         settings, ws, repo = _load(args)
-        revsets = args.revisions_pos or ["@"]
+        revsets = (list(args.revisions_pos or [])
+                   + list(getattr(args, "revision_flags", None) or [])) or ["@"]
         targets = _resolve_all(repo, settings, revsets)
         if not targets:
             print("No revisions to abandon.")
