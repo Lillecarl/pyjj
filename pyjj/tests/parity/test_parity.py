@@ -547,6 +547,19 @@ def test_commit_via_editor(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("describe", "--editor")
+def test_describe_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
+    """`-m` normally means no editor. `--editor` opens one anyway (on
+    the message text), and what it writes is what the commit keeps."""
+    pair.init()
+    pair.op(
+        files={"a.txt": b"a\n"},
+        jj=["describe", "-m", "explicit", "--editor"],
+        editor_spec={"op": "set", "value": "edited over the message\n"},
+    )
+    pair.assert_parity()
+
+
 def test_squash_combines_messages_via_editor(pair: RepoPair) -> None:
     chain(pair)
     # Both source ('one') and destination ('base') have descriptions, so

@@ -45,12 +45,18 @@ def describe(args) -> int:
 
     if args.stdin:
         description = sys.stdin.read()
-    elif args.messages:
+    elif args.messages and not getattr(args, "editor", False):
         description = join_message_paragraphs(args.messages)
     elif len(revsets) <= 1:
         # Bare `describe` (or a single revision): the editor path.
+        # `--editor` forces it even with `-m`, pre-filled with the
+        # message instead of the existing description.
         base_commit = _resolve_one(repo, settings, revsets[0] if revsets else "@")
-        description = _run_editor(settings, base_commit.description)
+        if args.messages:
+            prefill = join_message_paragraphs(args.messages)
+        else:
+            prefill = base_commit.description
+        description = _run_editor(settings, prefill)
     else:
         print("Error: bulk description editing is not supported; pass -m "
               "or --stdin", file=sys.stderr)
