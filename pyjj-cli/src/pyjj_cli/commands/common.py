@@ -1384,6 +1384,32 @@ def _resolve_operation(repo, name: str | None):
     return operation
 
 
+def _restore_what(args) -> list[str] | None:
+    """`--what` for `op restore`/`op revert`, in the binding's spelling.
+
+    jj takes `repo` and `remote-tracking` (can be repeated, default
+    both); the binding wants `remote_tracking` with an underscore.
+    Anything else fails with jj's own invalid-value wording rather
+    than argparse's, so the message names the flag the way jj does.
+    `None` means the flag was absent, which the binding reads as both.
+    """
+    values = getattr(args, "what", None)
+    if not values:
+        return None
+    translated = []
+    for value in values:
+        if value == "repo":
+            translated.append("repo")
+        elif value == "remote-tracking":
+            translated.append("remote_tracking")
+        else:
+            raise CommandError(
+                f"invalid value {value!r} for '--what <WHAT>' "
+                "[possible values: repo, remote-tracking]"
+            )
+    return translated
+
+
 def _resolve_operation_prefix(repo, symbol: str, load_error):
     """The one reachable operation whose id starts with `symbol`.
 

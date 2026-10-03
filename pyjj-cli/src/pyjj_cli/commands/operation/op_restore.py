@@ -20,6 +20,7 @@ from ..common import (
     _resolve_one,
     _resolve_operation,
     _restore_view_command,
+    _restore_what,
     _wc_commit,
     complete_newline,
     join_message_paragraphs,
@@ -36,11 +37,15 @@ def op_restore(args) -> int:
     """`jj op restore <OPERATION>`: make the view match a past operation."""
     try:
         settings, ws, repo = _load(args)
-        target = _resolve_operation(repo, args.operation_pos)
+        # `operation restore` names the same argument `operation`; the
+        # short `op restore` form calls it `operation_pos`.
+        name = (getattr(args, "operation_pos", None)
+                or getattr(args, "operation", None))
+        target = _resolve_operation(repo, name)
         tx = _start_transaction(repo, settings)
-        tx.restore_operation(target)
+        tx.restore_operation(target, _restore_what(args))
         _restore_view_command(
-            tx, f"restore operation {args.operation_pos}", settings, ws, repo
+            tx, f"restore operation {name}", settings, ws, repo
         )
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

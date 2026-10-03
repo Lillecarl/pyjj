@@ -244,6 +244,37 @@ def test_op_restore_across_wc_move(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("operation restore", "--what")
+def test_op_restore_what_repo_only(pair: RepoPair) -> None:
+    """`--what repo` restores the repo view but keeps remote tracking.
+
+    Operation ids differ per side, so each side names its own.
+    """
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "extra"])
+    pair.op(
+        jj=["op", "restore", "--what", "repo", pair.op_id("cli", 1)],
+        py=["op", "restore", "--what", "repo", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
+@pytest.mark.covers("operation restore")
+def test_operation_restore_long_form(pair: RepoPair) -> None:
+    """`operation restore` is `op restore` spelled out.
+
+    The long form crashed with AttributeError: it names the argument
+    `operation` while the handler read `operation_pos`.
+    """
+    chain(pair)
+    pair.op(jj=["new", "-m", "later"])
+    pair.op(
+        jj=["operation", "restore", pair.op_id("cli", 1)],
+        py=["operation", "restore", pair.op_id("py", 1)],
+    )
+    pair.assert_parity()
+
+
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("undo")
 def test_undo_across_file_write(pair: RepoPair) -> None:
@@ -2896,6 +2927,18 @@ def test_op_revert_a_describe(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["describe", "-m", "renamed"])
     pair.op(jj=["op", "revert"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("operation revert", "--what")
+def test_op_revert_what_repo_only(pair: RepoPair) -> None:
+    """`--what repo` reverts the repo view but keeps remote tracking."""
+    chain(pair)
+    pair.op(jj=["bookmark", "set", "main", "-r", rev("two")])
+    pair.op(
+        jj=["op", "revert", "--what", "repo", pair.op_id("cli", 0)],
+        py=["op", "revert", "--what", "repo", pair.op_id("py", 0)],
+    )
     pair.assert_parity()
 
 

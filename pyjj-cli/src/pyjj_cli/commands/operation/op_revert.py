@@ -3,7 +3,7 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _finish, _load, _start_transaction
+from ..common import CommandError, _finish, _load, _restore_what, _start_transaction
 
 
 def op_revert(args) -> int:
@@ -20,7 +20,7 @@ def op_revert(args) -> int:
         wanted = getattr(args, "operation", None) or "@"
         target = repo.operation if wanted == "@" else repo.load_operation(wanted)
         tx = _start_transaction(repo, settings)
-        description = tx.revert_operation(target)
+        description = tx.revert_operation(target, _restore_what(args))
         # Not `_restore_view_command`: merging an operation out records
         # rewrites, and `Transaction.commit` asserts they have been
         # rebased. Restoring a view records none, which is why that

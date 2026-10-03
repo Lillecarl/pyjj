@@ -16,6 +16,9 @@ def register(sub) -> None:
     op_sub = p_op.add_subparsers(dest="op_command")
     p_opr = op_sub.add_parser("restore", help="Restore to the state of an operation")
     p_opr.add_argument("operation_pos", metavar="OPERATION", help="The operation to restore to")
+    p_opr.add_argument("--what", dest="what", action="append", metavar="WHAT",
+                       help="What portions of the local state to restore "
+                            "(repo, remote-tracking; can be repeated)")
     p_opr.set_defaults(_handler="pyjj_cli.commands.operation.op_restore:op_restore")
     p_op_log2 = op_sub.add_parser("log", help="Show the operation log")
     p_op_log2.add_argument("-n", "--limit", type=int, default=None,
@@ -72,6 +75,9 @@ def register(sub) -> None:
     p_op_revert2 = op_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
     p_op_revert2.add_argument("operation", nargs="?", default="@",
                               help="Operation to revert (default: @)")
+    p_op_revert2.add_argument("--what", dest="what", action="append", metavar="WHAT",
+                              help="What portions of the local state to restore "
+                                   "(repo, remote-tracking; can be repeated)")
     p_op_revert2.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
 
     # `operation` — long form (duplicate of `op` for compatibility)
@@ -129,6 +135,9 @@ def register(sub) -> None:
     p_oplog_diff.set_defaults(_handler="pyjj_cli.commands.operation.op_diff:op_diff")
     p_oplog_restore2 = oplog_sub.add_parser("restore", help="Restore to the state of an operation")
     p_oplog_restore2.add_argument("operation", help="Operation to restore to")
+    p_oplog_restore2.add_argument("--what", dest="what", action="append", metavar="WHAT",
+                                  help="What portions of the local state to restore "
+                                       "(repo, remote-tracking; can be repeated)")
     p_oplog_restore2.set_defaults(_handler="pyjj_cli.commands.operation.op_restore:op_restore")
     p_oplog_integrate = oplog_sub.add_parser("integrate", help="Make an operation part of the operation log")
     p_oplog_integrate.add_argument("operation", help="Operation to integrate")
@@ -136,4 +145,7 @@ def register(sub) -> None:
     p_oplog_revert = oplog_sub.add_parser("revert", help="Create a new operation that reverts an earlier operation")
     p_oplog_revert.add_argument("operation", nargs="?", default="@",
                                 help="Operation to revert (default: @)")
+    p_oplog_revert.add_argument("--what", dest="what", action="append", metavar="WHAT",
+                                help="What portions of the local state to restore "
+                                     "(repo, remote-tracking; can be repeated)")
     p_oplog_revert.set_defaults(_handler="pyjj_cli.commands.operation.op_revert:op_revert")
