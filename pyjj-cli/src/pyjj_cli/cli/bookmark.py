@@ -37,6 +37,10 @@ def add_parsers(sub) -> None:
 
     p_bmf = bm_sub.add_parser("forget", help="Forget a bookmark")
     p_bmf.add_argument("names", nargs="+", metavar="NAMES", help="Bookmarks to forget")
+    p_bmf.add_argument("--include-remotes", dest="include_remotes",
+                       action="store_true", default=False,
+                       help="When forgetting a local bookmark, also forget "
+                            "any corresponding remote bookmarks")
     p_bmf.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bml = bm_sub.add_parser("list", help="List bookmarks")
@@ -69,6 +73,10 @@ def add_parsers(sub) -> None:
     p_bmr = bm_sub.add_parser("rename", help="Rename a bookmark")
     p_bmr.add_argument("old", metavar="OLD", help="Old bookmark name")
     p_bmr.add_argument("new", metavar="NEW", help="New bookmark name")
+    p_bmr.add_argument("--overwrite-existing", dest="overwrite_existing",
+                       action="store_true", default=False,
+                       help="Allow renaming even if the new bookmark name "
+                            "already exists")
     p_bmr.set_defaults(_handler="pyjj_cli.commands.bookmark.bookmark:bookmark")
 
     p_bmt = bm_sub.add_parser("track", help="Start tracking given remote bookmarks")

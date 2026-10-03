@@ -1277,10 +1277,69 @@ def test_bookmark_forget(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark forget", "--include-remotes")
+@pytest.mark.covers("git push", "--remote", "-b")
+def test_bookmark_forget_include_remotes(pair: RepoPair) -> None:
+    """Forgetting with `--include-remotes` removes the tracked remote
+    bookmarks too, not just the local one."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(files={"a.txt": b"a\n"}, jj=["describe", "-m", "base"])
+        pair.op(jj=["bookmark", "create", "mybranch"])
+        pair.op(jj=["git", "remote", "add", "origin", str(remote)])
+        pair.op(jj=["git", "push", "--remote", "origin", "-b", "mybranch"])
+        pair.op(jj=["bookmark", "forget", "--include-remotes", "mybranch"])
+        pair.assert_parity()
+        cli, py = pair.outputs(["bookmark", "list", "--all-remotes"])
+        assert "mybranch" not in cli
+        assert "mybranch" not in py
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+@pytest.mark.covers("bookmark forget")
+def test_bookmark_forget_untracks_remotes_by_default(pair: RepoPair) -> None:
+    """Without the flag the remote bookmarks stay but stop being
+    tracked, so a later push does not touch them -- same as jj."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(files={"a.txt": b"a\n"}, jj=["describe", "-m", "base"])
+        pair.op(jj=["bookmark", "create", "mybranch"])
+        pair.op(jj=["git", "remote", "add", "origin", str(remote)])
+        pair.op(jj=["git", "push", "--remote", "origin", "-b", "mybranch"])
+        pair.op(jj=["bookmark", "forget", "mybranch"])
+        pair.assert_parity()
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
 @pytest.mark.covers("bookmark rename")
 def test_bookmark_rename(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["bookmark", "rename", "main", "trunk"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark rename", "--overwrite-existing")
+def test_bookmark_rename_overwrite_existing(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "other", "-r", rev("two")])
+    pair.op(jj=["bookmark", "rename", "main", "other", "--overwrite-existing"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bookmark rename", "--overwrite-existing")
+def test_bookmark_rename_onto_itself_is_a_noop(pair: RepoPair) -> None:
+    """Renaming onto the same name with the flag changes nothing and,
+    like jj, records no new operation."""
+    chain(pair)
+    pair.op(jj=["bookmark", "rename", "main", "main", "--overwrite-existing"])
     pair.assert_parity()
 
 

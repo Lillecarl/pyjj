@@ -105,6 +105,40 @@ def bookmark(args) -> int:
         try:
             settings, ws, repo = _load(args)
             tx = _start_transaction(repo, settings)
+            if cmd == "forget":
+                include_remotes = bool(getattr(args, "include_remotes", False))
+                remotes_by_name: dict[str, list[str]] = {}
+                for remote_bm in repo.remote_bookmarks():
+                    remotes_by_name.setdefault(remote_bm.name, []).append(
+                        remote_bm.remote)
+                forgotten_local = 0
+                forgotten_remote = 0
+                matched = []
+                for name in args.names:
+                    if repo.get_bookmark(name) is None:
+                        print(f"Warning: No such bookmark: {name}", file=sys.stderr)
+                        continue
+                    tx.delete_bookmark(name)
+                    matched.append(name)
+                    forgotten_local += 1
+                    for remote in remotes_by_name.get(name, []):
+                        if include_remotes:
+                            tx.remove_remote_bookmark(remote, name)
+                            forgotten_remote += 1
+                        elif remote != "git":
+                            # Plain forget untracks instead of removing;
+                            # the git-tracking remote cannot be untracked.
+                            tx.git_untrack_remote_bookmark(remote, name)
+                if not matched:
+                    print("No bookmarks to forget.")
+                    return 0
+                if forgotten_local:
+                    print(f"Forgot {forgotten_local} local bookmarks.")
+                if forgotten_remote:
+                    print(f"Forgot {forgotten_remote} remote bookmarks.")
+                _finish(tx, f"forget bookmark {', '.join(matched)}",
+                        settings, ws, repo)
+                return 0
             matched = []
             for name in args.names:
                 if repo.get_bookmark(name) is None:
@@ -126,8 +160,16 @@ def bookmark(args) -> int:
             old_bm = repo.get_bookmark(args.old)
             if old_bm is None:
                 raise CommandError(f"No such bookmark: {args.old}")
+            if args.old == args.new:
+                if not getattr(args, "overwrite_existing", False):
+                    raise CommandError(f"Bookmark already exists: {args.new}")
+                # Renaming onto itself changes nothing (and records no
+                # operation, like real jj).
+                return 0
             if repo.get_bookmark(args.new) is not None:
-                raise CommandError(f"Bookmark already exists: {args.new}")
+                if not getattr(args, "overwrite_existing", False):
+                    raise CommandError(f"Bookmark already exists: {args.new}")
+                # else: fall through and overwrite below.
             if not old_bm.target_ids:
                 raise CommandError(f"Bookmark {args.old} has no target")
             # For conflicted bookmarks, rename is ambiguous; require non-conflicted for now.

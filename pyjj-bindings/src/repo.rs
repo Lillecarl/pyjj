@@ -8,7 +8,9 @@ use jj_lib::commit::Commit;
 use jj_lib::commit_builder::CommitBuilder;
 use jj_lib::object_id::ObjectId as _;
 use jj_lib::op_store::RefTarget;
+use jj_lib::op_store::RemoteRef;
 use jj_lib::ref_name::RefName;
+use jj_lib::ref_name::RemoteName;
 use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
 use jj_lib::transaction::Transaction;
 
@@ -802,6 +804,19 @@ impl PyTransaction {
     fn delete_bookmark(&self, name: &str) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
             mut_repo.set_local_bookmark_target(RefName::new(name), RefTarget::absent());
+            Ok(())
+        })
+    }
+
+    /// Delete a remote-tracking bookmark (`name@remote`). No-op if it
+    /// didn't exist. This is what `jj bookmark forget --include-remotes`
+    /// does to each corresponding remote bookmark (via
+    /// `set_remote_bookmark(symbol, absent)`), as opposed to merely
+    /// untracking it, which is what a plain forget does instead.
+    fn remove_remote_bookmark(&self, remote: &str, name: &str) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            let symbol = RefName::new(name).to_remote_symbol(RemoteName::new(remote));
+            mut_repo.set_remote_bookmark(symbol, RemoteRef::absent());
             Ok(())
         })
     }
