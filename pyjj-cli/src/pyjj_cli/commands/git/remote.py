@@ -42,9 +42,12 @@ def git_remote(args) -> int:
         elif cmd == "add":
             tx = _start_transaction(repo, settings)
             try:
-                tx.git_add_remote(args.name, args.url)
+                tx.git_add_remote(
+                    args.name, args.url,
+                    push_url=getattr(args, "push_url", None),
+                    fetch_tags=getattr(args, "fetch_tags", None))
             except pyjj.JjError as e:
-                print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+                print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
                 return 1
             _finish(tx, f"add git remote {args.name}", settings, ws, repo)
             return 0
@@ -68,15 +71,14 @@ def git_remote(args) -> int:
             return 0
         elif cmd == "set-url":
             tx = _start_transaction(repo, settings)
-            url = getattr(args, "url", None)
-            push_url = getattr(args, "push_url", None)
-            if url is None and push_url is None:
-                print("Error: --url or --push-url is required", file=sys.stderr)
-                return 2
+            # A bare URL is the short form of --fetch.
+            fetch = (getattr(args, "fetch", None)
+                     or getattr(args, "url", None))
+            push_url = getattr(args, "push", None)
             try:
-                tx.git_set_remote_urls(args.name, url=url, push_url=push_url)
+                tx.git_set_remote_urls(args.name, url=fetch, push_url=push_url)
             except pyjj.JjError as e:
-                print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+                print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
                 return 1
             _finish(tx, f"set git remote {args.name} URL", settings, ws, repo)
             return 0

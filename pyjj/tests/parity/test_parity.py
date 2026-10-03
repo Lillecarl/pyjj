@@ -954,6 +954,65 @@ def test_git_remote_add_list_remove(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("git init", "--git-repo")
+def test_git_init_external_backing_repo(pair: RepoPair) -> None:
+    """`--git-repo` backs the new workspace with an existing git repo,
+    importing its branches -- the only `git init` form that reads
+    history instead of starting empty."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        cli_ws = pair.root / "cli-ws"
+        py_ws = pair.root / "py-ws"
+        pair.op(
+            jj=["git", "init", "--git-repo", str(remote), str(cli_ws)],
+            py=["git", "init", "--git-repo", str(remote), str(py_ws)],
+        )
+        cli_state = pair._extract_repo(cli_ws)
+        py_state = pair._extract_repo(py_ws)
+        assert cli_state == py_state
+        # Anti-vacuity: the import really landed (not two equally
+        # empty repos agreeing with each other).
+        assert any(
+            "main" in commit["bookmarks"]
+            for commit in cli_state["commits"].values()
+        ), cli_state
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
+def _git_config(repo: Path, *args: str) -> str:
+    """One `git config` value from a colocated repo's own git dir."""
+    out = subprocess.run(
+        ["git", "-C", str(repo), "config", *args],
+        capture_output=True, text=True,
+    )
+    return out.stdout.strip()
+
+
+@pytest.mark.covers("git remote add", "--fetch-tags", "--push-url")
+@pytest.mark.covers("git remote set-url", "--fetch", "--push")
+def test_git_remote_add_and_set_url_flags(pair: RepoPair) -> None:
+    """The URL options land in git config, not just the parser: both
+    sides' `remote.origin.pushurl` (and fetch URL) must read the same."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = _make_bare_remote(base)
+        pair.init()
+        pair.op(jj=["git", "remote", "add", "origin", str(remote),
+                    "--fetch-tags", "none", "--push-url", str(remote)])
+        pair.op(jj=["git", "remote", "set-url", "origin",
+                    "--fetch", str(remote), "--push", str(remote)])
+        pair.assert_parity()
+        for key in ("remote.origin.url", "remote.origin.pushurl"):
+            assert _git_config(pair.cli_repo, "--get", key) == \
+                _git_config(pair.py_repo, "--get", key), key
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
+
+
 def bisect_line(pair: RepoPair, count: int) -> None:
     """`count` commits where `n.txt` holds the commit's index."""
     pair.init()

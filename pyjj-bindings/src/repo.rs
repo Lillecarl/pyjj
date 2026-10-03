@@ -985,8 +985,17 @@ impl PyTransaction {
     }
 
     /// `jj git remote add` equivalent.
-    fn git_add_remote(&self, name: &str, url: &str) -> PyResult<()> {
-        with_mut_repo(self, |mut_repo| crate::git::add_remote(mut_repo, name, url))
+    #[pyo3(signature = (name, url, push_url=None, fetch_tags=None))]
+    fn git_add_remote(
+        &self,
+        name: &str,
+        url: &str,
+        push_url: Option<&str>,
+        fetch_tags: Option<&str>,
+    ) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            crate::git::add_remote(mut_repo, name, url, push_url, fetch_tags)
+        })
     }
 
     /// `jj git remote remove` equivalent.

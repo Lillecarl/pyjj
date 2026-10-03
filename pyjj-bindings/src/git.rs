@@ -14,7 +14,8 @@ use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::str_util::StringExpression;
 
 use crate::errors::{
-    map_git_export_err, map_git_fetch_err, map_git_import_err, map_git_push_err, map_py_err,
+    JjError, map_git_export_err, map_git_fetch_err, map_git_import_err, map_git_push_err,
+    map_py_err,
 };
 use crate::settings::PyUserSettings;
 
@@ -182,14 +183,34 @@ pub fn remote_urls(store: &jj_lib::store::Store) -> PyResult<Vec<(String, String
 }
 
 /// Add a Git remote. Runs `git remote add` under the hood (via the Git
-/// backend's on-disk repo), not just an in-memory record.
-pub fn add_remote(mut_repo: &mut MutableRepo, name: &str, url: &str) -> PyResult<()> {
+/// backend's on-disk repo), not just an in-memory record. `push_url` sets
+/// a separate push URL; `fetch_tags` is `"all"`, `"included"` or
+/// `"none"` (`jj git remote add --fetch-tags`, defaulting the way the
+/// CLI does when absent).
+pub fn add_remote(
+    mut_repo: &mut MutableRepo,
+    name: &str,
+    url: &str,
+    push_url: Option<&str>,
+    fetch_tags: Option<&str>,
+) -> PyResult<()> {
+    let tags = match fetch_tags {
+        None => gix::remote::fetch::Tags::default(),
+        Some("all") => gix::remote::fetch::Tags::All,
+        Some("included") => gix::remote::fetch::Tags::Included,
+        Some("none") => gix::remote::fetch::Tags::None,
+        Some(other) => {
+            return Err(JjError::new_err(format!(
+                "invalid fetch-tags mode {other:?} (expected \"all\", \"included\" or \"none\")"
+            )));
+        }
+    };
     git::add_remote(
         mut_repo,
         RemoteName::new(name),
         url,
-        None,
-        gix::remote::fetch::Tags::default(),
+        push_url,
+        tags,
     )
     .map_err(map_py_err)
 }

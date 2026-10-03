@@ -205,6 +205,32 @@ impl PyWorkspace {
         ))
     }
 
+    /// Initialize a new jj workspace backed by an EXISTING git repository
+    /// at `git_repo_path` (`jj git init --git-repo`): the git store lives
+    /// outside the workspace instead of at its root (colocated) or
+    /// inside `.jj` (internal). Imports nothing -- follow with
+    /// `Transaction.git_import_refs()` to pick up its branches and tags,
+    /// the way the CLI's own init does.
+    #[staticmethod]
+    fn init_external_git(
+        settings: &PyUserSettings,
+        workspace_path: String,
+        git_repo_path: String,
+    ) -> PyResult<(Self, PyReadonlyRepo)> {
+        let path = std::path::Path::new(&workspace_path);
+        let git_path = std::path::Path::new(&git_repo_path);
+        let (ws, repo) =
+            pollster::block_on(Workspace::init_external_git(&settings.0, path, git_path))
+                .map_err(map_workspace_init_err)?;
+        let py_repo = wrap_repo(&ws, repo);
+        Ok((
+            Self {
+                inner: Mutex::new(ws),
+            },
+            py_repo,
+        ))
+    }
+
     /// `jj git clone <url> <destination>` equivalent: initializes a new
     /// workspace at `destination_path`, adds `remote_name` (`"origin"` by
     /// default) pointing at `url`, fetches every branch and tag, and --
@@ -264,7 +290,7 @@ impl PyWorkspace {
             let index = repo.readonly_index();
             let view = repo.view();
             let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-            crate::git::add_remote(&mut mut_repo, &remote_name, &url)?;
+            crate::git::add_remote(&mut mut_repo, &remote_name, &url, None, None)?;
             let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit(format!("add git remote {remote_name}")))
                 .map_err(map_transaction_err)?;
