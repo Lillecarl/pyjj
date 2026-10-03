@@ -24,6 +24,15 @@ monorepo-specific — it stays accurate regardless of where this repo lives.
 When bumping the `jj-lib` crates.io version in `pyjj-bindings/Cargo.toml`,
 re-check this section against that release's actual behavior/changelog.
 
+## Dogfooding: pyjj only
+
+Every VCS operation in this repo goes through `pyjj`, never `jj` or
+`git` -- status, log, diff, split, describe, push, all of it. The gaps
+are the point: each time `pyjj` cannot do what the task needs, that is
+a bug report (or a CTF challenge), not a reason to reach for `jj`.
+`jj` on PATH exists for the parity suite to compare against, not for
+daily use.
+
 ## Fast local loop
 
 For iterating on the Rust bindings, use `shells.default` (entered via
