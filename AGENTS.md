@@ -605,7 +605,6 @@ Deliberately excluded, with the reason:
 | `hunk`, `templates` | pyjj-cli's own commands; `jj` has no such subcommand, so there is no other side to compare against. Covered by unit tests instead |
 | `op integrate` | needs an operation created concurrently elsewhere; the harness runs one operation at a time |
 | `workspace update-stale` | has to run inside the stale workspace, and `op()` runs with the primary repo as cwd and prepends its own `-R`, which jj rejects a second one of |
-| `converge` | new in jj 0.45 (divergence-resolution heuristics + prompts); marked `UNIMPLEMENTED` until the bindings expose `jj_lib::converge` |
 
 When adding a command or a flag, add its scenario in the same commit.
 Two traps the suite has already caught, worth knowing before you write
@@ -918,6 +917,27 @@ Current state:
   `MutableRepo::transform_descendants` (which this wraps) already rebases
   the specific commits it visits internally; it still leaves a
   pending-rewrite record `Transaction::commit()` asserts must be cleared.
+- **Converge**: `jj converge`'s three `jj_lib::converge` steps, bound
+  1:1 — `ReadonlyRepo.find_divergent_changes(settings, revset) ->
+  list[DivergentChange]` (each with `.change_id`/`.commits`, change-id
+  ordered; empty means no divergence), `TruncatedEvolutionGraph(repo,
+  commits)` + `.converge(author=None, description=None, parents=None,
+  tree=None) -> ConvergeResult` (each attribute a
+  `ConvergedAuthor`/`ConvergedDescription`/`ConvergedParents` with
+  `.solved`/`.value`/`.base_commit`/`.excluded`; `.tree` is an opaque
+  `ConvergeTree` handle until the parents settle), and
+  `Transaction.apply_converge_solution(author, description, parents,
+  tree, change_id, divergent_ids) -> (Commit, num_rebased)`.
+  `rebase_descendants()` is still required before `commit()`, same as
+  every other rewrite here. pyjj-cli implements only the automatic
+  path: where jj would prompt (several divergent changes, or an
+  attribute the heuristics leave unsolved) it prints jj's own
+  could-not message and exits 1, so `--no-interactive` matches jj
+  exactly and the default matches wherever no prompt is needed. The
+  vendored `pyjj-bindings/vendor/revsets.toml` is a verbatim copy of
+  jj's `cli/src/config/revsets.toml` — re-copy it on every pin bump,
+  or defaults added upstream (like `revsets.converge`) silently go
+  missing here.
 - **Fix**: `jj fix` (`jj_lib::fix`) is exposed as two `Transaction` calls
   instead of a Python-callback-into-Rust-trait bridge:
   `fix_enumerate(settings, revset=None, paths=None) -> list[FileToFix]`

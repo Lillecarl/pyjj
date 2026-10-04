@@ -1666,6 +1666,110 @@ def test_rebase_keeps_a_divergent_commit_when_asked(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+# -- converge -----------------------------------------------------------
+
+
+@pytest.mark.covers("converge")
+@pytest.mark.covers("converge", "--no-interactive")
+def test_converge_with_no_divergence_reports_success(pair: RepoPair) -> None:
+    """Nothing divergent: both sides exit 0 and write nothing. The bare
+    `converge` never prompts without divergence, so it is safe to run
+    headlessly here too."""
+    chain(pair)
+    pair.op(jj=["converge"])
+    pair.op(jj=["converge", "--no-interactive"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("converge", "--no-interactive")
+def test_converge_resolves_a_divergent_change(pair: RepoPair) -> None:
+    """The `divergence()` fixture's two `btwo` versions share author,
+    description, parents and tree, so the heuristics settle everything
+    and both sides write the same solution with the same rebases."""
+    divergence(pair)
+    pair.op(jj=["converge", "--no-interactive"])
+    pair.assert_parity()
+
+
+def two_divergent_changes(pair: RepoPair) -> None:
+    """Two independent divergent changes, each a describe-rewrite with
+    its predecessor resurrected under a bookmark (`at_operation` with a
+    relative offset resolves per side, so the argv stays identical).
+
+    Operation counts are exact: every `describe`/`bookmark create` is
+    one operation on both sides, and the `files=` writes fold into the
+    following command's implicit snapshot.
+    """
+    pair.init()
+    pair.op(files={"one.txt": b"one\n"}, jj=["describe", "-m", "tone"])
+    pair.op(jj=["new", "-m", "ttwo"])
+    pair.op(files={"two.txt": b"two\n"}, jj=["status"])
+    # Rewriting `tone` rebases `ttwo` onto the rewrite; `@-` is the
+    # snapshot op, where `tone*` still names only the original.
+    pair.op(jj=["describe", "-r", rev("tone"), "-m", "tone-v2"])
+    pair.op(jj=["bookmark", "create", "res-tone", "-r",
+                f'at_operation(@-, {rev("tone")})'])
+    # Same for `ttwo`: `@-` is the bookmark op, where `ttwo*` still
+    # names only the pre-rewrite version.
+    pair.op(jj=["describe", "-r", rev("ttwo"), "-m", "ttwo-v2"])
+    pair.op(jj=["bookmark", "create", "res-ttwo", "-r",
+                f'at_operation(@-, {rev("ttwo")})'])
+
+
+@pytest.mark.covers("converge", "-r")
+@pytest.mark.covers("converge", "--revision")
+def test_converge_r_narrows_the_search_space(pair: RepoPair) -> None:
+    """`-r` restricts the search to one divergent change: solving it
+    leaves the other untouched. Each spelling gets its own operation,
+    since every spelling is its own coverage item."""
+    two_divergent_changes(pair)
+    pair.op(jj=["converge", "-r", rev("tone")])
+    pair.op(jj=["converge", "--revision", rev("ttwo")])
+    pair.assert_parity()
+
+
+def three_way_split(pair: RepoPair) -> None:
+    """One change with three visible versions carrying three distinct
+    descriptions -- the description merge cannot resolve trivially, so
+    `--no-interactive` fails on both sides without writing anything."""
+    pair.init()
+    pair.op(files={"f": b"base\n"}, jj=["status"])
+    pair.op(jj=["describe", "-m", "v1"])
+    pair.op(jj=["describe", "-m", "v2"])
+    pair.op(jj=["describe", "-m", "v3"])
+    # Head is the second bookmark op: `@-`/`@---` walk back to the
+    # describe ops, where each glob still names one version.
+    pair.op(jj=["bookmark", "create", "r2", "-r",
+                'at_operation(@-, description(glob:"v2*"))'])
+    pair.op(jj=["bookmark", "create", "r1", "-r",
+                'at_operation(@---, description(glob:"v1*"))'])
+
+
+@pytest.mark.covers("converge", "--no-interactive")
+def test_converge_without_a_solution_changes_nothing(pair: RepoPair) -> None:
+    """Three descriptions, no trivial merge: both sides refuse with a
+    nonzero exit and the repositories are untouched."""
+    three_way_split(pair)
+    assert pair.op(jj=["converge", "--no-interactive"],
+                   may_fail=True) != 0
+    pair.assert_parity()
+
+
+@pytest.mark.covers("converge", "--no-interactive")
+def test_converge_with_two_changes_refuses_to_choose(pair: RepoPair) -> None:
+    """Two divergent changes and no `-r`: automatic choice is
+    impossible, so both sides fail without writing anything."""
+    three_way_split(pair)
+    pair.op(jj=["new", "-m", "other"])
+    pair.op(files={"other.txt": b"other\n"}, jj=["status"])
+    pair.op(jj=["describe", "-m", "other2"])
+    pair.op(jj=["bookmark", "create", "rother", "-r",
+                'at_operation(@-, description(glob:"other*"))'])
+    assert pair.op(jj=["converge", "--no-interactive"],
+                   may_fail=True) != 0
+    pair.assert_parity()
+
+
 @pytest.mark.covers("duplicate", "-r")
 def test_duplicate_by_the_hidden_revision_flag(pair: RepoPair) -> None:
     """The revisions are positional here. jj hides a `-r` beside them
@@ -2951,11 +3055,6 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 
 UNIMPLEMENTED_ARGV = [
     ["util", "config-schema"],
-    # `converge` resolves divergent changes, interactively by default;
-    # `--no-interactive` is the headless-runnable half. New in jj 0.45,
-    # with heuristics in `jj_lib::converge` the bindings do not expose
-    # yet.
-    ["converge", "--no-interactive"],
 ]
 
 

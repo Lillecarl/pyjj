@@ -29,8 +29,6 @@
     "templates set",
     "templates unset"
   ],
-  "missing_commands": [
-    "converge"
-  ],
+  "missing_commands": [],
   "missing_flags": {}
 }

@@ -9,6 +9,7 @@ mod checkout;
 mod commit;
 mod config;
 mod conflicts;
+mod converge;
 mod errors;
 mod evolution;
 mod file;
@@ -38,6 +39,10 @@ use bisect::{PyBisectStep, PyBisector};
 use evolution::PyEvolutionEntry;
 use bookmark::PyBookmark;
 use commit::{PyCommit, PyReadonlyRepo, PyVerification};
+use converge::{
+    PyConvergeResult, PyConvergeTree, PyConvergedAuthor, PyConvergedDescription,
+    PyConvergedParents, PyDivergentChange, PyTruncatedEvolutionGraph,
+};
 use errors::{
     BackendError, CheckoutError, GitExportError, GitFetchError, GitImportError, GitPushError,
     IndexError, JjError, RepoInitError, RepoLoadError, RevsetEvalError, RevsetParseError,
@@ -119,6 +124,13 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGraphRenderer>()?;
     m.add_class::<PyBisector>()?;
     m.add_class::<PyBisectStep>()?;
+    m.add_class::<PyDivergentChange>()?;
+    m.add_class::<PyTruncatedEvolutionGraph>()?;
+    m.add_class::<PyConvergeResult>()?;
+    m.add_class::<PyConvergeTree>()?;
+    m.add_class::<PyConvergedAuthor>()?;
+    m.add_class::<PyConvergedDescription>()?;
+    m.add_class::<PyConvergedParents>()?;
     m.add_class::<PyEvolutionEntry>()?;
     m.add_class::<PyMoveCommitsStats>()?;
     m.add_class::<crate::opdiff::PyOperationDiff>()?;

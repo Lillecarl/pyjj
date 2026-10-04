@@ -73,12 +73,6 @@
     "--user",
     "--workspace"
   ],
-  "converge": [
-    "(command)",
-    "--no-interactive",
-    "--revision",
-    "-r"
-  ],
   "describe": [
     "--message"
   ],

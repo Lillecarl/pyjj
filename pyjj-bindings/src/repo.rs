@@ -134,6 +134,18 @@ impl PyReadonlyRepo {
         crate::revset::evaluate_revset(self, settings, revision)
     }
 
+    /// `jj converge`'s search half: evaluate `revset` and return the
+    /// divergent changes it matches -- change ids naming two or more
+    /// visible commits -- in change-id order. Empty when there is no
+    /// divergence in the search space.
+    fn find_divergent_changes(
+        &self,
+        settings: &PyUserSettings,
+        revset: &str,
+    ) -> PyResult<Vec<crate::converge::PyDivergentChange>> {
+        crate::converge::divergent_changes_for(self, settings, revset)
+    }
+
     /// Async sibling of `revset()`. See `get_commit_async()`'s docs for why
     /// this runs on tokio's blocking thread pool rather than directly.
     fn revset_async<'py>(
@@ -1329,6 +1341,37 @@ impl PyTransaction {
                 destinations.unwrap_or("mutable()"),
                 paths,
                 check_immutable,
+            )
+        })
+    }
+
+    /// `jj converge`'s write half: record `author`/`description`/`parents`/
+    /// `tree` (all solved -- see `TruncatedEvolutionGraph.converge()`) as
+    /// a new commit carrying `change_id` that supersedes `divergent_ids`,
+    /// rebasing descendants onto it. Returns the solution commit and the
+    /// number of rebased descendants. `rebase_descendants()` is still
+    /// required before `commit()`, same as every other rewrite here.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (author, description, parents, tree, change_id, divergent_ids))]
+    fn apply_converge_solution(
+        &self,
+        author: PySignature,
+        description: String,
+        parents: Vec<PyCommitId>,
+        tree: &crate::converge::PyConvergeTree,
+        change_id: &PyChangeId,
+        divergent_ids: Vec<PyCommitId>,
+    ) -> PyResult<(PyCommit, usize)> {
+        with_mut_repo(self, |mut_repo| {
+            crate::converge::apply_converge_solution(
+                self,
+                mut_repo,
+                author,
+                description,
+                parents,
+                tree,
+                change_id,
+                divergent_ids,
             )
         })
     }
