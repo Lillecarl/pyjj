@@ -6,6 +6,7 @@ import pytest
 
 import pyjj
 from pyjjui import mutations
+from pyjjui.arrange_plan import ArrangeState
 
 from . import testutils
 
@@ -380,3 +381,88 @@ def test_restore_file_overwrites_the_working_copy_path_from_another_commit(
     assert new_wc.id != wc.id  # restore rewrites the working-copy commit
     # the historic source commit is untouched
     assert new_repo.get_commit(historic.id).read_file("a.txt") == b"old\n"
+
+
+def _arrange_state(repo, settings, *descriptions):
+    """An `ArrangeState` over a linear stack resolved by description,
+    keyed by commit hex like the UI layer will hold them."""
+    commits = [
+        repo.resolve_single(settings, f"description(exact:'{d}')")
+        for d in descriptions
+    ]
+    return ArrangeState(
+        {c.id.hex(): [p.hex() for p in c.parent_ids] for c in commits},
+        heads=[commits[-1].id.hex()],
+    )
+
+
+def test_arrange_reorders_a_stack(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    repo, c = testutils.new_child(workspace, repo, settings, b, "C")
+
+    state = _arrange_state(repo, settings, "A", "B", "C")
+    assert state.swap_with_parent(c.id.hex()) is True
+    new_repo = mutations.arrange(workspace, repo, settings, state.to_plan())
+
+    # A <- C <- B now, same change ids, same descriptions.
+    a2 = new_repo.resolve_single(settings, "description(exact:'A')")
+    c2 = new_repo.resolve_single(settings, "description(exact:'C')")
+    b2 = new_repo.resolve_single(settings, "description(exact:'B')")
+    assert [p.hex() for p in c2.parent_ids] == [a2.id.hex()]
+    assert [p.hex() for p in b2.parent_ids] == [c2.id.hex()]
+    assert (a2.change_id, b2.change_id, c2.change_id) == (
+        repo.resolve_single(settings, "description(exact:'A')").change_id,
+        b.change_id,
+        c.change_id,
+    )
+    # The working copy followed its commit through the reorder.
+    assert new_repo.resolve_single(settings, "@").description == "C"
+
+
+def test_arrange_abandons_a_middle_commit(workspace, settings, seeded_repo):
+    repo = seeded_repo
+    b = repo.resolve_single(settings, "description(exact:'B')")
+    repo, _c = testutils.new_child(workspace, repo, settings, b, "C")
+
+    state = _arrange_state(repo, settings, "A", "B", "C")
+    state.set_abandoned(b.id.hex(), True)
+    new_repo = mutations.arrange(workspace, repo, settings, state.to_plan())
+
+    assert new_repo.revset(settings, "description(exact:'B')") == []
+    a2 = new_repo.resolve_single(settings, "description(exact:'A')")
+    c2 = new_repo.resolve_single(settings, "description(exact:'C')")
+    assert [p.hex() for p in c2.parent_ids] == [a2.id.hex()]
+
+
+def test_arrange_keep_with_an_abandoned_parent_moves_up(workspace, settings,
+                                                        seeded_repo):
+    """A kept commit naming an abandoned parent lands on that parent's
+    own parents -- `MutableRepo::new_parents`' abandoned-branch, which
+    `resolve_parents` mirrors."""
+    repo = seeded_repo
+    a = repo.resolve_single(settings, "description(exact:'A')")
+    b = repo.resolve_single(settings, "description(exact:'B')")
+
+    state = _arrange_state(repo, settings, "A", "B")
+    state.set_abandoned(a.id.hex(), True)
+    new_repo = mutations.arrange(workspace, repo, settings, state.to_plan())
+
+    assert new_repo.revset(settings, "description(exact:'A')") == []
+    b2 = new_repo.resolve_single(settings, "description(exact:'B')")
+    assert len(b2.parent_ids) == 1
+    assert new_repo.get_commit(b2.parent_ids[0]).description == ""
+
+
+def test_arrange_noop_plan_rewrites_nothing(workspace, settings, seeded_repo):
+    """A plan that changes no parents and abandons nothing still
+    commits (jj finishes the transaction unconditionally), but every
+    commit keeps its id."""
+    repo = seeded_repo
+    before = {c.id.hex() for c in repo.revset(settings, "description(exact:'A')::")}
+
+    state = _arrange_state(repo, settings, "A", "B")
+    new_repo = mutations.arrange(workspace, repo, settings, state.to_plan())
+
+    assert {c.id.hex() for c in
+            new_repo.revset(settings, "description(exact:'A')::")} == before

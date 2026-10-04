@@ -11,6 +11,8 @@ one thread `run_mutation()` runs it on. `Transaction`/`CommitBuilder` are
 
 import pyjj
 
+from .arrange_plan import PlanEntry, resolve_parents
+
 
 def _sync_working_copy(
     workspace: pyjj.Workspace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings
@@ -330,5 +332,54 @@ def redo(
     tx = repo.start_transaction(settings)
     _undone_op, _restored_op, description = tx.redo()
     new_repo = tx.commit(description)
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
+def arrange(
+    workspace: pyjj.Workspace,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    plan: list[PlanEntry],
+) -> pyjj.ReadonlyRepo:
+    """Execute an arrange plan (`jj arrange`'s confirm step): reorder
+    and/or abandon the planned commits, then rebase everything below
+    them onto the result -- one transaction, undo-able as one
+    operation, described "arrange revisions" like jj's own.
+
+    Mirrors `RewritePlan::execute` in `cli/src/commands/arrange.rs`:
+    the plan already runs parents-before-children
+    (`ArrangeState.to_plan()`), each entry is abandoned outright or
+    rebased onto its parents mapped through the rewrites so far (plus
+    abandoned parents resolving to *their* parents, via
+    `arrange_plan.resolve_parents` -- `MutableRepo::new_parents`),
+    entries whose mapped parents match their current ones are skipped
+    (`parents_changed`), and `rebase_descendants()` settles whatever
+    sat below the plan.
+    """
+    originals = {
+        entry.id: repo.get_commit(pyjj.CommitId(entry.id)) for entry in plan
+    }
+    tx = repo.start_transaction(settings)
+    rewritten: dict[str, str] = {}
+    abandoned: dict[str, list[str]] = {}
+    for entry in plan:
+        original = originals[entry.id]
+        if entry.abandon:
+            tx.abandon_commit(original)
+            abandoned[entry.id] = [p.hex() for p in original.parent_ids]
+            continue
+        mapped = resolve_parents(rewritten, abandoned, entry.parents)
+        current = [p.hex() for p in original.parent_ids]
+        if mapped == current:
+            continue
+        new_commit = (
+            tx.rewrite_commit(settings, original)
+            .set_parents([pyjj.CommitId(hex) for hex in mapped])
+            .write(repo)
+        )
+        rewritten[entry.id] = new_commit.id.hex()
+    tx.rebase_descendants()
+    new_repo = tx.commit("arrange revisions")
     _sync_working_copy(workspace, new_repo, settings)
     return new_repo

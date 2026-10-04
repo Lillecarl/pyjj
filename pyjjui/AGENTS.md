@@ -288,6 +288,20 @@ free that we don't.
   bordered, scrollable `VerticalScroll#detail` below the message) purely
   to support this -- see the op-log bullet above for the one caller that
   uses it.
+- **Arrange (plan model + mutation; screen pending)**: `arrange_plan.py`
+  ports jj's `cli/src/commands/arrange.rs` state machine without any UI
+  or repo access -- `ArrangeState` over `{id: [parents]}` dicts (targets
+  plus context, `external` naming the context), `swap_with_parent`/
+  `swap_with_child` with jj's exactly-one-editable-neighbor guards,
+  `set_abandoned` toggles, `to_plan()` emitting `PlanEntry`s in
+  parents-before-children execution order, `resolve_parents()`
+  mirroring `MutableRepo::new_parents` (rewritten id -> successor,
+  abandoned id -> its own parents, recursively). `mutations.arrange()`
+  executes a plan the way `RewritePlan::execute` does (abandon, or
+  rebase-if-parents-changed against the mapped parents, then
+  `rebase_descendants()`), committing one "arrange revisions"
+  operation. No `ArrangeScreen` yet -- that is stage two, reusing this
+  model verbatim.
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.
