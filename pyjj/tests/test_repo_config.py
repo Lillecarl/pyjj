@@ -303,6 +303,24 @@ def test_config_edit_opens_the_scoped_file(repo_with_topics, monkeypatch):
     assert listed.stdout.splitlines() == ["debug.edited = true"]
 
 
+@pytest.mark.covers("config edit", "--file")
+def test_config_edit_file_opens_the_named_file(repo_with_topics, monkeypatch):
+    """`config edit --file` opens the named file in $EDITOR, creating
+    it and its parents first when missing."""
+    root, home = repo_with_topics
+    target = home / "custom" / "extra.toml"
+    editor = home / "editor.sh"
+    editor.write_text('#!/bin/sh\nprintf \'[debug]\\nfile_edited = true\\n\' >> "$1"\n')
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    monkeypatch.delenv("JJ_EDITOR", raising=False)
+    monkeypatch.delenv("VISUAL", raising=False)
+    result = _run(root, "config", "edit", "--file", str(target),
+                  home=home, check=True)
+    assert result.returncode == 0
+    assert target.exists()
+
+
 def test_config_edit_requires_exactly_one_scope(repo_with_topics):
     """Zero or two scopes is a usage error, the way jj's own parser
     requires exactly one."""

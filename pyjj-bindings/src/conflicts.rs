@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
+use jj_lib::backend::MergedTreeValueExt as _;
 use jj_lib::conflicts::{
     ConflictMarkerStyle, ConflictMaterializeOptions, choose_materialized_conflict_marker_len,
     try_materialize_file_conflict_value, update_from_content,
@@ -74,9 +75,9 @@ pub fn materialize_conflict(
 fn resolve_file_value(
     tree: &jj_lib::merged_tree::MergedTree,
     repo_path: &RepoPathBuf,
-    value: jj_lib::merge::MergedTreeValue,
+    value: jj_lib::backend::MergedTreeValue,
     content: &[u8],
-) -> PyResult<jj_lib::merge::MergedTreeValue> {
+) -> PyResult<jj_lib::backend::MergedTreeValue> {
     let Some(old_file_ids) = value.to_file_merge() else {
         return Err(JjError::new_err(format!(
             "`{}` is conflicted, but not as a plain file -- can't resolve from text",
@@ -378,7 +379,6 @@ pub fn conflicted_paths(commit: &PyCommit) -> PyResult<Vec<(String, usize, usize
                 TreeValue::Symlink(_) => "a symlink",
                 TreeValue::Tree(_) => "a directory",
                 TreeValue::GitSubmodule(_) => "a git submodule",
-                _ => continue,
             };
             if !objects.iter().any(|seen| seen == name) {
                 objects.push(name.to_string());

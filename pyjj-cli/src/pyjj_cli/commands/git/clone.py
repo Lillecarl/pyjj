@@ -48,8 +48,9 @@ def git_clone(args) -> int:
             settings, source, str(dest), remote_name=remote_name,
             colocate=colocate,
             branches=list(getattr(args, "branches", None) or []) or None,
+            tags=list(getattr(args, "tags", None) or []) or None,
             depth=getattr(args, "depth", None),
-            fetch_tags=getattr(args, "fetch_tags", None))
+            object_hash=getattr(args, "object_hash", None))
     except (pyjj.WorkspaceInitError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

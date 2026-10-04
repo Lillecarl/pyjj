@@ -9,4 +9,7 @@ def register(git_sub) -> None:
                    help="Hide the git repo inside .jj instead")
     p.add_argument("--git-repo", dest="git_repo", default=None, metavar="GIT_REPO",
                    help="Use an existing git repository as the backing git repo")
+    p.add_argument("--object-hash", dest="object_hash", default=None,
+                   choices=("sha1", "sha256"), metavar="OBJECT_HASH",
+                   help="Object hash algorithm for the new Git repository")
     p.set_defaults(_handler="pyjj_cli.commands.git.init:git_init")

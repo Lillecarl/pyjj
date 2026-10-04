@@ -14,12 +14,13 @@ Commands:
   bookmark          Manage bookmarks [default alias: b]
   commit            Update the description and create a new change on top [default alias: ci]
   config            Manage config options
+  converge          Converge divergent changes
   describe          Update the change description or other metadata [default alias: desc]
   diff              Compare file contents between two revisions
   diffedit          Touch up the content changes in a revision with a diff editor
   duplicate         Create new changes with the same content as existing ones
   edit              Sets the specified revision as the working-copy revision
-  evolog            Show how a change has evolved over time [aliases: evolution-log]
+  evolog            Show how a change has evolved over time [alias: evolution-log]
   file              File operations
   fix               Update files with formatting fixes or other changes
   gerrit            Interact with Gerrit Code Review
@@ -30,7 +31,7 @@ Commands:
   metaedit          Modify the metadata of a revision without changing its content
   new               Create a new, empty change and (by default) edit it in the working copy
   next              Move the working-copy commit to the child revision
-  operation         Commands for working with the operation log [aliases: op]
+  operation         Commands for working with the operation log [alias: op]
   parallelize       Parallelize revisions by making them siblings
   prev              Change the working copy revision relative to the parent revision
   rebase            Move revisions to different parent(s)
@@ -125,7 +126,7 @@ Global Options:
           Doing that is equivalent to having run concurrent commands starting at the earlier
           operation. There's rarely a reason to do that, but it is possible.
           
-          [aliases: --at-op]
+          [alias: --at-op]
 
       --debug
           Enable debug logging

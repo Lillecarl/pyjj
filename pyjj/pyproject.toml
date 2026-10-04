@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "pyjj"
 description = "Pythonic API for Jujutsu VCS, built on pyjj-bindings"
 requires-python = ">=3.9"
-version = "0.43.0"
+version = "0.45.1"
 license = { text = "Apache-2.0" }
 dependencies = ["pyjj-bindings", "anyio", "pydantic>=2", "pyyaml", "pygraphviz"]
 

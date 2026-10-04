@@ -15,8 +15,11 @@
   ],
   "absorb": [
     "--from",
+    "--interactive",
     "--to",
+    "--tool",
     "-f",
+    "-i",
     "-t"
   ],
   "bisect": [
@@ -69,6 +72,12 @@
   "config unset": [
     "--user",
     "--workspace"
+  ],
+  "converge": [
+    "(command)",
+    "--no-interactive",
+    "--revision",
+    "-r"
   ],
   "describe": [
     "--message"

@@ -187,6 +187,19 @@ impl PyBisector {
                 result: Some("indeterminate".to_string()),
                 commits: Vec::new(),
             },
+            NextStep::Done(BisectionResult::FoundDespiteSkips {
+                bad_commits,
+                possibly_bad,
+            }) => PyBisectStep {
+                kind: "done".to_string(),
+                commit: None,
+                result: Some("found-despite-skips".to_string()),
+                commits: bad_commits
+                    .into_iter()
+                    .chain(possibly_bad)
+                    .map(|commit| self.wrap_commit(commit))
+                    .collect(),
+            },
             NextStep::Done(BisectionResult::Abort) => PyBisectStep {
                 kind: "done".to_string(),
                 commit: None,

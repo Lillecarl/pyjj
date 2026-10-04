@@ -722,6 +722,33 @@ def _split_remote_ref(name: str, default_remote):
         )
     return name, default_remote
 
+
+def _resolve_remote_tags(repo, names, remotes):
+    """`(tag, remote)` pairs a `tag track`/`untrack` names.
+
+    `TAG@REMOTE` resolves exactly; `--remote` supplies the remote for
+    bare names; a bare name with no `--remote` fans out to every remote
+    carrying that tag, which is what jj does when no remote names are
+    given. A bare name no remote carries is an error, not a silent
+    no-op.
+    """
+    pairs = []
+    for name in names:
+        tag, sep, remote = name.rpartition("@")
+        if sep:
+            pairs.append((tag, remote))
+        elif remotes:
+            pairs.append((name, remotes))
+        else:
+            matched = sorted({t.remote for t in repo.remote_tags()
+                              if t.name == name})
+            if not matched:
+                raise CommandError(
+                    f"Tag {name} has no remote; use NAME@REMOTE or --remote"
+                )
+            pairs.extend((name, remote) for remote in matched)
+    return pairs
+
 def _wants_edit(args) -> bool:
     """`--edit`/`--no-edit` for `jj next`/`jj prev`. The last flag wins in
     jj's parser, and argparse's default store_true/store_false pair gives
@@ -892,8 +919,31 @@ def _export_git_refs(tx, ws) -> None:
         return
     # jj resets HEAD first, then exports. HEAD tracks `@`'s first parent,
     # so a command that only moves `@` still has to update it.
-    tx.git_reset_head(ws.workspace_name)
+    tx.git_reset_head(ws.workspace_name, ws.workspace_root)
     tx.git_export_refs()
+
+
+def _advance_if_immutable(tx, settings, ws, repo) -> None:
+    """Create a new mutable working-copy commit when `@` turned immutable.
+
+    Tagging (or otherwise locking) the commit the workspace sits on
+    makes it part of `immutable()`; jj then moves the workspace onto a
+    fresh child with the same tree, in the same transaction, and says
+    so. Symbol-resolution failures are ignored -- the advance is a
+    convenience, and snapshotting keeps the working copy mutable
+    without it, same as upstream.
+    """
+    try:
+        at = [c.hex() for c in tx.revset(settings, "@")]
+        immutable = {c.hex() for c in tx.revset(settings, "immutable()")}
+    except Exception:
+        return
+    if not at or at[0] not in immutable:
+        return
+    child = tx.new_commit(settings, [pyjj.CommitId(at[0])]).write(repo)
+    tx.set_wc_commit(ws.workspace_name, child.id)
+    print("Warning: The working-copy commit became immutable; a new commit "
+          "has been created on top of it.", file=sys.stderr)
 
 
 def _finish(tx, description, settings, ws, base_repo, *,
@@ -912,6 +962,7 @@ def _finish(tx, description, settings, ws, base_repo, *,
         tx.reparent_descendants()
     else:
         tx.rebase_descendants(delete_abandoned_bookmarks)
+    _advance_if_immutable(tx, settings, ws, base_repo)
     _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
@@ -922,6 +973,7 @@ def _restore_view_command(tx, description, settings, ws, repo):
     verbatim from the binding -- for undo/redo it encodes the target op so
     future stack jumps keep working."""
     old_wc_hex = repo.view()[ws.workspace_name]
+    _advance_if_immutable(tx, settings, ws, repo)
     _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)

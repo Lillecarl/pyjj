@@ -7,11 +7,11 @@ use jj_lib::config::{ConfigNamePathBuf, StackedConfig};
 use jj_lib::dsl_util::{AliasDeclarationParser, AliasesMap};
 use jj_lib::fileset::FilesetAliasesMap;
 use jj_lib::repo::Repo as _;
-use jj_lib::repo_path::RepoPathUiConverter;
 use jj_lib::revset::{
     self, ResolvedRevsetExpression, RevsetAliasesMap, RevsetDiagnostics, RevsetExtensions,
     RevsetParseContext, RevsetStreamExt as _, RevsetWorkspaceContext, SymbolResolver,
 };
+use jj_lib::ui_path::RepoPathUiConverter;
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
 use crate::errors::{map_revset_eval_err, map_revset_parse_err};

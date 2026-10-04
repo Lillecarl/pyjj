@@ -223,7 +223,8 @@ class Repo:
         if not os.path.exists(
                 os.path.join(self._workspace.workspace_root, ".git")):
             return
-        transaction.git_reset_head(self._workspace.workspace_name)
+        transaction.git_reset_head(
+            self._workspace.workspace_name, self._workspace.workspace_root)
         transaction.git_export_refs()
 
     def _explain(self, error: BaseException, description: str):

@@ -14,8 +14,7 @@ use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::str_util::StringExpression;
 
 use crate::errors::{
-    JjError, map_git_export_err, map_git_fetch_err, map_git_import_err, map_git_push_err,
-    map_py_err,
+    map_git_export_err, map_git_fetch_err, map_git_import_err, map_git_push_err, map_py_err,
 };
 use crate::settings::PyUserSettings;
 
@@ -94,7 +93,11 @@ pub fn import_refs(mut_repo: &mut MutableRepo) -> PyResult<Py<PyAny>> {
 /// one step behind `@`, because `@` is the commit being written, not a
 /// checked-out one. Does nothing when the workspace has no working-copy
 /// commit in this transaction.
-pub fn reset_head(mut_repo: &mut MutableRepo, workspace_name: &str) -> PyResult<()> {
+pub fn reset_head(
+    mut_repo: &mut MutableRepo,
+    workspace_name: &str,
+    workspace_root: &std::path::Path,
+) -> PyResult<()> {
     use jj_lib::ref_name::WorkspaceNameBuf;
     let name = WorkspaceNameBuf::from(workspace_name);
     let Some(id) = mut_repo.view().get_wc_commit_id(&name).cloned() else {
@@ -102,7 +105,7 @@ pub fn reset_head(mut_repo: &mut MutableRepo, workspace_name: &str) -> PyResult<
     };
     let commit = pollster::block_on(mut_repo.store().get_commit_async(&id))
         .map_err(crate::errors::map_backend_err)?;
-    pollster::block_on(git::reset_head(mut_repo, &commit))
+    pollster::block_on(git::reset_head(mut_repo, name.as_ref(), workspace_root, &commit))
         .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
     Ok(())
 }
@@ -159,7 +162,7 @@ pub fn remote_urls(store: &jj_lib::store::Store) -> PyResult<Vec<(String, String
     let git_repo = git::get_git_repo(store).map_err(map_py_err)?;
     let mut out = Vec::new();
     for name in git_repo.remote_names() {
-        let Some(remote) = git_repo.try_find_remote(&*name) else {
+        let Some(remote) = git_repo.try_find_remote(bstr::BStr::new(&name)) else {
             continue; // an empty [remote "<name>"] section
         };
         let remote = remote.map_err(|err| {
@@ -184,35 +187,14 @@ pub fn remote_urls(store: &jj_lib::store::Store) -> PyResult<Vec<(String, String
 
 /// Add a Git remote. Runs `git remote add` under the hood (via the Git
 /// backend's on-disk repo), not just an in-memory record. `push_url` sets
-/// a separate push URL; `fetch_tags` is `"all"`, `"included"` or
-/// `"none"` (`jj git remote add --fetch-tags`, defaulting the way the
-/// CLI does when absent).
+/// a separate push URL.
 pub fn add_remote(
     mut_repo: &mut MutableRepo,
     name: &str,
     url: &str,
     push_url: Option<&str>,
-    fetch_tags: Option<&str>,
 ) -> PyResult<()> {
-    let tags = match fetch_tags {
-        None => gix::remote::fetch::Tags::default(),
-        Some("all") => gix::remote::fetch::Tags::All,
-        Some("included") => gix::remote::fetch::Tags::Included,
-        Some("none") => gix::remote::fetch::Tags::None,
-        Some(other) => {
-            return Err(JjError::new_err(format!(
-                "invalid fetch-tags mode {other:?} (expected \"all\", \"included\" or \"none\")"
-            )));
-        }
-    };
-    git::add_remote(
-        mut_repo,
-        RemoteName::new(name),
-        url,
-        push_url,
-        tags,
-    )
-    .map_err(map_py_err)
+    git::add_remote(mut_repo, RemoteName::new(name), url, push_url).map_err(map_py_err)
 }
 
 /// Remove a Git remote.
@@ -254,7 +236,7 @@ pub fn track_remote_bookmark(
     bookmark: &str,
 ) -> PyResult<()> {
     let symbol = RefName::new(bookmark).to_remote_symbol(RemoteName::new(remote));
-    mut_repo.track_remote_bookmark(symbol).map_err(map_py_err)
+    pollster::block_on(mut_repo.track_remote_bookmark(symbol)).map_err(map_py_err)
 }
 
 /// Stop tracking `{bookmark}@{remote}`.
@@ -263,29 +245,45 @@ pub fn untrack_remote_bookmark(mut_repo: &mut MutableRepo, remote: &str, bookmar
     mut_repo.untrack_remote_bookmark(symbol);
 }
 
+/// `jj tag track` equivalent for one remote tag: a tracked remote tag
+/// merges into the local tag of the same name on the next fetch.
+pub fn track_remote_tag(
+    mut_repo: &mut MutableRepo,
+    remote: &str,
+    tag: &str,
+) -> PyResult<()> {
+    let symbol = RefName::new(tag).to_remote_symbol(RemoteName::new(remote));
+    pollster::block_on(mut_repo.track_remote_tag(symbol)).map_err(map_py_err)
+}
+
+/// `jj tag untrack` equivalent for one remote tag.
+pub fn untrack_remote_tag(mut_repo: &mut MutableRepo, remote: &str, tag: &str) {
+    let symbol = RefName::new(tag).to_remote_symbol(RemoteName::new(remote));
+    mut_repo.untrack_remote_tag(symbol);
+}
+
 /// The refs one `jj git fetch` asks `remote` for.
 ///
-/// jj builds two expressions a remote, one for bookmarks and one for
-/// tags, and a flag saying whether git may follow tags on its own. The
-/// three cases are `--tracked`, a fetch that names branches or tags, and
-/// a plain fetch.
+/// jj builds two expressions per remote, one for bookmarks and one for
+/// tags. The three cases are `--tracked`, a fetch that names branches
+/// or tags, and a plain fetch.
 ///
-/// A plain fetch reads the remote's own refspec out of the Git config
-/// and asks for no tag, which leaves git's implicit tag following on --
-/// so a tag that a fetched branch reaches still arrives. Naming
-/// anything turns that off, which is why `-b side` brings no tag with
-/// it.
+/// A plain fetch reads the remote's own bookmark refspec out of the Git
+/// config and asks for every tag. Naming anything asks for exactly what
+/// was named, which is why `-b side` brings no tag with it.
 ///
 /// jj also reads `remotes.<name>.fetch-bookmarks` and `fetch-tags` here.
 /// Those are configuration rather than a flag, so this skips them and
-/// falls straight to the Git refspec.
+/// falls straight to the Git refspec (bookmarks) and to "every tag"
+/// (tags, which is what jj itself falls back to when that setting is
+/// absent).
 fn fetch_expressions(
     mut_repo: &MutableRepo,
     remote_name: &RemoteName,
     branches: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     tracked: bool,
-) -> PyResult<(StringExpression, StringExpression, bool)> {
+) -> PyResult<(StringExpression, StringExpression)> {
     if tracked {
         // Only what this repository already tracks, named exactly. A
         // remote bookmark nobody tracks is not asked for again.
@@ -302,7 +300,7 @@ fn fetch_expressions(
                 .map(|(name, _)| StringExpression::exact(name.as_str()))
                 .collect(),
         );
-        return Ok((bookmark, tag, true));
+        return Ok((bookmark, tag));
     }
 
     let is_specific = branches.is_some() || tags.is_some();
@@ -322,9 +320,12 @@ fn fetch_expressions(
     };
     let tag = match tags {
         Some(patterns) => bookmark_expression(Some(patterns))?,
-        None => StringExpression::none(),
+        None if is_specific => StringExpression::none(),
+        // Unspecified fetches every tag -- what jj falls back to when
+        // `remotes.<name>.fetch-tags` is not configured.
+        None => StringExpression::all(),
     };
-    Ok((bookmark, tag, is_specific))
+    Ok((bookmark, tag))
 }
 
 /// `jj git fetch` equivalent: runs `git fetch` (as a subprocess, so it
@@ -350,7 +351,7 @@ pub fn fetch(
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
     let import_options = default_import_options();
 
-    let (bookmark, tag, no_implicit_tags) =
+    let (bookmark, tag) =
         fetch_expressions(mut_repo, remote_name, branches, tags, tracked)?;
     let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
@@ -358,9 +359,8 @@ pub fn fetch(
     let mut git_fetch =
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
-    let fetch_tags = no_implicit_tags.then_some(jj_lib::git::FetchTagsOverride::NoTags);
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, None, fetch_tags)
+        .fetch(remote_name, expanded, &mut callback, None)
         .map_err(map_git_fetch_err)?;
     let stats = pollster::block_on(git_fetch.import_refs()).map_err(map_git_import_err)?;
 
@@ -435,7 +435,6 @@ pub fn fetch_all_inner(
     bookmark: StringExpression,
     tag: StringExpression,
     depth: Option<u32>,
-    fetch_tags: Option<&str>,
 ) -> PyResult<FetchAllResult> {
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
@@ -445,26 +444,13 @@ pub fn fetch_all_inner(
     let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
 
-    // A clone fetches all tags unless told otherwise, which is what git
-    // itself does. `included` means "whatever the remote is configured
-    // for", so it is the one value that sends no override.
-    let tags_override = match fetch_tags {
-        None | Some("all") => Some(jj_lib::git::FetchTagsOverride::AllTags),
-        Some("none") => Some(jj_lib::git::FetchTagsOverride::NoTags),
-        Some("included") => None,
-        Some(other) => {
-            return Err(crate::errors::JjError::new_err(format!(
-                "invalid value for --fetch-tags: {other}"
-            )));
-        }
-    };
     let depth = depth.and_then(std::num::NonZeroU32::new);
 
     let mut git_fetch =
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, depth, tags_override)
+        .fetch(remote_name, expanded, &mut callback, depth)
         .map_err(map_git_fetch_err)?;
     let default_branch = git_fetch
         .get_default_branch(remote_name)
@@ -499,7 +485,6 @@ pub fn fetch_all(
         remote,
         StringExpression::all(),
         StringExpression::all(),
-        None,
         None,
     )?;
     Python::attach(|py| {

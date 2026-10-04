@@ -56,7 +56,17 @@ def workspace_list(args) -> int:
             under = "target"
             if commit_id == view.get(ws.workspace_name):
                 under = "working_copy target"
+            # jj prints the workspace's root path, relative to where
+            # the command runs, between the name and the summary --
+            # `if(root, root.relative())` in the default template. The
+            # workspace running the command shows `.`.
             spans = [(name, "name"), (": ", "")]
+            rel = ws.workspace_path(name)
+            if rel is not None:
+                root = os.path.relpath(
+                    os.path.normpath(os.path.join(ws.repo_path, rel)),
+                    os.getcwd())
+                spans += [(root, "root relative"), (" ", "")]
             spans += [(text, f"{under} {labels}".strip()) for text, labels
                       in _commit_summary_spans(repo, settings, commit, refs)]
             print(render_block([spans], "workspace_list",

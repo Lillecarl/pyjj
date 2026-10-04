@@ -83,6 +83,16 @@ def run(args) -> int:
         expressions = list(args.revisions or []) or [_DEFAULT_REVSET]
         commits = _resolve_all(repo, settings, expressions)
         jobs = _resolve_jobs(settings, args.jobs)
+        ignore_changes = getattr(args, "ignore_changes", False)
+        ignore_errors = getattr(args, "ignore_errors", False)
+        passthrough = getattr(args, "passthrough", False)
+        if passthrough and jobs > 1:
+            raise CommandError(
+                "cannot use --passthrough with more than one job")
+        if ignore_changes and getattr(args, "restore_descendants", False):
+            raise CommandError(
+                "the argument '--ignore-changes' cannot be used with "
+                "'--restore-descendants'")
 
         # `argparse.REMAINDER` keeps a leading `--` separator; jj's clap
         # does not.
@@ -93,7 +103,8 @@ def run(args) -> int:
         spec = " ".join(argv)
 
         tx = _start_transaction(repo, settings)
-        _check_rewritable(tx, settings, commits)
+        if not ignore_changes:
+            _check_rewritable(tx, settings, commits)
 
         subdir = _subdir(ws.workspace_root, args.root)
         pool = pyjj.RunPool(ws.repo_path, jobs, args.clean)
@@ -117,33 +128,50 @@ def run(args) -> int:
                 env["JJ_CHANGE_ID"] = commit.change_id.reverse_hex()
                 env["JJ_COMMIT_ID"] = commit.id.hex()
                 try:
-                    proc = subprocess.run(
-                        argv, cwd=exec_dir, env=env, stdin=subprocess.DEVNULL,
-                        capture_output=True, check=False)
+                    if passthrough:
+                        # Stdout and stderr go straight to the terminal,
+                        # so TTY-aware programs work; stdin stays null.
+                        # There is nothing to buffer and emit afterwards.
+                        proc = subprocess.run(
+                            argv, cwd=exec_dir, env=env,
+                            stdin=subprocess.DEVNULL, check=False)
+                        dirty, tree_id = slot.finish(proc.returncode == 0)
+                    else:
+                        proc = subprocess.run(
+                            argv, cwd=exec_dir, env=env, stdin=subprocess.DEVNULL,
+                            capture_output=True, check=False)
+                        dirty, tree_id = slot.finish(proc.returncode == 0)
                 except OSError as e:
                     slot.finish(False)
                     raise CommandError(f"failed to run `{spec}`: {e}")
-                dirty, tree_id = slot.finish(proc.returncode == 0)
             finally:
                 slot.discard()
 
             # Buffered and emitted whole, so one revision's output never
-            # interleaves with another's.
-            if proc.stdout:
-                sys.stdout.buffer.write(proc.stdout)
-                sys.stdout.buffer.flush()
-            if proc.stderr:
-                sys.stderr.buffer.write(proc.stderr)
-                sys.stderr.buffer.flush()
+            # interleaves with another's. Under `--passthrough` the
+            # streams already went to the terminal, so there is nothing
+            # to emit.
+            if not passthrough:
+                if proc.stdout:
+                    sys.stdout.buffer.write(proc.stdout)
+                    sys.stdout.buffer.flush()
+                if proc.stderr:
+                    sys.stderr.buffer.write(proc.stderr)
+                    sys.stderr.buffer.flush()
             if proc.returncode != 0:
+                if ignore_errors:
+                    # A failed command saves nothing, but the revisions
+                    # that succeed still land atomically at the end --
+                    # and the failure does not touch our own exit code.
+                    continue
                 raise CommandError(
                     f"the command '{spec}' failed with "
                     f"{_status_text(proc.returncode)} for commit "
                     f"{commit.id.hex()}")
-            if dirty and tree_id is not None:
+            if dirty and tree_id is not None and not ignore_changes:
                 new_trees[commit.id.hex()] = tree_id
 
-        if not new_trees:
+        if ignore_changes or not new_trees:
             # The command changed nothing anywhere. jj drops the empty
             # transaction rather than committing it -- `finish()` in
             # `cli/src/cli_util.rs` returns early on `!has_changes()` --

@@ -424,6 +424,12 @@ def add_config_scope_flags(parser: argparse.ArgumentParser) -> None:
                         help="Target the workspace-level config")
 
 
+def add_config_file_flag(parser: argparse.ArgumentParser) -> None:
+    """`--file`: act on the config file at PATH instead of a scope."""
+    parser.add_argument("--file", dest="file", default=None, metavar="PATH",
+                        help="Target the config file at PATH")
+
+
 def add_key_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--key", dest="key", default=None, help=argparse.SUPPRESS)
 

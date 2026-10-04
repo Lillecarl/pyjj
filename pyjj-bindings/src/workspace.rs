@@ -5,13 +5,16 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use jj_lib::commit::Commit;
+use jj_lib::default_backend_factories::{
+    default_backend_factories, default_working_copy_factories, default_working_copy_factory,
+};
 use jj_lib::file_util;
 use jj_lib::ref_name::{RemoteName, WorkspaceNameBuf};
-use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _, StoreFactories};
+use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
 use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
 use jj_lib::transaction::Transaction as JjTransaction;
-use jj_lib::workspace::{Workspace, default_working_copy_factories, default_working_copy_factory};
+use jj_lib::workspace::Workspace;
 use jj_lib::workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _};
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
@@ -167,17 +170,55 @@ impl PyWorkspace {
     }
 }
 
+/// The object hash a new Git repository uses: `--object-hash` when
+/// given, else the `git.object-hash` config (jj's own default is
+/// `"sha1"`).
+fn resolve_object_hash(
+    settings: &PyUserSettings,
+    object_hash: Option<String>,
+) -> PyResult<gix::hash::Kind> {
+    let name = match object_hash {
+        Some(name) => name,
+        None => {
+            let path: jj_lib::config::ConfigNamePathBuf = "git.object-hash"
+                .parse()
+                .map_err(crate::errors::map_py_err)?;
+            match settings.0.config().get::<String>(path) {
+                Ok(value) => value,
+                Err(jj_lib::config::ConfigGetError::NotFound { .. }) => {
+                    "sha1".to_string()
+                }
+                Err(err) => return Err(crate::errors::map_py_err(err)),
+            }
+        }
+    };
+    match name.as_str() {
+        "sha1" => Ok(gix::hash::Kind::Sha1),
+        "sha256" => Ok(gix::hash::Kind::Sha256),
+        _ => Err(JjError::new_err(format!(
+            "invalid value for --object-hash: {name:?} (expected \"sha1\" or \"sha256\")"
+        ))),
+    }
+}
+
 #[pymethods]
 impl PyWorkspace {
     /// Initialize a new jj workspace with an internal git backend at `path`.
     #[staticmethod]
+    #[pyo3(signature = (settings, workspace_path, object_hash=None))]
     fn init_internal_git(
         settings: &PyUserSettings,
         workspace_path: String,
+        object_hash: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
-        let (ws, repo) = pollster::block_on(Workspace::init_internal_git(&settings.0, path))
-            .map_err(map_workspace_init_err)?;
+        let kind = resolve_object_hash(settings, object_hash)?;
+        let (ws, repo) = pollster::block_on(Workspace::init_internal_git(
+            &settings.0,
+            path,
+            kind,
+        ))
+        .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((
             Self {
@@ -189,12 +230,19 @@ impl PyWorkspace {
 
     /// Initialize a new jj workspace with a colocated git repo at `path`.
     #[staticmethod]
+    #[pyo3(signature = (settings, workspace_path, object_hash=None))]
     fn init_colocated_git(
         settings: &PyUserSettings,
         workspace_path: String,
+        object_hash: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
-        let (ws, repo) = pollster::block_on(Workspace::init_colocated_git(&settings.0, path))
+        let kind = resolve_object_hash(settings, object_hash)?;
+        let (ws, repo) = pollster::block_on(Workspace::init_colocated_git(
+            &settings.0,
+            path,
+            kind,
+        ))
         .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((
@@ -250,12 +298,12 @@ impl PyWorkspace {
     /// `branches` restricts what is fetched and picks the working-copy
     /// parent: the first pattern that names one branch exactly and
     /// exists on the remote wins, and the remote's default branch is
-    /// the fallback. `depth` makes a shallow clone. `fetch_tags` is
-    /// `"all"`, `"included"` or `"none"`; a clone defaults to all,
-    /// the way git does.
+    /// the fallback. `tags` narrows the fetched tags the same way
+    /// (`jj git clone --tag`); naming either narrows the whole clone,
+    /// tags included. `depth` makes a shallow clone.
     #[staticmethod]
     #[pyo3(signature = (settings, url, destination_path, remote_name=None, colocate=true,
-                        branches=None, depth=None, fetch_tags=None))]
+                        branches=None, tags=None, depth=None, object_hash=None))]
     fn clone_git(
         py: Python<'_>,
         settings: &PyUserSettings,
@@ -264,8 +312,9 @@ impl PyWorkspace {
         remote_name: Option<String>,
         colocate: bool,
         branches: Option<Vec<String>>,
+        tags: Option<Vec<String>>,
         depth: Option<u32>,
-        fetch_tags: Option<String>,
+        object_hash: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         py.detach(move || {
             let remote_name = remote_name.unwrap_or_else(|| "origin".to_string());
@@ -279,10 +328,19 @@ impl PyWorkspace {
                 ));
             }
 
+            let kind = resolve_object_hash(settings, object_hash)?;
             let (_initial_ws, repo) = if colocate {
-                pollster::block_on(Workspace::init_colocated_git(&settings.0, path))
+                pollster::block_on(Workspace::init_colocated_git(
+                    &settings.0,
+                    path,
+                    kind,
+                ))
             } else {
-                pollster::block_on(Workspace::init_internal_git(&settings.0, path))
+                pollster::block_on(Workspace::init_internal_git(
+                    &settings.0,
+                    path,
+                    kind,
+                ))
             }
             .map_err(map_workspace_init_err)?;
 
@@ -290,7 +348,7 @@ impl PyWorkspace {
             let index = repo.readonly_index();
             let view = repo.view();
             let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-            crate::git::add_remote(&mut mut_repo, &remote_name, &url, None, None)?;
+            crate::git::add_remote(&mut mut_repo, &remote_name, &url, None)?;
             let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit(format!("add git remote {remote_name}")))
                 .map_err(map_transaction_err)?;
@@ -301,7 +359,7 @@ impl PyWorkspace {
             // actually usable for fetching, same as `cli`'s own `git clone`
             // does (`configure_remote`'s "Reload workspace..." comment).
             let op_id = repo.operation().id().clone();
-            let store_factories = StoreFactories::default();
+            let store_factories = default_backend_factories();
             let working_copy_factories = default_working_copy_factories();
             let mut new_ws =
                 Workspace::load(&settings.0, path, &store_factories, &working_copy_factories)
@@ -315,27 +373,38 @@ impl PyWorkspace {
             let index = repo.readonly_index();
             let view = repo.view();
             let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-            let bookmark = crate::git::bookmark_expression(branches.clone())?;
-            // A clone fetches every tag by default, the way git does.
-            // Naming branches narrows the whole clone, though, so jj
-            // stops fetching tags implicitly too.
-            let effective_tags = match (&fetch_tags, &branches) {
-                (Some(mode), _) => mode.clone(),
-                (None, Some(_)) => "none".to_string(),
-                (None, None) => "all".to_string(),
+            // Naming branches or tags narrows the whole clone, the
+            // way `-b`/`--tag` do: unnamed bookmarks are not asked
+            // for at all.
+            let is_specific = branches.is_some() || tags.is_some();
+            let bookmark = match &branches {
+                Some(patterns) => {
+                    crate::git::bookmark_expression(Some(patterns.clone()))?
+                }
+                None if is_specific => {
+                    jj_lib::str_util::StringExpression::none()
+                }
+                None => jj_lib::str_util::StringExpression::all(),
+            };
+            // A clone fetches every tag. Naming branches or tags
+            // narrows the whole clone, tags included -- same
+            // `is_specific` rule jj applies to `--branch`/`--tag`.
+            let tag = match &tags {
+                Some(patterns) => {
+                    crate::git::bookmark_expression(Some(patterns.clone()))?
+                }
+                None if is_specific => {
+                    jj_lib::str_util::StringExpression::none()
+                }
+                None => jj_lib::str_util::StringExpression::all(),
             };
             let fetch_result = crate::git::fetch_all_inner(
                 &mut mut_repo,
                 settings,
                 &remote_name,
                 bookmark,
-                // A clone asks for no tag refspec at all and lets
-                // `--fetch-tags` decide, which is how git itself fetches
-                // tags on a clone. Naming them in the refspec would
-                // fetch them whatever `--fetch-tags` said.
-                jj_lib::str_util::StringExpression::none(),
+                tag,
                 depth,
-                Some(effective_tags.as_str()),
             )?;
 
             // Which branch the working copy starts on. `-b` names it: the
@@ -372,8 +441,7 @@ impl PyWorkspace {
                         if Some(name) == default_name.as_ref() {
                             let symbol = jj_lib::ref_name::RefName::new(name.as_str())
                                 .to_remote_symbol(RemoteName::new(&remote_name));
-                            mut_repo
-                                .track_remote_bookmark(symbol)
+                            pollster::block_on(mut_repo.track_remote_bookmark(symbol))
                                 .map_err(|err| JjError::new_err(err.to_string()))?;
                         }
                         Some(
@@ -419,7 +487,7 @@ impl PyWorkspace {
             pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
             if colocate {
                 let name = new_ws.workspace_name().to_owned();
-                crate::git::reset_head(&mut mut_repo, name.as_str())?;
+                crate::git::reset_head(&mut mut_repo, name.as_str(), path)?;
                 crate::git::export_refs_only(&mut mut_repo)?;
             }
             let tx = JjTransaction::new(mut_repo, &settings.0);
@@ -447,7 +515,7 @@ impl PyWorkspace {
     #[staticmethod]
     fn load(settings: &PyUserSettings, workspace_path: String) -> PyResult<Self> {
         let path = std::path::Path::new(&workspace_path);
-        let store_factories = StoreFactories::default();
+        let store_factories = default_backend_factories();
         let working_copy_factories = default_working_copy_factories();
         let ws = Workspace::load(&settings.0, path, &store_factories, &working_copy_factories)
             .map_err(map_workspace_load_err)?;
@@ -781,7 +849,7 @@ impl PyWorkspace {
             let view = repo.view();
             let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
             for name in &names {
-                pollster::block_on(mut_repo.remove_wc_commit(name))
+                pollster::block_on(mut_repo.remove_workspace(name.as_ref()))
                     .map_err(|err| JjError::new_err(err.to_string()))?;
             }
             let name_refs: Vec<&jj_lib::ref_name::WorkspaceName> =
@@ -789,7 +857,7 @@ impl PyWorkspace {
             workspace_store
                 .forget(&name_refs)
                 .map_err(|err| JjError::new_err(err.to_string()))?;
-            // remove_wc_commit() may abandon a forgotten workspace's discardable
+            // remove_workspace() may abandon a forgotten workspace's discardable
             // wc commit, which is a rewrite that must be rebased away (a no-op
             // if it has no descendants) before Transaction::commit.
             pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;

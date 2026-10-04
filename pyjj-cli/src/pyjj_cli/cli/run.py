@@ -31,4 +31,13 @@ def add_parsers(sub) -> None:
                    action="store_true",
                    help="Preserve the content (not the diff) when rebasing "
                         "descendants")
+    p.add_argument("--ignore-changes", dest="ignore_changes",
+                   action="store_true",
+                   help="Run the command without rewriting any commits")
+    p.add_argument("--ignore-errors", dest="ignore_errors",
+                   action="store_true",
+                   help="Continue with remaining revisions when a command fails")
+    p.add_argument("--passthrough", dest="passthrough",
+                   action="store_true",
+                   help="Pass stdout and stderr directly to the terminal")
     p.set_defaults(_handler="pyjj_cli.commands.run:run")

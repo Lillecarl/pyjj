@@ -34,11 +34,12 @@ def config_edit(args) -> int:
         ("user", getattr(args, "user", False)),
         ("repo", getattr(args, "repo", False)),
         ("workspace", getattr(args, "workspace", False)),
+        ("file", getattr(args, "file", None) is not None),
     ) if flag]
     if len(scopes) != 1:
         if not scopes:
-            print("Error: config edit requires one of --user, --repo "
-                  "or --workspace", file=sys.stderr)
+            print("Error: config edit requires one of --user, --repo, "
+                  "--workspace or --file", file=sys.stderr)
         else:
             first, second = scopes[0], scopes[1]
             print(f"Error: --{first} cannot be used with --{second}",
@@ -47,10 +48,16 @@ def config_edit(args) -> int:
     scope = scopes[0]
     try:
         settings = apply_config_args(pyjj.UserSettings())
-        root = None
-        if scope != "user":
-            root = _workspace_root(args)
-        path = config_path(root, scope, create=True)
+        if scope == "file":
+            from pathlib import Path
+            path = Path(getattr(args, "file"))
+            if path.parent and str(path.parent):
+                path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            root = None
+            if scope != "user":
+                root = _workspace_root(args)
+            path = config_path(root, scope, create=True)
     except (pyjj.JjError, CommandError, OSError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

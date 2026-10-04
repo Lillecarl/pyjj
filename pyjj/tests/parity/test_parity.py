@@ -923,6 +923,21 @@ def test_git_fetch(pair: RepoPair) -> None:
         shutil.rmtree(str(base), ignore_errors=True)
 
 
+GIT_FETCH_TAG_ARGV = [["--tag", "v*"], ["-t", "v*"]]
+
+
+@pytest.mark.covers("git fetch", "--tag", "-t")
+@pytest.mark.parametrize("argv", GIT_FETCH_TAG_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_fetch_tag_spellings(pair: RepoPair, deep_remote, argv) -> None:
+    """`--tag`/`-t` fetches only the tags it names: the branches stay
+    home, and the tag tracks nothing by itself."""
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", str(deep_remote)])
+    pair.op(jj=["git", "fetch", *argv])
+    pair.assert_parity()
+
+
 @pytest.mark.covers("bookmark create")
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("git fetch")
@@ -952,6 +967,21 @@ def test_git_remote_add_list_remove(pair: RepoPair) -> None:
     pair.op(jj=["git", "remote", "list"])
     pair.op(jj=["git", "remote", "remove", "upstream"])
     pair.assert_parity()
+
+
+@pytest.mark.covers("git init", "--object-hash")
+def test_git_init_object_hash_sha256(pair: RepoPair) -> None:
+    """`--object-hash sha256` creates a SHA-256 git repo on both sides;
+    the empty repositories compare equal."""
+    cli_ws = pair.root / "cli-ws"
+    py_ws = pair.root / "py-ws"
+    pair.op(
+        jj=["git", "init", "--object-hash", "sha256", str(cli_ws)],
+        py=["git", "init", "--object-hash", "sha256", str(py_ws)],
+    )
+    cli_state = pair._extract_repo(cli_ws)
+    py_state = pair._extract_repo(py_ws)
+    assert cli_state == py_state
 
 
 @pytest.mark.covers("git init", "--git-repo")
@@ -991,7 +1021,7 @@ def _git_config(repo: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
-@pytest.mark.covers("git remote add", "--fetch-tags", "--push-url")
+@pytest.mark.covers("git remote add", "--push-url")
 @pytest.mark.covers("git remote set-url", "--fetch", "--push")
 def test_git_remote_add_and_set_url_flags(pair: RepoPair) -> None:
     """The URL options land in git config, not just the parser: both
@@ -1001,7 +1031,7 @@ def test_git_remote_add_and_set_url_flags(pair: RepoPair) -> None:
         remote = _make_bare_remote(base)
         pair.init()
         pair.op(jj=["git", "remote", "add", "origin", str(remote),
-                    "--fetch-tags", "none", "--push-url", str(remote)])
+                    "--push-url", str(remote)])
         pair.op(jj=["git", "remote", "set-url", "origin",
                     "--fetch", str(remote), "--push", str(remote)])
         pair.assert_parity()
@@ -1104,6 +1134,48 @@ def test_run_no_op_writes_no_operation(pair: RepoPair, tmp_path) -> None:
     script = run_script(tmp_path, "noop.py", "pass\n")
     pair.op(jj=["run", "-r", rev("one"), sys.executable, script])
     pair.op_restore(1)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--ignore-changes")
+def test_run_ignore_changes_discards_the_result(pair: RepoPair, tmp_path) -> None:
+    """`--ignore-changes` runs the command but rewrites nothing: a
+    script that would append to every file leaves both repos alone."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "append.py",
+        "import pathlib\n"
+        "p = pathlib.Path('base.txt')\n"
+        "p.write_bytes(p.read_bytes() + b'ran\\n')\n",
+    )
+    pair.op(jj=["run", "--ignore-changes", sys.executable, script])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--ignore-errors")
+def test_run_ignore_errors_continues_past_failure(pair: RepoPair, tmp_path) -> None:
+    """`--ignore-errors` keeps going after a failing command, and the
+    failure does not touch the exit code either side reports."""
+    chain(pair)
+    script = run_script(tmp_path, "fail.py", "raise SystemExit(3)\n")
+    pair.op(jj=["run", "-r", rev("one"), "--ignore-errors",
+                sys.executable, script])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--passthrough")
+def test_run_passthrough_still_rewrites(pair: RepoPair, tmp_path) -> None:
+    """`--passthrough` only changes where the command's output goes,
+    not what lands in the repo: the rewrite is identical."""
+    chain(pair)
+    script = run_script(
+        tmp_path, "append.py",
+        "import pathlib\n"
+        "p = pathlib.Path('base.txt')\n"
+        "p.write_bytes(p.read_bytes() + b'ran\\n')\n",
+    )
+    pair.op(jj=["run", "-r", rev("one"), "--passthrough",
+                sys.executable, script])
     pair.assert_parity()
 
 
@@ -2879,6 +2951,11 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 
 UNIMPLEMENTED_ARGV = [
     ["util", "config-schema"],
+    # `converge` resolves divergent changes, interactively by default;
+    # `--no-interactive` is the headless-runnable half. New in jj 0.45,
+    # with heuristics in `jj_lib::converge` the bindings do not expose
+    # yet.
+    ["converge", "--no-interactive"],
 ]
 
 
@@ -3059,6 +3136,54 @@ def test_config_set_then_unset_restores_the_author(pair: RepoPair) -> None:
     pair.op(jj=["config", "set", "--repo", "user.email", "bob@example.com"])
     pair.op(jj=["config", "unset", "--repo", "user.email"])
     pair.op(jj=["new", "-m", "after"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("config set", "--file")
+@pytest.mark.covers("config unset", "--file")
+@pytest.mark.covers("new", "-m")
+def test_config_set_unset_file(pair: RepoPair) -> None:
+    """`--file` targets the named config file directly: set a key
+    through the shared user file, prove a later commit reads it back,
+    then unset through per-side user files.
+
+    The unset needs its own files because both sides share the pair's
+    scratch HOME: one shared file means the second unset finds nothing
+    left to remove. (The two sides can even share a secure config id --
+    init runs under one seed -- so per-side repo files are no safer.)
+    Fresh repos, not the chain template: the template restores by
+    copying, and jj treats a copied repo's config path as no longer a
+    valid `--file` location."""
+    pair.init()
+    shared = str(pair.home / ".config" / "jj" / "config.toml")
+    pair.op(jj=["config", "set", "--file", shared,
+                "user.email", "bob@example.com"])
+    pair.op(jj=["new", "-m", "after"])
+    for side, repo in (("cli", pair.cli_repo), ("py", pair.py_repo)):
+        home = pair.root / f"{side}-home"
+        cfg = home / ".config" / "jj"
+        cfg.mkdir(parents=True, exist_ok=True)
+        (cfg / "config.toml").write_text('user.name = "Bob"\n')
+        env = {**pair._env(bump=False), "HOME": str(home),
+               "XDG_CONFIG_HOME": str(cfg.parent)}
+        if side == "cli":
+            proc = subprocess.run(
+                [pair.jj_bin, "-R", str(repo), "--no-pager",
+                 "config", "unset", "--file", str(cfg / "config.toml"),
+                 "user.name"],
+                capture_output=True, text=True, env=env)
+        else:
+            proc = subprocess.run(
+                [sys.executable, str(DRIVER), str(repo),
+                 "config", "unset", "--file", str(cfg / "config.toml"),
+                 "user.name"],
+                capture_output=True, text=True, env=env, cwd=str(repo))
+        assert proc.returncode == 0, (
+            f"{side} unset --file failed:\n{proc.stdout}\n{proc.stderr}")
+    assert ((pair.root / "cli-home" / ".config" / "jj" / "config.toml")
+            .read_text() == (pair.root / "py-home" / ".config" / "jj"
+                             / "config.toml").read_text())
+    pair.op(jj=["new", "-m", "after-unset"])
     pair.assert_parity()
 
 
@@ -3739,6 +3864,42 @@ def test_tag_list_output_matches(pair: RepoPair) -> None:
     pair.assert_output(["tag", "list"])
 
 
+@pytest.mark.covers("tag list", "--tracked", "-t")
+@pytest.mark.parametrize("flag", ["--tracked", "-t"], ids=["long", "short"])
+def test_tag_list_tracked_spellings(pair: RepoPair, deep_remote, flag) -> None:
+    """`--tracked`/`-t` lists only the tags following a remote."""
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", str(deep_remote)])
+    pair.op(jj=["git", "fetch"])
+    pair.assert_output(["tag", "list", flag])
+
+
+@pytest.mark.covers("tag list", "--remote")
+def test_tag_list_remote(pair: RepoPair, deep_remote) -> None:
+    """`--remote` narrows the remotes whose tags are shown."""
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", str(deep_remote)])
+    pair.op(jj=["git", "fetch"])
+    pair.assert_output(["tag", "list", "--remote", "origin"])
+
+
+@pytest.mark.covers("tag track")
+@pytest.mark.covers("tag track", "--remote")
+@pytest.mark.covers("tag untrack")
+@pytest.mark.covers("tag untrack", "--remote")
+def test_tag_track_and_untrack(pair: RepoPair, deep_remote) -> None:
+    """Tracking makes the local tag follow the remote one; untracking
+    stops it. Bare and `--remote` spellings select the same tag."""
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", str(deep_remote)])
+    pair.op(jj=["git", "fetch"])
+    pair.op(jj=["tag", "untrack", "v1"])
+    pair.op(jj=["tag", "track", "v1"])
+    pair.op(jj=["tag", "untrack", "v1", "--remote", "origin"])
+    pair.op(jj=["tag", "track", "v1", "--remote", "origin"])
+    pair.assert_parity()
+
+
 @pytest.mark.covers("util backend name")
 def test_util_backend_name_output_matches(pair: RepoPair) -> None:
     chain(pair)
@@ -4005,6 +4166,36 @@ def test_git_push_matches_a_bookmark_pattern(pair: RepoPair) -> None:
         pair.op(jj=["bookmark", "create", "feature-two"])
         pair.op(jj=["bookmark", "create", "other"])
         pair.op(jj=["git", "push", "-b", "feature-*"])
+        pair.assert_parity()
+
+
+GIT_PUSH_TAG_ARGV = [["--tag", "v*"], ["-t", "v*"]]
+
+
+@pytest.mark.covers("git push", "--tag", "-t")
+@pytest.mark.parametrize("argv", GIT_PUSH_TAG_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_push_tag_spellings(pair: RepoPair, argv) -> None:
+    """`--tag`/`-t` takes a glob, not only a name, so one flag pushes
+    a set -- and a pushed tag tracks on the way, like a bookmark."""
+    with push_pair(pair):
+        pair.op(jj=["tag", "set", "v-one"])
+        pair.op(jj=["tag", "set", "v-two"])
+        pair.op(jj=["tag", "set", "other"])
+        pair.op(jj=["git", "push", *argv])
+        pair.assert_parity()
+
+
+@pytest.mark.covers("git push", "--allow-conflicts")
+def test_git_push_allow_conflicts(pair: RepoPair) -> None:
+    """`--allow-conflicts` pushes a commit whose merge conflicts; the
+    validator refuses it without the flag."""
+    with push_pair(pair):
+        pair.op(files={"f.txt": b"left\n"}, jj=["new", "-m", "left"])
+        pair.op(files={"f.txt": b"right\n"}, jj=["new", "@-", "-m", "right"])
+        pair.op(jj=["new", rev("left"), rev("right"), "-m", "merge"])
+        pair.op(jj=["bookmark", "create", "merge"])
+        pair.op(jj=["git", "push", "--allow-conflicts", "-b", "merge"])
         pair.assert_parity()
 
 
@@ -4340,8 +4531,8 @@ def clone_both(pair: RepoPair, source: str, name: str, *argv: str) -> None:
 def make_deep_remote(base: Path) -> Path:
     """A bare remote with two commits on `main` and a second branch.
 
-    `--depth` needs history to cut off, `-b` needs a branch that is not
-    the default one, and `--fetch-tags` needs a tag. The seed is pinned
+    `--depth` needs history to cut off and `-b` needs a branch that is not
+    the default one. The seed is pinned
     the same way `make_bare_remote`'s is, so both sides clone the same
     bytes.
     """
@@ -4430,17 +4621,56 @@ def test_git_clone_shallow(pair: RepoPair, deep_remote) -> None:
     clone_both(pair, f"file://{deep_remote}", "shallow", "--depth", "1")
 
 
-GIT_CLONE_FETCH_TAGS_ARGV = ["all", "included", "none"]
+@pytest.mark.covers("git clone", "--object-hash")
+def test_git_clone_object_hash_sha256(pair: RepoPair, tmp_path) -> None:
+    """`--object-hash sha256` clones a SHA-256 remote into a SHA-256
+    repo on both sides; the file contents are the same either way.
+    Cloning across hash functions fails on both sides too (git
+    refuses), so the remote is created SHA-256 to begin with."""
+    base = Path(tempfile.mkdtemp())
+    try:
+        remote = base / "remote.git"
+        seed = base / "seed"
+        env = {**os.environ, "GIT_AUTHOR_DATE": PIN_TIME,
+               "GIT_COMMITTER_DATE": PIN_TIME, "GIT_EDITOR": "true"}
+        identity = ["-c", "user.email=a@b.c", "-c", "user.name=A",
+                    "-c", "tag.gpgsign=false", "-c", "commit.gpgsign=false"]
+        subprocess.run(["git", "init", "--object-format=sha256",
+                        "--bare", "-b", "main", str(remote)],
+                       check=True, capture_output=True, env=env)
+        subprocess.run(["git", "init", "--object-format=sha256",
+                        "-b", "main", str(seed)],
+                       check=True, capture_output=True, env=env)
+        (seed / "file.txt").write_text("hello\n")
+        subprocess.run(["git", *identity, "add", "file.txt"],
+                       cwd=str(seed), check=True, capture_output=True,
+                       env=env)
+        subprocess.run(["git", *identity, "commit", "-m", "seed"],
+                       cwd=str(seed), check=True, capture_output=True,
+                       env=env)
+        subprocess.run(["git", "push", str(remote), "main"],
+                       cwd=str(seed), check=True, capture_output=True,
+                       env=env)
+        pair.init()
+        clone_both(pair, f"file://{remote}", "sha256",
+                   "--object-hash", "sha256")
+    finally:
+        import shutil
+        shutil.rmtree(str(base), ignore_errors=True)
 
 
-@pytest.mark.covers("git clone", "--fetch-tags")
-@pytest.mark.parametrize("mode", GIT_CLONE_FETCH_TAGS_ARGV)
-def test_git_clone_fetch_tags(pair: RepoPair, deep_remote, mode) -> None:
-    """A clone fetches every tag unless told otherwise, the way git
-    does. `none` fetches none, and `included` leaves it to whatever the
-    remote is configured for."""
+GIT_CLONE_TAG_ARGV = [["--tag", "v1"], ["-t", "v1"]]
+
+
+@pytest.mark.covers("git clone", "--tag", "-t")
+@pytest.mark.parametrize("argv", GIT_CLONE_TAG_ARGV,
+                         ids=lambda a: a[0].lstrip("-"))
+def test_git_clone_one_tag(pair: RepoPair, deep_remote, argv) -> None:
+    """`--tag` fetches only the tags it names: the remote's other refs
+    stay home, the way `-b` narrows branches."""
     pair.init()
-    clone_both(pair, str(deep_remote), f"tags-{mode}", "--fetch-tags", mode)
+    clone_both(pair, str(deep_remote), f"tag-{argv[0].lstrip('-')}",
+               *argv)
 
 
 # -- bookmark set and move -----------------------------------------------------

@@ -80,7 +80,10 @@ def test_skipping_everything_falls_back_to_the_seeded_head(line, settings):
     """Skipping every candidate still reports the head.
 
     The head is seeded bad at construction, so it stays the earliest
-    revision known to be bad even when nothing else was decided.
+    revision known to be bad even when nothing else was decided. jj
+    reports this blur as a distinct outcome (`FoundDespiteSkips`):
+    the seeded head first, then the skipped range that could not be
+    evaluated.
     """
     repo, ids = line
     b = pyjj.Bisector(repo, settings, ["root()..@"])
@@ -90,8 +93,8 @@ def test_skipping_everything_falls_back_to_the_seeded_head(line, settings):
             break
         b.mark(step.commit.id, "skip")
     assert step.kind == "done"
-    assert step.result == "found"
-    assert [c.id.hex() for c in step.commits] == [ids[-1].hex()]
+    assert step.result == "found-despite-skips"
+    assert [c.id.hex() for c in step.commits][0] == ids[-1].hex()
 
 
 def test_empty_range_is_indeterminate(line, settings):

@@ -44,8 +44,7 @@ def git_remote(args) -> int:
             try:
                 tx.git_add_remote(
                     args.name, args.url,
-                    push_url=getattr(args, "push_url", None),
-                    fetch_tags=getattr(args, "fetch_tags", None))
+                    push_url=getattr(args, "push_url", None))
             except pyjj.JjError as e:
                 print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
                 return 1

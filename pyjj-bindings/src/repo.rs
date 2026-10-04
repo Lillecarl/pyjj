@@ -489,8 +489,7 @@ impl PyReadonlyRepo {
     ) -> PyResult<usize> {
         let context = self.id_prefix_context(settings)?;
         let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
-        index
-            .shortest_change_prefix_len(self.inner.as_ref(), &change_id.0)
+        pollster::block_on(index.shortest_change_prefix_len(self.inner.as_ref(), &change_id.0))
             .map_err(map_index_err)
     }
 
@@ -973,9 +972,13 @@ impl PyTransaction {
     /// exports refs, and it keeps `HEAD` one step behind `@` because `@`
     /// is the commit being written rather than a checked-out one. Does
     /// nothing when the workspace has no working-copy commit here.
-    fn git_reset_head(&self, workspace_name: &str) -> PyResult<()> {
+    fn git_reset_head(&self, workspace_name: &str, workspace_root: &str) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
-            crate::git::reset_head(mut_repo, workspace_name)
+            crate::git::reset_head(
+                mut_repo,
+                workspace_name,
+                std::path::Path::new(workspace_root),
+            )
         })
     }
 
@@ -985,16 +988,10 @@ impl PyTransaction {
     }
 
     /// `jj git remote add` equivalent.
-    #[pyo3(signature = (name, url, push_url=None, fetch_tags=None))]
-    fn git_add_remote(
-        &self,
-        name: &str,
-        url: &str,
-        push_url: Option<&str>,
-        fetch_tags: Option<&str>,
-    ) -> PyResult<()> {
+    #[pyo3(signature = (name, url, push_url=None))]
+    fn git_add_remote(&self, name: &str, url: &str, push_url: Option<&str>) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
-            crate::git::add_remote(mut_repo, name, url, push_url, fetch_tags)
+            crate::git::add_remote(mut_repo, name, url, push_url)
         })
     }
 
@@ -1034,6 +1031,21 @@ impl PyTransaction {
     fn git_untrack_remote_bookmark(&self, remote: &str, bookmark: &str) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
             crate::git::untrack_remote_bookmark(mut_repo, remote, bookmark);
+            Ok(())
+        })
+    }
+
+    /// `jj tag track` equivalent for a remote tag.
+    fn git_track_remote_tag(&self, remote: &str, tag: &str) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            crate::git::track_remote_tag(mut_repo, remote, tag)
+        })
+    }
+
+    /// `jj tag untrack` equivalent for a remote tag.
+    fn git_untrack_remote_tag(&self, remote: &str, tag: &str) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            crate::git::untrack_remote_tag(mut_repo, remote, tag);
             Ok(())
         })
     }

@@ -1,6 +1,6 @@
 import argparse
 
-from .flags import Flag, add_config_scope_flags, add_flags
+from .flags import Flag, add_config_file_flag, add_config_scope_flags, add_flags
 
 
 def _config_help(args):
@@ -32,15 +32,18 @@ def add_parsers(sub) -> None:
     p_cfg_list.set_defaults(_handler="pyjj_cli.commands.config.config_list:config_list")
     p_cfg_set = config_sub.add_parser("set", help="Update config file to set the given option")
     add_config_scope_flags(p_cfg_set)
+    add_config_file_flag(p_cfg_set)
     p_cfg_set.add_argument("name", help="Config option name")
     p_cfg_set.add_argument("value", help="Config value")
     p_cfg_set.set_defaults(_handler="pyjj_cli.commands.config.config_set:config_set")
     p_cfg_unset = config_sub.add_parser("unset", help="Update config file to unset the given option")
     add_config_scope_flags(p_cfg_unset)
+    add_config_file_flag(p_cfg_unset)
     p_cfg_unset.add_argument("name", help="Config option name")
     p_cfg_unset.set_defaults(_handler="pyjj_cli.commands.config.config_unset:config_unset")
     p_cfg_edit = config_sub.add_parser("edit", help="Start an editor on a jj config file")
     add_config_scope_flags(p_cfg_edit)
+    add_config_file_flag(p_cfg_edit)
     p_cfg_edit.set_defaults(_handler="pyjj_cli.commands.config.config_edit:config_edit")
     p_cfg_gc = config_sub.add_parser("gc", help="Find and optionally delete repo-level config")
     p_cfg_gc.set_defaults(_handler="pyjj_cli.commands.config.config_gc:config_gc")

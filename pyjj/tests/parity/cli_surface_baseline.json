@@ -22,8 +22,6 @@
     "python",
     "skill",
     "skill path",
-    "tag track",
-    "tag untrack",
     "templates",
     "templates edit",
     "templates get",
@@ -31,6 +29,8 @@
     "templates set",
     "templates unset"
   ],
-  "missing_commands": [],
+  "missing_commands": [
+    "converge"
+  ],
   "missing_flags": {}
 }

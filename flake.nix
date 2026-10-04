@@ -26,7 +26,7 @@
     # against, not whatever `jj` happens to be on PATH. Deliberately left
     # unfollowed: jj builds with the rustPlatform of the nixpkgs *it*
     # pins, which is what its own CI tested that release with.
-    jj-vcs.url = "github:jj-vcs/jj/v0.43.0";
+    jj-vcs.url = "github:jj-vcs/jj/v0.45.1";
   };
 
   # This flake exists only to pin inputs and produce flake.lock for

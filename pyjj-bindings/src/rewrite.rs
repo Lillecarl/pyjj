@@ -112,7 +112,7 @@ fn apply_hunks(
             .unwrap_or(false);
         let file_id = pollster::block_on(store.write_file(&repo_path, &mut new_content.as_slice()))
             .map_err(map_backend_err)?;
-        let value: jj_lib::merge::MergedTreeValue = Merge::normal(TreeValue::File {
+        let value: jj_lib::backend::MergedTreeValue = Merge::normal(TreeValue::File {
             id: file_id,
             executable,
             copy_id: jj_lib::backend::CopyId::placeholder(),
@@ -287,7 +287,7 @@ fn overlay_contents(
                 let file_id =
                     pollster::block_on(store.write_file(&repo_path, &mut bytes.as_slice()))
                         .map_err(map_backend_err)?;
-                let value: jj_lib::merge::MergedTreeValue = Merge::normal(TreeValue::File {
+        let value: jj_lib::backend::MergedTreeValue = Merge::normal(TreeValue::File {
                     id: file_id,
                     executable,
                     copy_id: jj_lib::backend::CopyId::placeholder(),

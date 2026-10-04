@@ -14,12 +14,13 @@ To get started, see the tutorial [`jj help -k tutorial`].
   [1m[32mbookmark[0m          Manage bookmarks [default alias: b]
   [1m[32mcommit[0m            Update the description and create a new change on top [default alias: ci]
   [1m[32mconfig[0m            Manage config options
+  [1m[32mconverge[0m          Converge divergent changes
   [1m[32mdescribe[0m          Update the change description or other metadata [default alias: desc]
   [1m[32mdiff[0m              Compare file contents between two revisions
   [1m[32mdiffedit[0m          Touch up the content changes in a revision with a diff editor
   [1m[32mduplicate[0m         Create new changes with the same content as existing ones
   [1m[32medit[0m              Sets the specified revision as the working-copy revision
-  [1m[32mevolog[0m            Show how a change has evolved over time [aliases: evolution-log]
+  [1m[32mevolog[0m            Show how a change has evolved over time [alias: evolution-log]
   [1m[32mfile[0m              File operations
   [1m[32mfix[0m               Update files with formatting fixes or other changes
   [1m[32mgerrit[0m            Interact with Gerrit Code Review
@@ -30,7 +31,7 @@ To get started, see the tutorial [`jj help -k tutorial`].
   [1m[32mmetaedit[0m          Modify the metadata of a revision without changing its content
   [1m[32mnew[0m               Create a new, empty change and (by default) edit it in the working copy
   [1m[32mnext[0m              Move the working-copy commit to the child revision
-  [1m[32moperation[0m         Commands for working with the operation log [aliases: op]
+  [1m[32moperation[0m         Commands for working with the operation log [alias: op]
   [1m[32mparallelize[0m       Parallelize revisions by making them siblings
   [1m[32mprev[0m              Change the working copy revision relative to the parent revision
   [1m[32mrebase[0m            Move revisions to different parent(s)
@@ -125,7 +126,7 @@ To get started, see the tutorial [`jj help -k tutorial`].
           Doing that is equivalent to having run concurrent commands starting at the earlier
           operation. There's rarely a reason to do that, but it is possible.
           
-          [aliases: --at-op]
+          [alias: --at-op]
 
       [1m[32m--debug[0m
           Enable debug logging

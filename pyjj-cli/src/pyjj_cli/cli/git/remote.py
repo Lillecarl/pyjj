@@ -7,10 +7,6 @@ def register(git_sub) -> None:
     p_add = remote_sub.add_parser("add", help="Add a Git remote")
     p_add.add_argument("name", help="Remote name")
     p_add.add_argument("url", help="Remote URL")
-    p_add.add_argument("--fetch-tags", dest="fetch_tags", default=None,
-                       metavar="FETCH_TAGS",
-                       choices=("all", "included", "none"),
-                       help="Configure when to fetch tags")
     p_add.add_argument("--push-url", dest="push_url", default=None,
                        metavar="PUSH_URL", help="The URL used for push")
     p_add.set_defaults(_handler="pyjj_cli.commands.git.remote:git_remote")

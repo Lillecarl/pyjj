@@ -364,6 +364,11 @@ CATALOGUE: tuple[Entry, ...] = (
       claims=("file search", "-r"), colour="bytes"),
     E("file-search-fileset", ("file", "search", "-p", ".", "two.txt"),
       claims=("file search",), colour="bytes"),
+    E("file-search-name-only", ("file", "search", "--pattern", "ne$",
+                                "--name-only"),
+      claims=("file search", "--name-only"), colour="bytes"),
+    E("file-search-lines", ("file", "search", "-p", ".", "-n"),
+      claims=("file search", "--line-number", "-n"), colour="bytes"),
 
     # -- refs -----------------------------------------------------------
     E("bookmark-list", ("bookmark", "list"), claims=("bookmark list",), colour="bytes"),

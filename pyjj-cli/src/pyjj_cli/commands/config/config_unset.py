@@ -4,23 +4,25 @@ import sys
 import pyjj
 
 from ..common import CommandError
-from .config_set import _scope, _workspace_root
+from .config_set import _scope, _target_path, _workspace_root
 from .paths import config_path, read_config, unset_key, write_config
 
 
 def config_unset(args) -> int:
     """`jj config unset --repo|--user|--workspace <name>`."""
     scope = _scope(args)
-    if scope is None:
-        print("Error: No config target given; pass --user, --repo or --workspace",
-              file=sys.stderr)
+    if scope is None and getattr(args, "file", None) is None:
+        print("Error: No config target given; pass --user, --repo, "
+              "--workspace or --file", file=sys.stderr)
         return 2
     try:
-        root = _workspace_root(args) if scope != "user" else None
-        # Not `create=True`: a key that is not there fails below, and
-        # minting the directory on the way out leaves one jj refuses
-        # to read.
-        path = config_path(root, scope)
+        path = _target_path(args)
+        if path is None:
+            root = _workspace_root(args) if scope != "user" else None
+            # Not `create=True`: a key that is not there fails below, and
+            # minting the directory on the way out leaves one jj refuses
+            # to read.
+            path = config_path(root, scope)
         data = read_config(path)
         if not unset_key(data, args.name):
             print(f'Error: "{args.name}" doesn\'t exist', file=sys.stderr)

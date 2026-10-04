@@ -1,2 +1,2 @@
-base.txt
-one.txt
+base.txt:base
+one.txt:one

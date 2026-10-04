@@ -62,7 +62,8 @@ def git_init(args) -> int:
         else:
             init = (pyjj.Workspace.init_colocated_git if colocate
                     else pyjj.Workspace.init_internal_git)
-            ws, repo = init(settings, str(destination))
+            ws, repo = init(settings, str(destination),
+                            getattr(args, "object_hash", None))
     except pyjj.WorkspaceInitError as e:
         print(f"Error: {e.message}", file=sys.stderr)
         return 1

@@ -63,9 +63,8 @@ def read_config(path) -> dict:
 
 def write_config(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["#:schema https://docs.jj-vcs.dev/latest/config-schema.json", ""]
-    lines += _dump(data, [])
-    path.write_text("\n".join(lines).rstrip("\n") + "\n")
+    text = "\n".join(_dump(data, [])).rstrip("\n")
+    path.write_text(text + "\n" if text else "")
 
 
 def set_key(data: dict, dotted: str, value) -> None:
@@ -80,12 +79,21 @@ def set_key(data: dict, dotted: str, value) -> None:
 
 def unset_key(data: dict, dotted: str) -> bool:
     *tables, leaf = dotted.split(".")
-    node = data
+    nodes = [data]
     for name in tables:
-        node = node.get(name)
+        node = nodes[-1].get(name)
         if not isinstance(node, dict):
             return False
-    return node.pop(leaf, _MISSING) is not _MISSING
+        nodes.append(node)
+    if nodes[-1].pop(leaf, _MISSING) is _MISSING:
+        return False
+    # Drop tables the removal emptied, the way jj's own file edit does:
+    # a `[user]` left with no keys is not written back.
+    for depth in range(len(tables), 0, -1):
+        if nodes[depth]:
+            break
+        del nodes[depth - 1][tables[depth - 1]]
+    return True
 
 
 _MISSING = object()

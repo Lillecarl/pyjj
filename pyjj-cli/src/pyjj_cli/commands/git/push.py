@@ -351,6 +351,7 @@ class _Validator:
         self.repo = repo
         self.settings = settings
         self.allow_empty = getattr(args, "allow_empty", False)
+        self.allow_conflicts = getattr(args, "allow_conflicts", False)
         self.private = ("" if getattr(args, "allow_private", False)
                         else settings.get_string("git.private-commits") or "")
         self.known = [i.hex() for b in repo.remote_bookmarks()
@@ -374,7 +375,7 @@ class _Validator:
                     or not commit.committer.name
                     or not commit.committer.email):
                 reasons.append("has no author and/or committer set")
-            if commit.has_conflict:
+            if commit.has_conflict and not self.allow_conflicts:
                 reasons.append("has conflicts")
             if commit.id.hex() in private_ids:
                 reasons.append("is private")

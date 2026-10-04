@@ -1,1 +1,1 @@
-default: yqymtrmq f966b4d0 two
+default: . yqymtrmq f966b4d0 two

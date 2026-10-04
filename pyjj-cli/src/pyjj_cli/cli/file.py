@@ -48,5 +48,9 @@ def add_parsers(sub) -> None:
     p_fsearch = file_sub.add_parser("search", help="Search for content in files")
     add_revision_flag(p_fsearch, dest="revision", default="@", help="Revision to search in (default: @)")
     p_fsearch.add_argument("-p", "--pattern", dest="pattern", required=True, help="Pattern to search for")
+    p_fsearch.add_argument("--name-only", dest="name_only", action="store_true",
+                           help="Print only the paths of files that contain a match")
+    p_fsearch.add_argument("-n", "--line-number", dest="line_number", action="store_true",
+                           help="Prefix each matched line with its 1-based line number")
     add_flags(p_fsearch, {Flag.FILESETS})
     p_fsearch.set_defaults(_handler="pyjj_cli.commands.file.search:file_search")

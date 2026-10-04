@@ -19,7 +19,7 @@ filtering a shared monorepo tree — see "Reproducible builds" below.
   different kind of project — a Textual app, not a binding layer).
 
 Binding-surface coverage below (API coverage, async model, etc.) was written
-against `jj_lib` 0.43.0 and describes `jj_lib`'s own behavior, not anything
+against `jj_lib` 0.45.1 and describes `jj_lib`'s own behavior, not anything
 monorepo-specific — it stays accurate regardless of where this repo lives.
 When bumping the `jj-lib` crates.io version in `pyjj-bindings/Cargo.toml`,
 re-check this section against that release's actual behavior/changelog.
@@ -132,7 +132,7 @@ both forms compose.
 
 ## jj CLI parity coverage
 
-Every command the pinned `jj` (0.43) offers has a scenario in
+Every command the pinned `jj` (0.45) offers has a scenario in
 `pyjj/tests/parity/test_parity.py`. A command pyjj-cli does not implement
 yet still has one, marked `UNIMPLEMENTED` (a **strict** xfail): the day
 the command lands, its scenario stops being an expected failure and the
@@ -605,7 +605,7 @@ Deliberately excluded, with the reason:
 | `hunk`, `templates` | pyjj-cli's own commands; `jj` has no such subcommand, so there is no other side to compare against. Covered by unit tests instead |
 | `op integrate` | needs an operation created concurrently elsewhere; the harness runs one operation at a time |
 | `workspace update-stale` | has to run inside the stale workspace, and `op()` runs with the primary repo as cwd and prepends its own `-R`, which jj rejects a second one of |
-| `tag track`, `tag untrack` | pyjj-cli has them; jj 0.43 does not |
+| `converge` | new in jj 0.45 (divergence-resolution heuristics + prompts); marked `UNIMPLEMENTED` until the bindings expose `jj_lib::converge` |
 
 When adding a command or a flag, add its scenario in the same commit.
 Two traps the suite has already caught, worth knowing before you write
@@ -672,7 +672,10 @@ Current state:
 - **Bisect**: `Bisector(repo, settings, ["v1.0..main", ...])` is
   `jj bisect`'s binary search (`jj_lib::bisect`). Call `next_step()` for a
   `BisectStep` -- `kind` `"evaluate"` (test `.commit`) or `"done"`
-  (`.result` is `"found"` with `.commits`, `"indeterminate"`, or
+  (`.result` is `"found"` with `.commits`, `"found-despite-skips"`
+  (the frontier is blurred by skips: `.commits` is the bad commits
+  followed by the possibly-bad ones, the way `jj bisect` prints both
+  lists), `"indeterminate"`, or
   `"abort"`) -- then report the outcome with `mark(id, "good"|"bad"|
   "skip"|"abort")`. `remaining_count()` gives the `(lower, upper)`
   estimate `jj` turns into its "N revisions left to test" line, and the
@@ -731,11 +734,11 @@ Current state:
   (mutate) — a separate namespace from bookmarks, backed by the same
   `jj_lib::op_store::RefTarget`/`RefName` machinery
   (`MutableRepo::set_local_tag_target`/`get_local_tag`,
-  `View::local_tags()`). Real `jj` itself only exposes tags read-only
-  (`jj tag list`, populated by `git_import_refs()` from actual Git tags) —
-  this binding additionally exposes the write side since it's a public,
-  unrestricted `jj_lib` primitive, matching the "expose practically
-  everything `jj_lib` can do" goal even where the CLI is more conservative.
+  `View::local_tags()`). jj 0.45 itself gained tag commands
+  (`tag set`/`track`/`untrack`, previously read-only `tag list`), all
+  bound here; the write side additionally stays available as a public
+  `jj_lib` primitive even where no CLI command reaches it, matching the
+  "expose practically everything `jj_lib` can do" goal.
 - **Working copy**: `Workspace.snapshot(settings)` reads on-disk file state
   into the wc commit's tree and commits that as a new operation (a no-op,
   no new commit/operation, if nothing changed — matches `jj status`'s
@@ -1048,7 +1051,7 @@ Current state:
 
   Building this required fixing the same class of gap the conflict-resolution
   feature hit: `add_workspace`/`forget_workspaces` both call `jj_lib`
-  operations (`MutableRepo::edit`/`remove_wc_commit`) that can abandon a
+  operations (`MutableRepo::edit`/`remove_workspace`) that can abandon a
   now-unreferenced wc commit — a rewrite — which needs
   `rebase_descendants()` called before `Transaction::commit` even when
   there's nothing to actually rebase (`Transaction::commit` asserts no
@@ -1094,7 +1097,9 @@ Current state:
   bookmark merges into the local one of the same name (push uses the
   tracked target as the expected remote position — track before pushing to
   an already-populated remote, or the push may be rejected as
-  non-fast-forward). No progress reporting hooked up
+  non-fast-forward). `.git_track_remote_tag()`/`.git_untrack_remote_tag()`
+  are the tag equivalents (`jj tag track`/`untrack`, new in jj 0.45 — these
+  bindings previously stubbed those commands). No progress reporting hooked up
   (`GitSubprocessCallback` is a silent no-op).
 
   `Workspace.clone_git(settings, url, destination_path, remote_name=
@@ -1105,9 +1110,11 @@ Current state:
   which creates a fresh empty *child* commit on top of the branch, same as
   `jj new <branch>`, not a direct `edit` onto the branch's own commit —
   editing straight onto it would let working-copy edits silently move the
-  bookmark). No URL-based destination-directory auto-detection, no
-  `--branch`/`--tag`/`--depth`/`--object-hash` filtering — always fetches
-  everything, unlike the CLI's more configurable defaults.
+  bookmark). `--branch`/`--tag` narrow the fetch (an unnamed side
+  fetches nothing when the other names something — jj's own
+  `is_specific` rule); `--depth` makes it shallow; `--object-hash`
+  picks the new repo's hash (`git.object-hash` config when absent).
+  No URL-based destination-directory auto-detection here.
 
   **Caveat**: the Git backend's config (including remotes) is cached for
   the lifetime of a `Workspace` object — matches the real CLI, which is a
@@ -1401,7 +1408,9 @@ Current state:
   separately -- a symbol can name different commits, or none at all, on
   the two sides. `ReadonlyRepo.merge_operations(ops)` comes with it: the
   "from" side of a merge operation is its several parents, and they must
-  fold into one operation before a repo view can be loaded from them.
+  fold into one operation before a repo view can be loaded from them
+  (the binding follows `cli`'s own wrapper: merge with no workspace name,
+  description or attributes, and return the merged operation).
   The result names its two sides `before`/`after`, not jj's `from`/`to`,
   because `from` is a Python keyword and an attribute called that would
   be unreachable.
@@ -1623,15 +1632,21 @@ design choice:
 ## Notes
 
 - `pyjj-bindings/Cargo.toml` pins `jj-lib` to a specific crates.io version
-  (currently `0.43.0`) rather than a path dependency into a jj checkout.
-  Bumping it can require source changes on this side too: the move off
-  `~/Code/jj`'s in-progress `lib/` (which was ahead of the last crates.io
-  publish) surfaced that `Workspace::init_internal_git`/
-  `init_colocated_git` had gained a third `gix::hash::Kind` parameter
-  upstream that crates.io's `0.43.0` doesn't have yet — `src/workspace.rs`
-  was adjusted to the published 2-arg signature (defaults to SHA1, same
-  effective behavior). Check for similar API drift whenever bumping the
-  pin.
+  (currently `0.45.1`) rather than a path dependency into a jj checkout.
+  Bumping it can require source changes on this side too: jj 0.45 split
+  core types into a new `jj-core` crate (`MergedTreeValue` moved to
+  `jj_lib::backend`, `RepoPathUiConverter` to `jj_lib::ui_path`),
+  async-ified several primitives (`Commit::is_hidden`,
+  `resolve_change_id`, `track_remote_bookmark`,
+  `shortest_change_prefix_len`), removed `FetchTagsOverride` (tag
+  selection is purely refspec-driven now) and `View::git_head` (now
+  per-workspace `git_heads`), renamed `remove_wc_commit` to async
+  `remove_workspace`, and changed `merge_operations` to commit the merge.
+  `gix` must track jj's own gix line feature-for-feature (see the comment
+  in `Cargo.toml`), and `Workspace::init_*_git`'s third
+  `gix::hash::Kind` parameter (absent from crates.io's `0.43.0`) is now
+  exposed as `--object-hash`. Check for similar API drift whenever
+  bumping the pin.
 - `pyjj-bindings/Cargo.lock` and `pyjj`/`pyjj-cli`/`pyjjui`'s own
   `pyproject.toml`-declared dependencies are independent of each other.
 - If `pyjj-bindings`'s public API shape changes, update `pyjj/pyjj/__init__.py`

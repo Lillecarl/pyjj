@@ -2,9 +2,8 @@ use futures::StreamExt as _;
 use futures::TryStreamExt as _;
 use pyo3::prelude::*;
 
-use jj_lib::backend::{FileId, TreeValue};
+use jj_lib::backend::{FileId, MergedTreeValue, TreeValue};
 use jj_lib::copies::{CopyOperation, CopyRecords};
-use jj_lib::merge::MergedTreeValue;
 use jj_lib::merged_tree::{MergedTree, TreeDiffEntry};
 
 use crate::commit::{PyCommit, PyReadonlyRepo};

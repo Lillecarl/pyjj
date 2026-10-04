@@ -132,8 +132,7 @@ impl PyCommit {
     /// them, which is what `jj evolog` walks. jj marks such a commit
     /// `(hidden)` wherever it prints one.
     fn is_hidden(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
-        self.inner
-            .is_hidden(repo.inner.as_ref())
+        pollster::block_on(self.inner.is_hidden(repo.inner.as_ref()))
             .map_err(crate::errors::map_py_err)
     }
 
@@ -146,9 +145,7 @@ impl PyCommit {
     fn is_divergent(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
         use jj_lib::repo::Repo as _;
 
-        let targets = repo
-            .inner
-            .resolve_change_id(self.inner.change_id())
+        let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
             .map_err(crate::errors::map_py_err)?;
         Ok(targets.is_some_and(|targets| targets.is_divergent()))
     }
@@ -163,9 +160,7 @@ impl PyCommit {
     fn change_offset(&self, repo: &PyReadonlyRepo) -> PyResult<Option<usize>> {
         use jj_lib::repo::Repo as _;
 
-        let targets = repo
-            .inner
-            .resolve_change_id(self.inner.change_id())
+        let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
             .map_err(crate::errors::map_py_err)?;
         Ok(targets.and_then(|targets| targets.find_offset(self.inner.id())))
     }

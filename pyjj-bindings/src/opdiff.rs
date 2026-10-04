@@ -430,7 +430,10 @@ pub fn merge_operations(
     operations: Vec<crate::operation::PyOperation>,
 ) -> PyResult<crate::operation::PyOperation> {
     let ops = operations.into_iter().map(|op| op.0).collect();
-    let merged = pollster::block_on(repo.inner.loader().merge_operations(ops, None))
-        .map_err(map_py_err)?;
-    Ok(crate::operation::PyOperation(merged))
+    let (merged_repo, _num_rebased) =
+        pollster::block_on(repo.inner.loader().merge_operations(ops, None, None, []))
+            .map_err(map_py_err)?;
+    Ok(crate::operation::PyOperation(
+        merged_repo.operation().clone(),
+    ))
 }

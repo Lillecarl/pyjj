@@ -44,6 +44,24 @@ EDITOR = Path(__file__).with_name("editor.py")
 DIFF_TOOL = Path(__file__).with_name("diff_tool.py")
 MERGE_TOOL = Path(__file__).with_name("merge_tool.py")
 
+
+def _install_script(path: Path, source: Path) -> None:
+    """Install one scripted tool: the Python source beside a `/bin/sh`
+    shim that execs it with this interpreter's absolute path.
+
+    The sources carry `#!/usr/bin/env python3` shebangs, which work
+    wherever `/usr/bin/env` exists -- but the Nix sandbox has no
+    `/usr/bin/env`, so executing them there fails with ENOENT. The shim
+    needs only `/bin/sh` (which the sandbox guarantees) and names the
+    running interpreter outright, so no `PATH` lookup happens at all.
+    """
+    path.with_suffix(".py").write_bytes(source.read_bytes())
+    path.write_text(
+        "#!/bin/sh\n"
+        f'exec "{sys.executable}" "{path.with_suffix(".py")}" "$@"\n'
+    )
+    path.chmod(0o755)
+
 PIN_USER = "Alice"
 PIN_EMAIL = "alice@example.com"
 PIN_TIME = "2001-02-03T04:05:06+00:00"
@@ -121,14 +139,11 @@ class RepoPair:
         # the source tree); both CLIs find it via $EDITOR.
         self.editor_bin = root / "bin" / "parity-editor"
         self.editor_bin.parent.mkdir(parents=True, exist_ok=True)
-        self.editor_bin.write_bytes(EDITOR.read_bytes())
-        self.editor_bin.chmod(0o755)
+        _install_script(self.editor_bin, EDITOR)
         self.diff_tool_bin = root / "bin" / "parity-diff-tool"
-        self.diff_tool_bin.write_bytes(DIFF_TOOL.read_bytes())
-        self.diff_tool_bin.chmod(0o755)
+        _install_script(self.diff_tool_bin, DIFF_TOOL)
         self.merge_tool_bin = root / "bin" / "parity-merge-tool"
-        self.merge_tool_bin.write_bytes(MERGE_TOOL.read_bytes())
-        self.merge_tool_bin.chmod(0o755)
+        _install_script(self.merge_tool_bin, MERGE_TOOL)
         # Scratch-home jj config, loaded identically by both sides
         # (load_config=True): registers the scripted diff tool (the
         # dir-based edit protocol split/diffedit use) and two scripted
