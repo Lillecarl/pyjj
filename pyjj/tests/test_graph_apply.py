@@ -284,3 +284,112 @@ def test_json_reports_before_op(topics, tmp_path):
     payload = json.loads(result.stdout)
     assert payload["rolled_back"] is False
     assert _is_full_hex(payload["before_op"])
+
+
+def _mark_abandoned(src: Path, dst: Path, bookmark: str, value="true") -> None:
+    """Set the DOT `abandon` attribute on one node's row."""
+    import pygraphviz
+    graph = pygraphviz.AGraph(filename=str(src))
+    node = next(n for n in graph.nodes()
+                if n.attr["bookmarks"] == bookmark)
+    node.attr["abandon"] = value
+    graph.write(str(dst))
+
+
+def _describes(root, description: str, home) -> bool:
+    """Whether a visible commit still carries a description. The glob
+    absorbs the trailing newline `-m` stores, the way the parity
+    suite's `rev()` helper does -- `exact:` would match nothing."""
+    result = _run(root, "log", "--no-graph", "-r",
+                  f'description(glob:"{description}*")',
+                  "-T", "{{ commit_id }}", home=home)
+    assert result.returncode == 0, result.stderr
+    return bool(result.stdout.strip())
+
+
+def _commit_id(root, revset: str, home) -> str:
+    result = _run(root, "log", "--no-graph", "-r", revset,
+                  "-T", "{{ commit_id }}", home=home)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def test_apply_abandons_a_marked_node(topics, tmp_path):
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _mark_abandoned(current, target, "a")
+
+    result = _run(root, "graph", "apply", str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    assert "Reshaped 1 commits." in result.stdout
+    assert not _describes(root, "topic a", home)
+    assert _describes(root, "topic b", home)
+
+
+def test_apply_abandon_repoints_a_planned_child(topics, tmp_path):
+    """`keepalive` points at abandoned `b` in the graph: it lands on
+    `b`'s own parent `main`, the static grandparent-resolution, not a
+    leftover edge at a vanished commit."""
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _mark_abandoned(current, target, "b")
+
+    result = _run(root, "graph", "apply", str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    assert not _describes(root, "topic b", home)
+    assert _commit_id(root, 'parents(description(glob:"keepalive*"))',
+                      home) == _commit_id(root, "main", home)
+
+
+def test_apply_abandon_and_rebase_together(topics, tmp_path):
+    """One graph both drops `a` and stacks `b`'s child `keepalive`
+    onto `main`: abandons run before any rebase."""
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    import pygraphviz
+    graph = pygraphviz.AGraph(filename=str(current))
+
+    def named(bookmark=None, description=None):
+        if description is not None:
+            return next(n for n in graph.nodes()
+                        if n.attr.get("description") == description)
+        return next(n for n in graph.nodes()
+                    if n.attr["bookmarks"] == bookmark)
+
+    graph.remove_edge(named(description="keepalive"), named("b"))
+    graph.add_edge(named(description="keepalive"), named("main"))
+    named("a").attr["abandon"] = "true"
+    graph.write(str(target))
+
+    result = _run(root, "graph", "apply", str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    assert not _describes(root, "topic a", home)
+    assert _describes(root, "keepalive", home)
+
+
+def test_a_bogus_abandon_value_is_refused(topics, tmp_path):
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _mark_abandoned(current, target, "a", value="sometimes")
+
+    before = _state(root, home)
+    result = _run(root, "graph", "apply", str(target), home=home)
+    assert result.returncode == 2
+    assert "abandon must be" in result.stderr
+    assert _state(root, home) == before
+
+
+def test_plan_prints_abandon_commands(topics, tmp_path):
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _mark_abandoned(current, target, "a")
+
+    result = _run(root, "graph", "plan", str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    assert "pyjj abandon " in result.stdout
+    assert "1 commits reshaped" in result.stderr

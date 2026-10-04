@@ -21,8 +21,8 @@ def plan(args) -> int:
         return 1
 
     try:
-        steps, commits = resolve(repo, settings,
-                                 read_graph(getattr(args, "file")))
+        steps, abandons, commits = resolve(repo, settings,
+                                           read_graph(getattr(args, "file")))
     except CommandError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
@@ -38,6 +38,15 @@ def plan(args) -> int:
                        + [flag for parent in parents for flag in ("-d", parent)],
         }
         for key, parents in steps
+    ] + [
+        {
+            "node": key,
+            "change_id": commits[key].change_id.reverse_hex(),
+            "commit_id": commits[key].id.hex(),
+            "from": [pid.hex() for pid in commits[key].parent_ids],
+            "command": ["abandon", key],
+        }
+        for key in abandons
     ]
 
     if getattr(args, "format", "text") == "json":

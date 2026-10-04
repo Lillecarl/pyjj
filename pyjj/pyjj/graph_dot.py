@@ -48,6 +48,9 @@ class PlanError(ValueError):
     """A graph that cannot become a sequence of rebases."""
 
 
+_ABANDON_VALUES = {"true": True, "1": True, "false": False, "0": False}
+
+
 def resolve_plan(
     nodes: Sequence[str],
     edges: Mapping[str, Sequence[tuple[str, str]]],
@@ -169,6 +172,23 @@ def parse_dot(text: str) -> tuple[list[str], dict[str, list[tuple[str, str]]]]:
     The placeholder nodes `render_dot` writes for ancestors outside the
     graph are dropped: they name a commit the graph is not describing.
     """
+    nodes, edges, _abandoned = parse_dot_graph(text)
+    return nodes, edges
+
+
+def parse_dot_graph(
+    text: str,
+) -> tuple[list[str], dict[str, list[tuple[str, str]]], set[str]]:
+    """`parse_dot` plus the nodes marked for abandon: `(nodes, edges,
+    abandoned)`.
+
+    A node opts into abandonment with an `abandon="true"` attribute
+    (`"1"` also reads as yes, `"false"`/`"0"` as no -- anything else
+    is a `DotError`, since silently misreading intent here deletes
+    history). Every other attribute (the `bookmarks`/`change_id`/...
+    fields `--dot-fields` writes) is ignored: a graph `log --dot`
+    wrote must stay a plannable graph.
+    """
     try:
         graph = pygraphviz.AGraph(string=text)
     except Exception as e:  # pygraphviz raises bare exceptions on a bad parse
@@ -183,4 +203,84 @@ def parse_dot(text: str) -> tuple[list[str], dict[str, list[tuple[str, str]]]]:
         source, target = str(edge[0]), str(edge[1])
         edges.setdefault(source, []).append(
             (target, _EDGE_TYPE.get(edge.attr["style"] or "", "direct")))
-    return nodes, edges
+    abandoned = set()
+    for node in graph.nodes():
+        key = str(node)
+        if key not in nodes:
+            continue
+        raw = (node.attr.get("abandon") or "").strip().lower()
+        if not raw:
+            continue
+        if raw not in _ABANDON_VALUES:
+            raise DotError(
+                f"node {key!r}: abandon must be \"true\" or \"false\", "
+                f"not {raw!r}")
+        if _ABANDON_VALUES[raw]:
+            abandoned.add(key)
+    return nodes, edges, abandoned
+
+
+def resolve_abandons(
+    nodes: Sequence[str],
+    edges: Mapping[str, Sequence[tuple[str, str]]],
+    current: Mapping[str, Sequence[str]],
+    abandoned: set[str],
+) -> tuple[list[str], dict[str, list[tuple[str, str]]], list[str]]:
+    """Fold abandoned nodes out of a target graph: `(nodes, edges,
+    abandons)`.
+
+    Pure, like `resolve_plan`: `current` gives each node's parents as
+    the repository has them now (keys where the graph names the
+    commit, hexes where it only points outside it). The abandoned
+    nodes leave the graph, and every edge that pointed at one is
+    re-pointed at its current parents instead -- the abandonment half
+    of `MutableRepo::new_parents` (an abandoned id becomes its own
+    parents, recursively), computed statically here rather than
+    mid-transaction the way `pyjjui`'s arrange port does it
+    dynamically. A node left pointing at nothing keeps no edge, and a
+    node whose edges all resolve away keeps none either.
+
+    The usual refusals still apply, on the resolved graph: abandoning
+    a commit the graph merely points at rewrites history outside the
+    declared set, and the closure itself must terminate (two nodes
+    abandoned onto each other resolve forever).
+
+    `abandons` comes back in declaration order. Execution runs them
+    before any rebase: with every abandoned reference already
+    re-pointed, the mapping is complete before the first rewrite,
+    which is what makes one transaction enough.
+    """
+    known = set(nodes)
+    for key in sorted(abandoned):
+        if key not in known:
+            raise PlanError(
+                f"node {key!r} is marked abandoned but the graph only "
+                "points at it -- abandoning it would rewrite history "
+                "outside the declared set")
+        if not current.get(key):
+            raise PlanError(f"node {key!r} cannot be abandoned: it has "
+                            "no parents, so it is the root commit")
+
+    def resolve_target(target: str, visiting: frozenset[str]) -> list[str]:
+        if target not in abandoned:
+            return [target]
+        if target in visiting:
+            raise PlanError(
+                "abandoned nodes point at each other through "
+                + ", ".join(sorted(visiting | {target})))
+        return [resolved
+                for parent in current.get(target, [])
+                for resolved in resolve_target(parent, visiting | {target})]
+
+    resolved: dict[str, list[tuple[str, str]]] = {}
+    for key in nodes:
+        if key in abandoned:
+            continue
+        parents: list[tuple[str, str]] = []
+        for target, kind in edges.get(key, []):
+            parents.extend((resolved_target, kind)
+                           for resolved_target in resolve_target(target, frozenset()))
+        resolved[key] = parents
+    kept = [key for key in nodes if key not in abandoned]
+    ordered = [key for key in nodes if key in abandoned]
+    return kept, resolved, ordered

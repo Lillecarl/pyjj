@@ -13,7 +13,8 @@ in whatever order it likes.
 
 import pytest
 
-from pyjj.graph_dot import PlanError, parse_dot, render_dot, resolve_plan
+from pyjj.graph_dot import (PlanError, parse_dot, render_dot, resolve_abandons,
+                            resolve_plan)
 
 
 def _edges(**spec):
@@ -213,3 +214,89 @@ def test_an_indirect_edge_is_still_a_parent_edge():
     items = [("a", [("base", "indirect")])]
     nodes, edges = parse_dot(render_dot(items, {}))
     assert resolve_plan(nodes, edges, {"a": ["other"]}) == [("a", ["base"])]
+
+
+def test_no_abandons_leaves_the_graph_alone():
+    """Without abandon marks this is the identity: same nodes, same
+    edges, nothing to abandon first."""
+    nodes = ["c", "b", "a"]
+    edges = _edges(c=["b"], b=["a"], a=["base"])
+    current = {"c": ["b"], "b": ["a"], "a": ["base"]}
+    assert resolve_abandons(nodes, edges, current, set()) == (
+        nodes, edges, [])
+
+
+def test_an_abandoned_node_leaves_and_children_follow_its_slot():
+    """Abandoning `b` drops it from the graph and re-points `c` at
+    `b`'s own parents -- the static half of `new_parents`, so a child
+    keeps sitting where the abandoned commit sat."""
+    nodes = ["c", "b", "a"]
+    edges = _edges(c=["b"], b=["a"], a=["base"])
+    current = {"c": ["b"], "b": ["a"], "a": ["base"]}
+    kept, resolved, abandons = resolve_abandons(nodes, edges, current, {"b"})
+    assert kept == ["c", "a"]
+    assert abandons == ["b"]
+    assert resolve_plan(kept, resolved, current) == [("c", ["a"])]
+
+
+def test_abandonment_resolves_recursively():
+    """`d` points at abandoned `c`, which points at abandoned `b`:
+    `d` lands on `a`."""
+    nodes = ["d", "c", "b", "a"]
+    edges = _edges(d=["c"], c=["b"], b=["a"], a=["base"])
+    current = {"d": ["c"], "c": ["b"], "b": ["a"], "a": ["base"]}
+    kept, resolved, abandons = resolve_abandons(
+        nodes, edges, current, {"c", "b"})
+    assert kept == ["d", "a"]
+    assert sorted(abandons) == ["b", "c"]
+    assert resolve_plan(kept, resolved, current) == [("d", ["a"])]
+
+
+def test_abandonment_that_meets_again_is_a_repeated_parent():
+    """`y` points at `x` and `w`, both abandoned onto `p`: the
+    resolved graph names `p` twice, which `resolve_plan` refuses
+    like any hand-written duplicate."""
+    nodes = ["y", "x", "w", "p"]
+    edges = _edges(y=["x", "w"], x=["p"], w=["p"], p=["base"])
+    current = {"y": ["x", "w"], "x": ["p"], "w": ["p"], "p": ["base"]}
+    kept, resolved, _abandons = resolve_abandons(
+        nodes, edges, current, {"x", "w"})
+    with pytest.raises(PlanError, match="twice"):
+        resolve_plan(kept, resolved, current)
+
+
+def test_abandoned_nodes_pointing_at_each_other_resolve_forever():
+    """`d` points into two abandoned nodes that point at each other:
+    following the slot never terminates."""
+    nodes = ["d", "a", "b"]
+    edges = _edges(d=["a"], a=["b"], b=["a"])
+    current = {"d": ["a"], "a": ["b"], "b": ["a"]}
+    with pytest.raises(PlanError, match="each other"):
+        resolve_abandons(nodes, edges, current, {"a", "b"})
+
+
+def test_abandoning_a_parent_outside_the_graph_is_refused():
+    """The graph only points at `main`; abandoning it would rewrite
+    history the graph never declared."""
+    nodes = ["a"]
+    edges = _edges(a=["main"])
+    with pytest.raises(PlanError, match="outside the declared set"):
+        resolve_abandons(nodes, edges, {"a": ["base"]}, {"main"})
+
+
+def test_abandoning_the_root_is_refused():
+    with pytest.raises(PlanError, match="root commit"):
+        resolve_abandons(["r"], {}, {"r": []}, {"r"})
+
+
+def test_an_abandoned_nodes_own_edges_are_ignored():
+    """Abandoning drops the node, edges and all: a stale edge off it
+    (the normal state of a hand-edited graph) changes nothing."""
+    nodes = ["b", "a"]
+    edges = _edges(b=["elsewhere"], a=["base"])
+    current = {"b": ["old"], "a": ["base"]}
+    kept, resolved, abandons = resolve_abandons(
+        nodes, edges, current, {"b"})
+    assert kept == ["a"]
+    assert abandons == ["b"]
+    assert resolve_plan(kept, resolved, current) == []

@@ -31,10 +31,12 @@ exports the shape. Edit edges, then:
 - `pyjj graph apply base.dot` — all-or-nothing; conflicts or immutable
   commits roll everything back.
 
-Every step is a rebase: the graph can rearrange parents but cannot
-create commits, so it cannot build a merge-based topology — only
-verify one afterwards via `--dot` export. New commits (merges,
-reverts) come from the commands below or a script, not from a graph.
+Every step is a rebase, plus abandonment: a node with
+`abandon="true"` is dropped and its children re-pointed at its own
+parents. The graph cannot create commits, so it cannot build a
+merge-based topology — only verify one afterwards via `--dot` export.
+New commits (merges, reverts) come from the commands below or a
+script, not from a graph.
 
 Key the graph on **change ids** (`--dot-key change_id`): commit ids are
 content hashes, so a rewrite replaces them and the old one still resolves

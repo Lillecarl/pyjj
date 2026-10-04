@@ -424,15 +424,25 @@ topologically sorts the target and refuses a cycle, a self-parent and a
 repeated parent outright -- jj would otherwise take the first few steps
 before discovering the graph was impossible.
 
-`apply` is all-or-nothing. It records the operation first and restores
-it on **any** exception, not only the predicted ones: a half-applied
-graph is neither the shape that was asked for nor the one that was
-there. Two refusals are the default -- an immutable commit
-(`--ignore-immutable`) and a conflict the reshape introduced
-(`--allow-conflicts`). Each test asserts the commit ids are unchanged
-afterwards rather than trusting the message. A successful apply prints
-the pre-apply operation id (`Restore with: pyjj op restore <id>`, plus
-`before_op` in `--format json`), so the way back is one paste away.
+`apply` is all-or-nothing. It runs the whole reshape -- abandons
+first, then one `move_commits` per step -- in a single transaction,
+tracking each commit through the plan by change id (which survives
+rewrites, where a commit id would go stale behind its hidden
+predecessor), so a failure drops the transaction unwritten and there
+is no half-applied state to roll back. Only a conflict discovered
+*after* committing still restores via `op restore`, since the result
+is already written by then. A node opts into abandonment with an
+`abandon="true"` attribute; `resolve_abandons` in `graph_dot.py`
+folds abandoned nodes out beforehand, re-pointing their children at
+the abandoned commit's own parents (the static half of
+`new_parents` -- `pyjjui`'s arrange port does the same thing
+dynamically mid-transaction). Two refusals are the default -- an
+immutable commit (`--ignore-immutable`) and a conflict the reshape
+introduced (`--allow-conflicts`). Each test asserts the commit ids
+are unchanged afterwards rather than trusting the message. A
+successful apply prints the pre-apply operation id (`Restore with:
+pyjj op restore <id>`, plus `before_op` in `--format json`), so the
+way back is one paste away.
 
 `immutable_heads()` set with `config set --repo` bites, so the
 `graph apply` tests write it the way a user would.
@@ -507,8 +517,10 @@ vocabulary is jj's -- `revision`, `destination`, `into`, `after`,
 **A block is one transaction.** The operations accumulate and the
 transaction becomes an operation only on a clean exit, so a failure
 writes nothing: no half-applied change, and no rollback entry either.
-That is stronger than `graph apply`'s record-and-restore, which needs
-a transaction per step because each rebase re-resolves. A clean exit
+`graph apply` works the same way since its single-transaction
+rewrite (one transaction for abandons plus every rebase step, tracked
+by change id); the difference left is downstream of commit, not of
+failure handling. A clean exit
 also exports git refs on colocated repos (HEAD reset + bookmark/tag
 export, the CLI's own finish behavior) -- without it a scripted
 rewrite leaves `<name>@git` stale behind the moved bookmark -- and
@@ -529,8 +541,8 @@ is the one that sees the block's own writes, and its docstring says
 so; the wrapper exists partly to make that unmissable.
 
 The `except BaseException` in `atomic` is deliberate, for the reason
-`graph apply` records: a rollback covering only predicted errors is
-absent exactly when it is needed.
+`graph apply`'s conflict path still records: a rollback covering only
+predicted errors is absent exactly when it is needed.
 
 `pyjj python` carries the interpreter rather than the logic. pyjj is a
 native extension with its own closure, so outside a Nix shell built

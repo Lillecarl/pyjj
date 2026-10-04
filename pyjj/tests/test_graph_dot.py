@@ -17,7 +17,7 @@ from pathlib import Path
 import pygraphviz
 import pytest
 
-from pyjj.graph_dot import DotError, parse_dot, render_dot
+from pyjj.graph_dot import DotError, parse_dot, parse_dot_graph, render_dot
 from pyjj_cli.commands.common import (
     CommandError,
     dot_attribute,
@@ -120,6 +120,35 @@ def test_a_placeholder_node_is_not_a_row():
     nodes, edges = parse_dot(out)
     assert nodes == ["aa"]
     assert edges["aa"] == [("zz", "missing")]
+
+
+def test_an_abandon_mark_is_read_and_other_attributes_ignored():
+    """`abandon="true"` opts a node out of the reshape; every other
+    attribute (the fields `--dot-fields` writes) stays unread, so a
+    graph `log --dot` wrote remains plannable."""
+    out = render_dot([("aa", []), ("bb", [])], {},
+                     attributes={"aa": {"abandon": "true",
+                                        "bookmarks": "main"}})
+    nodes, edges, abandoned = parse_dot_graph(out)
+    assert set(nodes) == {"aa", "bb"}
+    assert abandoned == {"aa"}
+    # And `parse_dot` itself is unaffected by the attribute.
+    assert parse_dot(out) == (nodes, edges)
+
+
+def test_abandon_false_is_not_abandonment():
+    out = render_dot([("aa", [])], {},
+                     attributes={"aa": {"abandon": "false"}})
+    assert parse_dot_graph(out)[2] == set()
+
+
+def test_a_bogus_abandon_value_is_refused():
+    """Anything but true/false/1/0 misstates intent where history is
+    at stake, so it fails instead of guessing."""
+    out = render_dot([("aa", [])], {},
+                     attributes={"aa": {"abandon": "yes"}})
+    with pytest.raises(DotError, match="abandon must be"):
+        parse_dot_graph(out)
 
 
 def test_a_target_outside_the_rows_gets_a_placeholder_node():
