@@ -10,7 +10,9 @@ from textual.widgets import Footer, Header
 import pyjj
 
 from . import mutations
+from .arrange_plan import ArrangeState
 from .render.diff import render_commit_diff
+from .screens.arrange import ArrangeScreen, describe_plan
 from .screens.confirm import ConfirmScreen
 from .screens.files import FilesScreen
 from .screens.oplog import OpLogScreen
@@ -62,6 +64,7 @@ class PyjjuiApp(App[None]):
         Binding("u", "undo", "Undo"),
         Binding("U", "redo", "Redo"),
         Binding("o", "op_log", "Op Log"),
+        Binding("A", "arrange", "Arrange"),
         Binding("r", "set_revset", "Revset"),
         Binding("R", "refresh_log", "Refresh"),
         Binding("q", "quit", "Quit"),
@@ -232,6 +235,92 @@ class PyjjuiApp(App[None]):
             mutations.rebase, sources, destination, plan.mode, plan.include_descendants
         ):
             log_view.action_clear_marks()
+            await self.action_refresh_log()
+    @work
+    async def action_arrange(self) -> None:
+        """`A` -- arrange the mutable stack: reorder with swaps, abandon
+        some, confirm once for the whole batch (`jj arrange` without
+        leaving the app).
+        """
+        settings = self.state.settings
+        repo = self.state.repo
+        revset = settings.get_string("revsets.arrange")
+        if revset is None:
+            self.notify(
+                "revsets.arrange is not set",
+                title="Cannot arrange",
+                severity="error",
+            )
+            return
+        try:
+            targets = repo.revset(settings, revset)
+        except pyjj.JjError as exc:
+            self.notify(str(exc), title="Cannot arrange", severity="error")
+            return
+        if not targets:
+            self.notify("No revisions to arrange.", title="Cannot arrange")
+            return
+        union = "(" + "|".join(c.id.hex() for c in targets) + ")"
+        try:
+            gaps = repo.revset(settings, f"connected{union} ~ {union}")
+        except pyjj.JjError as exc:
+            self.notify(str(exc), title="Cannot arrange", severity="error")
+            return
+        if gaps:
+            self.notify(
+                "Cannot arrange revset with gaps in. Revision"
+                f" {gaps[0].hex()[:12]} would need to be in the set.",
+                title="Cannot arrange",
+                severity="error",
+            )
+            return
+
+        commits = {c.id.hex(): c for c in targets}
+        parents = {
+            hex: [p.hex() for p in c.parent_ids]
+            for hex, c in commits.items()
+        }
+        external: set[str] = set()
+        for hex, ps in list(parents.items()):
+            for parent in ps:
+                if parent not in parents:
+                    external.add(parent)
+        try:
+            children = repo.revset(settings, f"children{union}")
+        except pyjj.JjError as exc:
+            self.notify(str(exc), title="Cannot arrange", severity="error")
+            return
+        for child in children:
+            hex = child.id.hex()
+            if hex in parents:
+                continue
+            commits[hex] = child
+            parents[hex] = [p.hex() for p in child.parent_ids]
+            external.add(hex)
+        for hex in sorted(external):
+            if hex not in commits:
+                commits[hex] = repo.get_commit(pyjj.CommitId(hex))
+                parents[hex] = [
+                    p.hex() for p in commits[hex].parent_ids
+                ]
+        child_of = set()
+        for ps in parents.values():
+            child_of.update(ps)
+        heads = [c.id.hex() for c in targets if c.id.hex() not in child_of]
+        state = ArrangeState(parents, external=external, heads=heads)
+
+        plan = await self.push_screen_wait(ArrangeScreen(state, commits))
+        if plan is None:
+            return
+        abandoned = sum(1 for entry in plan if entry.abandon)
+        prompt = f"Arrange {len(targets)} commits?"
+        if abandoned:
+            prompt = (f"Arrange {len(targets)} commits, abandoning "
+                      f"{abandoned}?")
+        detail = describe_plan(commits, plan)
+        if not await self._confirm("arrange", prompt, detail=detail):
+            return
+        if await self._run_mutation(mutations.arrange, plan):
             await self.action_refresh_log()
 
     @work

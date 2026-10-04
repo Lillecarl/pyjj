@@ -234,14 +234,22 @@ free that we don't.
   new action and skip the try/except, or a bad revset typed into the UI
   takes the whole app down with it (this actually happened before these
   existed).
+- **`push_screen_wait` needs `@work`**: every action that awaits a modal
+  result (`describe`, `abandon`, `rebase`, `squash`, `duplicate`,
+  `split`, `files`, `arrange`, op-log restore) is `@work`-decorated, and
+  that is load-bearing, not stylistic -- `push_screen_wait` raises
+  `NoActiveWorker` outside a worker, so an undecorated action fails it
+  deterministically in a full-suite run (where no stale worker context
+  survives to mask the bug) while passing standalone.
 - **Confirmation before every history-rewriting mutation**: `describe`,
-  `squash`, `split`, `rebase`, and `duplicate` (alongside `abandon` and
+  `squash`, `split`, `rebase`, `duplicate`, and `arrange` (alongside
+  `abandon` and
   the op-log `restore_operation`, which already had one) each push a
   `ConfirmScreen` naming exactly what's about to happen -- the affected
-  change id(s), and for `describe`/`squash`/`split`/`rebase`
+  change id(s), and for `describe`/`squash`/`split`/`rebase`/`arrange`
   specifically, a preview of the actual effect (`describe`'s new first
   line, `squash`'s destination, `split`'s path count, `rebase`'s mode and
-  destination) -- right before the `_run_mutation()` call, even when the
+  destination, `arrange`'s per-entry moves) -- right before the `_run_mutation()` call, even when the
   action already went through a parameter-picking modal first
   (`rebase`'s mode picker, `split`'s path picker). The two are
   deliberately separate steps, not one merged dialog: the first modal
@@ -268,7 +276,7 @@ free that we don't.
   shows the modal and calls `state.remember_skip(action, result.remember)`
   when a box was checked. Skip state is tracked per action-name string
   (`"describe"`, `"squash"`, `"split"`, `"rebase"`, `"duplicate"`,
-  `"abandon"`) -- deliberately not one global toggle, so skipping squash
+  `"arrange"`, `"abandon"`) -- deliberately not one global toggle, so skipping squash
   confirmations doesn't silently also skip rebase ones.
   `AppState._skipped_confirmations` is a `set[str]`, seeded at startup from
   `pyjjui.config.load_skipped_confirmations()`; `"session"` only adds to
@@ -288,10 +296,10 @@ free that we don't.
   bordered, scrollable `VerticalScroll#detail` below the message) purely
   to support this -- see the op-log bullet above for the one caller that
   uses it.
-- **Arrange (plan model + mutation; screen pending)**: `arrange_plan.py`
-  ports jj's `cli/src/commands/arrange.rs` state machine without any UI
-  or repo access -- `ArrangeState` over `{id: [parents]}` dicts (targets
-  plus context, `external` naming the context), `swap_with_parent`/
+- **Arrange plan model**: `arrange_plan.py` ports jj's
+  `cli/src/commands/arrange.rs` state machine without any UI or repo
+  access -- `ArrangeState` over `{id: [parents]}` dicts (targets plus
+  context, `external` naming the context), `swap_with_parent`/
   `swap_with_child` with jj's exactly-one-editable-neighbor guards,
   `set_abandoned` toggles, `to_plan()` emitting `PlanEntry`s in
   parents-before-children execution order, `resolve_parents()`
@@ -300,8 +308,16 @@ free that we don't.
   executes a plan the way `RewritePlan::execute` does (abandon, or
   rebase-if-parents-changed against the mapped parents, then
   `rebase_descendants()`), committing one "arrange revisions"
-  operation. No `ArrangeScreen` yet -- that is stage two, reusing this
-  model verbatim.
+  operation.
+- **Arrange screen**: `A` opens `screens/arrange.py`'s `ArrangeScreen`
+  over the `revsets.arrange` target set (refusing gappy sets and the
+  empty set up front, like jj), driving the `arrange_plan.ArrangeState`
+  from stage one verbatim -- `j`/`k` move, `J`/`K` swap with
+  parent/child (refusals notify instead of jj's silent no-op),
+  `a`/`p` abandon/keep, `c` confirms the plan through the shared
+  `_confirm("arrange", ...)` gate (with the plan as its detail) into
+  `mutations.arrange()`. Context commits stay in the model for the
+  swap guards but are never displayed and never reach the plan.
 - `src/pyjjui/render/diff.py` — presentation-only diff formatting (built on
   `pyjj_bindings.diff_hunks`); stays here, not a pyjj binding, since it's
   pure UI formatting with no jj_lib logic behind it.

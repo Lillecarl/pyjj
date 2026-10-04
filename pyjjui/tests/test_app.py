@@ -342,6 +342,101 @@ async def test_rebase_modal_cancel_leaves_history_unchanged(app, render):
         assert log_view.row_count == before
 
 
+async def test_arrange_swap_reorders_the_stack(app, render):
+    """`A` opens the arrange screen over the mutable stack; `J` swaps
+    the cursor commit with its parent; `c` confirms through the shared
+    gate and the stack comes out reordered."""
+    from pyjjui.screens.arrange import ArrangeScreen
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        new_repo, c = testutils.new_child(
+            app.state.workspace, app.state.repo, app.state.settings, b, "C"
+        )
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        await pilot.press("A")
+        await pilot.pause()
+        assert isinstance(app.screen, ArrangeScreen)
+        render(app, "arrange-open")
+
+        await pilot.press("J")
+        await pilot.pause()
+        render(app, "arrange-swapped")
+
+        await pilot.press("c")
+        await pilot.pause()
+        render(app, "arrange-confirm")
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-arrange")
+
+        repo = app.state.repo
+        a2 = repo.resolve_single(app.state.settings, "description(exact:'A')")
+        b2 = repo.resolve_single(app.state.settings, "description(exact:'B')")
+        c2 = repo.resolve_single(app.state.settings, "description(exact:'C')")
+        assert [p.hex() for p in c2.parent_ids] == [a2.id.hex()]
+        assert [p.hex() for p in b2.parent_ids] == [c2.id.hex()]
+
+
+async def test_arrange_abandon_drops_the_cursor_commit(app, render):
+    from pyjjui.screens.arrange import ArrangeScreen
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        b = app.state.repo.resolve_single(app.state.settings, "description(exact:'B')")
+        new_repo, _c = testutils.new_child(
+            app.state.workspace, app.state.repo, app.state.settings, b, "C"
+        )
+        app.state.repo = new_repo
+        await app.action_refresh_log()
+        await pilot.pause()
+
+        await pilot.press("A")
+        await pilot.pause()
+        assert isinstance(app.screen, ArrangeScreen)
+
+        await pilot.press("j")  # cursor onto B (order is children-first)
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        render(app, "arrange-abandon-marked")
+
+        await pilot.press("c")
+        await pilot.pause()
+        await pilot.click("#confirm")
+        await pilot.pause()
+        render(app, "after-arrange-abandon")
+
+        repo = app.state.repo
+        assert repo.revset(app.state.settings, "description(exact:'B')") == []
+        a2 = repo.resolve_single(app.state.settings, "description(exact:'A')")
+        c2 = repo.resolve_single(app.state.settings, "description(exact:'C')")
+        assert [p.hex() for p in c2.parent_ids] == [a2.id.hex()]
+
+
+async def test_arrange_cancel_leaves_history_unchanged(app, render):
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log_view = app.query_one(LogView)
+        before = log_view.row_count
+
+        await pilot.press("A")
+        await pilot.pause()
+        await pilot.press("J")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        render(app, "after-arrange-cancel")
+
+        assert log_view.row_count == before
+
+
 async def test_abandon_requires_confirmation(app, render):
     async with app.run_test() as pilot:
         await pilot.pause()
