@@ -1,7 +1,7 @@
 @  movruppx alice@example.com 2001-02-03 09:35:06 32776e39
 │  whitespace
 │  -- operation «op» describe commit 728e9c28bb9da315bdc693ebff60afd1a70537ad
-│  Modified commit description:
+│  Modified JJ-COMMIT-DESCRIPTION:
 │          1: whitespace
 ○  movruppx/1 alice@example.com 2001-02-03 09:35:06 728e9c28 (hidden)
 │  (no description set)

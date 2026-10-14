@@ -44,6 +44,12 @@ def bisect_repo(tmp_path_factory):
         XDG_CONFIG_HOME=str(home / ".config"),
         JJ_USER="tester",
         JJ_EMAIL="tester@example.com",
+        JJ_TIMESTAMP="2001-02-03T04:05:06+00:00",
+        JJ_OP_TIMESTAMP="2001-02-03T04:05:06+00:00",
+        JJ_TZ_OFFSET_MINS="330",
+        # No JJ_RANDOMNESS_SEED: one fixed seed mints the same change
+        # id for every new commit, turning the repo divergent (the
+        # parity harness bumps it per step for exactly this reason).
         NO_COLOR="1",
     )
     jj = os.environ.get("PYJJ_PARITY_JJ") or "jj"
@@ -95,7 +101,7 @@ def test_bisect_run_finds_the_first_bad_revision(bisect_repo, scripts):
                           "n = int(pathlib.Path('n.txt').read_text())\n"
                           f"sys.exit(1 if n >= {CUTOFF} else 0)\n")
 
-    result = run_pyjj(root, env, "bisect", "run", "--range", "root()..@",
+    result = run_pyjj(root, env, "bisect", "run", "--trust-endpoints", "--range", "root()..@",
                       sys.executable, script)
     assert result.returncode == 0, result.stderr + result.stdout
     # The exact revision, not just the message -- otherwise a broken
@@ -104,6 +110,8 @@ def test_bisect_run_finds_the_first_bad_revision(bisect_repo, scripts):
     assert "The first bad revision is:" in result.stdout
     assert "Bisecting:" in result.stdout
     assert "Now evaluating:" in result.stdout
+    # `--trust-endpoints` skips the pre-bisection checks entirely.
+    assert "Pre-bisection check:" not in result.stdout
     assert "Search complete." in result.stdout
     assert "jj op restore " in result.stdout
 
@@ -120,7 +128,7 @@ def test_bisect_run_sets_the_target_env_var(bisect_repo, scripts, tmp_path_facto
         "n = int(pathlib.Path('n.txt').read_text())\n"
         f"sys.exit(1 if n >= {CUTOFF} else 0)\n",
     )
-    result = run_pyjj(root, env, "bisect", "run", "--range", "root()..@",
+    result = run_pyjj(root, env, "bisect", "run", "--trust-endpoints", "--range", "root()..@",
                       sys.executable, script)
     assert result.returncode == 0, result.stderr + result.stdout
     recorded = log.read_text().split()
@@ -141,7 +149,7 @@ def test_bisect_run_aborts_on_127(bisect_repo, scripts):
     """Exit 127 means 'command not found' and stops the bisection."""
     root, env, _ids = bisect_repo
     script = write_script(scripts, "abort.py", "import sys\nsys.exit(127)\n")
-    result = run_pyjj(root, env, "bisect", "run", "--range", "root()..@",
+    result = run_pyjj(root, env, "bisect", "run", "--trust-endpoints", "--range", "root()..@",
                       sys.executable, script)
     assert result.returncode != 0
     assert "aborting bisection" in result.stdout
@@ -152,10 +160,11 @@ def test_bisect_run_skip_is_not_bad(bisect_repo, scripts):
     """Exit 125 skips rather than marking the revision bad."""
     root, env, _ids = bisect_repo
     script = write_script(scripts, "skip.py", "import sys\nsys.exit(125)\n")
-    result = run_pyjj(root, env, "bisect", "run", "--range", "root()..@",
+    result = run_pyjj(root, env, "bisect", "run", "--trust-endpoints", "--range", "root()..@",
                       sys.executable, script)
     assert result.returncode == 0, result.stderr + result.stdout
     assert "could not be determined" in result.stdout
+    assert "These revisions may also be" in result.stdout
 
 
 def test_bisect_run_find_good_inverts(bisect_repo, scripts):
@@ -170,3 +179,29 @@ def test_bisect_run_find_good_inverts(bisect_repo, scripts):
     assert result.returncode == 0, result.stderr + result.stdout
     assert "The first good revision is:" in result.stdout
     assert ids[CUTOFF][:8] in result.stdout, result.stdout
+
+
+def test_bisect_run_verifies_endpoints_by_default(bisect_repo, scripts):
+    """Without `--trust-endpoints`, an endpoint that evaluates against
+    its assumption fails the run before the search starts (jj 0.46).
+
+    The range root has no `n.txt`, so the predicate crashes there --
+    expected good, actually bad.
+    """
+    root, env, _ids = bisect_repo
+    script = write_script(scripts, "check.py",
+                          "import pathlib, sys\n"
+                          "n = int(pathlib.Path('n.txt').read_text())\n"
+                          f"sys.exit(1 if n >= {CUTOFF} else 0)\n")
+    result = run_pyjj(root, env, "bisect", "run", "--range", "root()..@",
+                      sys.executable, script)
+    assert result.returncode != 0
+    assert "Pre-bisection check: ensuring this revision is bad:" in result.stdout
+    assert "Pre-bisection check: ensuring this revision is good:" in result.stdout
+    assert ("Cannot bisect: this revision was expected to be good, "
+            "but was bad") in result.stdout
+    assert "Search complete." in result.stdout
+    assert "Bisection preconditions failed" in result.stderr
+    # No search ran: no candidate was ever evaluated for the record.
+    assert "Bisecting:" not in result.stdout
+    assert "Now evaluating:" not in result.stdout

@@ -37,6 +37,24 @@ def test_no_new_gaps(measured, pytestconfig):
     grew a flag -- both worth a look before the baseline moves.
     """
     if pytestconfig.getoption("--write-surface-baseline"):
+        expected = json.loads(BASELINE.read_text())
+        grown_commands = sorted(
+            set(measured["missing_commands"]) - set(expected["missing_commands"]))
+        grown_flags = {
+            name: sorted(set(measured["missing_flags"].get(name, []))
+                         - set(expected["missing_flags"].get(name, [])))
+            for name in measured["missing_flags"]
+        }
+        grown_flags = {k: v for k, v in grown_flags.items() if v}
+        # "Only shrinks on purpose" is enforced, not just hoped for: a
+        # rewrite that adds gaps is a regression (or a jj that grew),
+        # and passes only with an explicit `--accept-growth`.
+        if (grown_commands or grown_flags) and not pytestconfig.getoption(
+                "--accept-growth"):
+            pytest.fail(
+                "baseline rewrite would add gaps "
+                f"(commands: {grown_commands}, flags: {grown_flags}); "
+                "pass --accept-growth to take them on purpose")
         BASELINE.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
         pytest.skip(f"baseline rewritten: {BASELINE}")
     expected = json.loads(BASELINE.read_text())

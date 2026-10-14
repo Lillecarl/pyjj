@@ -1,0 +1,2 @@
+Workspace 'default' is currently colocated with Git.
+Last imported/exported Git HEAD: 42ad4b070b0dbe6926808dd77fcc89f3731cf597

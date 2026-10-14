@@ -9,7 +9,7 @@ Changed commits:
 │  - movruppx/1 42ad4b07 (hidden) one
 ○  + supuptlt 187dcf6a base rewritten
    - supuptlt/1 f6a17347 (hidden) base
-   Modified commit description:
+   Modified JJ-COMMIT-DESCRIPTION:
       1     : base
            1: base rewritten
 

@@ -573,13 +573,22 @@ def test_squash_combines_messages_via_editor(pair: RepoPair) -> None:
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("split")
 def test_split_first_half_message_via_editor(pair: RepoPair) -> None:
+    """No `-m` opens the editor for the first half's message; what it
+    writes there is what the first half keeps (the remainder keeps the
+    revision's description).
+
+    Since jj 0.46 that is one session with a `JJ: describe` section
+    per half, so the spec replaces the first section's body rather
+    than the whole buffer.
+    """
     pair.init()
     pair.op(
         files={"base.txt": b"base\n", "one.txt": b"one\n"},
         jj=["describe", "-m", "base"],
     )
     pair.op(jj=["split", "base.txt"],
-            editor_spec={"op": "drop_jj_comments"})
+            editor_spec={"op": "set_first_section",
+                         "value": "split-off message\n"})
     pair.assert_parity()
 
 
@@ -1074,28 +1083,50 @@ def test_bisect_run(pair: RepoPair, tmp_path) -> None:
     Bisection is the one flow that writes commits from inside a loop --
     one `check_out` per candidate -- so the repos only match if both
     sides evaluate the same candidates in the same order.
+
+    Since jj 0.46 the range's endpoints are verified before the search
+    starts, and this range's root cannot run the predicate -- so both
+    sides fail the pre-bisection check identically, and the failed
+    state (two verification checkouts, no search) is what is compared.
     """
     bisect_line(pair, 8)
     script = bisect_predicate(tmp_path, cutoff=5)
-    pair.op(jj=["bisect", "run", "--range", "root()..@",
+    rc = pair.op(jj=["bisect", "run", "--range", "root()..@",
+                     sys.executable, script], may_fail=True)
+    assert rc != 0
+    pair.assert_parity()
+
+
+@pytest.mark.covers("bisect run", "--trust-endpoints")
+def test_bisect_run_trust_endpoints(pair: RepoPair, tmp_path) -> None:
+    """`--trust-endpoints` skips the pre-bisection checks, so the same
+    unverifiable range runs the search the way every range did before
+    jj 0.46."""
+    bisect_line(pair, 8)
+    script = bisect_predicate(tmp_path, cutoff=5)
+    pair.op(jj=["bisect", "run", "--trust-endpoints", "--range", "root()..@",
                 sys.executable, script])
     pair.assert_parity()
 
 
+@pytest.mark.covers("bisect run", "--trust-endpoints")
+@pytest.mark.covers("bisect run", "--find-good")
+@pytest.mark.covers("bisect run", "--range")
 def test_bisect_run_find_good(pair: RepoPair, tmp_path) -> None:
     bisect_line(pair, 8)
     script = bisect_predicate(tmp_path, cutoff=5)
-    pair.op(jj=["bisect", "run", "--find-good", "--range", "root()..@",
+    pair.op(jj=["bisect", "run", "--trust-endpoints", "--find-good", "--range", "root()..@",
                 sys.executable, script])
     pair.assert_parity()
 
 
+@pytest.mark.covers("bisect run", "--trust-endpoints")
 def test_bisect_run_skip(pair: RepoPair, tmp_path) -> None:
     """Exit 125 skips, so no candidate is ever marked good or bad."""
     bisect_line(pair, 6)
     script = tmp_path / "bisect_skip.py"
     script.write_text("import sys\nsys.exit(125)\n")
-    pair.op(jj=["bisect", "run", "--range", "root()..@",
+    pair.op(jj=["bisect", "run", "--trust-endpoints", "--range", "root()..@",
                 sys.executable, str(script)])
     pair.assert_parity()
 
@@ -1134,6 +1165,61 @@ def test_run_no_op_writes_no_operation(pair: RepoPair, tmp_path) -> None:
     script = run_script(tmp_path, "noop.py", "pass\n")
     pair.op(jj=["run", "-r", rev("one"), sys.executable, script])
     pair.op_restore(1)
+    pair.assert_parity()
+
+
+def _sparse_conditional_script(tmp_path) -> str:
+    """Appends to base.txt, but only when one.txt is visible: what the
+    slot materializes decides whether the rewrite happens at all."""
+    return run_script(
+        tmp_path, "conditional.py",
+        "import pathlib\n"
+        "base = pathlib.Path('base.txt')\n"
+        "one = pathlib.Path('one.txt')\n"
+        "if one.exists() and base.exists():\n"
+        "    base.write_bytes(base.read_bytes() + b'ran\\n')\n",
+    )
+
+
+@pytest.mark.covers("run", "--sparse-patterns")
+def test_run_sparse_patterns_copy_narrows_the_slot(pair: RepoPair,
+                                                   tmp_path) -> None:
+    """The default inherits the workspace's narrowed patterns, so the
+    command never sees one.txt and the rewrite never happens."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(jj=["run", "-r", rev("one"), sys.executable,
+                _sparse_conditional_script(tmp_path)])
+    out = pair.assert_output(["file", "show", "base.txt"])
+    assert "ran" not in out
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--sparse-patterns")
+def test_run_sparse_patterns_full_materializes(pair: RepoPair,
+                                               tmp_path) -> None:
+    """`full` checks out the whole tree whatever the workspace narrows
+    to, so the command sees one.txt and the rewrite lands."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(jj=["run", "--sparse-patterns", "full", "-r", rev("one"),
+                sys.executable, _sparse_conditional_script(tmp_path)])
+    out = pair.assert_output(["file", "show", "base.txt"])
+    assert "ran" in out
+    pair.assert_parity()
+
+
+@pytest.mark.covers("run", "--sparse-patterns")
+def test_run_sparse_patterns_empty_hides_everything(pair: RepoPair,
+                                                    tmp_path) -> None:
+    """`empty` materializes nothing, so even base.txt is missing and
+    the command is a no-op."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(jj=["run", "--sparse-patterns", "empty", "-r", rev("one"),
+                sys.executable, _sparse_conditional_script(tmp_path)])
+    out = pair.assert_output(["file", "show", "base.txt"])
+    assert "ran" not in out
     pair.assert_parity()
 
 
@@ -2257,6 +2343,134 @@ def test_file_chmod_back_to_normal(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("file edit", "--revision")
+def test_file_edit_changes_content(pair: RepoPair) -> None:
+    """The editor's saved bytes become the file's new content."""
+    chain(pair)
+    pair.op(jj=["file", "edit", "--revision", "@", "two.txt"],
+            editor_spec={"op": "set", "value": "edited\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit", "-r")
+def test_file_edit_saving_unchanged_is_a_no_op(pair: RepoPair) -> None:
+    """Saving without changes prints `Nothing changed` and writes no
+    commit -- the head operation is the same afterwards, on both
+    sides."""
+    chain(pair)
+    before_cli = pair.op_id("cli", 0)
+    before_py = pair.op_id("py", 0)
+    pair.op(jj=["file", "edit", "-r", "@", "two.txt"],
+            editor_spec={"op": "set", "value": "two\n"})
+    assert pair.op_id("cli", 0) == before_cli
+    assert pair.op_id("py", 0) == before_py
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit")
+def test_file_edit_creates_a_missing_file(pair: RepoPair) -> None:
+    """Editing a path the revision does not have starts the editor
+    empty; saving creates the file."""
+    chain(pair)
+    pair.op(jj=["file", "edit", "three.txt"],
+            editor_spec={"op": "create", "value": "three\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit")
+def test_file_edit_empty_save_still_creates_the_file(pair: RepoPair) -> None:
+    """Saving the empty seed for a missing path creates an empty file
+    rather than reporting `Nothing changed`."""
+    chain(pair)
+    pair.op(jj=["file", "edit", "three.txt"],
+            editor_spec={"op": "create", "value": ""})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit")
+def test_file_edit_round_trips_binary(pair: RepoPair) -> None:
+    """Non-UTF8 bytes survive the editor round trip instead of
+    crashing it."""
+    chain(pair)
+    pair.op(files={"bin.dat": b"\x00\x01\x02\n"}, jj=["status"])
+    pair.op(jj=["file", "edit", "bin.dat"],
+            editor_spec={"op": "append", "value": "\x03\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit")
+def test_file_edit_resolves_a_conflict(pair: RepoPair) -> None:
+    """Marker text materializes in the editor; saving it resolved
+    resolves the path on both sides."""
+    conflict_pair(pair)
+    pair.op(jj=["file", "edit", "f.txt"],
+            editor_spec={"op": "set", "value": "ONE\nline2\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit", "--restore-descendants")
+def test_file_edit_restore_descendants(pair: RepoPair) -> None:
+    """`--restore-descendants` reparents rather than rebases whatever
+    follows the edited revision."""
+    chain(pair)
+    pair.op(jj=["file", "edit", "-r", rev("one"), "one.txt",
+                "--restore-descendants"],
+            editor_spec={"op": "set", "value": "one edited\n"})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file edit")
+def test_file_edit_directory_is_an_error(pair: RepoPair) -> None:
+    """A directory is not editable; both sides refuse without writing."""
+    pair.init()
+    pair.op(files={"sub/nested.txt": b"nested\n"}, jj=["status"])
+    rc = pair.op(jj=["file", "edit", "sub"], may_fail=True)
+    assert rc != 0
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file delete")
+@pytest.mark.covers("file delete", "--revision")
+def test_file_delete_removes_the_file(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "delete", "--revision", "@", "two.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file delete")
+def test_file_delete_matches_globs(pair: RepoPair) -> None:
+    """Filesets are a real language, not just exact paths."""
+    chain(pair)
+    pair.op(jj=["file", "delete", "glob:*.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file delete")
+def test_file_delete_unmatched_warns_without_failing(pair: RepoPair) -> None:
+    """A pattern matching nothing warns and changes nothing, on both
+    sides -- and still exits 0."""
+    chain(pair)
+    pair.op(jj=["file", "delete", "nope.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file delete", "-r")
+def test_file_delete_in_another_revision(pair: RepoPair) -> None:
+    """Deleting in a parent rebases the children onto the rewritten
+    commit."""
+    chain(pair)
+    pair.op(jj=["file", "delete", "-r", rev("one"), "one.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("file delete", "--restore-descendants")
+def test_file_delete_restore_descendants(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["file", "delete", "-r", rev("one"), "one.txt",
+                "--restore-descendants"])
+    pair.assert_parity()
+
+
 @pytest.mark.covers("file track")
 def test_file_track_is_a_no_op_by_default(pair: RepoPair) -> None:
     """`snapshot.auto-track` defaults to `all()`, so tracking an already
@@ -2454,10 +2668,88 @@ def test_workspace_add_then_forget(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def _second_git_file(pair: RepoPair, side: str) -> Path:
+    """The `.git` entry a colocated second workspace carries -- a file
+    linking the Git worktree, never a directory. Only its existence is
+    asserted: the content embeds absolute paths, which differ per side
+    by construction."""
+    root = pair.cli_repo if side == "cli" else pair.py_repo
+    return root.parent / "second" / ".git"
+
+
+@pytest.mark.covers("workspace add", "--colocate")
+def test_workspace_add_colocate_creates_a_git_worktree(pair: RepoPair) -> None:
+    """`--colocate` puts a Git worktree beside the new workspace, so
+    git-native tools see a repository there too."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "--colocate",
+                "../second"])
+    assert _second_git_file(pair, "cli").is_file()
+    assert _second_git_file(pair, "py").is_file()
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--no-colocate")
+def test_workspace_add_no_colocate_creates_no_worktree(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "--no-colocate",
+                "../second"])
+    assert not _second_git_file(pair, "cli").exists()
+    assert not _second_git_file(pair, "py").exists()
+    pair.assert_parity()
+
+
+def test_workspace_add_colocates_by_default(pair: RepoPair) -> None:
+    """No flag: a worktree is created when the current workspace is
+    itself colocated and `git.colocate` (true by default) says so."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "../second"])
+    assert _second_git_file(pair, "cli").is_file()
+    assert _second_git_file(pair, "py").is_file()
+    pair.assert_parity()
+
+
 @pytest.mark.covers("workspace rename")
 def test_workspace_rename(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "rename", "renamed"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace remove")
+def test_workspace_remove_deletes_the_directory(pair: RepoPair) -> None:
+    """Uncommitted work in the removed workspace is snapshotted first.
+    Undoing the removal brings the workspace record back pointing at
+    that snapshot, so the file is recoverable -- which is also what
+    proves the snapshot happened: skipping it would leave the same
+    visible state but no commit holding the file."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "../second"])
+    pair.op(files={"../second/late.txt": b"late\n"},
+            jj=["util", "exec", "--", sys.executable, "-c", "pass"])
+    pair.op(jj=["workspace", "remove", "second"])
+    pair.op(jj=["undo"])
+    out = pair.assert_output(["file", "show", "-r", "second@",
+                              "late.txt"])
+    assert "late" in out
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace remove")
+def test_workspace_remove_unknown_name_changes_nothing(pair: RepoPair) -> None:
+    """An unknown name warns and changes nothing, and still exits 0."""
+    chain(pair)
+    pair.op(jj=["workspace", "remove", "nope"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace remove")
+def test_workspace_remove_main_workspace_is_an_error(pair: RepoPair) -> None:
+    """The repository lives inside the main workspace, so removing it
+    would destroy the repository itself. Both sides refuse."""
+    chain(pair)
+    rc = pair.op(jj=["workspace", "remove", "default"], may_fail=True)
+    assert rc != 0
     pair.assert_parity()
 
 
@@ -2466,6 +2758,18 @@ def test_workspace_add_at_a_named_revision(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["workspace", "add", "--name", "second", "-r", rev("one"),
                 "../second"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("workspace add", "--sparse-patterns")
+def test_workspace_add_revision_with_sparse_patterns(pair: RepoPair) -> None:
+    """A narrowed checkout of another revision: the new workspace holds
+    that revision's files under those patterns, on both sides."""
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "-r", rev("one"),
+                "--sparse-patterns", "full", "../second"])
+    pair.op(files={"../second/late.txt": b"late\n"}, jj=["status"],
+            cwd="../second")
     pair.assert_parity()
 
 
@@ -2889,6 +3193,88 @@ def test_util_gc_rejects_other_expire_values(pair: RepoPair) -> None:
     """jj accepts only the literal `now`."""
     chain(pair)
     pair.op(jj=["util", "gc", "--expire", "1h"], may_fail=True)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("util diff")
+def test_util_diff_compares_disk_files(pair: RepoPair) -> None:
+    """The default color-words format names the after path, with the
+    rename arrow when the two paths differ."""
+    chain(pair)
+    out = pair.assert_output(["util", "diff", "one.txt", "two.txt"])
+    assert "Modified two.txt (one.txt => two.txt):" in out
+
+
+@pytest.mark.covers("util diff", "--git")
+def test_util_diff_git_format(pair: RepoPair) -> None:
+    chain(pair)
+    out = pair.assert_output(["util", "diff", "--git", "one.txt", "two.txt"])
+    assert out.startswith("diff --git a/one.txt b/two.txt\n")
+
+
+@pytest.mark.covers("util diff", "--color-words")
+def test_util_diff_color_words_format(pair: RepoPair) -> None:
+    chain(pair)
+    pair.assert_output(["util", "diff", "--color-words",
+                        "one.txt", "two.txt"])
+
+
+@pytest.mark.covers("util diff", "--context")
+def test_util_diff_context_lines(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(files={"long1.txt": b"a\nb\nc\nd\ne\nf\ng\n",
+                   "long2.txt": b"a\nb\nc\nD\ne\nf\ng\n"},
+            jj=["status"])
+    out = pair.assert_output(["util", "diff", "--git", "--context", "1",
+                              "long1.txt", "long2.txt"])
+    assert "@@ -3,3 +3,3 @@" in out
+    pair.assert_parity()
+
+
+@pytest.mark.covers("util diff", "-w")
+@pytest.mark.covers("util diff", "--ignore-all-space")
+@pytest.mark.covers("util diff", "-b")
+@pytest.mark.covers("util diff", "--ignore-space-change")
+@pytest.mark.covers("util diff", "--tool")
+def test_util_diff_whitespace_and_tool_flags(pair: RepoPair) -> None:
+    """`-w`/`-b` (either spelling) hide whitespace-only changes from
+    the `--git` hunks; color-words renders them however the flags read
+    (identically on both sides, which is what that half asserts); an
+    external `--tool` prints nothing, since there is no repository
+    content to materialize for it."""
+    chain(pair)
+    pair.op(files={"tab1.txt": b"a b\n", "tab2.txt": b"a\tb\n",
+                   "dbl1.txt": b"a  b\n", "dbl2.txt": b"a b\n"},
+            jj=["status"])
+    for argv in (["util", "diff", "--git", "-w", "tab1.txt", "tab2.txt"],
+                 ["util", "diff", "--git", "--ignore-all-space",
+                  "tab1.txt", "tab2.txt"],
+                 ["util", "diff", "--git", "-b", "dbl1.txt", "dbl2.txt"],
+                 ["util", "diff", "--git", "--ignore-space-change",
+                  "dbl1.txt", "dbl2.txt"]):
+        # The header prints; the whitespace-only hunks do not.
+        out = pair.assert_output(argv)
+        assert "@@" not in out
+        assert out.startswith(f"diff --git a/{argv[-2]} b/{argv[-1]}\n")
+    pair.assert_output(["util", "diff", "-w", "tab1.txt", "tab2.txt"])
+    pair.assert_output(["util", "diff", "-b", "dbl1.txt", "dbl2.txt"])
+    assert pair.assert_output(["util", "diff", "--tool", "false",
+                               "one.txt", "two.txt"]) == ""
+    pair.assert_parity()
+
+
+@pytest.mark.covers("util diff")
+def test_util_diff_identical_files_print_nothing(pair: RepoPair) -> None:
+    chain(pair)
+    assert pair.assert_output(["util", "diff", "one.txt", "one.txt"]) == ""
+
+
+@pytest.mark.covers("util diff")
+def test_util_diff_missing_file_is_an_error(pair: RepoPair) -> None:
+    """An unreadable path fails on both sides without touching the repo."""
+    chain(pair)
+    pair.assert_output(["util", "diff", "one.txt", "nope.txt"],
+                       may_fail=True)
     pair.assert_parity()
 
 
@@ -3544,13 +3930,9 @@ def test_op_revert_what_repo_only(pair: RepoPair) -> None:
 # `outputs()` covers the fourth case: a command whose output *should*
 # differ per side, like `root`, which prints a path.
 #
-# What is still marked below fails today, strictly, so the count stays
-# visible rather than absent.
-
-OUTPUT_UNIMPLEMENTED = pytest.mark.xfail(
-    strict=True,
-    reason="pyjj-cli does not reproduce jj's output format for this command",
-)
+# Output gaps that remain are tracked as `todo` entries in the corpus
+# (`pyjj/tests/parity/corpus/`), which fails strictly until flipped --
+# the same discipline as the xfails above.
 
 
 @pytest.mark.covers("log", "--reversed")
@@ -3739,14 +4121,24 @@ def test_bookmark_list_output_matches(pair: RepoPair) -> None:
 @pytest.mark.covers("bookmark list")
 @pytest.mark.covers("bookmark delete")
 def test_bookmark_list_drops_a_deleted_bookmark(pair: RepoPair) -> None:
-    """A deleted local-only bookmark leaves nothing behind, so both
-    sides print nothing.
-
-    jj's `name (deleted)` line is for a bookmark that still has a
-    remote-tracking counterpart. `_print_bookmark` writes it, and no
-    scenario reaches it yet -- this repository has no remote.
-    """
+    """Deleting `main` leaves `side` behind, so the listing still has a
+    row to agree on -- an empty listing agrees vacuously."""
     chain(pair)
+    pair.op(jj=["bookmark", "create", "side", "-r", rev("two")])
+    pair.op(jj=["bookmark", "delete", "main"])
+    pair.assert_output(["bookmark", "list"])
+
+
+@pytest.mark.covers("bookmark list")
+@pytest.mark.covers("bookmark delete")
+def test_bookmark_list_marks_a_deleted_tracked_bookmark(
+        pair: RepoPair, deep_remote) -> None:
+    """A deleted local bookmark with a remote-tracking counterpart
+    still lists as `name (deleted)` -- the line no local-only scenario
+    reaches."""
+    pair.init()
+    pair.op(jj=["git", "remote", "add", "origin", str(deep_remote)])
+    pair.op(jj=["git", "fetch"])
     pair.op(jj=["bookmark", "delete", "main"])
     pair.assert_output(["bookmark", "list"])
 
@@ -3812,14 +4204,15 @@ def test_bookmark_list_renders_a_jinja_template(pair: RepoPair) -> None:
 
 @pytest.mark.covers("tag list", "--template", "-T")
 def test_tag_list_renders_a_jinja_template(pair: RepoPair) -> None:
-    """No tags here, so both sides print nothing -- which still pins
-    that a template does not make a listing invent rows."""
+    """The template renders the one tag here; an empty listing would
+    agree vacuously, so the scenario sets one first."""
     chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
     cli, py = pair.outputs_asymmetric(
         ["tag", "list", "-T", 'name ++ "\n"'],
         ["tag", "list", "-T", "{{ name }}"],
     )
-    assert cli == py
+    assert cli == py != ""
 
 
 @pytest.mark.covers("file list", "--template", "-T")
@@ -3957,10 +4350,16 @@ def test_file_show_output_matches(pair: RepoPair) -> None:
 
 @pytest.mark.covers("tag list")
 def test_tag_list_output_matches(pair: RepoPair) -> None:
-    """Nothing here has a tag, so both sides print nothing -- which is
-    still worth pinning: printing something would be the bug."""
+    """Both sides list the tag. Empty-agrees-with-empty proves
+    nothing (either side could print nothing at all), so the scenario
+    sets one first."""
     chain(pair)
-    pair.assert_output(["tag", "list"])
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    cli, py = pair.outputs_asymmetric(
+        ["tag", "list"],
+        ["tag", "list"],
+    )
+    assert cli == py != ""
 
 
 @pytest.mark.covers("tag list", "--tracked", "-t")
@@ -4147,14 +4546,15 @@ def test_split_editor_opens_over_an_explicit_message(pair: RepoPair) -> None:
     """`-m` normally means no editor. `--editor` opens one anyway, and
     what it writes is what the first half keeps.
 
-    The revision being split has no description, so jj asks about the
-    first half only. A described one would open the editor twice, once
-    a half.
+    Since jj 0.46 the session holds a `JJ: describe` section per half,
+    so the spec replaces the first section's body (seeded with `-m`'s
+    text) rather than the whole buffer.
     """
     pair.init()
     pair.op(files={"one.txt": b"one\n", "two.txt": b"two\n"}, jj=["status"])
     pair.op(jj=["split", "one.txt", "-m", "typed", "--editor"],
-            editor_spec={"op": "set", "value": "written by the editor\n"})
+            editor_spec={"op": "set_first_section",
+                         "value": "written by the editor\n"})
     pair.assert_parity()
 
 

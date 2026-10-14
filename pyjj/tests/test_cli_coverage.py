@@ -56,6 +56,16 @@ def test_coverage_matches_the_baseline(coverage_marks, coverage_is_complete,
         pytest.skip("-k/-m narrowed collection, so the marks seen are partial")
     measured = cli_surface.unclaimed(coverage_marks)
     if pytestconfig.getoption("--write-coverage-baseline"):
+        expected = json.loads(BASELINE.read_text())
+        grown = {
+            name: sorted(set(measured.get(name, [])) - set(expected.get(name, [])))
+            for name in measured
+        }
+        grown = {k: v for k, v in grown.items() if v}
+        if grown and not pytestconfig.getoption("--accept-growth"):
+            pytest.fail(
+                f"baseline rewrite would add unclaimed items {grown}; "
+                "pass --accept-growth to take them on purpose")
         BASELINE.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
         pytest.skip(f"baseline rewritten: {BASELINE}")
     expected = json.loads(BASELINE.read_text())

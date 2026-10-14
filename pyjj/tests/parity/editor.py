@@ -8,8 +8,15 @@ transform, taken from the PARITY_EDITOR_SPEC environment variable (JSON),
 to the file named in argv[1]:
 
     {"op": "set", "value": "..."}          replace the whole buffer
+    {"op": "create", "value": "..."}       write the buffer whether or not
+        it exists yet (`jj file edit` on a new path opens an editor on
+        a file that is not there for the tool to read first)
     {"op": "append", "value": "..."}       append after existing content
     {"op": "drop_jj_comments"}             delete lines starting with "JJ:"
+    {"op": "set_first_section", "value": "..."}
+        replace the body of the first `JJ: describe` section, keeping
+        its header -- the bulk-buffer (jj 0.46 single-session split)
+        equivalent of `set` for one half's message.
 
 Invoked without a spec it fails loudly -- an unexpected editor launch in
 a scenario is a bug, not something to silently accept.
@@ -30,11 +37,15 @@ def main() -> int:
         return 77
     spec = json.loads(raw)
 
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-
     op = spec["op"]
-    if op == "set":
+    if op == "create":
+        text = spec["value"]
+    else:
+        # `surrogateescape` so binary buffers (a `file edit` round
+        # trip) survive the read; plain text is unaffected.
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
+            text = f.read()
+    if op == "set" or op == "create":
         text = spec["value"]
     elif op == "append":
         text += spec["value"]
@@ -43,11 +54,34 @@ def main() -> int:
             line + "\n" for line in text.splitlines()
             if not line.startswith("JJ:")
         )
+    elif op == "set_first_section":
+        lines = text.splitlines()
+        try:
+            first = next(
+                i for i, line in enumerate(lines)
+                if line.startswith("JJ: describe ")
+            )
+        except StopIteration:
+            print("no JJ: describe header in buffer", file=sys.stderr)
+            return 1
+        following = next(
+            (i for i in range(first + 1, len(lines))
+             if lines[i].startswith("JJ: describe ")),
+            len(lines),
+        )
+        value = spec["value"]
+        if value and not value.endswith("\n"):
+            value += "\n"
+        text = (
+            "".join(line + "\n" for line in lines[:first + 1])
+            + value
+            + "".join(line + "\n" for line in lines[following:])
+        )
     else:
         print(f"unknown editor op: {op}", file=sys.stderr)
         return 1
 
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
         f.write(text)
     return 0
 

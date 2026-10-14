@@ -162,11 +162,11 @@ def test_load_at_operation_accepts_a_reloaded_operation(bookmark_history):
 
 def test_undo_at_the_genesis_operation_raises(bookmark_history, settings):
     """Regression test for a previously-undocumented gap: undo() should
-    raise "cannot undo the root operation" when the repo is truly
-    positioned at the genesis operation (0 parents, empty description) --
-    not just the "add workspace 'default'" operation that comes right
-    after it, which is what `repo.operation` was right after `init_*`
-    before `load_at_operation()` existed to walk further back.
+    raise when the repo is truly positioned at the genesis operation
+    (0 parents, empty description) -- not just the "add workspace
+    'default'" operation that comes right after it, which is what
+    `repo.operation` was right after `init_*` before
+    `load_at_operation()` existed to walk further back.
     """
     repo2, _op_after_init, _wc = bookmark_history
     genesis_op = repo2.operation_log()[-1]
@@ -176,3 +176,74 @@ def test_undo_at_the_genesis_operation_raises(bookmark_history, settings):
     tx = repo_at_genesis.start_transaction(settings)
     with pytest.raises(pyjj.JjError):
         tx.undo()
+
+
+def _second_workspace_operation(workspace, settings, tmp_path):
+    """A repo whose head operation ran in a second workspace.
+
+    Returns `(repo, second_op)`; `repo.operation` carries
+    `workspace_name == "second"`.
+    """
+    second_ws, second_repo = workspace.add_workspace(
+        settings, str(tmp_path / "second"))
+    wc = second_repo.resolve_single(settings, "second@")
+    tx = second_repo.start_transaction(settings)
+    tx.set_bookmark("second-work", wc.id)
+    repo = tx.commit("second work")
+    assert repo.operation.workspace_name == "second"
+    return repo
+
+
+def test_undo_refuses_a_cross_workspace_operation(workspace, settings,
+                                                  tmp_path):
+    """Since jj 0.46 undoing an operation performed in another workspace
+    is refused unless allowed -- the message and hint are jj's own."""
+    repo = _second_workspace_operation(workspace, settings, tmp_path)
+    tx = repo.start_transaction(settings)
+    with pytest.raises(pyjj.JjError) as excinfo:
+        tx.undo("default")
+    message = str(excinfo.value)
+    assert message.startswith(
+        f"Refusing to undo operation {repo.operation.id[:12]} "
+        f"because it was performed in workspace second\n"
+        f"Hint: Use `--allow-cross-workspace` to undo it anyway, "
+        f"or use `jj op revert` to revert a specific operation")
+
+
+def test_undo_allow_cross_workspace_goes_through(workspace, settings,
+                                                 tmp_path):
+    repo = _second_workspace_operation(workspace, settings, tmp_path)
+    tx = repo.start_transaction(settings)
+    undone, _restored, description = tx.undo("default", True)
+    assert undone.id == repo.operation.id
+    assert description.startswith("undo: restore to operation ")
+    tx.commit(description)
+
+
+def test_undo_same_workspace_is_not_a_refusal(workspace, settings, tmp_path):
+    repo = _second_workspace_operation(workspace, settings, tmp_path)
+    tx = repo.start_transaction(settings)
+    undone, _restored, description = tx.undo("second")
+    assert undone.id == repo.operation.id
+    tx.commit(description)
+
+
+def test_redo_refuses_a_cross_workspace_undo(workspace, settings, tmp_path):
+    """The redo counterpart: an undo performed in the second workspace
+    cannot be redone from the default one without the flag."""
+    repo = _second_workspace_operation(workspace, settings, tmp_path)
+    tx = repo.start_transaction(settings)
+    _undone, _restored, undo_description = tx.undo("second")
+    repo_after_undo = tx.commit(undo_description)
+    assert repo_after_undo.operation.workspace_name == "second"
+
+    tx = repo_after_undo.start_transaction(settings)
+    with pytest.raises(pyjj.JjError) as excinfo:
+        tx.redo("default")
+    assert "Refusing to redo operation " in str(excinfo.value)
+    assert "performed in workspace second" in str(excinfo.value)
+
+    tx = repo_after_undo.start_transaction(settings)
+    _redone, _restored, redo_description = tx.redo("default", True)
+    assert redo_description.startswith("redo: restore to operation ")
+    tx.commit(redo_description)

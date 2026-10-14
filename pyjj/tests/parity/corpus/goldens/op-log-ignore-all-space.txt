@@ -5,7 +5,7 @@
 │  Changed commits:
 │  ○  + movruppx 32776e39 whitespace
 │     - movruppx/1 728e9c28 (hidden) (no description set)
-│     Modified commit description:
+│     Modified JJ-COMMIT-DESCRIPTION:
 │             1: whitespace
 │
 │  Changed working copy default@:

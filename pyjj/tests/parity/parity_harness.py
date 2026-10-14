@@ -197,11 +197,10 @@ class RepoPair:
             self._step += 1
         # Inherit the parent environment (the dev-shell vars the editable
         # installs need), then layer the determinism pins on top and point
-        # HOME at the scratch dir so no real user config leaks in.
-        for name in list(os.environ):
-            if name.startswith("JJ_"):
-                del os.environ[name]
-        env = dict(os.environ)
+        # HOME at the scratch dir so no real user config leaks in. The
+        # caller's environment is never mutated: strip `JJ_*` from a copy.
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith("JJ_")}
         env.update(
             {
                 "HOME": str(self.home),
@@ -417,22 +416,23 @@ class RepoPair:
         if isinstance(editor_spec, tuple):
             cli_spec, py_spec = editor_spec
         rc = 0
+        cli_rc = 0
         if jj:
             # `git init` must not carry `-R`: that flag makes every other
             # command search for an existing repo upward. Commands run with
             # their repo as CWD so relative FILESETS resolve identically.
             if jj[:2] == ["git", "init"]:
-                rc = self._run([self.jj_bin, *jj], env, stdin=stdin,
-                               editor_spec=cli_spec, may_fail=may_fail)
+                cli_rc = rc = self._run([self.jj_bin, *jj], env, stdin=stdin,
+                                        editor_spec=cli_spec, may_fail=may_fail)
             else:
-                rc = self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
-                               stdin=stdin,
-                               cwd=self.cli_repo / cwd if cwd else self.cli_repo,
-                               editor_spec=cli_spec,
-                               diff_spec=diff_spec, merge_spec=merge_spec,
-                               may_fail=may_fail)
+                cli_rc = rc = self._run([self.jj_bin, "-R", str(self.cli_repo), *jj], env,
+                                        stdin=stdin,
+                                        cwd=self.cli_repo / cwd if cwd else self.cli_repo,
+                                        editor_spec=cli_spec,
+                                        diff_spec=diff_spec, merge_spec=merge_spec,
+                                        may_fail=may_fail)
         if jj or py:
-            return self._run(
+            py_rc = self._run(
                 [sys.executable, str(DRIVER), str(self.py_repo), *(py if py is not None else jj)],
                 env,
                 stdin=stdin,
@@ -442,6 +442,14 @@ class RepoPair:
                 merge_spec=merge_spec,
                 may_fail=may_fail,
             )
+            if may_fail and jj:
+                # State comparison cannot tell "both refused" from "one
+                # side succeeded without writing", and this return value
+                # only carries the py side -- so a `may_fail` run where
+                # real jj succeeded is a broken premise, failed here
+                # rather than mistaken for agreement.
+                assert cli_rc != 0, f"jj accepted {jj} with rc 0 under may_fail"
+            return py_rc
         return rc
 
     def _write_files(self, files: dict[str, bytes | None], ws: Path) -> None:
@@ -555,7 +563,10 @@ class RepoPair:
                 "description": desc,
                 "author": [aname, amail],
                 "committer": [cname, cmail],
-                "parents": sorted(parents.split()),
+                # Parent order is significant (and hashed into the commit
+                # id), so it compares raw -- a swap shows here directly
+                # instead of as one bare changed hash.
+                "parents": parents.split(),
                 "bookmarks": sorted(bookmarks.split()),
                 "working_copies": sorted(wcs.split()),
                 "tags": sorted(tags.split()),
@@ -635,7 +646,10 @@ class RepoPair:
                 "description": desc,
                 "author": [aname, amail],
                 "committer": [cname, cmail],
-                "parents": sorted(parents.split()),
+                # Parent order is significant (and hashed into the commit
+                # id), so it compares raw -- a swap shows here directly
+                # instead of as one bare changed hash.
+                "parents": parents.split(),
                 "bookmarks": sorted(bm.split()),
                 "working_copies": sorted(wcs.split()),
                 "tags": sorted(tags.split()),

@@ -4,7 +4,7 @@ From operation: «op» (2001-02-03 09:35:06) snapshot working copy
 Changed commits:
 ○  + movruppx 32776e39 whitespace
    - movruppx/1 728e9c28 (hidden) (no description set)
-   Modified commit description:
+   Modified JJ-COMMIT-DESCRIPTION:
            1: whitespace
 
 Changed working copy default@:

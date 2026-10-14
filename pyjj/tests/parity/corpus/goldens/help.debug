@@ -1,8 +1,8 @@
 Jujutsu (An experimental VCS)
 
-To get started, see the tutorial [`jj help -k tutorial`].
+To get started, see the tutorial at [`jj help -k tutorial`][tutorial].
 
-[`jj help -k tutorial`]: https://docs.jj-vcs.dev/latest/tutorial/
+[tutorial]: https://docs.jj-vcs.dev/latest/tutorial/
 
 [1m[33mUsage:[0m [1m[32mjj[0m [32m[OPTIONS][0m [32m[COMMAND][0m
 

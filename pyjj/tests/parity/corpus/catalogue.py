@@ -428,6 +428,14 @@ CATALOGUE: tuple[Entry, ...] = (
     E("tag-list-c", ("tag", "list", "-c"), fixture="conflicted_refs",
       normalize=("remote",), claims=("tag list", "-c"), colour="bytes"),
     E("workspace-list", ("workspace", "list"), claims=("workspace list",), colour="bytes"),
+    # Two rows, not one: the second workspace's relative root is what
+    # `workspace list` spends most of its template on.
+    E("workspace-list-two", ("workspace", "list"), fixture="two_workspaces",
+      normalize=("root",), claims=("workspace list",), colour="bytes"),
+    E("git-colocation-status", ("git", "colocation", "status"),
+      claims=("git colocation status",), colour="bytes"),
+    E("config-get", ("config", "get", "user.name"),
+      claims=("config get",), colour="bytes"),
 
     E("interdiff-tool", ("interdiff", "--from", 'description(glob:"one*")',
                          "--to", 'description(glob:"two*")', "--tool", _TOOL),

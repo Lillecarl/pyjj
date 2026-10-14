@@ -5,8 +5,8 @@
 │  Changed commits:
 │  ○  [38;5;2m<<diff added::+>>[39m [1m[38;5;13m<<op_log commit working_copy change_id shortest prefix::m>>[38;5;8m<<op_log commit working_copy change_id shortest rest::ovruppx>>[39m<<op_log commit working_copy:: >>[38;5;12m<<op_log commit working_copy commit_id shortest prefix::3>>[38;5;8m<<op_log commit working_copy commit_id shortest rest::2776e39>>[39m<<op_log commit working_copy:: >><<op_log commit working_copy description first_line::whitespace>>[0m
 │     [38;5;1m<<diff removed::->>[39m [1m[39m<<op_log commit hidden change_id shortest prefix::m>>[0m[38;5;8m<<op_log commit hidden change_id shortest rest::ovruppx>>[1m[39m<<op_log commit hidden change_offset::/1>>[0m<<op_log commit:: >>[1m[38;5;4m<<op_log commit commit_id shortest prefix::7>>[0m[38;5;8m<<op_log commit commit_id shortest rest::28e9c28>>[39m<<op_log commit:: >><<op_log commit hidden::(hidden)>><<op_log commit:: >>[38;5;3m<<op_log commit description placeholder::(no description set)>>[39m
-│     [38;5;3m<<diff header::Modified commit description:>>[39m
-│     <<diff::     >>[38;5;2m<<diff added line_number::   1>>[39m<<diff::: >>[4m[38;5;2m<<diff added token::whitespace>>[24m[39m
+│     [38;5;3m<<diff color_words header::Modified JJ-COMMIT-DESCRIPTION:>>[39m
+│     <<diff color_words::     >>[38;5;2m<<diff color_words added line_number::   1>>[39m<<diff color_words::: >>[4m[38;5;2m<<diff color_words added token::whitespace>>[24m[39m
 │
 │  Changed working copy [38;5;2m<<working_copies::default@>>[39m:
 │  [38;5;2m<<diff added::+>>[39m [1m[38;5;13m<<op_log commit working_copy change_id shortest prefix::m>>[38;5;8m<<op_log commit working_copy change_id shortest rest::ovruppx>>[39m<<op_log commit working_copy:: >>[38;5;12m<<op_log commit working_copy commit_id shortest prefix::3>>[38;5;8m<<op_log commit working_copy commit_id shortest rest::2776e39>>[39m<<op_log commit working_copy:: >><<op_log commit working_copy description first_line::whitespace>>[0m

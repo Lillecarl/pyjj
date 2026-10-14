@@ -86,6 +86,14 @@ def pytest_addoption(parser):
         help="rewrite the CLI coverage baseline from the marks collected "
              "in this run instead of asserting against it",
     )
+    parser.addoption(
+        "--accept-growth",
+        action="store_true",
+        default=False,
+        help="allow a baseline rewrite that adds gaps (a regression or "
+             "a jj that grew); without it a rewrite that does not "
+             "strictly shrink fails",
+    )
 
 
 def pytest_configure(config):

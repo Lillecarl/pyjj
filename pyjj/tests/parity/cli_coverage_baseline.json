@@ -26,9 +26,6 @@
     "(command)"
   ],
   "bisect run": [
-    "(command)",
-    "--find-good",
-    "--range",
     "-r"
   ],
   "bookmark": [
@@ -49,9 +46,6 @@
     "--remote"
   ],
   "config": [
-    "(command)"
-  ],
-  "config get": [
     "(command)"
   ],
   "config list": [
@@ -101,9 +95,6 @@
     "(command)"
   ],
   "git colocation": [
-    "(command)"
-  ],
-  "git colocation status": [
     "(command)"
   ],
   "git init": [

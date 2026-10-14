@@ -7,10 +7,14 @@ nothing on conflicted commits. Both sent a blind session the wrong way.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 
-JJ_ENV = dict(JJ_USER="tester", JJ_EMAIL="tester@example.com", NO_COLOR="1")
+JJ_ENV = dict(JJ_USER="tester", JJ_EMAIL="tester@example.com", NO_COLOR="1",
+              JJ_TIMESTAMP="2001-02-03T04:05:06+00:00",
+              JJ_OP_TIMESTAMP="2001-02-03T04:05:06+00:00",
+              JJ_TZ_OFFSET_MINS="330")
 
 
 def _env(home):
@@ -233,4 +237,56 @@ def test_config_file_flag_with_bad_toml_names_itself(tmp_path):
         "\n"
         f"Hint: Check the config file: {bad}\n"
         f"{FOOTER}\n"
+    )
+
+
+def _file_repo(root, home):
+    """A repo with one committed file, for the file/diff messages."""
+    _init(root, home)
+    (root / "base.txt").write_text("base\n")
+    result = _run(root, "commit", "-m", "base", home=home)
+    assert result.returncode == 0, result.stderr
+
+
+def test_file_edit_unchanged_reports_nothing_changed(tmp_path, monkeypatch):
+    """Saving without changes prints exactly `Nothing changed.`."""
+    root, home = tmp_path / "repo", tmp_path / "home"
+    root.mkdir()
+    home.mkdir()
+    _file_repo(root, home)
+    # `true` leaves the editor buffer untouched: the no-op path. It
+    # wins over any machine VISUAL/EDITOR leaking through the env.
+    monkeypatch.setenv("JJ_EDITOR", shutil.which("true"))
+    result = _run(root, "file", "edit", "base.txt", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == "Nothing changed.\n"
+
+
+def test_file_delete_unmatched_warns(tmp_path):
+    """A pattern matching nothing reports `Nothing changed.` (stderr),
+    with no warning -- matching real jj, which silently deletes what
+    matches."""
+    root, home = tmp_path / "repo", tmp_path / "home"
+    root.mkdir()
+    home.mkdir()
+    _file_repo(root, home)
+    result = _run(root, "file", "delete", "nope.txt", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == "Nothing changed.\n"
+
+
+def test_util_diff_missing_file_reports_cannot_access(tmp_path):
+    """An unreadable path fails with jj's `Cannot access` shape."""
+    root, home = tmp_path / "repo", tmp_path / "home"
+    root.mkdir()
+    home.mkdir()
+    _file_repo(root, home)
+    result = _run(root, "util", "diff", str(root / "base.txt"),
+                  str(root / "nope.txt"), home=home)
+    assert result.returncode == 1
+    assert result.stderr == (
+        f"Error: Cannot access {root / 'nope.txt'}\n"
+        "Caused by: No such file or directory (os error 2)\n"
     )

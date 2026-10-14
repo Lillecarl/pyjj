@@ -47,6 +47,18 @@ def tags(pair) -> None:
     pair.op(jj=["tag", "set", "v1", "-r", 'description(glob:"one*")'])
 
 
+def two_workspaces(pair) -> None:
+    """A chain with a second workspace inside it.
+
+    The second workspace lives at `./second` (not `../second`) so the
+    recorded `root` normalizer covers its path: a sibling directory
+    would embed the scratch path in every golden. A listing with one
+    row cannot show what two rows look like.
+    """
+    chain(pair)
+    pair.op(jj=["workspace", "add", "--name", "second", "./second"])
+
+
 def evolution(pair) -> None:
     """A change rewritten twice, so earlier versions are hidden.
 
@@ -233,6 +245,7 @@ FIXTURES = {
     "rewritten_stack": rewritten_stack,
     "conflict": conflict,
     "tags": tags,
+    "two_workspaces": two_workspaces,
     "evolution": evolution,
     "squashed": squashed,
     "executable": executable,
