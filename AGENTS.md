@@ -19,7 +19,7 @@ filtering a shared monorepo tree — see "Reproducible builds" below.
   different kind of project — a Textual app, not a binding layer).
 
 Binding-surface coverage below (API coverage, async model, etc.) was written
-against `jj_lib` 0.45.1 and describes `jj_lib`'s own behavior, not anything
+against `jj_lib` 0.46.0 and describes `jj_lib`'s own behavior, not anything
 monorepo-specific — it stays accurate regardless of where this repo lives.
 When bumping the `jj-lib` crates.io version in `pyjj-bindings/Cargo.toml`,
 re-check this section against that release's actual behavior/changelog.
@@ -132,7 +132,7 @@ both forms compose.
 
 ## jj CLI parity coverage
 
-Every command the pinned `jj` (0.45) offers has a scenario in
+Every command the pinned `jj` (0.46) offers has a scenario in
 `pyjj/tests/parity/test_parity.py`. A command pyjj-cli does not implement
 yet still has one, marked `UNIMPLEMENTED` (a **strict** xfail): the day
 the command lands, its scenario stops being an expected failure and the
@@ -331,7 +331,10 @@ rather than writing escape sequences.
   last `>>` before the next span opens. The capture asserts the round
   trip against `--color=always` and, where it fails, records the `.ansi`
   rendering instead and lists the entry under `unlabelled` in
-  `manifest.json`. That list is empty today.
+  `manifest.json`. That list holds the five external-tool entries
+  (`evolog-tool`, `log-tool`, `op-diff-tool`, `op-log-tool`,
+  `op-show-tool`): a tool echoes marker-colliding bytes, so no `.debug`
+  golden can exist for them.
 
 `manifest.json` records which jj produced the goldens, so a recapture
 under a different jj is a diff to read rather than a mystery.
@@ -695,6 +698,21 @@ Current state:
   empty bad set yields `"indeterminate"`, so skipping every candidate
   still reports the seeded head.
 
+  Since jj 0.46 `Bisector::new` takes a third argument,
+  `verify_preconditions` (the consistency checks behind `jj bisect run`'s
+  endpoint verification, skippable there via `--trust-endpoints`). This
+  binding passes `false`: the caller drives the search by hand, so there
+  are no endpoints to trust and the protocol stays the 0.45 one. The two
+  new shapes still have arms -- a `NextStep::Verify` reads as `"evaluate"`,
+  `BisectionResult::VerificationFailed` as `"verification-failed"` -- but
+  neither can occur with verification off. The pre-bisection endpoint
+  checks `jj bisect run` performs live one level down: `verify_steps()`
+  drains a fresh verify-enabled search's `Verify` queue (heads expected
+  bad, parents-of-roots expected good) with no marks replayed, and the
+  CLI evaluates each one before the main loop, failing with jj's
+  `Cannot bisect: ...` / `Bisection preconditions failed` wording on a
+  mismatch.
+
   `jj_lib`'s `Bisector<'repo>` borrows the repo, and a `#[pyclass]` cannot
   hold a borrow, so this wrapper stores the search *state* (the input
   range plus the three id sets) and rebuilds a real `Bisector` inside each
@@ -714,13 +732,16 @@ Current state:
   `UserSettings(load_config=False)` to get only `jj_lib`'s bare built-in
   defaults instead (empty user name/email, no revset aliases) --
   `pyjj/tests/conftest.py`'s `settings` fixture does this, so tests stay
-  hermetic regardless of the machine's real jj config. Repo-level
-  (`.jj/repo/`) and workspace-level (`.jj/<workspace>/`) config are **not**
-  loaded -- deliberately: real jj gates those behind an ID-indirection
-  scheme (`jj_lib::secure_config`) specifically so a cloned repo can't make
+  hermetic regardless of the machine's real jj config. By
+  `UserSettings()` alone, repo-level (`.jj/repo/`) and workspace-level
+  (`.jj/<workspace>/`) config are **not** loaded -- deliberately: real
+  jj gates those behind an ID-indirection scheme
+  (`jj_lib::secure_config`) specifically so a cloned repo can't make
   its own config (merge-tool commands, aliases) take effect without the
   user opting in, and reimplementing that casually would be a real
-  security regression, not just a missing feature.
+  security regression, not just a missing feature. The `for_repo` path
+  under "Repo and workspace config" below adds those layers back,
+  through the same indirection jj uses.
   `UserSettings.get_string(key) -> str | None` reads an arbitrary dotted
   config key (`"revsets.log"`, `"ui.default-command"`, ...) as a string —
   `None` if unset anywhere in the loaded layers (including built-in
@@ -818,6 +839,27 @@ Current state:
   path-or-subtree rules as `diff()`/`squash()`. Conflicted paths are still
   listed (matching real `jj file list`) — check a specific path's
   resolution via `read_file()`/`is_executable()` if needed.
+- **File edit/delete**: `jj file edit` opens the path's content in
+  `$EDITOR` (materialized conflict markers for a file conflict, empty
+  for a missing path) and writes back whatever was saved, fully
+  resolved or partially; `jj file delete` removes every path a fileset
+  matches. Both rewrite the revision and rebase (or, with
+  `--restore-descendants`, reparent) its descendants, print `Nothing
+  changed.` when the tree is identical, and finish with jj's own
+  descriptions (`edit file {path} in commit {id}`, `delete paths in
+  commit {id}`). Two probes back them: `Commit.file_kind(path)` tells
+  the refusal cases apart (`"file"`, `"symlink"`, `"dir"`,
+  `"submodule"`, `"absent"`, `"file-conflict"`, `"other-conflict"` --
+  jj refuses all but file/absent/file-conflict with a different
+  message each), and `Commit.match_filesets(settings, workspace_root,
+  patterns)` parses real fileset expressions (`parse_maybe_bare` plus
+  `fileset-aliases`, against a workspace-rooted converter) and returns
+  `(matched, unmatched_explicit)` -- the second list is what jj warns
+  `No matching entries for paths: ...` about. Writes go through the
+  existing `edit_commit_tree` overlay (`None` removes) and
+  `resolve_conflict` (which parses markers back, so partial resolution
+  round-trips); the editor runs over raw bytes (`_run_editor_raw`,
+  `surrogateescape` round-trip), never description-cleaned.
 - **Symlinks and file/directory transitions**: handled transparently by the
   same `jj_lib` working-copy code every other operation here goes through —
   `read_file()` on a symlink returns its target as bytes (matching
@@ -1011,7 +1053,8 @@ Current state:
   way the `jj` CLI does. Real backends (`gpg`, `gpgsm`, `ssh`) all work
   as-is; there's no `key` argument on `set_sign_behavior` because the
   signing key itself comes from `signing.key` config, not a per-call
-  parameter. jj's own CLI integration tests use a fake `signing.backend =
+  parameter. (`SignBehavior` itself moved from `jj_lib::signing` to
+  `jj_lib::settings` in 0.46.) jj's own CLI integration tests use a fake `signing.backend =
   "test"` (`jj_lib::test_signing_backend::TestSigningBackend`) — that's
   gated behind jj-lib's `testing` Cargo feature (see `lib/Cargo.toml`'s
   `testing = ["git"]` and the `#[cfg(feature = "testing")]` arm in
@@ -1073,13 +1116,45 @@ Current state:
   settings, new_name) -> ReadonlyRepo` is `jj workspace rename` — renames
   *this* `Workspace` object's own workspace (both the repo view and the
   on-disk working-copy state), a no-op if `new_name` already matches.
-  `Workspace.workspace_path(name)` looks up any workspace's on-disk
-  location (relative to `repo_path`) via `jj_lib::workspace_store`, or
-  `None` if unrecorded. `ReadonlyRepo.view()`'s dict (workspace name ->
+  `Workspace.workspace_path(name)` looks up any workspace's absolute
+  on-disk location via the workspace store, or `None` if unrecorded.
+  `ReadonlyRepo.view()`'s dict (workspace name ->
   wc commit hex) already doubles as `jj workspace list`'s core data — no
-  separate listing call needed. No sparse-pattern inheritance control
-  (`add_workspace` always gets a full, non-sparse checkout, unlike the
-  CLI's `--sparse-patterns` copy/full/empty choice).
+  separate listing call needed. `add_workspace` takes `sparse_patterns`
+  (`None` for a full checkout, `[]` for empty, else explicit patterns --
+  the CLI passes its `--sparse-patterns copy/full/empty` choice through)
+  and always materializes the new working copy's files: the unrestricted
+  case checks the new `@` out explicitly (without that the directory
+  stays empty and the first snapshot there deletes everything from it),
+  the restricted case via `set_sparse_patterns`.
+  `forget_workspaces(settings, names, description=None,
+  forget_store=True)` takes an operation-description override for `jj
+  workspace remove`, which forgets through this same path after
+  snapshotting each removed workspace (so uncommitted work there
+  survives as a commit) and then deletes the directories itself --
+  `remove workspace ...` instead of `forget workspace ...`. Undoing a
+  removal restores the record but not the directory (jj warns as much;
+  the CLI prints its warning). `forget_store=False` keeps the recorded
+  path, which is what plain `forget` passes: jj intentionally leaves
+  it behind so undoing the forget can point the workspace back at its
+  directory. The CLI unlinks each forgotten workspace's Git worktree
+  afterwards (`Workspace.unlink_git_worktree`, jj's `unlink_worktree`
+  with its report-nothing-on-absence contract); `remove` unlinks
+  before deleting the directories.
+
+  Since jj 0.46 the workspace store lives in a `workspace_store`
+  subdirectory of `.jj/repo` (with its own `index` file), and
+  `SimpleWorkspaceStore` moved from `jj_lib::workspace_store` to
+  `jj_lib::simple_workspace_store` with `load()` taking the store
+  directory itself --   passing `.jj/repo` now opens the *commit* index
+  as a workspace store. The mutating call sites go through
+  `repo.loader().workspace_store()` instead of constructing the path
+  at all (`workspace_path` still loads the store directly, which is
+  fine -- it holds no repo, only a path). Colocation is CLI-side: `Workspace.is_colocated()` (the
+  faithful `open_git_repo_at_workdir` check, not `.git`-exists) plus
+  the `git.colocate` setting (default true) decide, and
+  `Workspace.create_git_worktree(settings, dest)` runs jj_lib's own
+  `git::create_worktree` (`git worktree add --orphan`) after the add.
 
   Building this required fixing the same class of gap the conflict-resolution
   feature hit: `add_workspace`/`forget_workspaces` both call `jj_lib`
@@ -1192,7 +1267,15 @@ Current state:
   'default'" operation on top of it; `repo.operation_log()[-1]` (empty
   description) is the genuine root, and `load_at_operation()` is what makes
   it possible to actually construct and test that "undo at the very root"
-  scenario at all.
+  scenario at all. `undo(workspace_name=None,
+  allow_cross_workspace=False)` / `redo(...)` take the workspace the
+  command runs in plus the `--allow-cross-workspace` opt-out: since jj
+  0.46 undoing/redoing an operation performed in another workspace is
+  refused (with jj's message and hint), and `None` skips the check,
+  preserving the old behavior for direct binding callers. Undoing an
+  operation whose description starts with `remove workspace` prints
+  jj's warning (the directory is not restored) -- that check lives in
+  the CLI, which already holds the undone op, not in the binding.
 - **Op abandon**: `Workspace.op_abandon(operation) -> OpAbandonStats` is `jj
   op abandon` -- prunes `operation` (or, with `"root..head"` syntax, either
   side omittable to mean the repo root / current head ops, a contiguous
@@ -1341,6 +1424,16 @@ Current state:
   the cost of shelling out per operation. What's implemented here instead
   stays fully in-process against `jj_lib`, with no subprocess or temp-file
   round trip.)
+- **Split descriptions**: since jj 0.46 `split` edits both halves in one
+  editor session, not one per half. `_run_bulk_editor(settings,
+  sections)` in `commands/common.py` is `edit_multiple_descriptions`,
+  ported: each `(key, intro, description)` becomes one `JJ: describe
+  <key> -------` section, parsed back with jj's rules (headers trim
+  trailing whitespace/dashes only, first duplicate wins, missing /
+  duplicate / unexpected / headerless lines fail with jj's messages)
+  and cleaned with the same `cleanup_description_lines`. Keys only
+  need to be unique in the buffer (jj uses temp-commit hashes; there
+  are no temp commits here, so halves are `"1"`/`"2"`).
 - **Revert (backout)**: `Transaction.revert_commit(commit, new_parent_ids) ->
   CommitBuilder` is `jj revert -r <commit> -d <new_parent_ids>` — computes
   the reverse of `commit`'s own change (relative to its parents) and
@@ -1451,7 +1544,10 @@ Current state:
   operation store drops operations unreachable from the current head,
   the commit store drops objects no commit in the index refers to -- and
   what "drop" means is the backend's business, so the Git backend runs
-  `git gc`. Anything newer than the cutoff survives whether reachable or
+  `git gc`. Since jj 0.46 there is no `Store::gc` anymore: the binding
+  calls `op_store().gc()` always and `GitBackend::gc()` only when
+  `get_git_backend()` succeeds, exactly like `cli`'s own `cmd_util_gc`.
+  Anything newer than the cutoff survives whether reachable or
   not, because a concurrent process may not have referenced its new
   objects yet. Two traps. The sweep starts from the repo's *own*
   operation, so collecting from a repo loaded at a past operation would
@@ -1464,6 +1560,20 @@ Current state:
   name` -- the string written to `.jj/repo/store/type` when the repo was
   created. It names the storage format, not the remote or the working
   copy.
+- **Disk diff**: `jj util diff <path1> <path2>` compares two files on
+  disk through the same `--git`/`--color-words`/`--tool`/`--context`/
+  `-w`/`-b` machinery every other diff uses: `--git` prints the
+  `diff --git` header with the paths as given and unified hunks (no
+  index/mode lines, which need a repository behind them),
+  color-words prints `Modified <after> (<before> => <after>):`, and
+  anything else (a short listing format, an external `--tool`) prints
+  nothing, exactly like jj's `show_diff_bytes` omitting the block.
+  Identical files print nothing at all. It never touches the
+  repository -- no snapshot, no workspace needed -- so it builds
+  settings with `settings_for`, not `_load`. Two facts worth knowing:
+  `-w`/`-b` only thin the `--git` hunks (color-words renders the words
+  regardless, on both sides), and a missing path fails with jj's
+  `Cannot access {path}` / `Caused by: ... (os error N)` shape.
 - **Whether a snapshot did anything**: `Workspace.snapshot()`'s stats
   dict carries `changed`. The binding already returned early without
   writing when the walk found the same tree; the flag just says which
@@ -1492,6 +1602,12 @@ Current state:
   tree when `success` is false. The tree-state settings and the 64 kB
   `max_new_file_size` are hardcoded, copied from
   `cli/src/commands/run.rs`, not read from the user's config.
+  `RunPool(..., sparsity=None)` narrows what each acquisition checks
+  out: `None` (the default, and what `--sparse-patterns full` passes)
+  materializes the whole tree, `[]` (`empty`) nothing, and anything
+  else (`copy` resolves to the invoking workspace's own patterns in
+  the CLI) those patterns -- re-applied on every acquisition, so a
+  reused slot narrows again instead of keeping the last run's files.
 - **Writing a run's results back**: `Transaction.run_rewrite(targets,
   new_trees, restore_descendants=False)` takes `{commit_id_hex: TreeId}`
   and drives `transform_descendants` with jj's four cases. By default a
@@ -1578,10 +1694,10 @@ faster delegated to the nix-community build boxes:
 ```
 --builders @/home/lillecarl/tmp/builders --max-jobs 0
 ```
-
 Append to any `nix build`/`nix develop` invocation (`--max-jobs 0` forces
 full delegation; drop it to build locally in parallel). The builders file is
-machine-local — check it exists before relying on it.
+machine-local — check it exists before relying on it (and substitute your
+own path outside this machine; `$HOME/tmp/builders` is the same file).
 
 The top-level `jj` attribute (`nix build --file . jj`) is the reference
 CLI binary, pinned via the `jj-vcs` flake input to the same upstream
@@ -1664,8 +1780,21 @@ design choice:
 ## Notes
 
 - `pyjj-bindings/Cargo.toml` pins `jj-lib` to a specific crates.io version
-  (currently `0.45.1`) rather than a path dependency into a jj checkout.
-  Bumping it can require source changes on this side too: jj 0.45 split
+  (currently `0.46.0`) rather than a path dependency into a jj checkout.
+  Bumping it can require source changes on this side too: jj 0.46 moved
+  `Merge::{added_ids, removed_ids, has_conflict}` to
+  `{present_adds, present_removes, !is_resolved()}` (in `jj-core`),
+  `SignBehavior` from `jj_lib::signing` to `jj_lib::settings`,
+  `SimpleWorkspaceStore` from `jj_lib::workspace_store` to
+  `jj_lib::simple_workspace_store`, replaced `UserSettings::from_config`
+  with `from_config_and_home_dir` (pass the canonicalized
+  `etcetera::home_dir`, the `~` config values expand against), removed
+  `Store::gc` (call `op_store().gc()` plus `GitBackend::gc()` instead),
+  added `Bisector::new`'s `verify_preconditions` third argument, made
+  revset `parse` return `UserRevsetExpression` with `resolve_user_expression`
+  yielding a borrowed `ResolvedRevset` (`into_inner().0` recovers the
+  `Arc<ResolvedRevsetExpression>`), raised MSRV to 1.97.1, and added a
+  `revsets.git-push` default (re-copied into `vendor/revsets.toml`); jj 0.45 split
   core types into a new `jj-core` crate (`MergedTreeValue` moved to
   `jj_lib::backend`, `RepoPathUiConverter` to `jj_lib::ui_path`),
   async-ified several primitives (`Commit::is_hidden`,
@@ -1679,8 +1808,18 @@ design choice:
   `gix::hash::Kind` parameter (absent from crates.io's `0.43.0`) is now
   exposed as `--object-hash`. Check for similar API drift whenever
   bumping the pin.
+- Two live-verified 0.46 behaviors that look like bugs but are jj's
+  own: revset `description()` no longer substring-matches a bare word
+  (`description(left)` matches nothing; `description(substring:left)`
+  does), and `jj util diff --tool=<external>` never invokes the tool,
+  exiting 0 silently -- unlike in-repo `jj diff`, which runs it and
+  reports `Failed to generate diff`. Both confirmed against the pinned
+  binary, and pyjj-cli matches both.
 - `pyjj-bindings/Cargo.lock` and `pyjj`/`pyjj-cli`/`pyjjui`'s own
   `pyproject.toml`-declared dependencies are independent of each other.
+- `pyjj`/`pyjj-bindings` versions track the jj release (`0.46.0`);
+  `pyjj-cli`/`pyjjui` version independently (`0.1.0`). A
+  version-consistency audit that flags the split as drift is wrong.
 - If `pyjj-bindings`'s public API shape changes, update `pyjj/pyjj/__init__.py`
   (the re-export surface) to match.
 - `pyjj-bindings` depends on `pyo3-async-runtimes` (tokio-runtime feature) and

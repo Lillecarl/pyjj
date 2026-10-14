@@ -3,7 +3,7 @@
   project's own pyproject.toml (dependencies, build-system, entry points)
   instead of hand-duplicating that metadata in Nix, for both a normal
   package build (renderPyproject) and a live-editable one
-  (renderEditablePyproject, backing devShells.pyjjui's dev loop -- see
+  (renderEditablePyproject, backing shells.pyjjui's dev loop -- see
   flake.nix). Pattern mirrors ~/Code/nanopynix's default.nix.
 */
 {

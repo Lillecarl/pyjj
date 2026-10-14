@@ -129,8 +129,9 @@ let
 
   shells = {
     # Fast local loop for pyjj-bindings (the compiled Rust extension): plain
-    # nixpkgs stable rustc/cargo (pyjj-bindings needs edition 2024 / rustc
-    # >=1.89, which current nixpkgs stable already ships -- no rust-overlay
+    # nixpkgs stable rustc/cargo (pyjj-bindings needs edition 2024 /
+    # rustc >=1.97.1 -- see `rust-version` in pyjj-bindings/Cargo.toml,
+    # which current nixpkgs stable already ships -- no rust-overlay
     # nightly pin needed here, unlike jj's own Rust workspace).
     #
     #   nix-shell -A shells.default

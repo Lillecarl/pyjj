@@ -13,7 +13,9 @@
     # Evaluates default.nix (this repo's real outputs) without the flake
     # store-copy tax; see nix/compat.nix and AGENTS.md. `nix build .#foo` /
     # `nix develop .#foo` are banned in this repo -- use
-    # `nix-build -A foo` / `nix-shell -A shells.foo` instead. This input
+    # `nix build --file . foo` / `nix develop --file . shells.foo`
+    # instead (bare `-A` resolves against flake outputs, of which this
+    # flake declares none). This input
     # only needs to exist so `nix flake lock` can pin/fetch it for
     # nix/compat.nix to read from flake.lock directly.
     flake-compatish.url = "github:lillecarl/flake-compatish";
@@ -26,7 +28,7 @@
     # against, not whatever `jj` happens to be on PATH. Deliberately left
     # unfollowed: jj builds with the rustPlatform of the nixpkgs *it*
     # pins, which is what its own CI tested that release with.
-    jj-vcs.url = "github:jj-vcs/jj/v0.45.1";
+    jj-vcs.url = "github:jj-vcs/jj/v0.46.0";
   };
 
   # This flake exists only to pin inputs and produce flake.lock for
