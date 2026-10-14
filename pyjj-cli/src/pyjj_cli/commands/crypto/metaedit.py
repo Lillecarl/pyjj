@@ -32,7 +32,7 @@ def metaedit(args) -> int:
                      + list(getattr(args, "revisions_pos", None) or []))
         targets = _resolve_all(repo, settings, revisions or ["@"])
         if not targets:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
 
         tx = _start_transaction(repo, settings)
@@ -66,7 +66,7 @@ def metaedit(args) -> int:
             modified += 1
 
         if not modified:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
         _finish(tx, f"metaedit {modified} commits", settings, ws, repo)
         print(f"Modified {modified} commits")

@@ -40,7 +40,7 @@ def simplify_parents(args) -> int:
             simplified += 1
 
         if not simplified:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
         _finish(tx, f"simplify {simplified} commits", settings, ws, repo)
         print(f"Removed parent edges from {simplified} commits")

@@ -1,38 +1,15 @@
 """workspace subcommand: workspace_list."""
-import json
 import os
-import shlex
-import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
 from ...formatter import render_block
 from ..common import (
     _bookmarks_by_commit,
     _commit_context,
     _commit_summary_spans,
     _resolve_template,
-    CommandError,
-    _checkout_if_moved,
-    _finish,
     _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
     use_color,
 )
 
@@ -50,23 +27,24 @@ def workspace_list(args) -> int:
                 context["name"] = name
                 print(template.render(context))
                 continue
-            # jj wraps the whole summary in `working_copy` when the
-            # commit is the one *this* workspace sits on, not the one
-            # the row names, so every other row stays plain.
-            under = "target"
+            # Since jj 0.46 the template labels each row `workspace`,
+            # with the name and root beneath it (`workspace name`,
+            # `workspace root relative`) -- the debug golden carries the
+            # whole stacks.
+            under = "workspace target"
             if commit_id == view.get(ws.workspace_name):
-                under = "working_copy target"
+                under = "workspace working_copy target"
             # jj prints the workspace's root path, relative to where
             # the command runs, between the name and the summary --
             # `if(root, root.relative())` in the default template. The
             # workspace running the command shows `.`.
-            spans = [(name, "name"), (": ", "")]
+            spans = [(name, "workspace name"), (": ", "workspace")]
             rel = ws.workspace_path(name)
             if rel is not None:
-                root = os.path.relpath(
-                    os.path.normpath(os.path.join(ws.repo_path, rel)),
-                    os.getcwd())
-                spans += [(root, "root relative"), (" ", "")]
+                # `workspace_path()` is already absolute; show it
+                # relative to where the command runs.
+                root = os.path.relpath(os.path.normpath(rel), os.getcwd())
+                spans += [(root, "workspace root relative"), (" ", "workspace")]
             spans += [(text, f"{under} {labels}".strip()) for text, labels
                       in _commit_summary_spans(repo, settings, commit, refs)]
             print(render_block([spans], "workspace_list",

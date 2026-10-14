@@ -51,7 +51,7 @@ def restore(args) -> int:
         if tool:
             selections = _selected(repo, settings, tool, dst, src)
             if selections is None:
-                print("Nothing changed.")
+                print("Nothing changed.", file=sys.stderr)
                 return 0
             builder = tx.edit_commit_tree(dst, selections)
         else:

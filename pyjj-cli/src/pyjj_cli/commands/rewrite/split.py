@@ -18,7 +18,7 @@ from ..common import (
     _resolve_one,
     _wc_commit,
     complete_newline,
-    _run_editor,
+    _run_bulk_editor,
     _changed_files,
     _run_diff_tool,
     _selection_is_empty,
@@ -34,15 +34,30 @@ def split(args) -> int:
         afters = getattr(args, "insert_afters", None) or []
         befores = getattr(args, "insert_befores", None) or []
         # A placement flag sends the selected half somewhere else, so it
-        # cannot also make the two halves siblings.
+        # cannot also make the two halves siblings. Worded like clap,
+        # which reports these conflicts (lowercase `error:`, usage,
+        # `--help` trailer).
         moving = bool(ontos or afters or befores)
         if moving and parallel:
-            print("Error: --parallel cannot be used with --onto, "
-                  "--insert-after or --insert-before", file=sys.stderr)
+            placed = ("--onto <REVSETS>" if ontos
+                      else "--insert-after <REVSETS>" if afters
+                      else "--insert-before <REVSETS>")
+            print(f"error: the argument '--parallel' cannot be used with "
+                  f"'{placed}'", file=sys.stderr)
+            print(f"\nUsage: jj split --parallel <FILESETS>...",
+                  file=sys.stderr)
+            print(f"\nFor more information, try '--help'.",
+                  file=sys.stderr)
             return 2
         if ontos and (afters or befores):
-            print("Error: --onto cannot be used with --insert-after or "
-                  "--insert-before", file=sys.stderr)
+            other = ("--insert-after <REVSETS>" if afters
+                     else "--insert-before <REVSETS>")
+            print(f"error: the argument '--onto <REVSETS>' cannot be used "
+                  f"with '{other}'", file=sys.stderr)
+            print(f"\nUsage: jj split --onto <REVSETS> <FILESETS>...",
+                  file=sys.stderr)
+            print(f"\nFor more information, try '--help'.",
+                  file=sys.stderr)
             return 2
 
         target = _resolve_one(repo, settings, args.revision or "@")
@@ -82,29 +97,26 @@ def split(args) -> int:
             first_builder = tx.split_selected_edited(target, selections)
 
         forced_editor = getattr(args, "editor", False)
-        if args.message is not None:
+        if args.message is None or forced_editor:
+            # Since jj 0.46 both halves share one editor session: two
+            # `JJ: describe` sections in one buffer, not one session per
+            # half. The seeds are what each half would keep untouched --
+            # `-m` (completed) for the selected changes, the revision's
+            # own description for the remainder.
+            first_seed = (complete_newline(args.message)
+                          if args.message is not None
+                          else target.description)
+            edited = _run_bulk_editor(settings, [
+                ("1", "Enter a description for the selected changes.",
+                 first_seed),
+                ("2", "Enter a description for the remaining changes.",
+                 target.description),
+            ])
+            first_description = edited["1"]
+            second_description = edited["2"]
+        else:
             first_description = complete_newline(args.message)
-            if forced_editor:
-                # `-m` normally means no editor. `--editor` opens one
-                # anyway, seeded with what `-m` gave.
-                first_description = _run_editor(settings, first_description)
-        else:
-            # The editor path: the draft template carries the current
-            # description past all "JJ:" comments.
-            first_description = _run_editor(settings, target.description)
-
-        # jj asks about the second half too, right after the first. A
-        # revision with no description leaves the remainder with none
-        # and skips that editor, unless `--editor` forces it. A
-        # described one seeds the editor with its own description.
-        if not target.description:
-            second_description = ""
-            show_editor = forced_editor
-        else:
             second_description = target.description
-            show_editor = forced_editor or args.message is None
-        if show_editor:
-            second_description = _run_editor(settings, second_description)
 
         if moving:
             # The half that stays where `target` was keeps its change id,
@@ -143,7 +155,7 @@ def split(args) -> int:
             # which a rebase preserves.
             parent_changes = _change_ids(repo, new_parent_ids)
             child_changes = _change_ids(repo, new_child_ids)
-            tx.rebase_descendants(False)
+            tx.rebase_descendants(delete_abandoned_bookmarks=False)
             tx.move_commits(
                 [first.id], [],
                 _by_change_ids(tx, settings, parent_changes),

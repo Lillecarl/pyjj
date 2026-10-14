@@ -20,7 +20,7 @@ def parallelize(args) -> int:
                      + list(getattr(args, "revisions_pos", None) or []))
         targets = _resolve_all(repo, settings, revisions or ["@"])
         if len(targets) < 2:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
 
         union = "|".join(c.id.hex() for c in targets)
@@ -43,7 +43,7 @@ def parallelize(args) -> int:
                          if {p.hex() for p in c.parent_ids} != outside_hexes]
 
         if not needs_rewrite:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
 
         tx = _start_transaction(repo, settings)

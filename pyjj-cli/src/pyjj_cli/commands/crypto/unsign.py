@@ -46,7 +46,7 @@ def unsign(args) -> int:
         # nothing, so jj skips it and says so.
         signed = [commit for commit in targets if commit.is_signed]
         if not signed:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
         for commit in signed:
             b = tx.rewrite_commit(settings, commit)

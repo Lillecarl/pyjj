@@ -200,6 +200,101 @@ def _run_editor(settings, content: str) -> str:
     like the real CLI's description_util::edit_description: strip "JJ:"
     comment lines (stopping at "JJ: ignore-rest"), trim blank edges, and
     complete the trailing newline."""
+    prepped = content
+    if prepped and not prepped.endswith("\n"):
+        prepped += "\n"
+    last_line = prepped.splitlines()[-1] if prepped.splitlines() else ""
+    prepped += "JJ:\n" if last_line.startswith("JJ:") else "\n"
+    prepped += 'JJ: Lines starting with "JJ:" (like this one) will be removed.\n'
+
+    edited = _run_editor_raw(settings, prepped)
+    return _clean_description_lines(edited.splitlines())
+
+
+def _run_bulk_editor(settings, sections) -> dict:
+    """One editor session for several commit descriptions, like jj 0.46's
+    `edit_multiple_descriptions` (which `jj split` uses for both halves
+    since 0.46 opened a single session instead of one per half).
+
+    `sections` is a list of `(key, intro, description)` triples. Each
+    becomes one `JJ: describe <key> -------` section -- `key` only has
+    to be unique within the buffer (jj uses the temp commits' short
+    hashes; there are no temp commits here to hash) -- with `intro`
+    rendered as a `JJ:` line above the seeded description. Returns
+    `{key: cleaned description}`, raising `CommandError` with jj's own
+    messages when the edited buffer drops a section or confuses a
+    header. Section cleanup is `_run_editor`'s (jj's
+    `cleanup_description_lines` in both).
+    """
+    buffer = [
+        "JJ: Enter or edit commit descriptions after the `JJ: describe` lines.",
+        "JJ: Warning:",
+        "JJ: - The text you enter will be lost on a syntax error.",
+        "JJ: - The syntax of the separator lines may change in the future.",
+        "JJ:",
+    ]
+    for key, intro, description in sections:
+        buffer.append(f"JJ: describe {key} -------")
+        body = ([f"JJ: {intro}"] if intro else []) + description.splitlines()
+        buffer.extend(body)
+        # jj's `append_blank_line`: a section ending in a comment gets a
+        # `JJ:` separator, any other a blank line.
+        buffer.append("JJ:" if body and body[-1].startswith("JJ:") else "")
+    buffer.append('JJ: Lines starting with "JJ:" (like this one) will be removed.')
+    edited = _run_editor_raw(settings, "\n".join(buffer) + "\n")
+
+    parsed: list = []
+    for line in edited.splitlines():
+        if line.startswith("JJ: describe "):
+            # jj trims trailing whitespace and dashes only (its
+            # `is_ascii_whitespace`, which also covers vertical tab and
+            # form feed); a leading gap stays part of the prefix and
+            # matches nothing.
+            key = line[len("JJ: describe "):].rstrip(" \t\r\n\x0b\x0c-")
+            parsed.append([key, []])
+        elif parsed:
+            parsed[-1][1].append(line)
+        elif line.strip() and not line.startswith("JJ:"):
+            raise CommandError(
+                f'Found the following line without a commit header: "{line}"'
+            )
+    wanted = [key for key, _intro, _desc in sections]
+    descriptions: dict[str, str] = {}
+    duplicates: list[str] = []
+    unexpected: list[str] = []
+    for key, lines in parsed:
+        if key not in wanted:
+            unexpected.append(key)
+        elif key in descriptions:
+            duplicates.append(key)
+        else:
+            descriptions[key] = _clean_description_lines(lines)
+    missing = [key for key in wanted if key not in descriptions]
+    if missing:
+        raise CommandError(
+            "The description for the following commits were not found in "
+            f"the edited message: {', '.join(missing)}"
+        )
+    if duplicates:
+        raise CommandError(
+            "The following commits were found in the edited message "
+            f"multiple times: {', '.join(duplicates)}"
+        )
+    if unexpected:
+        raise CommandError(
+            "The following commits were not being edited, but were found "
+            f"in the edited message: {', '.join(unexpected)}"
+        )
+    return descriptions
+
+
+def _run_editor_raw(settings, content: str) -> str:
+    """Run $EDITOR over `content` and return the edited text verbatim --
+    `_run_editor` without the description cleanup, for callers (like
+    `_run_bulk_editor`, or `file edit` on raw file bytes) that handle
+    the result themselves. The content goes to the temp file exactly
+    as given: unlike the description path, no trailing newline is
+    forced, the way `jj` materializes a file for editing."""
     editor_cmd = (
         settings.get_string("ui.editor")
         or os.environ.get("JJ_EDITOR")
@@ -209,27 +304,27 @@ def _run_editor(settings, content: str) -> str:
     )
     argv = shlex.split(editor_cmd)
 
-    prepped = content
-    if prepped and not prepped.endswith("\n"):
-        prepped += "\n"
-    last_line = prepped.splitlines()[-1] if prepped.splitlines() else ""
-    prepped += "JJ:\n" if last_line.startswith("JJ:") else "\n"
-    prepped += 'JJ: Lines starting with "JJ:" (like this one) will be removed.\n'
-
     with tempfile.NamedTemporaryFile(
-        "w", suffix=".jjdescription", delete=False
+        "w", suffix=".jjdescription", encoding="utf-8",
+        errors="surrogateescape", delete=False
     ) as f:
-        f.write(prepped)
+        f.write(content)
         path = f.name
     try:
         subprocess.run([*argv, path], check=True)
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
             edited = f.read()
     finally:
         os.unlink(path)
+    return edited
 
+
+def _clean_description_lines(lines) -> str:
+    """jj's `cleanup_description_lines`, shared by `_run_editor` and the
+    bulk parser: stop at `JJ: ignore-rest`, drop `JJ:` comment lines,
+    trim blank edges, complete the trailing newline."""
     kept: list[str] = []
-    for line in edited.splitlines():
+    for line in lines:
         if line.startswith("JJ: ignore-rest"):
             break
         if line.startswith("JJ:"):
@@ -2765,7 +2860,7 @@ def _description_diff_bytes(args, before: str, after: str,
         ]
         lines += _unified_hunk_lines(left, right, compare=compare)
         return _render_diff(lines, coloured, "diff")
-    lines = [[("Modified commit description:", "header")]]
+    lines = [[("Modified JJ-COMMIT-DESCRIPTION:", "header")]]
     lines += _color_words_rows(left, right, coloured=coloured, compare=compare)
     return _render_diff(lines, coloured, "diff")
 

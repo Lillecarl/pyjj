@@ -1,33 +1,13 @@
 """workspace subcommand: workspace_add."""
-import json
 import os
-import shlex
-import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import pyjj
-import pyjj.hunk as hunk_mod
 from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
     _load,
     _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _restore_view_command,
-    _wc_commit,
-    complete_newline,
     join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
 )
 
 def workspace_add(args) -> int:
@@ -47,11 +27,48 @@ def workspace_add(args) -> int:
             settings, dest, name=name, revision_ids=revision_ids,
             description=description,
             sparse_patterns=_sparse_patterns(ws, args))
-        print(f"Created workspace at {new_ws.workspace_root}")
+        if _should_colocate(ws, settings, args):
+            # After the workspace exists: the primitive supports a
+            # populated destination (the `colocation enable` shape), and
+            # adding first keeps the empty-destination check intact.
+            new_ws.create_git_worktree(settings, dest)
+            print("Created Git worktree for the new workspace.")
+        print(f"Created workspace in \"{os.path.relpath(dest, os.getcwd())}\"")
+        if os.sep not in args.destination:
+            print(f"Warning: Workspace created inside current directory. "
+                  f"If this was unintentional, delete the "
+                  f"\"{args.destination}\" directory and run "
+                  f"`jj workspace forget {new_ws.workspace_name}` to "
+                  f"remove it.", file=sys.stderr)
+        # Keep a colocated Git worktree from tracking jj's own files.
+        if new_ws.is_colocated():
+            try:
+                Path(dest, ".jj", ".gitignore").write_text("/*\n")
+            except OSError as e:
+                print("Error: Failed to write .jj/.gitignore file",
+                      file=sys.stderr)
+                print(f"Caused by: {e}", file=sys.stderr)
+                return 1
         return 0
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
+
+
+def _should_colocate(ws, settings, args) -> bool:
+    """Whether the new workspace gets a Git worktree, mirroring
+    `cli/src/commands/workspace/add.rs`: `--colocate` forces one,
+    `--no-colocate` refuses one, and otherwise a worktree is created
+    when the current workspace is itself colocated and `git.colocate`
+    (which defaults to true) says so."""
+    if getattr(args, "colocate", False):
+        return True
+    if getattr(args, "no_colocate", False):
+        return False
+    if not ws.is_colocated():
+        return False
+    # `git.colocate` defaults to true when unset.
+    return settings.get_bool("git.colocate") != False
 
 
 def _sparse_patterns(ws, args):

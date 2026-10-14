@@ -95,7 +95,7 @@ def squash(args) -> int:
                 # a no-op: the reader was asked to choose and chose none.
                 raise CommandError("No changes selected")
             if not inserting:
-                print("Nothing changed.")
+                print("Nothing changed.", file=sys.stderr)
                 return 0
             # The placement still created a commit, so the operation is
             # not empty even though nothing moved into it.

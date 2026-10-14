@@ -1,41 +1,37 @@
 """operation subcommand: undo."""
-import json
-import os
-import shlex
-import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
+from ...formatter import render_block
 from ..common import (
     _start_transaction,
     CommandError,
-    _checkout_if_moved,
-    _finish,
     _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
     _restore_view_command,
-    _wc_commit,
-    complete_newline,
-    join_message_paragraphs,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
-    _run_merge_tool,
-    _fix_pattern_matches,
+    use_color,
 )
+from .op_diff import _op_summary_spans
 
 def undo(args) -> int:
     try:
         settings, ws, repo = _load(args)
         tx = _start_transaction(repo, settings)
-        _undone, _restored_to, description = tx.undo()
+        undone, restored_to, description = tx.undo(
+            ws.workspace_name, getattr(args, "allow_cross_workspace", False))
+        if undone.description.startswith("remove workspace"):
+            print("Warning: Undoing a workspace removal restores the "
+                  "workspace, but does not restore the workspace directory.",
+                  file=sys.stderr)
+            print("Hint: Run `jj workspace forget` then `jj workspace add` "
+                  "to recreate the directory.", file=sys.stderr)
+        coloured = use_color(settings)
+        print(render_block(
+            [[("Undid operation: ", ""), *_op_summary_spans(undone, "")]],
+            (), coloured))
+        print(render_block(
+            [[("Restored to operation: ", ""),
+              *_op_summary_spans(restored_to, "")]],
+            (), coloured))
         _restore_view_command(tx, description, settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)

@@ -54,3 +54,20 @@ def add_parsers(sub) -> None:
                            help="Prefix each matched line with its 1-based line number")
     add_flags(p_fsearch, {Flag.FILESETS})
     p_fsearch.set_defaults(_handler="pyjj_cli.commands.file.search:file_search")
+
+    p_fedit = file_sub.add_parser("edit", help="Edit the contents of a file in a revision")
+    add_revision_flag(p_fedit, dest="revision", default="@", help="Revision to edit the file in (default: @)")
+    p_fedit.add_argument("path", metavar="FILE", help="File to edit")
+    p_fedit.add_argument("--restore-descendants", dest="restore_descendants",
+                         action="store_true",
+                         help="Preserve the content (not the diff) when rebasing descendants")
+    p_fedit.set_defaults(_handler="pyjj_cli.commands.file.edit:file_edit")
+
+    p_fdelete = file_sub.add_parser("delete", help="Delete files from a revision")
+    add_revision_flag(p_fdelete, dest="revision", default="@", help="Revision to delete the files in (default: @)")
+    p_fdelete.add_argument("filesets", nargs="+", metavar="FILESETS",
+                           help="Files or directories to delete (filesets are accepted)")
+    p_fdelete.add_argument("--restore-descendants", dest="restore_descendants",
+                           action="store_true",
+                           help="Preserve the content (not the diff) when rebasing descendants")
+    p_fdelete.set_defaults(_handler="pyjj_cli.commands.file.delete:file_delete")

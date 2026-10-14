@@ -51,7 +51,7 @@ def diffedit(args) -> int:
             return 0
         selections = _run_diff_tool(settings, args.tool, before, after)
         if _selection_is_empty(selections, after):
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
 
         tx = _start_transaction(repo, settings)

@@ -10,10 +10,6 @@ the slot count is what decides how many build trees survive between
 invocations, but nothing here runs in parallel yet. The repository result
 does not depend on it: every command's tree lands in one map, and one
 rewrite pass applies them all.
-
-Unlike real `jj`, this does not refuse to rewrite immutable commits.
-pyjj-cli has no immutability check anywhere yet, and `run` is not the
-place to invent one.
 """
 import os
 import subprocess
@@ -63,6 +59,22 @@ def _subdir(workspace_root: str, use_root: bool) -> str | None:
         return ""
 
 
+def _sparsity(ws, args):
+    """What each slot checks out, for `--sparse-patterns`.
+
+    `full` (the binding default, `None`) materializes the whole tree;
+    `empty` (`[]`) nothing; `copy` (jj's default) the workspace's own
+    patterns -- `[""]` is "everything", which the binding reads the
+    same way `sparse set` does.
+    """
+    choice = getattr(args, "sparse_patterns", "copy")
+    if choice == "full":
+        return None
+    if choice == "empty":
+        return []
+    return ws.sparse_patterns()
+
+
 def _status_text(returncode: int) -> str:
     """Rust's `ExitStatus` Display, which is what jj's error message
     interpolates."""
@@ -82,9 +94,12 @@ def run(args) -> int:
     try:
         expressions = list(args.revisions or []) or [_DEFAULT_REVSET]
         commits = _resolve_all(repo, settings, expressions)
-        jobs = _resolve_jobs(settings, args.jobs)
+        tx = _start_transaction(repo, settings)
         ignore_changes = getattr(args, "ignore_changes", False)
         ignore_errors = getattr(args, "ignore_errors", False)
+        if not ignore_changes:
+            _check_rewritable(tx, settings, commits)
+        jobs = _resolve_jobs(settings, args.jobs)
         passthrough = getattr(args, "passthrough", False)
         if passthrough and jobs > 1:
             raise CommandError(
@@ -102,12 +117,9 @@ def run(args) -> int:
         argv = [args.command] + extra
         spec = " ".join(argv)
 
-        tx = _start_transaction(repo, settings)
-        if not ignore_changes:
-            _check_rewritable(tx, settings, commits)
-
         subdir = _subdir(ws.workspace_root, args.root)
-        pool = pyjj.RunPool(ws.repo_path, jobs, args.clean)
+        pool = pyjj.RunPool(ws.repo_path, jobs, args.clean,
+                            _sparsity(ws, args))
 
         new_trees: dict[str, pyjj.TreeId] = {}
         for commit in commits:
@@ -121,7 +133,7 @@ def run(args) -> int:
                     # exist in this revision, so there is nothing to run.
                     slot.discard()
                     print(f"Skipped commit {commit.id.hex()}: directory does "
-                          f"not exist: {subdir}", file=sys.stderr)
+                          f"not exist: {subdir}")
                     continue
                 env = dict(os.environ)
                 env["JJ_WORKSPACE_ROOT"] = slot.working_copy_dir
@@ -145,6 +157,9 @@ def run(args) -> int:
                     slot.finish(False)
                     raise CommandError(f"failed to run `{spec}`: {e}")
             finally:
+                # Releases the slot directory only; the snapshotted
+                # tree (`tree_id`, captured above) already lives in the
+                # store and survives this.
                 slot.discard()
 
             # Buffered and emitted whole, so one revision's output never
@@ -180,12 +195,15 @@ def run(args) -> int:
             print("Nothing changed.", file=sys.stderr)
             return 0
 
-        count, reparented = tx.run_rewrite(
+        count, moved = tx.run_rewrite(
             [c.id for c in commits], new_trees, args.restore_descendants)
-        print(f"Rewrote {count} commits", file=sys.stderr)
-        if args.restore_descendants and reparented > 0:
-            print(f"Rebased {reparented} descendant commits (while preserving "
-                  f"their content)", file=sys.stderr)
+        print(f"Rewrote {count} commits.")
+        if moved > 0:
+            if args.restore_descendants:
+                print(f"Rebased {moved} descendant commits (while preserving "
+                      f"their content).")
+            else:
+                print(f"Rebased {moved} descendant commits.")
         _finish(tx, f"run: rewrite {count} commits", settings, ws, repo)
         return 0
     except CommandError as e:

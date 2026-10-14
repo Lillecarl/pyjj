@@ -32,7 +32,7 @@ def _evaluation_for(status: int) -> str:
 def _summary(commit) -> str:
     """A one-line commit summary, in the shape `pyjj log` uses."""
     description = commit.description.splitlines()[0] if commit.description else "(no description set)"
-    return f"{commit.change_id.hex()[:8]} {commit.id.hex()[:8]} {description}"
+    return f"{commit.change_id.reverse_hex()[:8]} {commit.id.hex()[:8]} {description}"
 
 
 def bisect_run(args) -> int:
@@ -61,6 +61,82 @@ def bisect_run(args) -> int:
         extra = extra[1:]
     argv = [args.cmd] + extra
 
+    def _check_out(commit) -> int | None:
+        """Check out `commit` for one evaluation, like `evaluate_commit`
+        in `cli/src/commands/bisect/run.rs` does. Returns None, or an
+        exit code when the checkout itself failed."""
+        commit_id_hex = commit.id.hex()
+        try:
+            tx = _start_transaction(repo, settings)
+            tx.check_out(ws.workspace_name, commit)
+            _finish(tx, f"Updated to revision {commit_id_hex} for bisection",
+                    settings, ws, repo)
+        except (pyjj.JjError, CommandError) as e:
+            print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+            return 1
+        return None
+
+    def _evaluate(commit):
+        """Run the command against `commit`; returns (evaluation, status)."""
+        env = os.environ.copy()
+        # jj also sets JJ_EXECUTABLE_PATH (its own binary); there is no
+        # jj binary to point at from here, so only the target travels.
+        env["JJ_BISECT_TARGET"] = commit.id.hex()
+        try:
+            status = subprocess.run(argv, cwd=ws.workspace_root, env=env).returncode
+        except OSError as e:
+            print(f"Error: Failed to run evaluation command: {e}", file=sys.stderr)
+            return None, None
+        return _evaluation_for(status), status
+
+    def _print_search_complete():
+        print("Search complete. To discard any revisions created during search, run:")
+        print(f"  jj op restore {initial_op[:12]}")
+
+    if not getattr(args, "trust_endpoints", False):
+        # The pre-bisection checks: every revision `Bisector` assumes
+        # bad or good is evaluated once up front, and a mismatch fails
+        # the whole run before the search starts. `--trust-endpoints`
+        # skips this, like `jj`'s own flag.
+        try:
+            checks = bisector.verify_steps()
+        except (pyjj.JjError, ValueError) as e:
+            print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+            return 1
+        for commit, expected in checks:
+            if args.find_good:
+                # The assumptions flip with the search direction.
+                expected = pyjj.Bisector.invert(expected)
+            print(f"Pre-bisection check: ensuring this revision is {expected}:")
+            print(_summary(commit))
+            if (rc := _check_out(commit)) is not None:
+                return rc
+            evaluation, status = _evaluate(commit)
+            if evaluation is None:
+                return 1
+            if evaluation != expected:
+                # jj renders the outcome with `Evaluation`'s Display
+                # (`skipped`/`aborted`), while the mark vocabulary says
+                # `skip`/`abort` -- the message follows jj.
+                shown = {"good": "good", "bad": "bad", "skip": "skipped",
+                         "abort": "aborted"}[evaluation]
+                # `status.code().unwrap_or(-1)`: a signal death has no
+                # code, and prints as -1.
+                code = status if status >= 0 else -1
+                print(f"Cannot bisect: this revision was expected to be {expected}, "
+                      f"but was {shown} (exit status: {code}) instead.")
+                _print_search_complete()
+                print("Error: Bisection preconditions failed", file=sys.stderr)
+                return 1
+            # As in the main loop below: the evaluation command may
+            # have run `jj`, so reload -- keeping the same settings
+            # object, so the change-id RNG sequence continues.
+            try:
+                ws, repo = _reload(settings, args)
+            except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
+                print(f"Error: {e.message}", file=sys.stderr)
+                return 1
+
     while True:
         try:
             step = bisector.next_step()
@@ -84,25 +160,12 @@ def bisect_run(args) -> int:
                   f"(at least roughly {steps} steps)")
         print(f"Now evaluating: {_summary(commit)}")
 
-        commit_id_hex = commit.id.hex()
-        try:
-            tx = _start_transaction(repo, settings)
-            tx.check_out(ws.workspace_name, commit)
-            _finish(tx, f"Updated to revision {commit_id_hex} for bisection",
-                    settings, ws, repo)
-        except (pyjj.JjError, CommandError) as e:
-            print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-            return 1
+        if (rc := _check_out(commit)) is not None:
+            return rc
 
-        env = os.environ.copy()
-        env["JJ_BISECT_TARGET"] = commit_id_hex
-        try:
-            status = subprocess.run(argv, cwd=ws.workspace_root, env=env).returncode
-        except OSError as e:
-            print(f"Error: Failed to run evaluation command: {e}", file=sys.stderr)
+        evaluation, _status = _evaluate(commit)
+        if evaluation is None:
             return 1
-
-        evaluation = _evaluation_for(status)
         print({
             "good": "The revision is good.",
             "bad": "The revision is bad.",
@@ -128,8 +191,7 @@ def bisect_run(args) -> int:
             print(f"Error: {e.message}", file=sys.stderr)
             return 1
 
-    print("Search complete. To discard any revisions created during search, run:")
-    print(f"  jj op restore {initial_op[:12]}")
+    _print_search_complete()
 
     target = "good" if args.find_good else "bad"
     if step.result == "abort":
@@ -141,10 +203,15 @@ def bisect_run(args) -> int:
         return 1
 
     found = list(step.commits)
-    if len(found) == 1:
+    if step.result == "found" and len(found) == 1:
         print(f"The first {target} revision is: {_summary(found[0])}")
     else:
         print(f"The first {target} revisions are:")
         for commit in found:
             print(_summary(commit))
+        if step.possibly_bad:
+            print(f"These revisions may also be {target}, but couldn't be "
+                  f"evaluated:")
+            for commit in step.possibly_bad:
+                print(_summary(commit))
     return 0

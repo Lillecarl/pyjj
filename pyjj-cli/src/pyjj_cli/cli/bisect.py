@@ -20,6 +20,8 @@ def add_parsers(sub) -> None:
                        help="Range of revisions to bisect (can be repeated)")
     p_run.add_argument("--find-good", dest="find_good", action="store_true",
                        help="Find the first good revision instead")
+    p_run.add_argument("--trust-endpoints", dest="trust_endpoints", action="store_true",
+                       help="Skip the pre-bisection checks")
     # `dest` must not be "command": the top-level subparser already owns
     # that name, and reusing it overwrites the dispatch key.
     p_run.add_argument("cmd", nargs="?", metavar="COMMAND",

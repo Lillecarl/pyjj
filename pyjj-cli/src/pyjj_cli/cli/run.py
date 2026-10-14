@@ -40,4 +40,9 @@ def add_parsers(sub) -> None:
     p.add_argument("--passthrough", dest="passthrough",
                    action="store_true",
                    help="Pass stdout and stderr directly to the terminal")
+    p.add_argument("--sparse-patterns", dest="sparse_patterns",
+                   choices=("copy", "full", "empty"), default="copy",
+                   help="What the command sees in each revision: the "
+                        "workspace's sparse patterns (copy, the default), "
+                        "the whole tree (full), or nothing (empty)")
     p.set_defaults(_handler="pyjj_cli.commands.run:run")

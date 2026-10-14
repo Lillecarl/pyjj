@@ -1,6 +1,6 @@
 """`jj util`: infrequently used commands.
 
-Only `backend name`, `exec`, `gc` and `snapshot` are implemented. The
+Only `backend name`, `diff`, `exec`, `gc` and `snapshot` are implemented. The
 rest keep the old stub behaviour, so an unimplemented subcommand still
 exits 2 -- and so does an unknown one, which argparse rejects on its
 own.
@@ -8,9 +8,11 @@ own.
 import argparse
 import sys
 
+from .flags import Flag, add_flags
+
 
 def _util_help(args):
-    print("usage: pyjj util {backend,exec,gc,snapshot}", file=sys.stderr)
+    print("usage: pyjj util {backend,diff,exec,gc,snapshot}", file=sys.stderr)
     return 2
 
 
@@ -76,6 +78,19 @@ def add_parsers(sub) -> None:
         "name", help="Print the name of the backend used in the current repo")
     p_backend_name.set_defaults(
         _handler="pyjj_cli.commands.util.backend:util_backend_name")
+
+    p_diff = util_sub.add_parser("diff", help="Compare two files on disk")
+    p_diff.add_argument("path1", metavar="PATH1", help="First path to compare")
+    p_diff.add_argument("path2", metavar="PATH2", help="Second path to compare")
+    add_flags(p_diff, {Flag.GIT, Flag.WHITESPACE, Flag.CONTEXT,
+                       Flag.DIFF_TOOL})
+    # Short listing formats: accepted but hidden, like jj's own
+    # `mut_arg(hide(true))` -- `show_diff_bytes` omits the block for
+    # all of them, so they only matter when combined with `--tool`.
+    for _flag in ("--summary", "--stat", "--types", "--name-only"):
+        p_diff.add_argument(_flag, action="store_true",
+                            help=argparse.SUPPRESS)
+    p_diff.set_defaults(_handler="pyjj_cli.commands.util.diff:util_diff")
 
     for name, handler in (
         ("completion", "_stub_completion"),

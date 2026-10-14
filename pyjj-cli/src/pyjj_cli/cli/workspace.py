@@ -5,7 +5,7 @@ from .flags import Flag, add_flags
 
 def _workspace_help(args):
     import sys
-    print("usage: pyjj workspace {add,forget,list,rename,root,update-stale}", file=sys.stderr)
+    print("usage: pyjj workspace {add,forget,list,remove,rename,root,update-stale}", file=sys.stderr)
     return 2
 
 
@@ -17,6 +17,15 @@ def add_parsers(sub) -> None:
     p_ws_add.add_argument("destination", help="Where to create the new workspace")
     p_ws_add.add_argument("--name", dest="name", default=None, help="A name for the workspace")
     add_flags(p_ws_add, [Flag.REVISION_APPEND, Flag.MESSAGE_APPEND])
+    colocate_group = p_ws_add.add_mutually_exclusive_group()
+    colocate_group.add_argument("--colocate", dest="colocate",
+                                action="store_true",
+                                help="Create a corresponding Git worktree "
+                                     "for this workspace")
+    colocate_group.add_argument("--no-colocate", dest="no_colocate",
+                                action="store_true",
+                                help="Do not create a Git worktree for this "
+                                     "workspace")
     p_ws_add.add_argument("--sparse-patterns", dest="sparse_patterns",
                           choices=("copy", "full", "empty"), default="copy",
                           help="What the new workspace's sparse patterns "
@@ -37,3 +46,6 @@ def add_parsers(sub) -> None:
     p_ws_root.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_root:workspace_root")
     p_ws_update = ws_sub.add_parser("update-stale", help="Update a workspace that has become stale")
     p_ws_update.set_defaults(_handler="pyjj_cli.commands.workspace.workspace_update_stale:workspace_update_stale")
+    p_ws_remove = ws_sub.add_parser("remove", help="Remove a workspace and its files from disk")
+    p_ws_remove.add_argument("names", nargs="+", help="Workspaces to remove")
+    p_ws_remove.set_defaults(_handler="pyjj_cli.commands.workspace.remove:workspace_remove")

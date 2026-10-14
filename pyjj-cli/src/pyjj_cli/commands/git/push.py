@@ -41,7 +41,7 @@ def git_push(args) -> int:
         remote = _remote(args, repo, settings)
         updates, created = _updates(args, repo, settings, remote)
         if not updates:
-            print("Nothing changed.")
+            print("Nothing changed.", file=sys.stderr)
             return 0
         print(f"Changes to push to {remote}:")
         for name, before, after in updates:
