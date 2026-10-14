@@ -1,5 +1,6 @@
 """Shared helpers for CLI commands."""
 """CLI command implementations exercising pyjj bindings."""
+import contextlib
 import functools
 import os
 import shlex
@@ -509,6 +510,42 @@ def _start_transaction(repo, settings):
     its operation without provenance.
     """
     return repo.start_transaction(settings, _operation_args())
+
+
+@contextlib.contextmanager
+def write_tx(args):
+    """Load the workspace and open its transaction in one step.
+
+    The caller still commits explicitly with `_finish`: the operation
+    description usually names what the block did, so it cannot be
+    fixed up front. Returning early -- or raising -- before `_finish`
+    drops the transaction unwritten, as before; `_finish` inside the
+    block commits, and the exit then runs nothing.
+
+    `_check_rewritable` stays explicit right after the open: its
+    target set is per-command policy, only its position is uniform.
+
+    Not for `git init`'s direct `tx.commit()` sites, `run`'s and
+    `graph apply`'s hand-rolled loads, or `bisect`'s checkout closure:
+    those must not reload, since a fresh `_load` would rebuild
+    settings and reseed the change-id RNG. They keep
+    `_start_transaction` with a comment saying why.
+    """
+    settings, ws, repo = _load(args)
+    yield settings, ws, repo, _start_transaction(repo, settings)
+
+
+@contextlib.contextmanager
+def read_repo(args):
+    """Load the workspace for a command that writes nothing.
+
+    Same `_load` (including its working-copy snapshot) without the
+    transaction. Not for the `settings_for` commands (`config get`,
+    `config list`, `util diff`, `util snapshot`): those must not
+    snapshot on load.
+    """
+    settings, ws, repo = _load(args)
+    yield settings, ws, repo
 
 
 def report_refused(stats) -> None:
