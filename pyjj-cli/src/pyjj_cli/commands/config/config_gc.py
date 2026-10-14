@@ -8,7 +8,6 @@ The metadata that records which repo a directory belongs to is a
 protobuf, so reading it goes through the binding rather than being
 decoded here -- see `pyjj-bindings/src/secure_config.rs`.
 """
-import os
 import sys
 from pathlib import Path
 

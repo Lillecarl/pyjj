@@ -1,6 +1,5 @@
 """file subcommand: file_chmod."""
 import sys
-from pathlib import Path
 
 import pyjj
 from ..common import (
@@ -9,9 +8,7 @@ from ..common import (
     CommandError,
     _finish,
     _load,
-    _resolve_all,
     _resolve_one,
-    _wc_commit,
 )
 
 def file_chmod(args) -> int:

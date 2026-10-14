@@ -1,6 +1,5 @@
 """file subcommand: file_annotate."""
 import sys
-from pathlib import Path
 
 import pyjj
 from ...formatter import render_block
@@ -8,14 +7,11 @@ from ..common import (
     CommandError,
     _commit_context,
     _resolve_template,
-    _finish,
     _format_timestamp,
     _load,
-    _resolve_all,
     _resolve_one,
     _short_id_spans,
     use_color,
-    _wc_commit,
 )
 
 def file_annotate(args) -> int:

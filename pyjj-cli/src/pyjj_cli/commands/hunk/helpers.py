@@ -1,26 +1,7 @@
 """hunk subcommand: _load_spec."""
-import json
-import os
-import shlex
-import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
 
-import pyjj
 import pyjj.hunk as hunk_mod
-from ..common import (
-    CommandError,
-    _checkout_if_moved,
-    _finish,
-    _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _wc_commit,
-    complete_newline,
-    _run_editor,
-)
 
 def _load_spec(args) -> hunk_mod.Spec:
     """Load spec from args.spec / args.spec_file / stdin, handling '-'."""

@@ -1,6 +1,5 @@
-import argparse
 
-from .flags import Flag, add_config_file_flag, add_config_scope_flags, add_flags
+from .flags import add_config_file_flag, add_config_scope_flags
 
 
 def _config_help(args):

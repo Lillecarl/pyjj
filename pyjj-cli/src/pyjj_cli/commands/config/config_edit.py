@@ -7,7 +7,7 @@ import sys
 import pyjj
 
 from ..common import CommandError, apply_config_args
-from .config_set import _scope, _workspace_root
+from .config_set import _workspace_root
 from .paths import config_path, write_config
 
 

@@ -3,11 +3,7 @@ import sys
 
 import pyjj
 from ..common import (
-    CommandError,
-    _finish,
     _load,
-    _resolve_all,
-    _resolve_one,
 )
 
 def git_colocation(args) -> int:

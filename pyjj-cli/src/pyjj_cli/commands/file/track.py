@@ -5,11 +5,7 @@ from pathlib import Path
 import pyjj
 from ..common import (
     CommandError,
-    _finish,
     _load,
-    _resolve_all,
-    _resolve_one,
-    _wc_commit,
 )
 
 def file_track(args) -> int:

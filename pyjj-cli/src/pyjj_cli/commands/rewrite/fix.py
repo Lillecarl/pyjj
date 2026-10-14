@@ -1,26 +1,14 @@
 """pyjj-cli rewrite command: fix."""
 import subprocess
 import sys
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
 from ..common import (
     _start_transaction,
     CommandError,
-    _checkout_if_moved,
     _finish,
     _ignore_immutable,
     _load,
-    _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _wc_commit,
-    complete_newline,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
     _fix_pattern_matches,
 )
 
@@ -126,7 +114,7 @@ def fix(args) -> int:
         if not fixes:
             return 0
 
-        summary = tx.fix_apply(settings, fixes, revset=revset, paths=paths, include_unchanged_files=include_unchanged)
+        tx.fix_apply(settings, fixes, revset=revset, paths=paths, include_unchanged_files=include_unchanged)
         _finish(tx, f"fix {revset or 'reachable(@, mutable())'}", settings, ws, repo)
         return 0
     except (pyjj.JjError, CommandError) as e:

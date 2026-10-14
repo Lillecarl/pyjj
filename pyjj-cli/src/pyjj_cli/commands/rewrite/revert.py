@@ -1,29 +1,16 @@
 """pyjj-cli rewrite command: revert."""
-import subprocess
 import sys
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
 from ..common import (
     _start_transaction,
     _check_rewritable,
     _commit_location,
     _insert_between,
     CommandError,
-    _checkout_if_moved,
     _finish,
     _load,
     _resolve_all,
-    _resolve_in_arg_order,
-    _resolve_one,
-    _wc_commit,
-    complete_newline,
-    _run_editor,
-    _changed_files,
-    _run_diff_tool,
-    _selection_is_empty,
-    _fix_pattern_matches,
 )
 
 def revert(args) -> int:

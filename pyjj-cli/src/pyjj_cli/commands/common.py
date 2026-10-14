@@ -1040,7 +1040,8 @@ def _advance_if_immutable(tx, settings, ws, repo) -> None:
 
 
 def _finish(tx, description, settings, ws, base_repo, *,
-            delete_abandoned_bookmarks=False, restore_descendants=False):
+            delete_abandoned_bookmarks=False, restore_descendants=False,
+            rebase=True):
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
     commit (e.g. an abandon or rebase rebased it), update the on-disk
@@ -1049,12 +1050,17 @@ def _finish(tx, description, settings, ws, base_repo, *,
     `restore_descendants` is `--restore-descendants`: move the
     descendants down without replaying their diffs, so their content
     stays exactly as it was. jj calls one or the other, never both.
+
+    `rebase=False` skips the descendant step entirely, for operations
+    that record no rewrites (undo/redo/op restore) -- see
+    `_restore_view_command`.
     """
     old_wc_hex = base_repo.view()[ws.workspace_name]
-    if restore_descendants:
-        tx.reparent_descendants()
-    else:
-        tx.rebase_descendants(delete_abandoned_bookmarks)
+    if rebase:
+        if restore_descendants:
+            tx.reparent_descendants()
+        else:
+            tx.rebase_descendants(delete_abandoned_bookmarks)
     _advance_if_immutable(tx, settings, ws, base_repo)
     _export_git_refs(tx, ws)
     tx.commit(description)
@@ -1065,11 +1071,7 @@ def _restore_view_command(tx, description, settings, ws, repo):
     they produce no rewrites to rebase and take their operation description
     verbatim from the binding -- for undo/redo it encodes the target op so
     future stack jumps keep working."""
-    old_wc_hex = repo.view()[ws.workspace_name]
-    _advance_if_immutable(tx, settings, ws, repo)
-    _export_git_refs(tx, ws)
-    tx.commit(description)
-    _checkout_if_moved(settings, ws, old_wc_hex)
+    _finish(tx, description, settings, ws, repo, rebase=False)
 
 
 # -- commands --------------------------------------------------------------

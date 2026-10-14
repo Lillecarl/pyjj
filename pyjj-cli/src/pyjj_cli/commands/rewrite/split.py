@@ -1,28 +1,21 @@
 """pyjj-cli rewrite command: split."""
 import subprocess
 import sys
-from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
 from ..common import (
     _start_transaction,
     _check_rewritable,
     _commit_location,
     CommandError,
-    _checkout_if_moved,
     _finish,
     _load,
-    _resolve_all,
-    _resolve_in_arg_order,
     _resolve_one,
-    _wc_commit,
     complete_newline,
     _run_bulk_editor,
     _changed_files,
     _run_diff_tool,
     _selection_is_empty,
-    _fix_pattern_matches,
 )
 
 def split(args) -> int:
@@ -44,9 +37,9 @@ def split(args) -> int:
                       else "--insert-before <REVSETS>")
             print(f"error: the argument '--parallel' cannot be used with "
                   f"'{placed}'", file=sys.stderr)
-            print(f"\nUsage: jj split --parallel <FILESETS>...",
+            print("\nUsage: jj split --parallel <FILESETS>...",
                   file=sys.stderr)
-            print(f"\nFor more information, try '--help'.",
+            print("\nFor more information, try '--help'.",
                   file=sys.stderr)
             return 2
         if ontos and (afters or befores):
@@ -54,9 +47,9 @@ def split(args) -> int:
                      else "--insert-before <REVSETS>")
             print(f"error: the argument '--onto <REVSETS>' cannot be used "
                   f"with '{other}'", file=sys.stderr)
-            print(f"\nUsage: jj split --onto <REVSETS> <FILESETS>...",
+            print("\nUsage: jj split --onto <REVSETS> <FILESETS>...",
                   file=sys.stderr)
-            print(f"\nFor more information, try '--help'.",
+            print("\nFor more information, try '--help'.",
                   file=sys.stderr)
             return 2
 

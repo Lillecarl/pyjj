@@ -71,7 +71,6 @@ from pyjj_bindings import (
     remove_repo_config_dir,
     repo_config_repo_path,
     repo_configs_root_dir,
-    VERSION,
     __version__,
 )
 from . import _async as _async  # noqa: F401  (installs *_async methods below)

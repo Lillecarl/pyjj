@@ -1,4 +1,3 @@
-import argparse
 
 from .flags import Flag, add_flags, add_revision_flag
 

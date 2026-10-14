@@ -34,7 +34,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 try:
     import yaml  # type: ignore
@@ -620,7 +620,7 @@ def _reconstruct_with_line_filters(
     # Decode as text for line handling; if binary or decode fails, fall back
     try:
         before_s = before.decode()
-        after_s = after.decode()
+        after.decode()  # validated only; reconstruction walks before_s + hunk ranges
     except UnicodeDecodeError:
         return before if not selected_hunks else after
     # Use the detailed hunks to reconstruct, but need to handle per-hunk line filters
@@ -645,7 +645,6 @@ def _reconstruct_with_line_filters(
     # For hunks with per_hunk_lines etc, we will generate a filtered version of that hunk's added/removed.
     # Then we can use a helper that walks the diff and applies per-hunk decisions.
     before_lines = before_s.splitlines(keepends=True)
-    after_lines = after_s.splitlines(keepends=True)
     # But we need to know the hunk boundaries to map. Instead, we can just use the detailed_hunks' removed/added and reassemble
     # by treating the file as: unchanged prefix + hunk0 + unchanged gap + hunk1 + ...
     # We don't have gaps, but we can compute gaps from the before/after strings and hunk ranges.
@@ -793,8 +792,6 @@ def list_hunks_for_commit(commit, settings=None) -> dict[str, list[dict[str, Any
     Returns {path: [hunk_dict, ...]} where each hunk has id, type, removed, added, before/after ranges.
     If commit has no parent (root), returns empty.
     """
-    import pyjj
-
     if not commit.parent_ids:
         return {}
     # Get parent commit

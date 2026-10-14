@@ -1,15 +1,11 @@
 """git subcommand: git_import."""
 import sys
-from pathlib import Path
 
 import pyjj
 from ..common import (
     _start_transaction,
-    CommandError,
     _finish,
     _load,
-    _resolve_all,
-    _resolve_one,
 )
 
 def git_import(args) -> int:

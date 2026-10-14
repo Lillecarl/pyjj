@@ -2,8 +2,6 @@
 import subprocess
 import sys
 
-import pyjj
-from ..common import _load
 
 # Allowed template variables — for validation
 _ALLOWED_VARS = {

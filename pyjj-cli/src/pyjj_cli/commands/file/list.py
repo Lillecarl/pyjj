@@ -1,16 +1,12 @@
 """file subcommand: file_list."""
 import sys
-from pathlib import Path
 
 import pyjj
 from ..common import (
     CommandError,
     _resolve_template,
-    _finish,
     _load,
-    _resolve_all,
     _resolve_one,
-    _wc_commit,
 )
 
 def file_list(args) -> int:
