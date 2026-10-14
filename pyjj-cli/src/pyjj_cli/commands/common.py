@@ -1,6 +1,5 @@
 """Shared helpers for CLI commands."""
 """CLI command implementations exercising pyjj bindings."""
-import json
 import os
 import shlex
 import subprocess
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 
 import pyjj
-import pyjj.hunk as hunk_mod
 
 from ..formatter import Formatter, Line, render_block, separate
 
