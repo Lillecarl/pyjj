@@ -8,6 +8,7 @@ from ..common import (
     CommandError,
     _load,
     _resolve_one,
+    command,
 )
 
 # What `--pattern` means when it names no kind. jj reads the pattern as
@@ -18,6 +19,7 @@ _DEFAULT_KIND = "regex"
 _GLOB_CHARS = "*?["
 
 
+@command
 def file_search(args) -> int:
     """`jj file search` — the lines whose content matches a pattern.
 
@@ -26,25 +28,21 @@ def file_search(args) -> int:
     prints as `path:line` (`path:lineno:line` under `-n`), and
     `--name-only` prints each matching file once, by name.
     """
-    try:
-        settings, _ws, repo = _load(args)
-        commit = _resolve_one(repo, settings, args.revision)
-        matches = _line_matcher(getattr(args, "pattern", "") or "")
-        paths = getattr(args, "filesets", None) or None
-        name_only = getattr(args, "name_only", False)
-        line_number = getattr(args, "line_number", False)
-        for path in sorted(commit.list_files(paths)):
-            for content in _searchable_contents(repo, commit, path):
-                if name_only:
-                    if any(matches(line) for line in _lines(content)):
-                        print(path)
-                        break
-                else:
-                    _print_matches(path, content, matches, line_number)
-        return 0
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
+    settings, _ws, repo = _load(args)
+    commit = _resolve_one(repo, settings, args.revision)
+    matches = _line_matcher(getattr(args, "pattern", "") or "")
+    paths = getattr(args, "filesets", None) or None
+    name_only = getattr(args, "name_only", False)
+    line_number = getattr(args, "line_number", False)
+    for path in sorted(commit.list_files(paths)):
+        for content in _searchable_contents(repo, commit, path):
+            if name_only:
+                if any(matches(line) for line in _lines(content)):
+                    print(path)
+                    break
+            else:
+                _print_matches(path, content, matches, line_number)
+    return 0
 
 
 def _searchable_contents(repo, commit, path):

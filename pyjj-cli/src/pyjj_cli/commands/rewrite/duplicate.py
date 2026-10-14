@@ -1,7 +1,5 @@
 """pyjj-cli rewrite command: duplicate."""
-import sys
 
-import pyjj
 from ..common import (
     _start_transaction,
     _check_rewritable,
@@ -10,29 +8,27 @@ from ..common import (
     _load,
     _resolve_all,
     _resolve_in_arg_order,
+    command,
 )
 
+@command
 def duplicate(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        revsets = (list(args.revisions_pos)
-                   + list(getattr(args, "revisions_opt", None) or [])) or ["@"]
-        targets = _resolve_all(repo, settings, revsets)
-        parents, children = _placement(repo, settings, args)
-        tx = _start_transaction(repo, settings)
-        # The duplicates themselves are new commits, but `-A`/`-B` rebase
-        # whatever followed the insertion point.
-        _check_rewritable(tx, settings, children)
-        copies = tx.duplicate(targets)
-        if parents or children:
-            # `tx.duplicate` always lands the copies beside their
-            # originals; a placement flag then moves them where jj would
-            # have put them in the first place.
-            tx.move_commits([c.id for c in copies], [], parents, children)
-        _finish(tx, "duplicate commit", settings, ws, repo)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
+    settings, ws, repo = _load(args)
+    revsets = (list(args.revisions_pos)
+               + list(getattr(args, "revisions_opt", None) or [])) or ["@"]
+    targets = _resolve_all(repo, settings, revsets)
+    parents, children = _placement(repo, settings, args)
+    tx = _start_transaction(repo, settings)
+    # The duplicates themselves are new commits, but `-A`/`-B` rebase
+    # whatever followed the insertion point.
+    _check_rewritable(tx, settings, children)
+    copies = tx.duplicate(targets)
+    if parents or children:
+        # `tx.duplicate` always lands the copies beside their
+        # originals; a placement flag then moves them where jj would
+        # have put them in the first place.
+        tx.move_commits([c.id for c in copies], [], parents, children)
+    _finish(tx, "duplicate commit", settings, ws, repo)
     return 0
 
 

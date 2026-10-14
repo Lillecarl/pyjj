@@ -4,34 +4,32 @@ import sys
 import pyjj
 from ..common import (
     _load,
+    command,
 )
 
+@command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def workspace_forget(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-        view = repo.view()
-        names = getattr(args, "names", [])
-        known = [name for name in names if name in view]
-        for name in names:
-            if name not in view:
-                print(f"Warning: No such workspace: {name}", file=sys.stderr)
-        if not known:
-            if names:
-                print("Nothing changed.", file=sys.stderr)
-            else:
-                # No names at all: the binding refuses an empty batch.
-                ws.forget_workspaces(settings, names)
-            return 0
-        # The recorded path intentionally outlives the forget (undoing
-        # it restores the workspace, which needs the directory), so
-        # the entry is kept -- unlike `remove`, which drops it.
-        ws.forget_workspaces(settings, known, forget_store=False)
-        for name in known:
-            _unlink_worktree(settings, ws, name)
+    settings, ws, repo = _load(args)
+    view = repo.view()
+    names = getattr(args, "names", [])
+    known = [name for name in names if name in view]
+    for name in names:
+        if name not in view:
+            print(f"Warning: No such workspace: {name}", file=sys.stderr)
+    if not known:
+        if names:
+            print("Nothing changed.", file=sys.stderr)
+        else:
+            # No names at all: the binding refuses an empty batch.
+            ws.forget_workspaces(settings, names)
         return 0
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
+    # The recorded path intentionally outlives the forget (undoing
+    # it restores the workspace, which needs the directory), so
+    # the entry is kept -- unlike `remove`, which drops it.
+    ws.forget_workspaces(settings, known, forget_store=False)
+    for name in known:
+        _unlink_worktree(settings, ws, name)
+    return 0
 
 
 def _unlink_worktree(settings, ws, name) -> None:

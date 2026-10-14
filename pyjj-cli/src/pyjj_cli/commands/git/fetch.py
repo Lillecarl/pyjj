@@ -8,6 +8,7 @@ from ..common import (
     _load,
     _name_matches,
     _start_transaction,
+    command,
 )
 
 # The remote a fetch reads when nothing names one and the repository
@@ -66,27 +67,23 @@ def _no_remotes():
     raise CommandError("No git remotes to fetch from")
 
 
+@command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def git_fetch(args) -> int:
     """`jj git fetch` — fetch from a Git remote."""
-    try:
-        branches = getattr(args, "branches", None)
-        tags = getattr(args, "tags", None)
-        tracked = getattr(args, "tracked", False)
-        if tracked and (branches is not None or tags is not None):
-            named = "--branch" if branches is not None else "--tag"
-            print(f"error: the argument '--tracked' cannot be used with "
-                  f"'{named}'", file=sys.stderr)
-            return 2
+    branches = getattr(args, "branches", None)
+    tags = getattr(args, "tags", None)
+    tracked = getattr(args, "tracked", False)
+    if tracked and (branches is not None or tags is not None):
+        named = "--branch" if branches is not None else "--tag"
+        print(f"error: the argument '--tracked' cannot be used with "
+              f"'{named}'", file=sys.stderr)
+        return 2
 
-        settings, ws, repo = _load(args)
-        remotes = _remotes(repo, settings, args)
-        tx = _start_transaction(repo, settings)
-        for remote in remotes:
-            tx.git_fetch(settings, remote, branches, tags, tracked)
-        _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
-                settings, ws, repo)
-        return 0
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError,
-            CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
+    settings, ws, repo = _load(args)
+    remotes = _remotes(repo, settings, args)
+    tx = _start_transaction(repo, settings)
+    for remote in remotes:
+        tx.git_fetch(settings, remote, branches, tags, tracked)
+    _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
+            settings, ws, repo)
+    return 0

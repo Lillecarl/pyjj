@@ -8,6 +8,7 @@ from ..common import (
     CommandError,
     _finish,
     _load,
+    command,
 )
 
 #: The remote jj falls back to when nothing else names one.
@@ -34,42 +35,38 @@ class _Refused(Exception):
     """
 
 
+@command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def git_push(args) -> int:
     """`jj git push` -- push bookmarks to a Git remote."""
-    try:
-        settings, ws, repo = _load(args)
-        remote = _remote(args, repo, settings)
-        updates, created = _updates(args, repo, settings, remote)
-        if not updates:
-            print("Nothing changed.", file=sys.stderr)
-            return 0
-        print(f"Changes to push to {remote}:")
-        for name, before, after in updates:
-            print(f"  {_update_term(before, after)} bookmark {name}")
-        if getattr(args, "dry_run", False):
-            # jj stops before it writes anything, so a bookmark that
-            # `--change` or `--named` would have created stays uncreated.
-            print("Dry-run requested, not pushing.")
-            return 0
-        tx = _start_transaction(repo, settings)
-        for name, target in created.items():
-            tx.set_bookmark(name, target)
-        stats = tx.git_push_updates(
-            settings, remote, updates,
-            list(getattr(args, "push_options", None) or []))
-        rejected = list(stats["rejected"]) + list(stats["remote_rejected"])
-        for name, reason in rejected:
-            print(f"Error: {name} rejected: {reason or 'no reason given'}",
-                  file=sys.stderr)
-        if not stats["pushed"] and rejected:
-            return 1
-        _finish(tx, f"push to {remote}", settings, ws, repo)
-        if rejected:
-            print("Error: Failed to push some bookmarks", file=sys.stderr)
-            return 1
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError, pyjj.JjError,
-            CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+    settings, ws, repo = _load(args)
+    remote = _remote(args, repo, settings)
+    updates, created = _updates(args, repo, settings, remote)
+    if not updates:
+        print("Nothing changed.", file=sys.stderr)
+        return 0
+    print(f"Changes to push to {remote}:")
+    for name, before, after in updates:
+        print(f"  {_update_term(before, after)} bookmark {name}")
+    if getattr(args, "dry_run", False):
+        # jj stops before it writes anything, so a bookmark that
+        # `--change` or `--named` would have created stays uncreated.
+        print("Dry-run requested, not pushing.")
+        return 0
+    tx = _start_transaction(repo, settings)
+    for name, target in created.items():
+        tx.set_bookmark(name, target)
+    stats = tx.git_push_updates(
+        settings, remote, updates,
+        list(getattr(args, "push_options", None) or []))
+    rejected = list(stats["rejected"]) + list(stats["remote_rejected"])
+    for name, reason in rejected:
+        print(f"Error: {name} rejected: {reason or 'no reason given'}",
+              file=sys.stderr)
+    if not stats["pushed"] and rejected:
+        return 1
+    _finish(tx, f"push to {remote}", settings, ws, repo)
+    if rejected:
+        print("Error: Failed to push some bookmarks", file=sys.stderr)
         return 1
     return 0
 

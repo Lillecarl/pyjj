@@ -1,5 +1,6 @@
 """Shared helpers for CLI commands."""
 """CLI command implementations exercising pyjj bindings."""
+import functools
 import os
 import shlex
 import subprocess
@@ -43,6 +44,35 @@ class CommandError(Exception):
     def __init__(self, message):
         super().__init__(message)
         self.message = message
+
+
+def command(fn=None, *, catch=()):
+    """Run a command body, mapping known errors to `Error:` + exit 1.
+
+    Every command used to retype the same `try/except` tail: catch the
+    error, print `Error: <message>` to stderr, return 1. That tail lives
+    here now; bodies just do the work and return their exit code --
+    explicit `return 2` usage refusals pass through untouched.
+
+    The base pair `(pyjj.JjError, CommandError)` is always caught.
+    `catch` names extra exception types a body can raise besides the
+    pair (`OSError` for filesystem touchers, `ValueError` for argument
+    plumbing, the workspace-load errors for `_load`-phase failures).
+    Anything not listed -- `ConfigArgsError`, `SystemExit`,
+    `KeyboardInterrupt` -- propagates exactly as if the body ran
+    unwrapped.
+    """
+    def decorate(fn):
+        @functools.wraps(fn)
+        def run(args) -> int:
+            try:
+                return fn(args)
+            except (pyjj.JjError, CommandError, *catch) as e:
+                print(f"Error: {getattr(e, 'message', str(e))}",
+                      file=sys.stderr)
+                return 1
+        return run
+    return decorate(fn) if fn is not None else decorate
 
 
 class ConfigArgsError(Exception):
