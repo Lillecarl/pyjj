@@ -2,9 +2,9 @@
 
 from ..common import (
     _resolve_template,
-    _load,
     _resolve_one,
     command,
+    read_repo,
 )
 
 @command
@@ -15,10 +15,10 @@ def file_list(args) -> int:
     path and nothing else. `-T` replaces that; pyjj-cli's is a Jinja
     template, and `path` is what it has to work with.
     """
-    settings, ws, repo = _load(args)
-    commit = _resolve_one(repo, settings, args.revision)
-    template = _resolve_template(settings, ws, args, "file_list")
-    paths = getattr(args, "filesets", None) or None
-    for p in sorted(commit.list_files(paths)):
-        print(template.render({"path": p}) if template is not None else p)
-    return 0
+    with read_repo(args) as (settings, ws, repo):
+        commit = _resolve_one(repo, settings, args.revision)
+        template = _resolve_template(settings, ws, args, "file_list")
+        paths = getattr(args, "filesets", None) or None
+        for p in sorted(commit.list_files(paths)):
+            print(template.render({"path": p}) if template is not None else p)
+        return 0

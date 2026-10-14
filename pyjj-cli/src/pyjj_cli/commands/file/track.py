@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 
 from ..common import (
-    _load,
     command,
+    read_repo,
 )
 
 @command
@@ -15,13 +15,13 @@ def file_track(args) -> int:
     # would force-track. For now, we just ensure the file is not ignored
     # by touching it and snapshotting, but the real `jj file track` does
     # more. For parity, we just snapshot and check out.
-    _settings, ws, repo = _load(args)
-    # Snapshot will pick up the files if they exist and are not ignored
-    # unless --include-ignored is used, in which case we would need to
-    # force-track. For now, just do a snapshot and return.
-    # The paths are relative to workspace root, we ensure they exist
-    for path in getattr(args, "paths", []):
-        p = Path(ws.workspace_root) / path
-        if not p.exists():
-            print(f"Warning: path {path} does not exist", file=sys.stderr)
-    return 0
+    with read_repo(args) as (_settings, ws, repo):
+        # Snapshot will pick up the files if they exist and are not ignored
+        # unless --include-ignored is used, in which case we would need to
+        # force-track. For now, just do a snapshot and return.
+        # The paths are relative to workspace root, we ensure they exist
+        for path in getattr(args, "paths", []):
+            p = Path(ws.workspace_root) / path
+            if not p.exists():
+                print(f"Warning: path {path} does not exist", file=sys.stderr)
+        return 0

@@ -4,18 +4,17 @@ import sys
 
 import pyjj
 from ..common import (
-    _start_transaction,
     _changed_files,
     _check_rewritable,
     _commit_location,
     CommandError,
     _finish,
-    _load,
     _resolve_all,
     _resolve_one,
     _run_diff_tool,
     complete_newline,
     _run_editor,
+    write_tx,
 )
 
 # What jj's clap refuses outright, as `(flag, dest, incompatible with)`.
@@ -52,70 +51,69 @@ def squash(args) -> int:
         print(f"Error: {refusal}", file=sys.stderr)
         return 2
     try:
-        settings, ws, repo = _load(args)
-        ontos = list(getattr(args, "ontos", None) or [])
-        afters = list(getattr(args, "insert_afters", None) or [])
-        befores = list(getattr(args, "insert_befores", None) or [])
-        # The experimental UI: `-o`/`-A`/`-B` squash into a commit that
-        # does not exist yet, so the command creates one and places it.
-        inserting = bool(ontos or afters or befores)
+        with write_tx(args) as (settings, ws, repo, tx):
+            ontos = list(getattr(args, "ontos", None) or [])
+            afters = list(getattr(args, "insert_afters", None) or [])
+            befores = list(getattr(args, "insert_befores", None) or [])
+            # The experimental UI: `-o`/`-A`/`-B` squash into a commit that
+            # does not exist yet, so the command creates one and places it.
+            inserting = bool(ontos or afters or befores)
 
-        sources, dest = _sources_and_destination(
-            args, repo, settings, inserting)
-        if len(sources) != 1:
-            raise CommandError(
-                "squashing multiple source revisions is not supported yet")
-        source = sources[0]
-        # jj names the transaction after the commits it was asked for,
-        # before an insertion rebases any of them.
-        squashed = f"squash commit {source.id.hex()}"
+            sources, dest = _sources_and_destination(
+                args, repo, settings, inserting)
+            if len(sources) != 1:
+                raise CommandError(
+                    "squashing multiple source revisions is not supported yet")
+            source = sources[0]
+            # jj names the transaction after the commits it was asked for,
+            # before an insertion rebases any of them.
+            squashed = f"squash commit {source.id.hex()}"
 
-        description = _description(args, settings, source, dest)
+            description = _description(args, settings, source, dest)
 
-        tx = _start_transaction(repo, settings)
-        _check_rewritable(tx, settings, [source] if dest is None
-                          else [source, dest])
-        if dest is None:
-            dest, source = _place_new_commit(
-                tx, repo, settings, source, ontos, afters, befores)
+            _check_rewritable(tx, settings, [source] if dest is None
+                              else [source, dest])
+            if dest is None:
+                dest, source = _place_new_commit(
+                    tx, repo, settings, source, ontos, afters, befores)
 
-        keep_emptied = getattr(args, "keep_emptied", False)
-        tool = getattr(args, "tool", None)
-        if tool:
-            builder = tx.squash_edited(
-                source, dest, _selected(repo, settings, tool, source),
-                keep_emptied=keep_emptied)
-        else:
-            builder = tx.squash(source, dest,
-                                paths=getattr(args, "filesets", None) or None,
-                                keep_emptied=keep_emptied)
-        if builder is None:
+            keep_emptied = getattr(args, "keep_emptied", False)
+            tool = getattr(args, "tool", None)
             if tool:
-                # A selection that moved nothing is a mistake rather than
-                # a no-op: the reader was asked to choose and chose none.
-                raise CommandError("No changes selected")
-            if not inserting:
-                print("Nothing changed.", file=sys.stderr)
-                return 0
-            # The placement still created a commit, so the operation is
-            # not empty even though nothing moved into it.
-        else:
-            builder = builder.set_description(description)
-            if inserting:
-                # Forget the empty commit the placement created. It is a
-                # step nobody asked for, and an evolog naming it would
-                # read as a history the user never made.
-                builder = builder.set_predecessors(
-                    [p for p in builder.predecessors()
-                     if p.hex() != dest.id.hex()])
-            builder.write(repo)
-        # jj words this by where the changes landed. A destination that
-        # already existed -- `--into`, or the source's parent -- reads
-        # `squash commits into <id>`; a destination the command creates
-        # reads `squash commit <id>`.
-        _finish(tx, squashed if inserting
-                else f"squash commits into {dest.id.hex()}",
-                settings, ws, repo)
+                builder = tx.squash_edited(
+                    source, dest, _selected(repo, settings, tool, source),
+                    keep_emptied=keep_emptied)
+            else:
+                builder = tx.squash(source, dest,
+                                    paths=getattr(args, "filesets", None) or None,
+                                    keep_emptied=keep_emptied)
+            if builder is None:
+                if tool:
+                    # A selection that moved nothing is a mistake rather than
+                    # a no-op: the reader was asked to choose and chose none.
+                    raise CommandError("No changes selected")
+                if not inserting:
+                    print("Nothing changed.", file=sys.stderr)
+                    return 0
+                # The placement still created a commit, so the operation is
+                # not empty even though nothing moved into it.
+            else:
+                builder = builder.set_description(description)
+                if inserting:
+                    # Forget the empty commit the placement created. It is a
+                    # step nobody asked for, and an evolog naming it would
+                    # read as a history the user never made.
+                    builder = builder.set_predecessors(
+                        [p for p in builder.predecessors()
+                         if p.hex() != dest.id.hex()])
+                builder.write(repo)
+            # jj words this by where the changes landed. A destination that
+            # already existed -- `--into`, or the source's parent -- reads
+            # `squash commits into <id>`; a destination the command creates
+            # reads `squash commit <id>`.
+            _finish(tx, squashed if inserting
+                    else f"squash commits into {dest.id.hex()}",
+                    settings, ws, repo)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1

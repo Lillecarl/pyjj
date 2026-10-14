@@ -4,63 +4,61 @@ import sys
 
 import pyjj
 from ..common import (
-    _start_transaction,
     _check_rewritable,
     CommandError,
     _finish,
-    _load,
     _resolve_one,
     _changed_files,
     _run_diff_tool,
     _selection_is_empty,
+    write_tx,
 )
 
 
 def restore(args) -> int:
     try:
-        settings, ws, repo = _load(args)
-        changes_in = getattr(args, "changes_in", None)
-        if changes_in and (args.from_ or args.into):
-            print("Error: --changes-in cannot be used with --from or --into",
-                  file=sys.stderr)
-            return 2
-        tool = getattr(args, "tool", None)
-        paths = list(args.paths_pos) or None
-        if tool and paths:
-            # jj shows the editor only the matched paths and leaves the
-            # rest of the destination alone. Doing that here needs jj's
-            # fileset matcher on the Python side, which pyjj-cli does
-            # not have yet, so it refuses rather than guessing.
-            print("Error: --tool cannot be combined with FILESETS yet",
-                  file=sys.stderr)
-            return 2
+        with write_tx(args) as (settings, ws, repo, tx):
+            changes_in = getattr(args, "changes_in", None)
+            if changes_in and (args.from_ or args.into):
+                print("Error: --changes-in cannot be used with --from or --into",
+                      file=sys.stderr)
+                return 2
+            tool = getattr(args, "tool", None)
+            paths = list(args.paths_pos) or None
+            if tool and paths:
+                # jj shows the editor only the matched paths and leaves the
+                # rest of the destination alone. Doing that here needs jj's
+                # fileset matcher on the Python side, which pyjj-cli does
+                # not have yet, so it refuses rather than guessing.
+                print("Error: --tool cannot be combined with FILESETS yet",
+                      file=sys.stderr)
+                return 2
 
-        # Naming either side defaults the other to `@`. Naming neither
-        # restores `@` -- or `--changes-in`'s revision -- from the merge
-        # of its own parents, which is what makes a bare `jj restore`
-        # undo the working copy.
-        if args.from_ or args.into:
-            dst = _resolve_one(repo, settings, args.into or "@")
-            src = _resolve_one(repo, settings, args.from_ or "@")
-        else:
-            dst = _resolve_one(repo, settings, changes_in or "@")
-            src = None
+            # Naming either side defaults the other to `@`. Naming neither
+            # restores `@` -- or `--changes-in`'s revision -- from the merge
+            # of its own parents, which is what makes a bare `jj restore`
+            # undo the working copy.
+            if args.from_ or args.into:
+                dst = _resolve_one(repo, settings, args.into or "@")
+                src = _resolve_one(repo, settings, args.from_ or "@")
+            else:
+                dst = _resolve_one(repo, settings, changes_in or "@")
+                src = None
 
-        tx = _start_transaction(repo, settings)
-        _check_rewritable(tx, settings, [dst])
-        if tool:
-            selections = _selected(repo, settings, tool, dst, src)
-            if selections is None:
-                print("Nothing changed.", file=sys.stderr)
-                return 0
-            builder = tx.edit_commit_tree(dst, selections)
-        else:
-            builder = tx.restore(src, dst, paths)
-        restored = builder.write(repo)
-        if dst.id.hex() == repo.view().get(ws.workspace_name):
-            tx.set_wc_commit(ws.workspace_name, restored.id)
-        _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo,
-                restore_descendants=getattr(args, "restore_descendants", False))
+            _check_rewritable(tx, settings, [dst])
+            if tool:
+                selections = _selected(repo, settings, tool, dst, src)
+                if selections is None:
+                    print("Nothing changed.", file=sys.stderr)
+                    return 0
+                builder = tx.edit_commit_tree(dst, selections)
+            else:
+                builder = tx.restore(src, dst, paths)
+            restored = builder.write(repo)
+            if dst.id.hex() == repo.view().get(ws.workspace_name):
+                tx.set_wc_commit(ws.workspace_name, restored.id)
+            _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo,
+                    restore_descendants=getattr(args, "restore_descendants", False))
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1

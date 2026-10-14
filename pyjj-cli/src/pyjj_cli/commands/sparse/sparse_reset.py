@@ -2,12 +2,12 @@
 
 import pyjj
 from ..common import (
-    _load,
     command,
+    read_repo,
 )
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def sparse_reset(args) -> int:
-    _settings, ws, _repo = _load(args)
-    ws.set_sparse_patterns([""])
-    return 0
+    with read_repo(args) as (_settings, ws, _repo):
+        ws.set_sparse_patterns([""])
+        return 0

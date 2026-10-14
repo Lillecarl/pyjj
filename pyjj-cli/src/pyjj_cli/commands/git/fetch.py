@@ -5,10 +5,9 @@ import pyjj
 from ..common import (
     CommandError,
     _finish,
-    _load,
     _name_matches,
-    _start_transaction,
     command,
+    write_tx,
 )
 
 # The remote a fetch reads when nothing names one and the repository
@@ -79,11 +78,10 @@ def git_fetch(args) -> int:
               f"'{named}'", file=sys.stderr)
         return 2
 
-    settings, ws, repo = _load(args)
-    remotes = _remotes(repo, settings, args)
-    tx = _start_transaction(repo, settings)
-    for remote in remotes:
-        tx.git_fetch(settings, remote, branches, tags, tracked)
-    _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
-            settings, ws, repo)
-    return 0
+    with write_tx(args) as (settings, ws, repo, tx):
+        remotes = _remotes(repo, settings, args)
+        for remote in remotes:
+            tx.git_fetch(settings, remote, branches, tags, tracked)
+        _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
+                settings, ws, repo)
+        return 0

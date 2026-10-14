@@ -2,7 +2,7 @@
 import sys
 
 import pyjj
-from ..common import CommandError, _load
+from ..common import CommandError, read_repo
 
 def file_untrack(args) -> int:
     """`jj file untrack <paths>`: stop tracking paths in the working copy.
@@ -17,8 +17,8 @@ def file_untrack(args) -> int:
         print("Error: Paths to untrack are required", file=sys.stderr)
         return 2
     try:
-        settings, ws, _repo = _load(args)
-        _repo, added_back = ws.untrack_paths(settings, paths)
+        with read_repo(args) as (settings, ws, _repo):
+            _repo, added_back = ws.untrack_paths(settings, paths)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

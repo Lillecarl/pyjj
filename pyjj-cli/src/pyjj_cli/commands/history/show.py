@@ -10,74 +10,74 @@ from ..common import (
     _print_diff,
     _resolve_template,
     _tags_by_commit,
-    _load,
     _resolve_all,
     _signature_spans,
     use_color,
     command,
+    read_repo,
 )
 
 @command
 def show(args) -> int:
     """`jj show` — a commit's metadata and its diff."""
-    settings, ws, repo = _load(args)
-    # jj accepts a revision positionally or after `-r`, and takes
-    # both together.
-    revs = (list(args.revisions or [])
-            + list(getattr(args, "revision_flags", None) or [])) or ["@"]
-    commits = _resolve_all(repo, settings, revs)
-    # A revset answers newest first, and `--reversed` asks for the
-    # other end. jj reverses the revisions, not the blocks it
-    # prints, so each one still carries its own diff.
-    if getattr(args, "reversed", False):
-        commits = list(reversed(commits))
-    bookmarks = _bookmarks_by_commit(repo, remotes=True)
-    locals_ = _bookmarks_by_commit(repo)
-    # jj lists the local names first and the remote ones after, and
-    # colours a remote name's three parts apart.
-    remotes: dict[str, list[tuple[str, str]]] = {}
-    for remote_bookmark in repo.remote_bookmarks():
-        for target in remote_bookmark.target_ids:
-            remotes.setdefault(target.hex(), []).append(
-                (remote_bookmark.name, remote_bookmark.remote))
-    tags = _tags_by_commit(repo)
-    # jj drives `show` from `templates.show`, whose default is
-    # `builtin_log_detailed`. A template replaces the header block;
-    # the diff below it still prints, as it does for jj.
-    builtins = {
-        "builtin_log_detailed":
-            "Commit ID: {{ commit_id }}\nChange ID: {{ change_id }}\n"
-            "Author   : {{ author_detailed }}\nCommitter: {{ committer_detailed }}\n"
-            "\n{{ description_indented }}\n",
-    }
-    template = _resolve_template(settings, ws, args, "show", builtins)
-    for commit in commits:
-        if template is not None:
-            context = _commit_context(
-                repo, settings, commit, bookmarks.get(commit.id.hex(), [])
-            )
-            context["tags"] = tags.get(commit.id.hex(), [])
-            context["author_detailed"] = _detailed_signature(commit.author)
-            context["committer_detailed"] = _detailed_signature(commit.committer)
-            context["description_indented"] = _indent(
-                commit.description.rstrip() or "(no description set)"
-            )
-            print(template.render(context))
-            if not getattr(args, "no_patch", False):
-                _print_diff(args, ws, settings, _diff_base(repo, settings, commit),
-                            commit, None)
-            continue
-        print(render_block(
-            _detailed_lines(repo, settings, commit,
-                            locals_.get(commit.id.hex(), []),
-                            remotes.get(commit.id.hex(), []),
-                            tags.get(commit.id.hex(), [])),
-            "show commit", use_color(settings)))
-        if getattr(args, "no_patch", False):
-            continue
-        base = _diff_base(repo, settings, commit)
-        _print_diff(args, ws, settings, base, commit, None)
-    return 0
+    with read_repo(args) as (settings, ws, repo):
+        # jj accepts a revision positionally or after `-r`, and takes
+        # both together.
+        revs = (list(args.revisions or [])
+                + list(getattr(args, "revision_flags", None) or [])) or ["@"]
+        commits = _resolve_all(repo, settings, revs)
+        # A revset answers newest first, and `--reversed` asks for the
+        # other end. jj reverses the revisions, not the blocks it
+        # prints, so each one still carries its own diff.
+        if getattr(args, "reversed", False):
+            commits = list(reversed(commits))
+        bookmarks = _bookmarks_by_commit(repo, remotes=True)
+        locals_ = _bookmarks_by_commit(repo)
+        # jj lists the local names first and the remote ones after, and
+        # colours a remote name's three parts apart.
+        remotes: dict[str, list[tuple[str, str]]] = {}
+        for remote_bookmark in repo.remote_bookmarks():
+            for target in remote_bookmark.target_ids:
+                remotes.setdefault(target.hex(), []).append(
+                    (remote_bookmark.name, remote_bookmark.remote))
+        tags = _tags_by_commit(repo)
+        # jj drives `show` from `templates.show`, whose default is
+        # `builtin_log_detailed`. A template replaces the header block;
+        # the diff below it still prints, as it does for jj.
+        builtins = {
+            "builtin_log_detailed":
+                "Commit ID: {{ commit_id }}\nChange ID: {{ change_id }}\n"
+                "Author   : {{ author_detailed }}\nCommitter: {{ committer_detailed }}\n"
+                "\n{{ description_indented }}\n",
+        }
+        template = _resolve_template(settings, ws, args, "show", builtins)
+        for commit in commits:
+            if template is not None:
+                context = _commit_context(
+                    repo, settings, commit, bookmarks.get(commit.id.hex(), [])
+                )
+                context["tags"] = tags.get(commit.id.hex(), [])
+                context["author_detailed"] = _detailed_signature(commit.author)
+                context["committer_detailed"] = _detailed_signature(commit.committer)
+                context["description_indented"] = _indent(
+                    commit.description.rstrip() or "(no description set)"
+                )
+                print(template.render(context))
+                if not getattr(args, "no_patch", False):
+                    _print_diff(args, ws, settings, _diff_base(repo, settings, commit),
+                                commit, None)
+                continue
+            print(render_block(
+                _detailed_lines(repo, settings, commit,
+                                locals_.get(commit.id.hex(), []),
+                                remotes.get(commit.id.hex(), []),
+                                tags.get(commit.id.hex(), [])),
+                "show commit", use_color(settings)))
+            if getattr(args, "no_patch", False):
+                continue
+            base = _diff_base(repo, settings, commit)
+            _print_diff(args, ws, settings, base, commit, None)
+        return 0
 
 
 def _detailed_lines(repo, settings, commit, names, remote_names, tags):

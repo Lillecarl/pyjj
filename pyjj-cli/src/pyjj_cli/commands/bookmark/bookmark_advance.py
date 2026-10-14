@@ -1,11 +1,10 @@
 """bookmark subcommand: bookmark_advance."""
 
 from ..common import (
-    _start_transaction,
     _finish,
-    _load,
     _resolve_one,
     command,
+    write_tx,
 )
 
 @command
@@ -18,31 +17,30 @@ def bookmark_advance(args) -> int:
     bookmarks that `advance-bookmarks` opts in, which pyjj does not read,
     so no names means nothing moves.
     """
-    settings, ws, repo = _load(args)
-    names = list(getattr(args, "names", []) or [])
-    target = _resolve_one(repo, settings, getattr(args, "to", "@") or "@")
-    target_hex = target.id.hex()
+    with write_tx(args) as (settings, ws, repo, tx):
+        names = list(getattr(args, "names", []) or [])
+        target = _resolve_one(repo, settings, getattr(args, "to", "@") or "@")
+        target_hex = target.id.hex()
 
-    eligible = {
-        c.id.hex()
-        for c in repo.revset(settings, f"::{target_hex}")
-    }
-    moved = []
-    for bookmark in repo.bookmarks():
-        if bookmark.name not in names:
-            continue
-        here = [i.hex() for i in bookmark.target_ids]
-        if here == [target_hex] or not all(h in eligible for h in here):
-            continue
-        moved.append(bookmark.name)
+        eligible = {
+            c.id.hex()
+            for c in repo.revset(settings, f"::{target_hex}")
+        }
+        moved = []
+        for bookmark in repo.bookmarks():
+            if bookmark.name not in names:
+                continue
+            here = [i.hex() for i in bookmark.target_ids]
+            if here == [target_hex] or not all(h in eligible for h in here):
+                continue
+            moved.append(bookmark.name)
 
-    if not moved:
-        print("No bookmarks to update.")
+        if not moved:
+            print("No bookmarks to update.")
+            return 0
+
+        for name in moved:
+            tx.set_bookmark(name, target.id)
+        _finish(tx, f"advance bookmarks to {target_hex[:8]}", settings, ws, repo)
+        print(f"Advanced {len(moved)} bookmarks to {target_hex[:8]}")
         return 0
-
-    tx = _start_transaction(repo, settings)
-    for name in moved:
-        tx.set_bookmark(name, target.id)
-    _finish(tx, f"advance bookmarks to {target_hex[:8]}", settings, ws, repo)
-    print(f"Advanced {len(moved)} bookmarks to {target_hex[:8]}")
-    return 0

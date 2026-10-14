@@ -24,10 +24,10 @@ from ..common import (
     _diff_files_bytes,
     _diff_formats_for_log,
     _format_timestamp,
-    _load,
     _resolve_operation,
     _write_lines,
     use_color,
+    read_repo,
 )
 
 
@@ -302,16 +302,16 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
 
 def op_diff(args) -> int:
     try:
-        settings, ws, repo = _load(args)
+        with read_repo(args) as (settings, ws, repo):
 
-        from_arg = getattr(args, "from_", None)
-        to_arg = getattr(args, "to", None)
-        if from_arg is not None or to_arg is not None:
-            from_ops = [_resolve_operation(repo, from_arg or "@")]
-            to_op = _resolve_operation(repo, to_arg or "@")
-        else:
-            to_op = _resolve_operation(repo, getattr(args, "operation", None))
-            from_ops = to_op.parents()
+            from_arg = getattr(args, "from_", None)
+            to_arg = getattr(args, "to", None)
+            if from_arg is not None or to_arg is not None:
+                from_ops = [_resolve_operation(repo, from_arg or "@")]
+                to_op = _resolve_operation(repo, to_arg or "@")
+            else:
+                to_op = _resolve_operation(repo, getattr(args, "operation", None))
+                from_ops = to_op.parents()
     except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
             CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

@@ -19,7 +19,6 @@ from ..common import (
     _format_timestamp,
     _immutable_ids,
     _is_empty,
-    _load,
     _pyjj_template,
     _resolve_all,
     _resolve_template,
@@ -28,6 +27,7 @@ from ..common import (
     dot_attribute,
     select_fields,
     use_color,
+    read_repo,
 )
 
 # Same list as `log`'s: a flag that shapes a row or its order has
@@ -86,29 +86,29 @@ def evolog(args) -> int:
         return 2
 
     try:
-        settings, ws, repo = _load(args)
-        revisions = getattr(args, "revisions", None) or ["@"]
-        if isinstance(revisions, str):
-            revisions = [revisions]
-        commits = _resolve_all(repo, settings, revisions)
-        if not commits:
-            print("No revisions to show")
-            return 0
+        with read_repo(args) as (settings, ws, repo):
+            revisions = getattr(args, "revisions", None) or ["@"]
+            if isinstance(revisions, str):
+                revisions = [revisions]
+            commits = _resolve_all(repo, settings, revisions)
+            if not commits:
+                print("No revisions to show")
+                return 0
 
-        limit = getattr(args, "limit", None)
-        if limit == 0:
-            limit = None
-        no_graph = getattr(args, "no_graph", False)
-        # A squash gives a commit two predecessors, so an evolution log
-        # is a graph. jj groups the rows before drawing them and takes
-        # the limit afterwards; without the graph it keeps the raw walk
-        # order instead.
-        start = [c.id for c in commits]
-        entries = (
-            repo.evolution_log(start, limit=limit)
-            if no_graph
-            else repo.evolution_graph(start, limit=limit)
-        )
+            limit = getattr(args, "limit", None)
+            if limit == 0:
+                limit = None
+            no_graph = getattr(args, "no_graph", False)
+            # A squash gives a commit two predecessors, so an evolution log
+            # is a graph. jj groups the rows before drawing them and takes
+            # the limit afterwards; without the graph it keeps the raw walk
+            # order instead.
+            start = [c.id for c in commits]
+            entries = (
+                repo.evolution_log(start, limit=limit)
+                if no_graph
+                else repo.evolution_graph(start, limit=limit)
+            )
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1

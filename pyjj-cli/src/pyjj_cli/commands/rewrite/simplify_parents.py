@@ -2,7 +2,7 @@
 import sys
 
 
-from ..common import _check_rewritable, _finish, _load, _resolve_all, _start_transaction, command
+from ..common import _check_rewritable, _finish, _resolve_all, command, write_tx
 
 
 @command
@@ -14,36 +14,35 @@ def simplify_parents(args) -> int:
     Dropping it changes no revision's content, only the shape of the
     graph.
     """
-    settings, ws, repo = _load(args)
-    sources = list(getattr(args, "sources", None) or [])
-    revisions = list(getattr(args, "revisions", None) or [])
-    if sources:
-        revisions += [f"descendants({source})" for source in sources]
-    if not revisions:
-        # jj falls back to `revsets.simplify-parents`, then to this.
-        revisions = ["reachable(@, mutable())"]
+    with write_tx(args) as (settings, ws, repo, tx):
+        sources = list(getattr(args, "sources", None) or [])
+        revisions = list(getattr(args, "revisions", None) or [])
+        if sources:
+            revisions += [f"descendants({source})" for source in sources]
+        if not revisions:
+            # jj falls back to `revsets.simplify-parents`, then to this.
+            revisions = ["reachable(@, mutable())"]
 
-    targets = _resolve_all(repo, settings, revisions)
-    tx = _start_transaction(repo, settings)
-    # jj checks the whole target set, not only the commits that turn
-    # out to have a redundant edge.
-    _check_rewritable(tx, settings, targets)
-    simplified = 0
-    for commit in targets:
-        keep = _essential_parents(repo, settings, commit)
-        if keep is None:
-            continue
-        builder = tx.rewrite_commit(settings, commit)
-        builder.set_parents(keep)
-        builder.write(repo)
-        simplified += 1
+        targets = _resolve_all(repo, settings, revisions)
+        # jj checks the whole target set, not only the commits that turn
+        # out to have a redundant edge.
+        _check_rewritable(tx, settings, targets)
+        simplified = 0
+        for commit in targets:
+            keep = _essential_parents(repo, settings, commit)
+            if keep is None:
+                continue
+            builder = tx.rewrite_commit(settings, commit)
+            builder.set_parents(keep)
+            builder.write(repo)
+            simplified += 1
 
-    if not simplified:
-        print("Nothing changed.", file=sys.stderr)
+        if not simplified:
+            print("Nothing changed.", file=sys.stderr)
+            return 0
+        _finish(tx, f"simplify {simplified} commits", settings, ws, repo)
+        print(f"Removed parent edges from {simplified} commits")
         return 0
-    _finish(tx, f"simplify {simplified} commits", settings, ws, repo)
-    print(f"Removed parent edges from {simplified} commits")
-    return 0
 
 
 def _essential_parents(repo, settings, commit):

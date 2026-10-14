@@ -4,13 +4,12 @@ import sys
 import pyjj
 
 from ..common import (
-    _start_transaction,
     _check_rewritable,
     CommandError,
     _finish,
-    _load,
     _resolve_all,
     complete_newline,
+    write_tx,
 )
 
 
@@ -27,50 +26,49 @@ def metaedit(args) -> int:
         return 2
 
     try:
-        settings, ws, repo = _load(args)
-        revisions = (list(getattr(args, "revisions", None) or [])
-                     + list(getattr(args, "revisions_pos", None) or []))
-        targets = _resolve_all(repo, settings, revisions or ["@"])
-        if not targets:
-            print("Nothing changed.", file=sys.stderr)
+        with write_tx(args) as (settings, ws, repo, tx):
+            revisions = (list(getattr(args, "revisions", None) or [])
+                         + list(getattr(args, "revisions_pos", None) or []))
+            targets = _resolve_all(repo, settings, revisions or ["@"])
+            if not targets:
+                print("Nothing changed.", file=sys.stderr)
+                return 0
+
+            _check_rewritable(tx, settings, targets)
+            modified = 0
+            for commit in targets:
+                description = None
+                if args.message is not None:
+                    candidate = complete_newline(args.message)
+                    if candidate != commit.description:
+                        description = candidate
+                author = _new_author(settings, commit, args)
+                new_change_id = getattr(args, "update_change_id", False)
+                force = getattr(args, "force_rewrite", False)
+                if (description is None and author is None and not new_change_id
+                        and not force):
+                    # Asking for metadata a commit already has changes
+                    # nothing, and rewriting it anyway would move its commit
+                    # id for no reason. `--force-rewrite` is the caller
+                    # saying to move it anyway, which restamps the committer.
+                    continue
+
+                builder = tx.rewrite_commit(settings, commit)
+                if description is not None:
+                    builder.set_description(description)
+                if author is not None:
+                    builder.set_author(author)
+                if new_change_id:
+                    builder.generate_new_change_id()
+                builder.write(repo)
+                modified += 1
+
+            if not modified:
+                print("Nothing changed.", file=sys.stderr)
+                return 0
+            _finish(tx, f"metaedit {modified} commits", settings, ws, repo)
+            print(f"Modified {modified} commits")
             return 0
-
-        tx = _start_transaction(repo, settings)
-        _check_rewritable(tx, settings, targets)
-        modified = 0
-        for commit in targets:
-            description = None
-            if args.message is not None:
-                candidate = complete_newline(args.message)
-                if candidate != commit.description:
-                    description = candidate
-            author = _new_author(settings, commit, args)
-            new_change_id = getattr(args, "update_change_id", False)
-            force = getattr(args, "force_rewrite", False)
-            if (description is None and author is None and not new_change_id
-                    and not force):
-                # Asking for metadata a commit already has changes
-                # nothing, and rewriting it anyway would move its commit
-                # id for no reason. `--force-rewrite` is the caller
-                # saying to move it anyway, which restamps the committer.
-                continue
-
-            builder = tx.rewrite_commit(settings, commit)
-            if description is not None:
-                builder.set_description(description)
-            if author is not None:
-                builder.set_author(author)
-            if new_change_id:
-                builder.generate_new_change_id()
-            builder.write(repo)
-            modified += 1
-
-        if not modified:
-            print("Nothing changed.", file=sys.stderr)
-            return 0
-        _finish(tx, f"metaedit {modified} commits", settings, ws, repo)
-        print(f"Modified {modified} commits")
-        return 0
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
