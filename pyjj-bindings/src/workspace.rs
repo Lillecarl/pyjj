@@ -15,7 +15,11 @@ use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
 use jj_lib::transaction::Transaction as JjTransaction;
 use jj_lib::workspace::Workspace;
-use jj_lib::workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _};
+use jj_lib::simple_workspace_store::SimpleWorkspaceStore;
+// The store *trait* moved to `jj-core` in 0.46 and is re-exported as
+// `jj_lib::workspace_store` -- this split import is correct as-is,
+// not half-migrated.
+use jj_lib::workspace_store::WorkspaceStore as _;
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
 use crate::errors::{
@@ -79,14 +83,14 @@ impl PyWorkspace {
             }
         };
         if workspace_name.as_str().is_empty() {
-            return Err(JjError::new_err("workspace name cannot be empty"));
+            return Err(JjError::new_err("New workspace name cannot be empty"));
         }
 
         let repo =
             pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
         if repo.view().get_wc_commit_id(&workspace_name).is_some() {
             return Err(JjError::new_err(format!(
-                "workspace named `{}` already exists",
+                "Workspace named '{}' already exists",
                 workspace_name.as_str()
             )));
         }
@@ -96,7 +100,7 @@ impl PyWorkspace {
                 .map_err(|err| JjError::new_err(format!("{destination_path}: {err}")))?;
         } else if !file_util::is_empty_dir(dest_path).map_err(map_backend_err)? {
             return Err(JjError::new_err(
-                "destination path exists and is not an empty directory",
+                "Destination path exists and is not an empty directory",
             ));
         }
 
@@ -162,9 +166,32 @@ impl PyWorkspace {
             inner: Mutex::new(new_ws),
         };
         if let Some(patterns) = sparse_patterns {
-            // The new workspace starts unrestricted, so only a caller
-            // asking for something else has anything to do here.
+            // Narrow first when the caller asked for less than everything.
             Python::attach(|py| py_ws.set_sparse_patterns(py, patterns))?;
+        }
+        // Materialize the new working-copy commit's tree, the way `jj
+        // workspace add` does -- in both cases. The unrestricted case
+        // has nothing to narrow first, but it still has nothing on
+        // disk: without an explicit checkout the directory stays empty
+        // and the first snapshot there deletes everything from the new
+        // `@`. The restricted case needs it too: `set_sparse_patterns`
+        // materializes the *recorded* commit (whatever the workspace
+        // was created pointing at), not the merged-parents tree the
+        // new `@` actually holds, and it leaves the recorded operation
+        // stale by one. `check_out` respects the just-set patterns and
+        // records the new operation, mirroring jj exactly.
+        {
+            let mut inner = py_ws.inner.lock().unwrap();
+            let fresh_repo = PyReadonlyRepo {
+                inner: py_repo.inner.clone(),
+                workspace_root: inner.workspace_root().to_path_buf(),
+                workspace_name: inner.workspace_name().to_owned(),
+            };
+            let fresh_commit = crate::commit::PyCommit {
+                inner: new_wc_commit,
+                _repo: Some(py_repo.inner.clone()),
+            };
+            crate::checkout::check_out(&mut inner, &fresh_repo, &fresh_commit)?;
         }
         Ok((py_ws, py_repo))
     }
@@ -546,15 +573,23 @@ impl PyWorkspace {
             .to_string()
     }
 
-    /// The recorded filesystem path of the *named* workspace (any
-    /// workspace sharing this repo, not just `self`), relative to `self`'s
-    /// `repo_path` (`.jj/repo`) -- `None` if the workspace store has no
-    /// record of it (already forgotten, or created before `workspace_store`
-    /// existed).
+    /// The recorded filesystem location of the *named* workspace (any
+    /// workspace sharing this repo, not just `self`) -- `None` if the
+    /// workspace store has no record of it (already forgotten, or
+    /// created before `workspace_store` existed). An absolute,
+    /// normalized path: the store records it relative to `repo_path`
+    /// (`.jj/repo`) and resolving joins the two.
     fn workspace_path(&self, name: &str) -> PyResult<Option<String>> {
         let inner = self.inner.lock().unwrap();
-        let workspace_store = SimpleWorkspaceStore::load(inner.repo_path())
-            .map_err(|err| JjError::new_err(err.to_string()))?;
+        // Since jj 0.46 `SimpleWorkspaceStore::load` takes the store
+        // directory itself (`.jj/repo/workspace_store`, holding the
+        // store's own `index` file) rather than the repo directory --
+        // passing `.jj/repo` now opens the *commit* index as a workspace
+        // store instead. (In 0.45 `load(repo_path)` joined the
+        // subdirectory internally.)
+        let workspace_store =
+            SimpleWorkspaceStore::load(&inner.repo_path().join("workspace_store"))
+                .map_err(|err| JjError::new_err(err.to_string()))?;
         let workspace_name = WorkspaceNameBuf::from(name);
         let path = workspace_store
             .get_workspace_path(workspace_name.as_ref())
@@ -566,6 +601,100 @@ impl PyWorkspace {
     #[getter]
     fn repo_path(&self) -> String {
         self.inner.lock().unwrap().repo_path().display().to_string()
+    }
+
+    /// Whether this workspace shares its working copy with Git (a
+    /// colocated checkout): the store is git-backed and the workspace
+    /// root opens as that same git repo. Mirrors
+    /// `cli/src/git_util.rs::is_colocated_git_workspace` -- the
+    /// `--colocate` default for `workspace add` reads this, not the
+    /// mere presence of a `.git` entry (an unrelated repo's file
+    /// there would lie).
+    fn is_colocated(&self) -> PyResult<bool> {
+        let inner = self.inner.lock().unwrap();
+        let repo =
+            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
+        let Ok(backend) = jj_lib::git::get_git_backend(repo.store()) else {
+            return Ok(false);
+        };
+        match backend.open_git_repo_at_workdir(inner.workspace_root()) {
+            Ok(_) => Ok(true),
+            Err(
+                jj_lib::git_backend::GitRepoAtWorkdirError::NotFound { .. }
+                | jj_lib::git_backend::GitRepoAtWorkdirError::Unrelated { .. },
+            ) => Ok(false),
+            Err(jj_lib::git_backend::GitRepoAtWorkdirError::Other(source)) => {
+                Err(JjError::new_err(source.to_string()))
+            }
+        }
+    }
+
+    /// The Git HEAD commit's hex hash, when this workspace is colocated
+    /// and HEAD resolves to a commit -- `None` otherwise (not colocated,
+    /// unborn HEAD, or anything else unresolvable). What `jj git
+    /// colocation status` prints as "Last imported/exported Git HEAD".
+    fn git_head_hex(&self) -> PyResult<Option<String>> {
+        let inner = self.inner.lock().unwrap();
+        let repo =
+            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
+        let Ok(backend) = jj_lib::git::get_git_backend(repo.store()) else {
+            return Ok(None);
+        };
+        let Ok(git_repo) = backend.open_git_repo_at_workdir(inner.workspace_root()) else {
+            return Ok(None);
+        };
+        Ok(git_repo.head_id().ok().map(|id| id.to_hex().to_string()))
+    }
+
+    /// Create the Git worktree backing a colocated sibling workspace at
+    /// `destination_path` (`jj_lib::git::create_worktree`: `git worktree
+    /// add --orphan`, so nothing is checked out and jj stays responsible
+    /// for the working-copy contents). Runs after `add_workspace`, which
+    /// the primitive supports explicitly (a populated workspace awaiting
+    /// colocation, the same shape `git colocation enable` uses on an
+    /// existing one).
+    fn create_git_worktree(
+        &self,
+        settings: &PyUserSettings,
+        destination_path: String,
+    ) -> PyResult<()> {
+        let inner = self.inner.lock().unwrap();
+        let repo =
+            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
+        let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
+            .map_err(crate::errors::map_py_err)?;
+        jj_lib::git::create_worktree(
+            repo.store(),
+            options,
+            std::path::Path::new(&destination_path),
+        )
+        .map_err(|err| JjError::new_err(err.to_string()))?;
+        Ok(())
+    }
+
+    /// Disconnect the Git worktree backing the sibling workspace at
+    /// `workspace_path`, if there is one (`jj_lib::git::unlink_worktree`,
+    /// behind `cli/src/git_util.rs::unlink_git_worktree`'s reporting).
+    /// Returns whether one was removed; a leftover gitlink or stale
+    /// metadata is not worth failing over, so callers report errors as
+    /// warnings instead. `workspace forget`/`remove` call this for every
+    /// forgotten workspace after the record is gone.
+    fn unlink_git_worktree(
+        &self,
+        settings: &PyUserSettings,
+        workspace_path: String,
+    ) -> PyResult<bool> {
+        let inner = self.inner.lock().unwrap();
+        let repo =
+            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
+        let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
+            .map_err(crate::errors::map_py_err)?;
+        jj_lib::git::unlink_worktree(
+            repo.store(),
+            options,
+            std::path::Path::new(&workspace_path),
+        )
+        .map_err(|err| JjError::new_err(err.to_string()))
     }
 
     /// Load the repo at the current operation (head).
@@ -813,11 +942,26 @@ impl PyWorkspace {
     /// single operation, so undoing it restores all of them at once). Does
     /// **not** touch anything on disk in the forgotten workspaces'
     /// directories -- they can be deleted before or after this call.
+    ///
+    /// `description` overrides the operation description (which defaults
+    /// to `forget workspace ...`): `jj workspace remove` forgets through
+    /// this same path after snapshotting, but records `remove workspace
+    /// ...` instead.
+    ///
+    /// `forget_store` drops the workspace's recorded path from the
+    /// store as well. `jj forget` intentionally keeps it (undoing the
+    /// forget restores the workspace, which is only possible while the
+    /// path outlives it); `jj remove` drops it along with the deleted
+    /// directory. Defaults to dropping, preserving the historical
+    /// behavior for existing callers.
+    #[pyo3(signature = (settings, names, description=None, forget_store=true))]
     fn forget_workspaces(
         &self,
         py: Python<'_>,
         settings: &PyUserSettings,
         names: Vec<String>,
+        description: Option<String>,
+        forget_store: bool,
     ) -> PyResult<PyReadonlyRepo> {
         py.detach(move || {
             let inner = self.inner.lock().unwrap();
@@ -842,8 +986,10 @@ impl PyWorkspace {
                 }
             }
 
-            let workspace_store = SimpleWorkspaceStore::load(inner.repo_path())
-                .map_err(|err| JjError::new_err(err.to_string()))?;
+            // The repo loader already holds the correctly-located
+            // workspace store (see `workspace_path` for why it is not
+            // `SimpleWorkspaceStore::load(repo_path)` anymore).
+            let workspace_store = repo.loader().workspace_store();
 
             let index = repo.readonly_index();
             let view = repo.view();
@@ -854,26 +1000,30 @@ impl PyWorkspace {
             }
             let name_refs: Vec<&jj_lib::ref_name::WorkspaceName> =
                 names.iter().map(|n| n.as_ref()).collect();
-            workspace_store
-                .forget(&name_refs)
-                .map_err(|err| JjError::new_err(err.to_string()))?;
+            if forget_store {
+                workspace_store
+                    .forget(&name_refs)
+                    .map_err(|err| JjError::new_err(err.to_string()))?;
+            }
             // remove_workspace() may abandon a forgotten workspace's discardable
             // wc commit, which is a rewrite that must be rebased away (a no-op
             // if it has no descendants) before Transaction::commit.
             pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
 
-            let description = if let [name] = names.as_slice() {
-                format!("forget workspace {}", name.as_str())
-            } else {
-                format!(
-                    "forget workspaces {}",
-                    names
-                        .iter()
-                        .map(|n| n.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
+            let description = description.unwrap_or_else(|| {
+                if let [name] = names.as_slice() {
+                    format!("forget workspace {}", name.as_str())
+                } else {
+                    format!(
+                        "forget workspaces {}",
+                        names
+                            .iter()
+                            .map(|n| n.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            });
             let tx = JjTransaction::new(mut_repo, &settings.0);
             let new_repo =
                 pollster::block_on(tx.commit(description)).map_err(map_transaction_err)?;
@@ -911,8 +1061,8 @@ impl PyWorkspace {
                 )));
             }
 
-            let workspace_store = SimpleWorkspaceStore::load(inner.repo_path())
-                .map_err(|err| JjError::new_err(err.to_string()))?;
+            // Same correctly-located store as in `forget_workspaces`.
+            let workspace_store = repo.loader().workspace_store();
 
             let index = repo.readonly_index();
             let view = repo.view();

@@ -35,9 +35,9 @@ impl PyTag {
     pub(crate) fn from_target(name: &RefName, target: &RefTarget) -> Self {
         Self {
             name: name.as_str().to_string(),
-            target_ids: target.added_ids().map(PyCommitId::from).collect(),
-            removed_ids: target.removed_ids().map(PyCommitId::from).collect(),
-            has_conflict: target.has_conflict(),
+            target_ids: target.present_adds().map(PyCommitId::from).collect(),
+            removed_ids: target.present_removes().map(PyCommitId::from).collect(),
+            has_conflict: !target.is_resolved(),
         }
     }
 }

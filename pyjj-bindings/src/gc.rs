@@ -1,12 +1,16 @@
 //! `jj util gc`: backend garbage collection.
 //!
-//! Two stores hold garbage, and both are swept. The operation store
+//! Two stores hold garbage and both are swept. The operation store
 //! drops operations no longer reachable from the current head, and the
 //! commit store drops objects no commit in the index refers to. What
 //! "drop" means is up to the backend -- the Git backend runs `git gc`.
 //!
 //! Both take a cutoff and keep anything newer, because an object written
 //! by a concurrent process may not be referenced yet.
+//!
+//! This mirrors `cli/src/commands/util/gc.rs`: the op-store sweep always
+//! runs, and the commit-store sweep runs only when the store is git-backed
+//! (`jj_lib::git::get_git_backend`); other backends have nothing to sweep.
 
 use std::slice;
 use std::time::{Duration, SystemTime};
@@ -38,9 +42,10 @@ pub fn gc(repo: &PyReadonlyRepo, max_age_secs: f64) -> PyResult<()> {
             .gc(slice::from_ref(inner.op_id()), keep_newer),
     )
     .map_err(map_py_err)?;
-    inner
-        .store()
-        .gc(inner.index(), keep_newer)
-        .map_err(map_backend_err)?;
+    if let Ok(git_backend) = jj_lib::git::get_git_backend(inner.store()) {
+        git_backend
+            .gc(inner.index(), keep_newer)
+            .map_err(map_backend_err)?;
+    }
     Ok(())
 }

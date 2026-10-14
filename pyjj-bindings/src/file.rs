@@ -1,18 +1,22 @@
 use futures::AsyncReadExt as _;
 use pyo3::prelude::*;
 
+use jj_lib::backend::MergedTreeValueExt as _;
 use jj_lib::backend::TreeValue;
+use jj_lib::fileset::{FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext};
 use jj_lib::repo_path::RepoPathBuf;
+use jj_lib::ui_path::RepoPathUiConverter;
 
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err};
+use crate::settings::PyUserSettings;
 
 /// Reads the content of the file (or symlink target) at `path` within
 /// `commit`'s tree.
 ///
 /// Raises `JjError` if the path doesn't exist, is a directory or Git
-/// submodule, or has an unresolved conflict (conflict materialization isn't
-/// implemented yet — see AGENTS.md).
+/// submodule, or has an unresolved conflict (render it with
+/// `materialize_conflict()` instead).
 pub fn read_file(commit: &PyCommit, path: &str) -> PyResult<Vec<u8>> {
     let repo_path =
         RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
@@ -87,6 +91,31 @@ pub fn parent_contents(
     Ok(out)
 }
 
+/// The kind of tree entry at `path` in `commit`'s tree, for callers
+/// that must tell the cases apart -- `jj file edit` refuses
+/// directories, symlinks/submodules, and non-file conflicts with
+/// different messages each.
+///
+/// One of `"file"`, `"symlink"`, `"dir"`, `"submodule"`, `"absent"`,
+/// `"file-conflict"` (every side a file or absent -- materializable as
+/// text), or `"other-conflict"`.
+pub fn file_kind(commit: &PyCommit, path: &str) -> PyResult<String> {
+    let repo_path =
+        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let tree = commit.inner.tree();
+    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let kind = match value.as_resolved() {
+        Some(Some(TreeValue::File { .. })) => "file",
+        Some(Some(TreeValue::Symlink(_))) => "symlink",
+        Some(Some(TreeValue::Tree(_))) => "dir",
+        Some(Some(TreeValue::GitSubmodule(_))) => "submodule",
+        Some(None) => "absent",
+        None if value.to_file_merge().is_some() => "file-conflict",
+        None => "other-conflict",
+    };
+    Ok(kind.to_string())
+}
+
 /// Whether `path` names a regular file, executable file, or symlink (not a
 /// directory/submodule/conflict/absence) within `commit`'s tree.
 pub fn file_exists(commit: &PyCommit, path: &str) -> PyResult<bool> {
@@ -133,4 +162,61 @@ pub fn list_files(commit: &PyCommit, paths: Option<Vec<String>>) -> PyResult<Vec
             Ok(path.as_internal_file_string().to_string())
         })
         .collect()
+}
+
+/// `jj`'s fileset matching for commands that take `<FILESETS>` (`file
+/// delete`, ...): parse each pattern the way `WorkspaceCommandHelper::
+/// parse_union_filesets` does (bare paths fall back to exact paths,
+/// `fileset-aliases` from `settings` expand) against a converter rooted
+/// at `workspace_root`, and list every path in `commit`'s tree they
+/// match.
+///
+/// Returns `(matched, unmatched_explicit)`: paths present in the tree,
+/// plus the explicit (non-pattern) paths that matched nothing -- jj
+/// warns about those (`No matching entries for paths: ...`) without
+/// failing. Parse diagnostics (jj prints them as `In fileset
+/// expression` warnings) are dropped: a headless library has nowhere
+/// good to print them, and a bad pattern surfaces as a parse error at
+/// this point anyway.
+pub fn match_filesets(
+    commit: &PyCommit,
+    settings: &PyUserSettings,
+    workspace_root: &str,
+    patterns: Vec<String>,
+) -> PyResult<(Vec<String>, Vec<String>)> {
+    let path_converter = RepoPathUiConverter::Fs {
+        cwd: std::path::PathBuf::from(workspace_root),
+        base: std::path::PathBuf::from(workspace_root),
+    };
+    let aliases_map: FilesetAliasesMap =
+        crate::revset::load_aliases_map(settings.0.config(), "fileset-aliases");
+    let context = FilesetParseContext {
+        aliases_map: &aliases_map,
+        path_converter: &path_converter,
+    };
+    let mut diagnostics = FilesetDiagnostics::new();
+    let mut expressions = Vec::with_capacity(patterns.len());
+    for pattern in &patterns {
+        let expression =
+            jj_lib::fileset::parse_maybe_bare(&mut diagnostics, pattern, &context)
+                .map_err(|err| JjError::new_err(err.to_string()))?;
+        expressions.push(expression);
+    }
+    let expression = FilesetExpression::union_all(expressions);
+    let matcher = expression.to_matcher();
+    let tree = commit.inner.tree();
+    let mut matched = Vec::new();
+    for (path, value) in tree.entries_matching(matcher.as_ref()) {
+        value.map_err(map_backend_err)?;
+        matched.push(path.as_internal_file_string().to_string());
+    }
+    let mut unmatched = Vec::new();
+    for path in expression.explicit_paths() {
+        let value =
+            pollster::block_on(tree.path_value(path)).map_err(map_backend_err)?;
+        if value.is_absent() {
+            unmatched.push(path.as_internal_file_string().to_string());
+        }
+    }
+    Ok((matched, unmatched))
 }

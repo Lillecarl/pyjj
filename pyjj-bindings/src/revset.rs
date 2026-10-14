@@ -25,7 +25,7 @@ use crate::settings::PyUserSettings;
 /// just skipped: a headless library has nowhere good to print a warning,
 /// and a bad alias definition will surface as a normal parse error at the
 /// point it's actually used, same as any other unresolvable symbol).
-fn load_aliases_map<P>(config: &StackedConfig, table_name: &str) -> AliasesMap<P, String>
+pub(crate) fn load_aliases_map<P>(config: &StackedConfig, table_name: &str) -> AliasesMap<P, String>
 where
     P: AliasDeclarationParser + Default,
 {
@@ -150,6 +150,10 @@ pub fn resolve_revset(
     let symbol_resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
     expression
         .resolve_user_expression(repo, &symbol_resolver)
+        // .1 is the other repos an `at_operation()` subexpression pulls
+        // in; dropped to preserve the pre-0.46 evaluate behavior (the
+        // fully-correct path would evaluate with a merged index).
+        .map(|resolved| resolved.into_inner().0)
         .map_err(map_revset_eval_err)
 }
 

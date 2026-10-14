@@ -24,6 +24,15 @@
 //! That rejection matters on its own: jj_lib's `assert!`s stay live in
 //! release builds, and a tripped one reaches Python as a
 //! `PanicException`. Validating first turns those into `ValueError`.
+//!
+//! `Bisector::new` takes `verify_preconditions` since jj 0.46 (the
+//! consistency checks behind `jj bisect run`'s endpoint verification,
+//! skippable there via `--trust-endpoints`). This type passes `false`:
+//! the caller drives the search by hand through `next_step()`/`mark()`,
+//! so there are no endpoints to trust or distrust, and the protocol
+//! stays exactly the 0.45 one. A `NextStep::Verify` arm still exists
+//! below for exhaustiveness; it maps to an `"evaluate"` step, the only
+//! sensible reading of "test this commit".
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -54,6 +63,11 @@ pub struct PyBisectStep {
     commit: Option<PyCommit>,
     result: Option<String>,
     commits: Vec<PyCommit>,
+    /// Only for `"found-despite-skips"`: the commits after the bad ones
+    /// that could not be evaluated, which `jj bisect run` prints under
+    /// `These revisions may also be ...` rather than folding into
+    /// `commits` (empty in every other outcome).
+    possibly_bad: Vec<PyCommit>,
 }
 
 /// The exit-status protocol `jj bisect run` uses, as a name.
@@ -88,10 +102,12 @@ pub struct PyBisector {
 impl PyBisector {
     /// Rebuild a real `Bisector` holding this object's state. See the
     /// module docs for why the replay order is bad, good, skipped.
-    fn rebuild(&self) -> PyResult<Bisector<'_>> {
-        let mut bisector =
-            pollster::block_on(Bisector::new(self.repo.as_ref(), self.input_range.clone()))
-                .map_err(map_py_err)?;
+    fn rebuild(&self) -> PyResult<Bisector<'_>> {        let mut bisector = pollster::block_on(Bisector::new(
+            self.repo.as_ref(),
+            self.input_range.clone(),
+            false,
+        ))
+        .map_err(map_py_err)?;
         for id in &self.bad {
             bisector.mark_bad(id.clone());
         }
@@ -139,8 +155,12 @@ impl PyBisector {
         )?;
         // Let jj_lib seed the bad set from the range's heads rather than
         // reimplementing that rule here.
-        let seeded = pollster::block_on(Bisector::new(repo.inner.as_ref(), input_range.clone()))
-            .map_err(map_py_err)?;
+        let seeded = pollster::block_on(Bisector::new(
+            repo.inner.as_ref(),
+            input_range.clone(),
+            false,
+        ))
+        .map_err(map_py_err)?;
         let bad = seeded.bad_commits().clone();
         Ok(Self {
             repo: repo.inner.clone(),
@@ -152,6 +172,49 @@ impl PyBisector {
         })
     }
 
+    /// The pre-bisection endpoint checks `jj bisect run` performs (since
+    /// jj 0.46), as `(commit, expected)` pairs -- each range head expected
+    /// `"bad"`, each parent-of-a-range-root `"good"`, in the order `jj`
+    /// checks them.
+    ///
+    /// Built from a fresh verify-enabled `Bisector` with no marks
+    /// replayed: verification always runs before the first evaluation,
+    /// so there is nothing to replay. It is a separate one-shot call
+    /// rather than part of `next_step()` on purpose -- the replay design
+    /// there rebuilds the search from stored marks on every call, and a
+    /// rebuild re-queues the stateful verify queue from scratch, so a
+    /// `Verify` step could never be consumed through it.
+    fn verify_steps(&self) -> PyResult<Vec<(PyCommit, String)>> {
+        let mut bisector = pollster::block_on(Bisector::new(
+            self.repo.as_ref(),
+            self.input_range.clone(),
+            true,
+        ))
+        .map_err(map_py_err)?;
+        let mut steps = Vec::new();
+        loop {
+            match pollster::block_on(bisector.next_step()).map_err(map_py_err)? {
+                NextStep::Verify {
+                    commit,
+                    expected_evaluation,
+                } => steps.push((
+                    self.wrap_commit(commit),
+                    match expected_evaluation {
+                        Evaluation::Good => "good",
+                        Evaluation::Bad => "bad",
+                        Evaluation::Skip => "skip",
+                        Evaluation::Abort => "abort",
+                    }
+                    .to_string(),
+                )),
+                // The first real step ends the verify phase; the
+                // rebuilt search in `next_step()` starts there.
+                _ => break,
+            }
+        }
+        Ok(steps)
+    }
+
     /// The next commit to evaluate, or the finished result. See
     /// `BisectStep`.
     fn next_step(&mut self) -> PyResult<PyBisectStep> {
@@ -161,16 +224,21 @@ impl PyBisector {
                 commit: None,
                 result: Some("abort".to_string()),
                 commits: Vec::new(),
+                possibly_bad: Vec::new(),
             });
         }
         let mut bisector = self.rebuild()?;
         let step = pollster::block_on(bisector.next_step()).map_err(map_py_err)?;
         Ok(match step {
-            NextStep::Evaluate(commit) => PyBisectStep {
+            // Unreachable: constructed with `verify_preconditions = false`,
+            // so no `Verify` step is ever queued. Read as a plain
+            // evaluation if that ever changes.
+            NextStep::Verify { commit, .. } | NextStep::Evaluate(commit) => PyBisectStep {
                 kind: "evaluate".to_string(),
                 commit: Some(self.wrap_commit(commit)),
                 result: None,
                 commits: Vec::new(),
+                possibly_bad: Vec::new(),
             },
             NextStep::Done(BisectionResult::Found(commits)) => PyBisectStep {
                 kind: "done".to_string(),
@@ -180,12 +248,14 @@ impl PyBisector {
                     .into_iter()
                     .map(|commit| self.wrap_commit(commit))
                     .collect(),
+                possibly_bad: Vec::new(),
             },
             NextStep::Done(BisectionResult::Indeterminate) => PyBisectStep {
                 kind: "done".to_string(),
                 commit: None,
                 result: Some("indeterminate".to_string()),
                 commits: Vec::new(),
+                possibly_bad: Vec::new(),
             },
             NextStep::Done(BisectionResult::FoundDespiteSkips {
                 bad_commits,
@@ -196,7 +266,10 @@ impl PyBisector {
                 result: Some("found-despite-skips".to_string()),
                 commits: bad_commits
                     .into_iter()
-                    .chain(possibly_bad)
+                    .map(|commit| self.wrap_commit(commit))
+                    .collect(),
+                possibly_bad: possibly_bad
+                    .into_iter()
                     .map(|commit| self.wrap_commit(commit))
                     .collect(),
             },
@@ -205,12 +278,24 @@ impl PyBisector {
                 commit: None,
                 result: Some("abort".to_string()),
                 commits: Vec::new(),
+                possibly_bad: Vec::new(),
+            },
+            // Unreachable with `verify_preconditions = false`: only a
+            // mismatched `Verify` evaluation produces this.
+            NextStep::Done(BisectionResult::VerificationFailed) => PyBisectStep {
+                kind: "done".to_string(),
+                commit: None,
+                result: Some("verification-failed".to_string()),
+                commits: Vec::new(),
+                possibly_bad: Vec::new(),
             },
         })
     }
 
     /// Record the outcome of testing `id`. `evaluation` is `"good"`,
-    /// `"bad"`, `"skip"` or `"abort"`.
+    /// `"bad"`, `"skip"` or `"abort"`. Abort is global to the search --
+    /// it ends the whole bisection, so `id` is only validated, never
+    /// stored (there is no per-commit abort state to read back).
     ///
     /// Raises `ValueError` when the id already carries a different mark,
     /// or once the bisection has aborted.
@@ -267,8 +352,12 @@ impl PyBisector {
 
     /// How many commits remain to test, as `(lower, upper)`. `upper` is
     /// `None` when the count is not bounded yet. This is what `jj bisect
-    /// run` turns into its "N revisions left to test" line.
+    /// run` turns into its "N revisions left to test" line. Once the
+    /// search has aborted there is nothing left to test.
     fn remaining_count(&self) -> PyResult<(usize, Option<usize>)> {
+        if self.aborted {
+            return Ok((0, Some(0)));
+        }
         let bisector = self.rebuild()?;
         let revset = pollster::block_on(bisector.remaining_revset()).map_err(map_py_err)?;
         revset.count_estimate().map_err(map_revset_eval_err)

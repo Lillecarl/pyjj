@@ -137,7 +137,9 @@ impl PyUserSettings {
         } else {
             jj_lib::config::StackedConfig::with_defaults()
         };
-        let user_settings = UserSettings::from_config(config).map_err(crate::errors::map_py_err)?;
+        let user_settings =
+            UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
+                .map_err(crate::errors::map_py_err)?;
         Ok(Self(user_settings))
     }
 
@@ -156,7 +158,9 @@ impl PyUserSettings {
             std::path::Path::new(workspace_root),
         )
         .map_err(crate::errors::map_py_err)?;
-        let user_settings = UserSettings::from_config(config).map_err(crate::errors::map_py_err)?;
+        let user_settings =
+            UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
+                .map_err(crate::errors::map_py_err)?;
         Ok(Self(user_settings))
     }
 
@@ -175,7 +179,7 @@ impl PyUserSettings {
     ///
     /// Empty input clones without rebuilding, so a command given neither
     /// flag keeps its change-id RNG sequence (rebuilding would restart
-    /// it -- `UserSettings::from_config` seeds a fresh RNG).
+    /// it -- `UserSettings::from_config_and_home_dir` seeds a fresh RNG).
     fn with_command_args(&self, args: Vec<(String, String)>) -> PyResult<Self> {
         if args.is_empty() {
             return Ok(Self(self.0.clone()));
@@ -218,7 +222,7 @@ impl PyUserSettings {
                 }
             }
         }
-        let settings = UserSettings::from_config(config)
+        let settings = UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
             .map_err(|err| crate::errors::JjError::new_err(error_chain_body(&err)))?;
         Ok(Self(settings))
     }

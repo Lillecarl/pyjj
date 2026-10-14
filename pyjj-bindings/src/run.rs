@@ -91,6 +91,12 @@ pub struct PyRunPool {
     base_path: PathBuf,
     size: usize,
     clean: bool,
+    /// Sparse patterns each acquisition materializes, or `None` for the
+    /// whole tree. Set per pool (which lives for one `jj run`
+    /// invocation), mirroring `cli/src/commands/run.rs`: `--sparse-
+    /// patterns full` is `None`, `empty` is `[]`, and `copy` is the
+    /// invoking workspace's own patterns, resolved by the caller.
+    sparsity: Option<Vec<jj_lib::repo_path::RepoPathBuf>>,
 }
 
 #[pymethods]
@@ -98,8 +104,13 @@ impl PyRunPool {
     /// `repo_path` is the `.jj/repo` directory (`Workspace.repo_path`).
     /// The pool lives beside it, under `.jj/run`, never inside it.
     #[new]
-    #[pyo3(signature = (repo_path, size, clean=false))]
-    fn new(repo_path: &str, size: usize, clean: bool) -> PyResult<Self> {
+    #[pyo3(signature = (repo_path, size, clean=false, sparsity=None))]
+    fn new(
+        repo_path: &str,
+        size: usize,
+        clean: bool,
+        sparsity: Option<Vec<String>>,
+    ) -> PyResult<Self> {
         if size == 0 {
             return Err(crate::errors::JjError::new_err(
                 "run pool size must be at least 1",
@@ -111,10 +122,22 @@ impl PyRunPool {
             .join("run")
             .join("default");
         fs::create_dir_all(&base_path).map_err(map_py_err)?;
+        let sparsity = sparsity
+            .map(|patterns| {
+                patterns
+                    .iter()
+                    .map(|p| {
+                        jj_lib::repo_path::RepoPathBuf::from_internal_string(p)
+                            .map_err(|err| crate::errors::JjError::new_err(err.to_string()))
+                    })
+                    .collect::<PyResult<Vec<_>>>()
+            })
+            .transpose()?;
         Ok(Self {
             base_path,
             size,
             clean,
+            sparsity,
         })
     }
 
@@ -173,8 +196,18 @@ impl PyRunPool {
             )
         };
 
+        // What the command sees: `None` (the `--sparse-patterns full`
+        // choice) materializes the whole tree, anything else narrows to
+        // those patterns -- re-applied on every acquisition, so a reused
+        // slot narrows again rather than keeping the last run's files.
+        let patterns = match &self.sparsity {
+            None => vec![jj_lib::repo_path::RepoPathBuf::root()],
+            Some(patterns) => patterns.clone(),
+        };
+        tree_state
+            .set_sparse_patterns(patterns)
+            .map_err(map_py_err)?;
         tree_state.check_out(&commit.tree()).map_err(map_py_err)?;
-
         // Checking out an empty tree deletes the slot directory itself:
         // `check_out` removes empty directories until something stops
         // it, and a slot has no `.jj` to stop it. Put it back.
@@ -376,7 +409,10 @@ impl PyRunSlot {
 ///   descendants outside the set are reparented, so their trees do not
 ///   move at all.
 ///
-/// Returns `(rewritten, reparented)`.
+/// Returns `(rewritten, moved)`, where `moved` counts the outside
+/// descendants whose parents changed: reparented with
+/// `restore_descendants`, rebased without it (same counter jj's own
+/// `num_rebased` is).
 pub fn run_rewrite(
     mut_repo: &mut MutableRepo,
     targets: Vec<crate::ids::PyCommitId>,
@@ -423,12 +459,20 @@ pub fn run_rewrite(
                 .await?;
                 builder.set_tree(merged).write().await?;
             }
+            // An outside descendant: move it only when its parents
+            // changed (the callback also fires for unaffected ones),
+            // exactly like jj's own counter does.
             (None, true) => {
-                rewriter.reparent().write().await?;
-                reparented.set(reparented.get() + 1);
+                if rewriter.parents_changed() {
+                    rewriter.reparent().write().await?;
+                    reparented.set(reparented.get() + 1);
+                }
             }
             (None, false) => {
-                rewriter.rebase().await?.write().await?;
+                if rewriter.parents_changed() {
+                    rewriter.rebase().await?.write().await?;
+                    reparented.set(reparented.get() + 1);
+                }
             }
         }
         Ok(())

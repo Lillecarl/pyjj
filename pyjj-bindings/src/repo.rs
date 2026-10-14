@@ -40,10 +40,15 @@ impl PyReadonlyRepo {
         };
         let revset_string = match settings.0.get_string("revsets.short-prefixes") {
             Ok(value) => value,
-            Err(_) => settings
+            // Fall back to `revsets.log` only when the key is unset; a
+            // set-but-not-a-string value is a real type error, surfaced
+            // the same way every other `get_string` call-site surfaces
+            // it rather than silently ignored.
+            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => settings
                 .0
                 .get_string("revsets.log")
                 .unwrap_or_else(|_| String::new()),
+            Err(err) => return Err(crate::errors::map_py_err(err)),
         };
         if revset_string.is_empty() {
             return Ok(context);
@@ -307,9 +312,9 @@ impl PyReadonlyRepo {
             .map(|(symbol, remote_ref)| crate::bookmark::PyRemoteBookmark {
                 name: symbol.name.as_str().to_string(),
                 remote: symbol.remote.as_str().to_string(),
-                target_ids: remote_ref.target.added_ids().map(Into::into).collect(),
-                removed_ids: remote_ref.target.removed_ids().map(Into::into).collect(),
-                has_conflict: remote_ref.target.has_conflict(),
+                target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
+                removed_ids: remote_ref.target.present_removes().map(Into::into).collect(),
+                has_conflict: !remote_ref.target.is_resolved(),
                 tracked: remote_ref.is_tracked(),
             })
             .collect()
@@ -374,9 +379,9 @@ impl PyReadonlyRepo {
             .map(|(symbol, remote_ref)| crate::tag::PyRemoteTag {
                 name: symbol.name.as_str().to_string(),
                 remote: symbol.remote.as_str().to_string(),
-                target_ids: remote_ref.target.added_ids().map(Into::into).collect(),
-                removed_ids: remote_ref.target.removed_ids().map(Into::into).collect(),
-                has_conflict: remote_ref.target.has_conflict(),
+                target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
+                removed_ids: remote_ref.target.present_removes().map(Into::into).collect(),
+                has_conflict: !remote_ref.target.is_resolved(),
                 tracked: remote_ref.is_tracked(),
             })
             .collect()
@@ -1585,26 +1590,42 @@ impl PyTransaction {
     /// afterward (it's not just a message, it's how future `undo()`/
     /// `redo()` calls recognize the undo-stack -- see the Rust docs on
     /// `pyjj_bindings.oplog.undo`). Does not commit on its own.
+    ///
+    /// Since jj 0.46 undoing an operation performed in another
+    /// workspace is refused unless `allow_cross_workspace` is given;
+    /// pass the workspace the command runs in as `workspace_name`
+    /// (`None` skips the check, preserving the old behavior).
+    #[pyo3(signature = (workspace_name=None, allow_cross_workspace=false))]
     fn undo(
         &self,
+        workspace_name: Option<String>,
+        allow_cross_workspace: bool,
     ) -> PyResult<(
         crate::operation::PyOperation,
         crate::operation::PyOperation,
         String,
     )> {
-        with_mut_repo(self, crate::oplog::undo)
+        with_mut_repo(self, |mut_repo| {
+            crate::oplog::undo(mut_repo, workspace_name.as_deref(), allow_cross_workspace)
+        })
     }
 
     /// `jj redo` equivalent, the complement of `undo()`. Same return shape
-    /// and description-handling as `undo()`.
+    /// and description-handling as `undo()`, same cross-workspace rule
+    /// (`--allow-cross-workspace`).
+    #[pyo3(signature = (workspace_name=None, allow_cross_workspace=false))]
     fn redo(
         &self,
+        workspace_name: Option<String>,
+        allow_cross_workspace: bool,
     ) -> PyResult<(
         crate::operation::PyOperation,
         crate::operation::PyOperation,
         String,
     )> {
-        with_mut_repo(self, crate::oplog::redo)
+        with_mut_repo(self, |mut_repo| {
+            crate::oplog::redo(mut_repo, workspace_name.as_deref(), allow_cross_workspace)
+        })
     }
 
     /// `jj git push`: push the given bookmark updates in one go.
@@ -1796,7 +1817,7 @@ impl PyCommitBuilder {
         mut slf: PyRefMut<'a, Self>,
         behavior: &'a str,
     ) -> Result<PyRefMut<'a, Self>, PyErr> {
-        use jj_lib::signing::SignBehavior;
+        use jj_lib::settings::SignBehavior;
         let behavior = match behavior {
             "drop" => SignBehavior::Drop,
             "keep" => SignBehavior::Keep,

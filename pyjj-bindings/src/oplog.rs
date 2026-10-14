@@ -13,6 +13,39 @@ use crate::operation::PyOperation;
 pub const UNDO_OP_DESC_PREFIX: &str = "undo: restore to operation ";
 pub const REDO_OP_DESC_PREFIX: &str = "redo: restore to operation ";
 
+/// Since jj 0.46 `undo`/`redo` refuse an operation performed in another
+/// workspace unless allowed: undoing across workspaces is usually not
+/// what was meant. The check runs on the walked target (after the
+/// undo/redo-stack jumping below), against the workspace the command
+/// runs in -- exactly `cli/src/commands/undo.rs`/`redo.rs`, message and
+/// hint included (the hint rides in the message: the CLI prints
+/// `Error: {message}`, which renders jj's two lines verbatim).
+fn check_cross_workspace(
+    target_op: &Operation,
+    workspace_name: Option<&str>,
+    allow_cross_workspace: bool,
+    verb: &str,
+    revert_hint: &str,
+) -> PyResult<()> {
+    if allow_cross_workspace {
+        return Ok(());
+    }
+    let Some(current) = workspace_name else {
+        return Ok(());
+    };
+    let Some(op_workspace) = target_op.metadata().workspace_name.as_ref() else {
+        return Ok(());
+    };
+    if op_workspace.as_str() == current {
+        return Ok(());
+    }
+    Err(JjError::new_err(format!(
+        "Refusing to {verb} operation {} because it was performed in workspace {}\nHint: Use `--allow-cross-workspace` to {verb} it anyway, or use `jj op revert` to revert a specific {revert_hint}",
+        &target_op.id().hex()[..12],
+        op_workspace.as_symbol(),
+    )))
+}
+
 /// Full backward walk of the operation log from `repo`'s current
 /// operation, newest first -- the same order `jj op log` shows. Unlike
 /// `Operation.parents()` (one hop at a time), this walks the whole
@@ -309,7 +342,11 @@ fn resolve_restore_target(
 /// operation) or the current operation is a merge of concurrent operations
 /// (ambiguous what "undo" should mean there -- use `restore_operation`
 /// instead, same as real jj recommends).
-pub fn undo(mut_repo: &mut MutableRepo) -> PyResult<(PyOperation, PyOperation, String)> {
+pub fn undo(
+    mut_repo: &mut MutableRepo,
+    workspace_name: Option<&str>,
+    allow_cross_workspace: bool,
+) -> PyResult<(PyOperation, PyOperation, String)> {
     let loader = mut_repo.base_repo().loader().clone();
     let mut target_op = mut_repo.base_repo().operation().clone();
 
@@ -317,15 +354,16 @@ pub fn undo(mut_repo: &mut MutableRepo) -> PyResult<(PyOperation, PyOperation, S
         target_op = op;
     }
 
+    check_cross_workspace(&target_op, workspace_name, allow_cross_workspace, "undo", "operation")?;
     let parents = pollster::block_on(target_op.parents()).map_err(map_py_err)?;
     let mut target_op_parent = match <[Operation; 1]>::try_from(parents) {
         Ok([parent]) => parent,
         Err(parents) if parents.is_empty() => {
-            return Err(JjError::new_err("cannot undo the root operation"));
+            return Err(JjError::new_err("Cannot undo root operation"));
         }
         Err(_) => {
             return Err(JjError::new_err(
-                "cannot undo a merge of concurrent operations -- use restore_operation instead",
+                "Cannot undo a merge operation\nHint: Consider using `jj op restore` instead",
             ));
         }
     };
@@ -357,7 +395,11 @@ pub fn undo(mut_repo: &mut MutableRepo) -> PyResult<(PyOperation, PyOperation, S
 ///
 /// Raises `JjError` if the current operation isn't an undo (nothing to
 /// redo).
-pub fn redo(mut_repo: &mut MutableRepo) -> PyResult<(PyOperation, PyOperation, String)> {
+pub fn redo(
+    mut_repo: &mut MutableRepo,
+    workspace_name: Option<&str>,
+    allow_cross_workspace: bool,
+) -> PyResult<(PyOperation, PyOperation, String)> {
     let loader = mut_repo.base_repo().loader().clone();
     let mut target_op = mut_repo.base_repo().operation().clone();
 
@@ -370,9 +412,16 @@ pub fn redo(mut_repo: &mut MutableRepo) -> PyResult<(PyOperation, PyOperation, S
         .description
         .starts_with(UNDO_OP_DESC_PREFIX)
     {
-        return Err(JjError::new_err("nothing to redo"));
+        return Err(JjError::new_err("Nothing to redo"));
     }
 
+    check_cross_workspace(
+        &target_op,
+        workspace_name,
+        allow_cross_workspace,
+        "redo",
+        "undo operation",
+    )?;
     let parents = pollster::block_on(target_op.parents()).map_err(map_py_err)?;
     let mut target_op_parent = match <[Operation; 1]>::try_from(parents) {
         Ok([parent]) => parent,

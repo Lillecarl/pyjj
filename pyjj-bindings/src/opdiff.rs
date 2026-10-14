@@ -147,10 +147,10 @@ async fn summarize_target(
             state,
         });
     }
-    let conflict = target.has_conflict();
-    let commits = commits_of(store, repo, target.added_ids().cloned()).await?;
+    let conflict = !target.is_resolved();
+    let commits = commits_of(store, repo, target.present_adds().cloned()).await?;
     let removed_commits = if conflict {
-        commits_of(store, repo, target.removed_ids().cloned()).await?
+        commits_of(store, repo, target.present_removes().cloned()).await?
     } else {
         vec![]
     };
@@ -206,6 +206,9 @@ pub fn operation_diff(
         let resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
         user_expr
             .resolve_user_expression(repo, &resolver)
+            // .1 is the other repos an `at_operation()` subexpression
+            // pulls in; dropped, same as in `resolve_revset` above.
+            .map(|resolved| resolved.into_inner().0)
             .map_err(map_revset_eval_err)
     };
     let from_changes_expr = resolve(&from_repo.inner)?;
@@ -213,7 +216,8 @@ pub fn operation_diff(
 
     // A transaction only so the two indexes can be merged into one repo
     // view. It is dropped at the end of this function without ever being
-    // committed, so nothing is written.
+    // committed, so the index merge itself writes nothing (the separate
+    // `merge_operations` step below is what persists, same as the CLI).
     let mut tx = to_repo.inner.start_transaction();
     tx.repo_mut()
         .merge_index(&from_repo.inner)
@@ -425,6 +429,12 @@ pub fn operation_diff(
 /// `jj op diff` needs this: the from side of a merge operation is its
 /// several parents, and they have to become one repo view before the
 /// two sides can be compared.
+///
+/// Since jj 0.46 the merge is *written* to the op store (an unpublished
+/// operation, via `tx.write().leave_unpublished()`, the same wrapper the
+/// CLI itself uses) -- not just computed in memory. It never becomes a
+/// head and never touches the working copy, but it does persist until
+/// the next `gc`, so this is not a pure read.
 pub fn merge_operations(
     repo: &PyReadonlyRepo,
     operations: Vec<crate::operation::PyOperation>,

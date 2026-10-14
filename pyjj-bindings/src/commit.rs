@@ -374,6 +374,25 @@ impl PyCommit {
         crate::aio::spawn_blocking_py(py, move || crate::file::is_executable(&commit, &path))
     }
 
+    /// The kind of tree entry at `path` — `"file"`, `"symlink"`, `"dir"`,
+    /// `"submodule"`, `"absent"`, `"file-conflict"`, or
+    /// `"other-conflict"` (see `pyjj_bindings.file.file_kind`).
+    fn file_kind(&self, path: &str) -> PyResult<String> {
+        crate::file::file_kind(self, path)
+    }
+
+    /// `jj`'s fileset matching against this commit's tree: `(matched,
+    /// unmatched_explicit)` for `patterns` (see
+    /// `pyjj_bindings.file.match_filesets`).
+    fn match_filesets(
+        &self,
+        settings: &crate::settings::PyUserSettings,
+        workspace_root: &str,
+        patterns: Vec<String>,
+    ) -> PyResult<(Vec<String>, Vec<String>)> {
+        crate::file::match_filesets(self, settings, workspace_root, patterns)
+    }
+
     /// Renders the conflict at `path` as conflict-marker text, the same
     /// way a real jj working copy would show it. Raises `JjError` if
     /// `path` isn't conflicted.

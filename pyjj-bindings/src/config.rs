@@ -103,6 +103,16 @@ fn env_overrides_layer() -> ConfigLayer {
     layer
 }
 
+/// The user's home directory, canonicalized the way the `jj` CLI does
+/// (`etcetera::home_dir` through `dunce::canonicalize`): it locates
+/// `~/.jjconfig.toml` below, and since jj 0.46 it is also the `~`
+/// that config values expand against (`UserSettings::from_config_and_home_dir`).
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    etcetera::home_dir()
+        .ok()
+        .map(|d| dunce::canonicalize(&d).unwrap_or(d))
+}
+
 /// System-wide config paths: `/etc/jj/config.toml` and `/etc/jj/conf.d/` on
 /// Unix (jj has no defined system config location on Windows). Suppressed
 /// entirely when `JJ_CONFIG` is set, matching `jj`'s own behavior -- an
@@ -136,9 +146,7 @@ fn user_config_paths() -> Vec<PathBuf> {
 
     let base_strategy = etcetera::choose_base_strategy().ok();
     let user_config_dir = base_strategy.map(|s| s.config_dir());
-    let home_dir = etcetera::home_dir()
-        .ok()
-        .map(|d| dunce::canonicalize(&d).unwrap_or(d));
+    let home_dir = home_dir();
 
     let home_config_path = home_dir.map(|mut home| {
         home.push(".jjconfig.toml");
