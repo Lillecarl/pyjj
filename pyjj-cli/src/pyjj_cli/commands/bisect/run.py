@@ -67,6 +67,8 @@ def bisect_run(args) -> int:
         exit code when the checkout itself failed."""
         commit_id_hex = commit.id.hex()
         try:
+            # Not write_tx: repo/ws are rebound by _reload around every
+            # evaluation, and a fresh _load would reseed the RNG.
             tx = _start_transaction(repo, settings)
             tx.check_out(ws.workspace_name, commit)
             _finish(tx, f"Updated to revision {commit_id_hex} for bisection",

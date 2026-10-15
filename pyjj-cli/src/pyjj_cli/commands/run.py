@@ -94,6 +94,8 @@ def run(args) -> int:
     try:
         expressions = list(args.revisions or []) or [_DEFAULT_REVSET]
         commits = _resolve_all(repo, settings, expressions)
+        # Not write_tx: the transaction spans the subprocess loop and the
+        # load carries this command's exit-2 error mapping.
         tx = _start_transaction(repo, settings)
         ignore_changes = getattr(args, "ignore_changes", False)
         ignore_errors = getattr(args, "ignore_errors", False)

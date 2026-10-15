@@ -3,13 +3,13 @@ import sys
 
 from ..common import (
     _commit_summary,
-    _load,
     _nearest_conflicted,
     _wc_commit,
     _move_to,
     _walk,
     _wants_edit,
     command,
+    write_tx,
 )
 
 @command
@@ -26,66 +26,66 @@ def next_commit(args) -> int:
     jumps to the nearest conflicted descendant instead, with the same
     edit/no-edit shape around it.
     """
-    settings, ws, repo = _load(args)
-    edit = _wants_edit(args)
-    wc = _wc_commit(repo, ws)
+    with write_tx(args) as (settings, ws, repo, tx):
+        edit = _wants_edit(args)
+        wc = _wc_commit(repo, ws)
 
-    if getattr(args, "conflict", False):
-        if getattr(args, "amount", None) is not None:
-            print("Error: --conflict cannot be used with [OFFSET]",
-                  file=sys.stderr)
-            return 2
-        if edit:
-            targets = _nearest_conflicted(
-                repo, settings, [wc.id.hex()], "children")
-            if not targets:
-                print("Error: The working copy has no descendants "
-                      "with conflicts", file=sys.stderr)
-                print(f"Hint: Working copy: "
-                      f"{_commit_summary(repo, settings, wc)}",
+        if getattr(args, "conflict", False):
+            if getattr(args, "amount", None) is not None:
+                print("Error: --conflict cannot be used with [OFFSET]",
                       file=sys.stderr)
+                return 2
+            if edit:
+                targets = _nearest_conflicted(
+                    repo, settings, [wc.id.hex()], "children")
+                if not targets:
+                    print("Error: The working copy has no descendants "
+                          "with conflicts", file=sys.stderr)
+                    print(f"Hint: Working copy: "
+                          f"{_commit_summary(repo, settings, wc)}",
+                          file=sys.stderr)
+                    return 1
+            else:
+                if repo.revset(settings, f"children({wc.id.hex()})"):
+                    print("Error: The working copy must not have any children",
+                          file=sys.stderr)
+                    print("Hint: Create a new commit on top of this one "
+                          "or use `--edit`", file=sys.stderr)
+                    return 1
+                starts = [i.hex() for i in wc.parent_ids]
+                targets = _nearest_conflicted(
+                    repo, settings, starts, "children",
+                    exclude={wc.id.hex()})
+                if not targets:
+                    print("Error: The working copy parent(s) have no other "
+                          "descendants with conflicts", file=sys.stderr)
+                    for pid in wc.parent_ids:
+                        parent = repo.get_commit(pid)
+                        print(f"Hint: Working copy parent: "
+                              f"{_commit_summary(repo, settings, parent)}",
+                              file=sys.stderr)
+                    return 1
+            return _move_to(args, settings, ws, repo, tx, targets, edit, "next")
+
+        offset = getattr(args, "amount", 1) or 1
+
+        if edit:
+            targets = _walk(repo, settings, [wc.id.hex()], "children", offset)
+            if not targets:
+                print(f"Error: No descendant found {offset} commit(s) forward "
+                      "from the working copy", file=sys.stderr)
                 return 1
         else:
             if repo.revset(settings, f"children({wc.id.hex()})"):
                 print("Error: The working copy must not have any children",
                       file=sys.stderr)
-                print("Hint: Create a new commit on top of this one "
-                      "or use `--edit`", file=sys.stderr)
                 return 1
             starts = [i.hex() for i in wc.parent_ids]
-            targets = _nearest_conflicted(
-                repo, settings, starts, "children",
-                exclude={wc.id.hex()})
+            targets = _walk(repo, settings, starts, "children", offset,
+                            exclude={wc.id.hex()})
             if not targets:
-                print("Error: The working copy parent(s) have no other "
-                      "descendants with conflicts", file=sys.stderr)
-                for pid in wc.parent_ids:
-                    parent = repo.get_commit(pid)
-                    print(f"Hint: Working copy parent: "
-                          f"{_commit_summary(repo, settings, parent)}",
-                          file=sys.stderr)
+                print(f"Error: No other descendant found {offset} commit(s) "
+                      "forward from the working copy parent(s)", file=sys.stderr)
                 return 1
-        return _move_to(args, settings, ws, repo, targets, edit, "next")
 
-    offset = getattr(args, "amount", 1) or 1
-
-    if edit:
-        targets = _walk(repo, settings, [wc.id.hex()], "children", offset)
-        if not targets:
-            print(f"Error: No descendant found {offset} commit(s) forward "
-                  "from the working copy", file=sys.stderr)
-            return 1
-    else:
-        if repo.revset(settings, f"children({wc.id.hex()})"):
-            print("Error: The working copy must not have any children",
-                  file=sys.stderr)
-            return 1
-        starts = [i.hex() for i in wc.parent_ids]
-        targets = _walk(repo, settings, starts, "children", offset,
-                        exclude={wc.id.hex()})
-        if not targets:
-            print(f"Error: No other descendant found {offset} commit(s) "
-                  "forward from the working copy parent(s)", file=sys.stderr)
-            return 1
-
-    return _move_to(args, settings, ws, repo, targets, edit, "next")
+        return _move_to(args, settings, ws, repo, tx, targets, edit, "next")

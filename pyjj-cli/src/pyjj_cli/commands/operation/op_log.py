@@ -11,13 +11,14 @@ from ..common import (
     _ago,
     _diff_formats_for_log,
     _duration,
-    _load,
     _pyjj_template,
     _resolve_template,
     conflicting_flags,
     dot_attribute,
     select_fields,
     use_color,
+    read_repo,
+    command,
 )
 from .op_diff import print_operation_diff
 
@@ -215,6 +216,7 @@ def _dot_attributes(op, current: bool, fields) -> dict[str, str]:
     return {field: dot_attribute(values[field]) for field in fields}
 
 
+@command
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
     dot = getattr(args, "dot", False)
@@ -235,69 +237,64 @@ def op_log(args) -> int:
         print("Error: --dot-fields requires --dot", file=sys.stderr)
         return 2
 
-    try:
-        settings, ws, repo = _load(args)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
-        return 1
+    with read_repo(args) as (settings, ws, repo):
+        ops = repo.operation_log()
+        limit = getattr(args, "limit", None)
+        # jj applies the limit after the topological ordering but before
+        # reversing, so `--reversed -n 3` shows the three newest operations
+        # oldest first -- not the three oldest.
+        if limit:
+            ops = ops[:limit]
 
-    ops = repo.operation_log()
-    limit = getattr(args, "limit", None)
-    # jj applies the limit after the topological ordering but before
-    # reversing, so `--reversed -n 3` shows the three newest operations
-    # oldest first -- not the three oldest.
-    if limit:
-        ops = ops[:limit]
+        current_id = repo.operation.id
+        shape, template = _shape(settings, ws, args, "op_log")
+        coloured = use_color(settings)
+        by_id = {op.id: op for op in ops}
+        items = [(op.id, [(parent, "direct") for parent in op.parent_ids])
+                 for op in ops]
+        if getattr(args, "reversed", False):
+            items = reverse_graph(items)
 
-    current_id = repo.operation.id
-    shape, template = _shape(settings, ws, args, "op_log")
-    coloured = use_color(settings)
-    by_id = {op.id: op for op in ops}
-    items = [(op.id, [(parent, "direct") for parent in op.parent_ids])
-             for op in ops]
-    if getattr(args, "reversed", False):
-        items = reverse_graph(items)
+        # `--op-diff` shows what each operation changed, and `--patch`
+        # implies it -- so does any other diff-format flag, since a format
+        # with nothing to format would print nothing at all.
+        formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+        with_diff = getattr(args, "op_diff", False) or formats != (None, None)
 
-    # `--op-diff` shows what each operation changed, and `--patch`
-    # implies it -- so does any other diff-format flag, since a format
-    # with nothing to format would print nothing at all.
-    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
-    with_diff = getattr(args, "op_diff", False) or formats != (None, None)
+        def body(op_id: str) -> str:
+            if not with_diff:
+                return ""
+            return _op_diff_text(args, settings, ws, repo, by_id[op_id])
 
-    def body(op_id: str) -> str:
-        if not with_diff:
-            return ""
-        return _op_diff_text(args, settings, ws, repo, by_id[op_id])
+        if dot:
+            labels = {op_id: render_operation(by_id[op_id], op_id == current_id,
+                                              shape, template, "op_log", False)
+                      for op_id, _edges in items}
+            attrs = {op_id: _dot_attributes(by_id[op_id], op_id == current_id,
+                                            dot_fields)
+                     for op_id, _edges in items} if dot_fields else {}
+            sys.stdout.write(render_dot(items, labels, name="op_log",
+                                        attributes=attrs))
+            return 0
 
-    if dot:
-        labels = {op_id: render_operation(by_id[op_id], op_id == current_id,
-                                          shape, template, "op_log", False)
-                  for op_id, _edges in items}
-        attrs = {op_id: _dot_attributes(by_id[op_id], op_id == current_id,
-                                        dot_fields)
-                 for op_id, _edges in items} if dot_fields else {}
-        sys.stdout.write(render_dot(items, labels, name="op_log",
-                                    attributes=attrs))
+        if getattr(args, "no_graph", False):
+            for op_id, _edges in items:
+                sys.stdout.write(render_operation(
+                    by_id[op_id], op_id == current_id, shape, template,
+                    "op_log", coloured) + "\n")
+                sys.stdout.write(body(op_id))
+            return 0
+
+        renderer = pyjj.GraphRenderer()
+        for op_id, edges in items:
+            # An edge to an operation outside the set is not drawn: under
+            # `--limit` the oldest row shown still has a parent, and jj
+            # leaves its lane running rather than closing it.
+            current = op_id == current_id
+            text = render_operation(by_id[op_id], current, shape, template,
+                                    "op_log", coloured)
+            patch = body(op_id)
+            sys.stdout.write(renderer.next_row(
+                op_id, edges, render_node(current, "op_log", coloured),
+                f"{text}\n{patch}" if patch else text))
         return 0
-
-    if getattr(args, "no_graph", False):
-        for op_id, _edges in items:
-            sys.stdout.write(render_operation(
-                by_id[op_id], op_id == current_id, shape, template,
-                "op_log", coloured) + "\n")
-            sys.stdout.write(body(op_id))
-        return 0
-
-    renderer = pyjj.GraphRenderer()
-    for op_id, edges in items:
-        # An edge to an operation outside the set is not drawn: under
-        # `--limit` the oldest row shown still has a parent, and jj
-        # leaves its lane running rather than closing it.
-        current = op_id == current_id
-        text = render_operation(by_id[op_id], current, shape, template,
-                                "op_log", coloured)
-        patch = body(op_id)
-        sys.stdout.write(renderer.next_row(
-            op_id, edges, render_node(current, "op_log", coloured),
-            f"{text}\n{patch}" if patch else text))
-    return 0

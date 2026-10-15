@@ -91,6 +91,8 @@ def apply(args) -> int:
 
     changes = {key: commit.change_id.reverse_hex()
                for key, commit in commits.items()}
+    # Not write_tx: the load carries exit-2 mapping, and the rollback
+    # below must open its own transaction after committing.
     tx = _start_transaction(repo, settings)
     try:
         if not getattr(args, "ignore_immutable", False):
@@ -168,6 +170,7 @@ def _rollback(ws, settings, operation_id: str, why: str, applied: int,
     try:
         repo = ws.load_at_head()
         target = repo.load_operation(operation_id)
+        # Not write_tx: this runs after committing, by design.
         tx = _start_transaction(repo, settings)
         tx.restore_operation(target)
         _finish(tx, "graph apply: roll back", settings, ws, repo)

@@ -48,6 +48,7 @@ def git_init(args) -> int:
             ws, repo = pyjj.Workspace.init_external_git(
                 settings, str(destination), str(candidate))
             # Import its branches and tags, the way real init does.
+            # Not write_tx: init finishes with direct commits.
             tx = _start_transaction(repo, settings)
             tx.git_import_refs()
             tx.rebase_descendants()
@@ -94,6 +95,7 @@ def _check_out_git_head(settings, workspace_name: str, destination: Path,
     bookmark = repo.get_bookmark(ref[len("refs/heads/"):])
     if bookmark is None or bookmark.has_conflict or not bookmark.target_ids:
         return repo
+    # Not write_tx: init finishes with direct commits and its own checkout.
     tx = _start_transaction(repo, settings)
     builder = tx.new_commit(settings, [bookmark.target_ids[0]])
     child = builder.write(repo)

@@ -1043,15 +1043,17 @@ def _check_rewritable(tx, settings, commits) -> None:
     tx.check_rewritable(settings, ids)
 
 
-def _move_to(args, settings, ws, repo, targets, edit: bool, name: str) -> int:
+def _move_to(args, settings, ws, repo, tx, targets, edit: bool, name: str) -> int:
     """Land `jj next`/`jj prev` on `targets`: edit the target itself, or
-    create a new empty commit on top of it."""
+    create a new empty commit on top of it.
+
+    `tx` arrives open from the caller (next/prev resolve first, then
+    hand over), so this never reloads mid-command."""
     if len(targets) > 1:
         print(f"Error: Ambiguous target for {name}: "
               f"{', '.join(t[:12] for t in targets)}", file=sys.stderr)
         return 1
     target = repo.get_commit(pyjj.CommitId(targets[0]))
-    tx = _start_transaction(repo, settings)
     if edit:
         _check_rewritable(tx, settings, [target])
         tx.edit(ws.workspace_name, target)

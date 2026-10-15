@@ -9,54 +9,50 @@ import sys
 
 import pyjj
 
-from ..common import CommandError, _load
+from ..common import CommandError, read_repo, command
 from .resolve import read_graph, resolve
 
 
+@command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def plan(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
-        print(f"Error: {e.message}", file=sys.stderr)
-        return 1
+    with read_repo(args) as (settings, ws, repo):
+        try:
+            steps, abandons, commits = resolve(repo, settings,
+                                               read_graph(getattr(args, "file")))
+        except CommandError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
 
-    try:
-        steps, abandons, commits = resolve(repo, settings,
-                                           read_graph(getattr(args, "file")))
-    except CommandError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
+        described = [
+            {
+                "node": key,
+                "change_id": commits[key].change_id.reverse_hex(),
+                "commit_id": commits[key].id.hex(),
+                "from": [pid.hex() for pid in commits[key].parent_ids],
+                "to": [commits[parent].id.hex() for parent in parents],
+                "command": ["rebase", "--revision", key]
+                           + [flag for parent in parents for flag in ("-d", parent)],
+            }
+            for key, parents in steps
+        ] + [
+            {
+                "node": key,
+                "change_id": commits[key].change_id.reverse_hex(),
+                "commit_id": commits[key].id.hex(),
+                "from": [pid.hex() for pid in commits[key].parent_ids],
+                "command": ["abandon", key],
+            }
+            for key in abandons
+        ]
 
-    described = [
-        {
-            "node": key,
-            "change_id": commits[key].change_id.reverse_hex(),
-            "commit_id": commits[key].id.hex(),
-            "from": [pid.hex() for pid in commits[key].parent_ids],
-            "to": [commits[parent].id.hex() for parent in parents],
-            "command": ["rebase", "--revision", key]
-                       + [flag for parent in parents for flag in ("-d", parent)],
-        }
-        for key, parents in steps
-    ] + [
-        {
-            "node": key,
-            "change_id": commits[key].change_id.reverse_hex(),
-            "commit_id": commits[key].id.hex(),
-            "from": [pid.hex() for pid in commits[key].parent_ids],
-            "command": ["abandon", key],
-        }
-        for key in abandons
-    ]
+        if getattr(args, "format", "text") == "json":
+            print(json.dumps({"steps": described,
+                              "unchanged": len(commits) - len(described)},
+                             indent=2))
+            return 0
 
-    if getattr(args, "format", "text") == "json":
-        print(json.dumps({"steps": described,
-                          "unchanged": len(commits) - len(described)},
-                         indent=2))
+        for step in described:
+            print("pyjj " + " ".join(step["command"]))
+        print(f"# {len(described)} commits reshaped, "
+              f"{len(commits) - len(described)} unchanged", file=sys.stderr)
         return 0
-
-    for step in described:
-        print("pyjj " + " ".join(step["command"]))
-    print(f"# {len(described)} commits reshaped, "
-          f"{len(commits) - len(described)} unchanged", file=sys.stderr)
-    return 0

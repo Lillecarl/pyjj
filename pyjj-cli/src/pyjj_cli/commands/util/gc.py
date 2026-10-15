@@ -7,7 +7,7 @@ import sys
 
 import pyjj
 
-from ...commands.common import CommandError, _load
+from ...commands.common import CommandError, read_repo
 
 # jj's default: keep anything written in the last two weeks, reachable or
 # not, because a concurrent process may not have referenced it yet.
@@ -25,8 +25,8 @@ def util_gc(args) -> int:
         return 1
 
     try:
-        _settings, _ws, repo = _load(args)
-        repo.gc(max_age)
+        with read_repo(args) as (_settings, _ws, repo):
+            repo.gc(max_age)
     except (pyjj.JjError, pyjj.WorkspaceLoadError, pyjj.RepoLoadError,
             CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

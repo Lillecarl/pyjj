@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pyjj
 
-from ..common import CommandError, _load
+from ..common import CommandError, read_repo
 from .paths import config_path, read_config, set_key, write_config
 
 
@@ -54,9 +54,9 @@ def config_set(args) -> int:
 def _warn_wc_author(args, value, part: str) -> None:
     """The full warning jj prints when the author setting changes."""
     try:
-        _settings, ws, repo = _load(args)
-        wc_hex = repo.view()[ws.workspace_name]
-        author = repo.get_commit(pyjj.CommitId(wc_hex)).author
+        with read_repo(args) as (_settings, ws, repo):
+            wc_hex = repo.view()[ws.workspace_name]
+            author = repo.get_commit(pyjj.CommitId(wc_hex)).author
     except Exception:
         return
     current = author.name if part == "name" else author.email
@@ -80,8 +80,8 @@ def _scope(args):
 
 
 def _workspace_root(args):
-    _settings, ws, _repo = _load(args)
-    return ws.workspace_root
+    with read_repo(args) as (_settings, ws, _repo):
+        return ws.workspace_root
 
 
 def _parse(text: str):

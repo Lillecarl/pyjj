@@ -35,12 +35,13 @@ from ..common import (
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
-    _load,
     _pyjj_template,
     _resolve_template,
     _short_id,
     _short_id_spans,
     use_color,
+    read_repo,
+    command,
 )
 
 # jj's own builtin template names. `builtin_log_compact` builds its
@@ -240,216 +241,212 @@ def _spans_millennia(nodes) -> bool:
     return (min(years)[:1]) != (max(years)[:1])
 
 
+@command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def log(args) -> int:
-    try:
-        settings, ws, repo = _load(args)
-    except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
-        print(f"Error: {e.message}", file=sys.stderr)
-        return 1
+    with read_repo(args) as (settings, ws, repo):
+        paths = getattr(args, "filesets", None) or None
+        revset_expr = _log_revset(settings, getattr(args, "revisions", None),
+                                  paths)
 
-    paths = getattr(args, "filesets", None) or None
-    revset_expr = _log_revset(settings, getattr(args, "revisions", None),
-                              paths)
+        limit = getattr(args, "limit", None)
+        if limit == 0:
+            limit = None
 
-    limit = getattr(args, "limit", None)
-    if limit == 0:
-        limit = None
-
-    dot = getattr(args, "dot", False)
-    dot_fields: list[str] = []
-    if dot:
-        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
-        if conflicting:
-            print(f"Error: --dot cannot be used with {conflicting[0]}",
-                  file=sys.stderr)
+        dot = getattr(args, "dot", False)
+        dot_fields: list[str] = []
+        if dot:
+            conflicting = conflicting_flags(args, _DOT_CONFLICTS)
+            if conflicting:
+                print(f"Error: --dot cannot be used with {conflicting[0]}",
+                      file=sys.stderr)
+                return 2
+            try:
+                dot_fields = select_fields(getattr(args, "dot_fields", None),
+                                           _DOT_DEFAULT, _DOT_CATALOGUE)
+            except CommandError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 2
+        elif getattr(args, "dot_fields", None):
+            print("Error: --dot-fields requires --dot", file=sys.stderr)
             return 2
+        elif getattr(args, "dot_key", "commit_id") != "commit_id":
+            print("Error: --dot-key requires --dot", file=sys.stderr)
+            return 2
+
+        if getattr(args, "count", False):
+            # jj makes `--count` exclusive with everything that shapes the
+            # rows, since it prints no rows at all. clap says so in one
+            # attribute; argparse cannot, so the check lives here.
+            conflicting = conflicting_flags(args, _COUNT_CONFLICTS)
+            if conflicting:
+                print(f"Error: --count cannot be used with {conflicting[0]}",
+                      file=sys.stderr)
+                return 2
+            try:
+                found = repo.revset(settings, revset_expr)
+            except pyjj.JjError as e:
+                print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
+                return 1
+            print(len(found) if limit is None else min(len(found), limit))
+            return 0
+
         try:
-            dot_fields = select_fields(getattr(args, "dot_fields", None),
-                                       _DOT_DEFAULT, _DOT_CATALOGUE)
-        except CommandError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 2
-    elif getattr(args, "dot_fields", None):
-        print("Error: --dot-fields requires --dot", file=sys.stderr)
-        return 2
-    elif getattr(args, "dot_key", "commit_id") != "commit_id":
-        print("Error: --dot-key requires --dot", file=sys.stderr)
-        return 2
-
-    if getattr(args, "count", False):
-        # jj makes `--count` exclusive with everything that shapes the
-        # rows, since it prints no rows at all. clap says so in one
-        # attribute; argparse cannot, so the check lives here.
-        conflicting = conflicting_flags(args, _COUNT_CONFLICTS)
-        if conflicting:
-            print(f"Error: --count cannot be used with {conflicting[0]}",
-                  file=sys.stderr)
-            return 2
-        try:
-            found = repo.revset(settings, revset_expr)
+            nodes = repo.log_graph(settings, revset_expr, limit=limit)
         except pyjj.JjError as e:
             print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
             return 1
-        print(len(found) if limit is None else min(len(found), limit))
-        return 0
 
-    try:
-        nodes = repo.log_graph(settings, revset_expr, limit=limit)
-    except pyjj.JjError as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
+        view = repo.view()
+        # jj's `current_working_copy` asks about this workspace alone, which
+        # is what makes a row bold. Another workspace's commit is named in
+        # the row instead, and only when there is more than one.
+        current_wc = view.get(ws.workspace_name)
+        wc_ids = {current_wc} if current_wc else set()
+        all_wc_ids = set(view.values())
+        names_by_hex = {hex_id: name for name, hex_id in view.items()}
+        many_workspaces = len(view) > 1
 
-    view = repo.view()
-    # jj's `current_working_copy` asks about this workspace alone, which
-    # is what makes a row bold. Another workspace's commit is named in
-    # the row instead, and only when there is more than one.
-    current_wc = view.get(ws.workspace_name)
-    wc_ids = {current_wc} if current_wc else set()
-    all_wc_ids = set(view.values())
-    names_by_hex = {hex_id: name for name, hex_id in view.items()}
-    many_workspaces = len(view) > 1
+        bookmarks_by_commit: dict[str, list[str]] = {}
+        for bookmark in repo.bookmarks():
+            for target in bookmark.target_ids:
+                bookmarks_by_commit.setdefault(target.hex(), []).append(
+                    bookmark.name)
+        immutable = _immutable_ids(repo, settings,
+                                  [node.commit for node in nodes])
 
-    bookmarks_by_commit: dict[str, list[str]] = {}
-    for bookmark in repo.bookmarks():
-        for target in bookmark.target_ids:
-            bookmarks_by_commit.setdefault(target.hex(), []).append(
-                bookmark.name)
-    immutable = _immutable_ids(repo, settings,
-                              [node.commit for node in nodes])
+        # `--reversed` walks the same DAG the other way: each commit's
+        # parents become its children and the order flips, which is what
+        # jj's own `reverse_graph` does. Reversing the drawn rows instead
+        # would leave a merge's fork pointing the wrong way.
+        by_id = {node.commit.id.hex(): node for node in nodes}
+        items = [
+            (node.commit.id.hex(),
+             [(edge.target.hex(), edge.edge_type) for edge in node.edges])
+            for node in nodes
+        ]
+        if getattr(args, "reversed", False):
+            items = reverse_graph(items)
 
-    # `--reversed` walks the same DAG the other way: each commit's
-    # parents become its children and the order flips, which is what
-    # jj's own `reverse_graph` does. Reversing the drawn rows instead
-    # would leave a merge's fork pointing the wrong way.
-    by_id = {node.commit.id.hex(): node for node in nodes}
-    items = [
-        (node.commit.id.hex(),
-         [(edge.target.hex(), edge.edge_type) for edge in node.edges])
-        for node in nodes
-    ]
-    if getattr(args, "reversed", False):
-        items = reverse_graph(items)
+        no_graph = getattr(args, "no_graph", False)
+        # `jj log` prints a row and nothing else unless a flag asks for a
+        # diff, so this pair may name no format at all.
+        formats = _diff_formats_for_log(args, getattr(args, "patch", False))
+        with_diff = formats != (None, None)
+        coloured = use_color(settings)
 
-    no_graph = getattr(args, "no_graph", False)
-    # `jj log` prints a row and nothing else unless a flag asks for a
-    # diff, so this pair may name no format at all.
-    formats = _diff_formats_for_log(args, getattr(args, "patch", False))
-    with_diff = formats != (None, None)
-    coloured = use_color(settings)
+        given = (getattr(args, "template", None)
+                 or _pyjj_template(settings, "log", cwd=ws.workspace_root))
+        builtin = given == _COMPACT
+        jinja_template = (None if builtin or not given
+                          else _resolve_template(settings, ws, args, "log",
+                                                 _BUILTINS))
+        short_year = not _spans_millennia(nodes)
 
-    given = (getattr(args, "template", None)
-             or _pyjj_template(settings, "log", cwd=ws.workspace_root))
-    builtin = given == _COMPACT
-    jinja_template = (None if builtin or not given
-                      else _resolve_template(settings, ws, args, "log",
-                                             _BUILTINS))
-    short_year = not _spans_millennia(nodes)
+        renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
+        dot_labels: dict[str, str] = {}
+        dot_attrs: dict[str, dict[str, str]] = {}
+        # One pass over the remote refs, not one per row.
+        dot_remotes = (remote_state(repo) if {"remote_bookmarks",
+                                              "unpushed_bookmarks"}
+                       & set(dot_fields) else {})
+        sys.stdout.flush()
+        for hex_id, edges in items:
+            commit = by_id[hex_id].commit
+            root = not commit.parent_ids
+            kind = _commit_kind(repo, commit, wc_ids, immutable)
+            names = sorted(bookmarks_by_commit.get(hex_id, []))
 
-    renderer = None if (no_graph or dot) else pyjj.GraphRenderer()
-    dot_labels: dict[str, str] = {}
-    dot_attrs: dict[str, dict[str, str]] = {}
-    # One pass over the remote refs, not one per row.
-    dot_remotes = (remote_state(repo) if {"remote_bookmarks",
-                                          "unpushed_bookmarks"}
-                   & set(dot_fields) else {})
-    sys.stdout.flush()
-    for hex_id, edges in items:
-        commit = by_id[hex_id].commit
-        root = not commit.parent_ids
-        kind = _commit_kind(repo, commit, wc_ids, immutable)
-        names = sorted(bookmarks_by_commit.get(hex_id, []))
+            if dot_fields:
+                dot_attrs[hex_id] = _dot_attributes(
+                    repo, settings, args, ws, commit,
+                    _context(repo, settings, commit, names, short_year,
+                             hex_id in all_wc_ids, hex_id in wc_ids),
+                    dot_fields, paths, names, dot_remotes)
 
-        if dot_fields:
-            dot_attrs[hex_id] = _dot_attributes(
-                repo, settings, args, ws, commit,
-                _context(repo, settings, commit, names, short_year,
-                         hex_id in all_wc_ids, hex_id in wc_ids),
-                dot_fields, paths, names, dot_remotes)
+            def emit(lines, indent: bool = True) -> None:
+                """One row, buffered: renderdag takes a finished string.
 
-        def emit(lines, indent: bool = True) -> None:
-            """One row, buffered: renderdag takes a finished string.
+                jj writes the patch into the same buffer as the row, so the
+                graph column runs down beside the diff. File content is
+                bytes and need not be text, so the row goes out through
+                `stdout.buffer` once it carries a diff.
+                """
+                text = render_block(lines, "log commit", coloured and not dot)
+                if dot:
+                    dot_labels[hex_id] = text
+                    return
+                patch = ""
+                if with_diff:
+                    patch = _diff_bytes(
+                        args, ws, settings, _diff_base(repo, settings, commit),
+                        commit, paths, formats,
+                    ).decode("utf-8", "surrogateescape")
+                if no_graph:
+                    head, _, rest = text.partition("\n")
+                    out = head + "\n"
+                    for line in rest.splitlines():
+                        out += f"  {line}\n" if indent else f"{line}\n"
+                    _write(out + patch)
+                    return
+                glyph = render_block([[(_commit_glyph(kind), kind)]],
+                                     "log commit node", coloured)
+                # renderdag drops a trailing newline, so the row reads the
+                # same with a patch under it as jj's own buffer does.
+                _write(renderer.next_row(hex_id, edges, glyph,
+                                         f"{text}\n{patch}" if patch else text))
 
-            jj writes the patch into the same buffer as the row, so the
-            graph column runs down beside the diff. File content is
-            bytes and need not be text, so the row goes out through
-            `stdout.buffer` once it carries a diff.
-            """
-            text = render_block(lines, "log commit", coloured and not dot)
-            if dot:
-                dot_labels[hex_id] = text
-                return
-            patch = ""
-            if with_diff:
-                patch = _diff_bytes(
-                    args, ws, settings, _diff_base(repo, settings, commit),
-                    commit, paths, formats,
-                ).decode("utf-8", "surrogateescape")
-            if no_graph:
-                head, _, rest = text.partition("\n")
-                out = head + "\n"
-                for line in rest.splitlines():
-                    out += f"  {line}\n" if indent else f"{line}\n"
-                _write(out + patch)
-                return
-            glyph = render_block([[(_commit_glyph(kind), kind)]],
-                                 "log commit node", coloured)
-            # renderdag drops a trailing newline, so the row reads the
-            # same with a patch under it as jj's own buffer does.
-            _write(renderer.next_row(hex_id, edges, glyph,
-                                     f"{text}\n{patch}" if patch else text))
-
-        if jinja_template is not None:
-            try:
-                rendered = jinja_template.render(_context(
-                    repo, settings, commit, names, short_year,
-                    hex_id in all_wc_ids, hex_id in wc_ids))
-            except Exception as e:
-                sys.stdout.buffer.flush()
-                print(f"Error: template render failed: {e}", file=sys.stderr)
-                return 1
-            # A template is the whole row, exactly like `jj log -T`.
-            emit([Line([(line, "")], kind)
-                  for line in rendered.splitlines() or [""]])
-        elif builtin:
-            # jj names another workspace's working copy in the row, and
-            # only when the repository has more than one.
-            workspaces = ([f"{names_by_hex[hex_id]}@"]
-                          if many_workspaces and hex_id in all_wc_ids else [])
-            if root:
-                emit([Line(_commit_root_spans(repo, settings, commit),
-                           "immutable")], indent=False)
+            if jinja_template is not None:
+                try:
+                    rendered = jinja_template.render(_context(
+                        repo, settings, commit, names, short_year,
+                        hex_id in all_wc_ids, hex_id in wc_ids))
+                except Exception as e:
+                    sys.stdout.buffer.flush()
+                    print(f"Error: template render failed: {e}", file=sys.stderr)
+                    return 1
+                # A template is the whole row, exactly like `jj log -T`.
+                emit([Line([(line, "")], kind)
+                      for line in rendered.splitlines() or [""]])
+            elif builtin:
+                # jj names another workspace's working copy in the row, and
+                # only when the repository has more than one.
+                workspaces = ([f"{names_by_hex[hex_id]}@"]
+                              if many_workspaces and hex_id in all_wc_ids else [])
+                if root:
+                    emit([Line(_commit_root_spans(repo, settings, commit),
+                               "immutable")], indent=False)
+                else:
+                    emit([Line(_commit_header_spans(repo, settings, commit,
+                                                    bookmarks=names,
+                                                    working_copies=workspaces),
+                               kind),
+                          Line(_commit_body_spans(repo, settings, commit), kind)],
+                         indent=False)
             else:
-                emit([Line(_commit_header_spans(repo, settings, commit,
-                                                bookmarks=names,
-                                                working_copies=workspaces),
-                           kind),
-                      Line(_commit_body_spans(repo, settings, commit), kind)],
-                     indent=False)
-        else:
-            # pyjj-cli names the workspace on any working-copy row,
-            # whether or not the repository has a second one.
-            own = names + ([f"{names_by_hex[hex_id]}@"]
-                           if hex_id in all_wc_ids else [])
-            emit(_default_lines(repo, settings, commit, kind, sorted(own),
-                                root, short_year))
+                # pyjj-cli names the workspace on any working-copy row,
+                # whether or not the repository has a second one.
+                own = names + ([f"{names_by_hex[hex_id]}@"]
+                               if hex_id in all_wc_ids else [])
+                emit(_default_lines(repo, settings, commit, kind, sorted(own),
+                                    root, short_year))
 
-    if dot:
-        if getattr(args, "dot_key", "commit_id") == "change_id":
-            try:
-                keys = _dot_keys(repo, items, by_id)
-            except CommandError as e:
-                sys.stdout.buffer.flush()
-                print(f"Error: {e}", file=sys.stderr)
-                return 1
-            _write(render_dot(
-                _rekey(items, keys),
-                {keys[hex_id]: text for hex_id, text in dot_labels.items()},
-                attributes={keys[hex_id]: attrs
-                            for hex_id, attrs in dot_attrs.items()}))
-        else:
-            _write(render_dot(items, dot_labels, attributes=dot_attrs))
-    sys.stdout.buffer.flush()
-    return 0
+        if dot:
+            if getattr(args, "dot_key", "commit_id") == "change_id":
+                try:
+                    keys = _dot_keys(repo, items, by_id)
+                except CommandError as e:
+                    sys.stdout.buffer.flush()
+                    print(f"Error: {e}", file=sys.stderr)
+                    return 1
+                _write(render_dot(
+                    _rekey(items, keys),
+                    {keys[hex_id]: text for hex_id, text in dot_labels.items()},
+                    attributes={keys[hex_id]: attrs
+                                for hex_id, attrs in dot_attrs.items()}))
+            else:
+                _write(render_dot(items, dot_labels, attributes=dot_attrs))
+        sys.stdout.buffer.flush()
+        return 0
 
 
 def _default_lines(repo, settings, commit, kind, names, root: bool,
