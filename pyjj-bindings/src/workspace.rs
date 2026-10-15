@@ -876,10 +876,7 @@ impl PyWorkspace {
     fn set_sparse_patterns(&self, py: Python<'_>, patterns: Vec<String>) -> PyResult<Py<PyAny>> {
         let repo_paths: Vec<RepoPathBuf> = patterns
             .iter()
-            .map(|p| {
-                RepoPathBuf::from_internal_string(p)
-                    .map_err(|err| JjError::new_err(err.to_string()))
-            })
+            .map(|p| crate::tree::repo_path(p))
             .collect::<PyResult<_>>()?;
 
         py.detach(move || {

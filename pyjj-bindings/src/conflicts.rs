@@ -29,10 +29,9 @@ pub fn materialize_conflict(
     settings: &PyUserSettings,
     path: &str,
 ) -> PyResult<Vec<u8>> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     if value.as_resolved().is_some() {
         return Err(JjError::new_err(format!("`{path}` is not conflicted")));
     }
@@ -149,10 +148,9 @@ pub fn resolve_conflict(
     path: &str,
     content: &[u8],
 ) -> PyResult<PyCommitBuilder> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     if value.as_resolved().is_some() {
         return Err(JjError::new_err(format!("`{path}` is not conflicted")));
     }
@@ -188,9 +186,8 @@ pub fn resolve_conflicts(
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
     for (path_str, content) in selections {
-        let repo_path = RepoPathBuf::from_internal_string(&path_str)
-            .map_err(|err| JjError::new_err(err.to_string()))?;
-        let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let repo_path = crate::tree::repo_path(&path_str)?;
+        let value = crate::tree::tree_value(&tree, &repo_path)?;
         if value.as_resolved().is_some() {
             return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));
         }
@@ -215,10 +212,9 @@ pub fn conflict_sides(
     commit: &PyCommit,
     path: &str,
 ) -> PyResult<(Vec<u8>, Vec<u8>, Vec<u8>, bool)> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     match value.clone().into_resolved() {
         Err(_conflict) => {
             let store = tree.store();
@@ -293,9 +289,8 @@ pub fn pick_conflict_sides(
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
     for path_str in paths {
-        let repo_path = RepoPathBuf::from_internal_string(&path_str)
-            .map_err(|err| JjError::new_err(err.to_string()))?;
-        let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let repo_path = crate::tree::repo_path(&path_str)?;
+        let value = crate::tree::tree_value(&tree, &repo_path)?;
         if value.as_resolved().is_some() {
             return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));
         }

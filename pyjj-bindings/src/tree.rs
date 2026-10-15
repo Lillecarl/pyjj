@@ -5,9 +5,25 @@ use pyo3::prelude::*;
 use jj_lib::backend::{FileId, MergedTreeValue, TreeValue};
 use jj_lib::copies::{CopyOperation, CopyRecords};
 use jj_lib::merged_tree::{MergedTree, TreeDiffEntry};
+use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::map_backend_err;
+use crate::errors::{JjError, map_backend_err};
+
+/// Parse one internal-syntax path string.
+///
+/// Every file/annotate/conflict/rewrite entry point spells the same
+/// `from_internal_string` + `JjError::new_err` mapping by hand; the
+/// wording lives here once so a new call site cannot invent its own.
+pub(crate) fn repo_path(path: &str) -> PyResult<RepoPathBuf> {
+    RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))
+}
+
+/// Look a path up in a merged tree, mapping backend errors the one way
+/// every call site already does by hand.
+pub(crate) fn tree_value(tree: &MergedTree, path: &RepoPath) -> PyResult<MergedTreeValue> {
+    pollster::block_on(tree.path_value(path)).map_err(map_backend_err)
+}
 
 /// One changed path between two commits' trees.
 #[pyclass(name = "DiffEntry", frozen, from_py_object)]

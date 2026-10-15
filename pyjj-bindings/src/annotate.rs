@@ -1,11 +1,10 @@
 use pyo3::prelude::*;
 
 use jj_lib::annotate::FileAnnotator;
-use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::revset::RevsetExpression;
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::{JjError, map_backend_err, map_revset_eval_err};
+use crate::errors::{map_backend_err, map_revset_eval_err};
 use crate::ids::PyCommitId;
 
 /// One line of a `Commit.annotate()` result: which commit last touched this
@@ -33,8 +32,7 @@ pub fn annotate(
     repo: &PyReadonlyRepo,
     path: &str,
 ) -> PyResult<Vec<PyAnnotationLine>> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let mut annotator = pollster::block_on(FileAnnotator::from_commit(&commit.inner, &repo_path))
         .map_err(map_backend_err)?;
     pollster::block_on(annotator.compute(repo.inner.as_ref(), &RevsetExpression::all()))

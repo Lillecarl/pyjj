@@ -4,7 +4,6 @@ use pyo3::prelude::*;
 use jj_lib::backend::MergedTreeValueExt as _;
 use jj_lib::backend::TreeValue;
 use jj_lib::fileset::{FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext};
-use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::ui_path::RepoPathUiConverter;
 
 use crate::commit::PyCommit;
@@ -18,10 +17,9 @@ use crate::settings::PyUserSettings;
 /// submodule, or has an unresolved conflict (render it with
 /// `materialize_conflict()` instead).
 pub fn read_file(commit: &PyCommit, path: &str) -> PyResult<Vec<u8>> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     let resolved = value
         .into_resolved()
         .map_err(|_| JjError::new_err(format!("`{path}` has an unresolved conflict")))?;
@@ -66,9 +64,8 @@ pub fn parent_contents(
         .map_err(map_backend_err)?;
     let mut out = std::collections::HashMap::new();
     for path in paths {
-        let repo_path = RepoPathBuf::from_internal_string(&path)
-            .map_err(|err| JjError::new_err(err.to_string()))?;
-        let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let repo_path = crate::tree::repo_path(&path)?;
+        let value = crate::tree::tree_value(&tree, &repo_path)?;
         let content = match value.as_resolved() {
             Some(Some(TreeValue::File { id, .. })) => {
                 let mut reader =
@@ -100,10 +97,9 @@ pub fn parent_contents(
 /// `"file-conflict"` (every side a file or absent -- materializable as
 /// text), or `"other-conflict"`.
 pub fn file_kind(commit: &PyCommit, path: &str) -> PyResult<String> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     let kind = match value.as_resolved() {
         Some(Some(TreeValue::File { .. })) => "file",
         Some(Some(TreeValue::Symlink(_))) => "symlink",
@@ -119,10 +115,9 @@ pub fn file_kind(commit: &PyCommit, path: &str) -> PyResult<String> {
 /// Whether `path` names a regular file, executable file, or symlink (not a
 /// directory/submodule/conflict/absence) within `commit`'s tree.
 pub fn file_exists(commit: &PyCommit, path: &str) -> PyResult<bool> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     Ok(matches!(
         value.as_resolved(),
         Some(Some(TreeValue::File { .. })) | Some(Some(TreeValue::Symlink(_)))
@@ -135,10 +130,9 @@ pub fn file_exists(commit: &PyCommit, path: &str) -> PyResult<bool> {
 /// -- unlike `read_file()`/`file_exists()`, this never raises for those
 /// cases, since "not an executable file" covers all of them uniformly.
 pub fn is_executable(commit: &PyCommit, path: &str) -> PyResult<Option<bool>> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     Ok(match value.as_resolved() {
         Some(Some(TreeValue::File { executable, .. })) => Some(*executable),
         _ => None,

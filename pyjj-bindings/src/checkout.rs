@@ -5,7 +5,6 @@ use jj_lib::gitignore::GitIgnoreFile;
 use jj_lib::matchers::{EverythingMatcher, NothingMatcher};
 use jj_lib::merge::Merge;
 use jj_lib::merged_tree_builder::MergedTreeBuilder;
-use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::settings::HumanByteSize;
 use jj_lib::transaction::Transaction;
@@ -217,10 +216,7 @@ pub fn untrack_paths(
 
     let repo_paths = paths
         .iter()
-        .map(|path| {
-            RepoPathBuf::from_internal_string(path)
-                .map_err(|err| crate::errors::JjError::new_err(err.to_string()))
-        })
+        .map(|path| crate::tree::repo_path(path))
         .collect::<PyResult<Vec<_>>>()?;
 
     let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())

@@ -33,10 +33,7 @@ pub(crate) fn paths_matcher(paths: Option<Vec<String>>) -> PyResult<Box<dyn Matc
         Some(paths) => {
             let repo_paths: Vec<RepoPathBuf> = paths
                 .iter()
-                .map(|p| {
-                    RepoPathBuf::from_internal_string(p)
-                        .map_err(|err| JjError::new_err(err.to_string()))
-                })
+                .map(|p| crate::tree::repo_path(p))
                 .collect::<PyResult<_>>()?;
             Ok(Box::new(PrefixMatcher::new(&repo_paths)))
         }
@@ -93,8 +90,7 @@ fn apply_hunks(
     let store = base_tree.store().clone();
     let mut builder = MergedTreeBuilder::new(base_tree);
     for (path_str, indices) in hunks {
-        let repo_path = RepoPathBuf::from_internal_string(&path_str)
-            .map_err(|err| JjError::new_err(err.to_string()))?;
+        let repo_path = crate::tree::repo_path(&path_str)?;
         let before = read_tree_file_bytes(parent_tree, &repo_path)?;
         let after = read_tree_file_bytes(commit_tree, &repo_path)?;
         let selected: HashSet<usize> = indices.into_iter().collect();
@@ -266,8 +262,7 @@ fn overlay_contents(
     let store = base_tree.store().clone();
     let mut builder = MergedTreeBuilder::new(base_tree);
     for (path_str, content) in selections {
-        let repo_path = RepoPathBuf::from_internal_string(&path_str)
-            .map_err(|err| JjError::new_err(err.to_string()))?;
+        let repo_path = crate::tree::repo_path(&path_str)?;
         match content {
             None => {
                 builder.set_or_remove(repo_path, Merge::absent());
@@ -490,10 +485,9 @@ pub fn set_executable(
     path: &str,
     executable: bool,
 ) -> PyResult<PyCommitBuilder> {
-    let repo_path =
-        RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))?;
+    let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
-    let value = pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
     let (id, copy_id) = match value.as_resolved() {
         Some(Some(TreeValue::File { id, copy_id, .. })) => (id.clone(), copy_id.clone()),
         _ => {
@@ -547,11 +541,9 @@ pub fn restore(
         // and say nothing. An unresolved conflict counts as present --
         // restoring may be exactly what resolves it.
         for path in paths {
-            let repo_path = RepoPathBuf::from_internal_string(path)
-                .map_err(|err| JjError::new_err(err.to_string()))?;
+            let repo_path = crate::tree::repo_path(path)?;
             let absent = |tree: &MergedTree| -> PyResult<bool> {
-                let value = pollster::block_on(tree.path_value(&repo_path))
-                    .map_err(map_backend_err)?;
+    let value = crate::tree::tree_value(&tree, &repo_path)?;
                 Ok(matches!(value.as_resolved(), Some(None)))
             };
             if absent(&from_tree)? && absent(&into_tree)? {

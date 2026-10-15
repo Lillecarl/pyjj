@@ -127,8 +127,7 @@ impl PyRunPool {
                 patterns
                     .iter()
                     .map(|p| {
-                        jj_lib::repo_path::RepoPathBuf::from_internal_string(p)
-                            .map_err(|err| crate::errors::JjError::new_err(err.to_string()))
+                        crate::tree::repo_path(p)
                     })
                     .collect::<PyResult<Vec<_>>>()
             })
