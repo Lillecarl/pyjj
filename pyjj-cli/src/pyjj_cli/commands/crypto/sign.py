@@ -1,37 +1,12 @@
 """crypto subcommand: sign."""
-import sys
 
-import pyjj
 from ..common import (
-    _check_rewritable,
-    _finish,
-    _resolve_all,
+    _require_signing_backend,
+    _rewrite_signatures,
     command,
-    write_tx,
 )
 
 @command
 def sign(args) -> int:
-    with write_tx(args) as (settings, ws, repo, tx):
-        revs = getattr(args, "revisions", None) or ["@"]
-        targets = _resolve_all(repo, settings, revs)
-        # Signing without a backend would rewrite every commit and
-        # attach nothing; jj refuses up front, and so must pyjj.
-        try:
-            backend = settings.get_string("signing.backend")
-        except pyjj.JjError:
-            backend = None
-        if not backend or backend == "none":
-            print("Error: No signing backend configured", file=sys.stderr)
-            print("Hint: For configuring a signing backend, see "
-                  "https://docs.jj-vcs.dev/latest/config/#commit-signing",
-                  file=sys.stderr)
-            return 1
-
-        _check_rewritable(tx, settings, targets)
-        for commit in targets:
-            b = tx.rewrite_commit(settings, commit)
-            b.set_sign_behavior("force")
-            b.write(repo)
-        _finish(tx, f"sign {len(targets)} commits", settings, ws, repo)
-        return 0
+    return _rewrite_signatures(args, "sign", "force", signed_only=False,
+                               pre_check=_require_signing_backend)

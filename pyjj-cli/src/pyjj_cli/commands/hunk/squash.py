@@ -9,29 +9,16 @@ from ..common import (
     command,
     write_tx,
 )
+from .helpers import _hunk_spec
 
 @command(catch=(ValueError,))
 def hunk_squash(args) -> int:
     """`pyjj hunk squash [-r REV] <spec>` — squash selected hunks into parent."""
     with write_tx(args) as (settings, ws, repo, tx):
-        spec_str = getattr(args, "spec", None)
-        spec_flag = getattr(args, "spec_flag", None)
-        spec_file = getattr(args, "spec_file", None)
-        if spec_flag is not None:
-            if spec_str is not None or spec_file is not None:
-                print("Error: hunk squash: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
-                return 2
-            spec_str = spec_flag
-        if spec_file:
-            if spec_str is not None:
-                print("Error: hunk squash: omit <spec> when using --spec-file", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(None, spec_file)
-        else:
-            if spec_str is None:
-                print("Error: hunk squash requires a spec (or use --spec/--spec-file)", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(spec_str, None)
+        resolved = _hunk_spec(args, "hunk squash", require_message=False)
+        if resolved is None:
+            return 2
+        spec, _ = resolved
         target = _resolve_one(repo, settings, _rev(args, "revision"))
         if not target.parent_ids:
             print("Error: cannot squash root commit", file=sys.stderr)

@@ -896,48 +896,110 @@ def _name_matches(name: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(name, pattern)
 
 
-def _split_remote_ref(name: str, default_remote):
-    """`BOOKMARK@REMOTE` -> `("BOOKMARK", "REMOTE")`.
+def _resolve_remote_refs(names, default_remote, *, kind, fan_out=None):
+    """`(ref, remote)` pairs for `track`/`untrack` names.
 
-    jj takes the remote in the name itself, and `--remote` only supplies
-    it for names that leave it out. A name with no remote and no
-    `--remote` is an error, not a guess at `origin`.
-    """
-    bookmark, sep, remote = name.rpartition("@")
-    if sep:
-        return bookmark, remote
-    if not default_remote:
-        raise CommandError(
-            f"Bookmark {name} has no remote; use NAME@REMOTE or --remote"
-        )
-    return name, default_remote
-
-
-def _resolve_remote_tags(repo, names, remotes):
-    """`(tag, remote)` pairs a `tag track`/`untrack` names.
-
-    `TAG@REMOTE` resolves exactly; `--remote` supplies the remote for
-    bare names; a bare name with no `--remote` fans out to every remote
-    carrying that tag, which is what jj does when no remote names are
-    given. A bare name no remote carries is an error, not a silent
-    no-op.
+    `NAME@REMOTE` resolves exactly; `--remote` supplies the remote for
+    bare names. A bare name with no `--remote` fans out to every remote
+    carrying that ref when `fan_out` (a zero-arg callable returning refs
+    with `.name`/`.remote`, e.g. `repo.remote_tags`) is given -- which is
+    what jj does for tags -- and is an error otherwise (jj's bookmark
+    behavior: no guessing at `origin`).
     """
     pairs = []
     for name in names:
-        tag, sep, remote = name.rpartition("@")
+        ref, sep, remote = name.rpartition("@")
         if sep:
-            pairs.append((tag, remote))
-        elif remotes:
-            pairs.append((name, remotes))
+            pairs.append((ref, remote))
+        elif default_remote:
+            pairs.append((name, default_remote))
+        elif fan_out is None:
+            raise CommandError(
+                f"{kind.capitalize()} {name} has no remote; use NAME@REMOTE or --remote"
+            )
         else:
-            matched = sorted({t.remote for t in repo.remote_tags()
-                              if t.name == name})
+            matched = sorted({t.remote for t in fan_out() if t.name == name})
             if not matched:
                 raise CommandError(
-                    f"Tag {name} has no remote; use NAME@REMOTE or --remote"
+                    f"{kind.capitalize()} {name} has no remote; use NAME@REMOTE or --remote"
                 )
             pairs.extend((name, remote) for remote in matched)
     return pairs
+
+
+def _track_remote(args, kind: str, verb: str) -> int:
+    """Shared `track`/`untrack` body for bookmarks and tags.
+
+    `kind` is `"bookmark"`/`"tag"`, `verb` `"track"`/`"untrack"`. Tags fan
+    out bare names across remotes; bookmarks refuse them -- see
+    `_resolve_remote_refs`. The transaction call is the matching
+    `git_<verb>_remote_<kind>` binding.
+    """
+    with write_tx(args) as (settings, ws, repo, tx):
+        names = getattr(args, "names", [])
+        pairs = _resolve_remote_refs(
+            names, getattr(args, "remote", None), kind=kind,
+            fan_out=repo.remote_tags if kind == "tag" else None)
+        apply = getattr(tx, f"git_{verb}_remote_{kind}")
+        for ref, remote in pairs:
+            apply(remote, ref)
+        _finish(tx, f"{verb} remote {kind} {', '.join(names)}",
+                settings, ws, repo)
+        return 0
+
+def _require_signing_backend(settings) -> int | None:
+    """Refuse when no signing backend is configured.
+
+    Signing without a backend would rewrite every commit and attach
+    nothing; jj refuses up front, and so must pyjj. Returns 1 after
+    printing, `None` to proceed.
+    """
+    try:
+        backend = settings.get_string("signing.backend")
+    except pyjj.JjError:
+        backend = None
+    if not backend or backend == "none":
+        print("Error: No signing backend configured", file=sys.stderr)
+        print("Hint: For configuring a signing backend, see "
+              "https://docs.jj-vcs.dev/latest/config/#commit-signing",
+              file=sys.stderr)
+        return 1
+    return None
+
+
+def _rewrite_signatures(args, verb: str, behavior: str, *,
+                        signed_only: bool, pre_check=None) -> int:
+    """Shared `sign`/`unsign` body.
+
+    Resolves `revisions or ["@"]`, checks the whole target set rewritable
+    *before* filtering (jj reports an immutable target even when nothing
+    would have been rewritten), optionally narrows to signed commits
+    (`signed_only`, with jj's `Nothing changed.` when none), then
+    rewrites each with `behavior`. `pre_check(settings)`, when given,
+    runs before the rewritability check and aborts on a non-`None`
+    return -- `sign` refuses a missing backend there.
+    """
+    with write_tx(args) as (settings, ws, repo, tx):
+        if pre_check is not None:
+            code = pre_check(settings)
+            if code:
+                return code
+        revs = getattr(args, "revisions", None) or ["@"]
+        targets = _resolve_all(repo, settings, revs)
+        _check_rewritable(tx, settings, targets)
+        if signed_only:
+            # Rewriting an unsigned commit would change its commit id for
+            # nothing, so jj skips it and says so.
+            targets = [commit for commit in targets if commit.is_signed]
+            if not targets:
+                print("Nothing changed.", file=sys.stderr)
+                return 0
+        for commit in targets:
+            b = tx.rewrite_commit(settings, commit)
+            b.set_sign_behavior(behavior)
+            b.write(repo)
+        _finish(tx, f"{verb} {len(targets)} commits", settings, ws, repo)
+        return 0
 
 def _wants_edit(args) -> bool:
     """`--edit`/`--no-edit` for `jj next`/`jj prev`. The last flag wins in
@@ -1109,6 +1171,95 @@ def _move_to(args, settings, ws, repo, tx, targets, edit: bool, name: str) -> in
         tx.set_wc_commit(ws.workspace_name, child.id)
         _finish(tx, "new empty commit", settings, ws, repo)
     return 0
+
+def _next_prev(args, direction: str, *, walk_dir: str,
+               conflict_edit_rel: str, conflict_noedit_rel: str,
+               plain_edit_tpl: str, plain_noedit_tpl: str,
+               noedit_from_parents: bool) -> int:
+    """Shared `jj next`/`jj prev` body.
+
+    `direction` is `"next"`/`"prev"` (the `_move_to` name);
+    `walk_dir` the revset direction (`"children"`/`"parents"`).
+    `conflict_edit_rel`/`conflict_noedit_rel` name the relatives in the
+    `--conflict` not-found messages (`"descendants"`/`"other descendants"`
+    forward, `"ancestors"` back). `plain_edit_tpl`/`plain_noedit_tpl`
+    are the offset-walk not-found messages with an `{offset}` slot.
+    `noedit_from_parents` walks the offset from `@`'s parents excluding
+    `@` itself (forward: the sibling line); otherwise from `@` with one
+    extra step (back: the new commit sits where `@` used to).
+
+    Every refusal string lives in the calling shim -- this only threads
+    them through, so jj-exact wording stays grep-able per command.
+    """
+    with write_tx(args) as (settings, ws, repo, tx):
+        edit = _wants_edit(args)
+        wc = _wc_commit(repo, ws)
+
+        if getattr(args, "conflict", False):
+            if getattr(args, "amount", None) is not None:
+                print("Error: --conflict cannot be used with [OFFSET]",
+                      file=sys.stderr)
+                return 2
+            if edit:
+                targets = _nearest_conflicted(
+                    repo, settings, [wc.id.hex()], walk_dir)
+                if not targets:
+                    print(f"Error: The working copy has no {conflict_edit_rel} "
+                          "with conflicts", file=sys.stderr)
+                    print(f"Hint: Working copy: "
+                          f"{_commit_summary(repo, settings, wc)}",
+                          file=sys.stderr)
+                    return 1
+            else:
+                if repo.revset(settings, f"children({wc.id.hex()})"):
+                    print("Error: The working copy must not have any children",
+                          file=sys.stderr)
+                    print("Hint: Create a new commit on top of this one "
+                          "or use `--edit`", file=sys.stderr)
+                    return 1
+                starts = [i.hex() for i in wc.parent_ids]
+                targets = _nearest_conflicted(
+                    repo, settings, starts, walk_dir,
+                    exclude={wc.id.hex()})
+                if not targets:
+                    print(f"Error: The working copy parent(s) have no "
+                          f"{conflict_noedit_rel} with conflicts",
+                          file=sys.stderr)
+                    for pid in wc.parent_ids:
+                        parent = repo.get_commit(pid)
+                        print(f"Hint: Working copy parent: "
+                              f"{_commit_summary(repo, settings, parent)}",
+                              file=sys.stderr)
+                    return 1
+            return _move_to(args, settings, ws, repo, tx, targets, edit,
+                            direction)
+
+        offset = getattr(args, "amount", 1) or 1
+
+        if edit:
+            targets = _walk(repo, settings, [wc.id.hex()], walk_dir, offset)
+            if not targets:
+                print(plain_edit_tpl.format(offset=offset), file=sys.stderr)
+                return 1
+        else:
+            if repo.revset(settings, f"children({wc.id.hex()})"):
+                print("Error: The working copy must not have any children",
+                      file=sys.stderr)
+                return 1
+            if noedit_from_parents:
+                starts = [i.hex() for i in wc.parent_ids]
+                targets = _walk(repo, settings, starts, walk_dir, offset,
+                                exclude={wc.id.hex()})
+            else:
+                targets = _walk(repo, settings, [wc.id.hex()], walk_dir,
+                                offset + 1)
+            if not targets:
+                print(plain_noedit_tpl.format(offset=offset),
+                      file=sys.stderr)
+                return 1
+
+        return _move_to(args, settings, ws, repo, tx, targets, edit,
+                        direction)
 
 def _export_git_refs(tx, ws) -> None:
     """Write the transaction's bookmarks and tags out to the git repo.

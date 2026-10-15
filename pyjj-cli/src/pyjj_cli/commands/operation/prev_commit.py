@@ -1,15 +1,8 @@
 """operation subcommand: prev_commit."""
-import sys
 
 from ..common import (
-    _commit_summary,
-    _nearest_conflicted,
-    _wc_commit,
-    _move_to,
-    _walk,
-    _wants_edit,
+    _next_prev,
     command,
-    write_tx,
 )
 
 @command
@@ -26,57 +19,12 @@ def prev_commit(args) -> int:
     jumps to the nearest conflicted ancestor instead, with the same
     edit/no-edit shape around it.
     """
-    with write_tx(args) as (settings, ws, repo, tx):
-        edit = _wants_edit(args)
-        wc = _wc_commit(repo, ws)
-
-        if getattr(args, "conflict", False):
-            if getattr(args, "amount", None) is not None:
-                print("Error: --conflict cannot be used with [OFFSET]",
-                      file=sys.stderr)
-                return 2
-            if not edit:
-                if repo.revset(settings, f"children({wc.id.hex()})"):
-                    print("Error: The working copy must not have any children",
-                          file=sys.stderr)
-                    print("Hint: Create a new commit on top of this one "
-                          "or use `--edit`", file=sys.stderr)
-                    return 1
-            starts = [wc.id.hex()] if edit else [i.hex() for i in wc.parent_ids]
-            targets = _nearest_conflicted(
-                repo, settings, starts, "parents",
-                exclude=set() if edit else {wc.id.hex()})
-            if not targets:
-                if edit:
-                    print("Error: The working copy has no ancestors "
-                          "with conflicts", file=sys.stderr)
-                    print(f"Hint: Working copy: "
-                          f"{_commit_summary(repo, settings, wc)}",
-                          file=sys.stderr)
-                else:
-                    print("Error: The working copy parent(s) have no "
-                          "ancestors with conflicts", file=sys.stderr)
-                    for pid in wc.parent_ids:
-                        parent = repo.get_commit(pid)
-                        print(f"Hint: Working copy parent: "
-                              f"{_commit_summary(repo, settings, parent)}",
-                              file=sys.stderr)
-                return 1
-            return _move_to(args, settings, ws, repo, tx, targets, edit, "prev")
-
-        offset = getattr(args, "amount", 1) or 1
-        if not edit:
-            # A new commit goes on top, so `@` must be childless first --
-            # the same guard `next` has, which this was missing.
-            if repo.revset(settings, f"children({wc.id.hex()})"):
-                print("Error: The working copy must not have any children",
-                      file=sys.stderr)
-                return 1
-        steps = offset if edit else offset + 1
-        targets = _walk(repo, settings, [wc.id.hex()], "parents", steps)
-        if not targets:
-            print(f"Error: No ancestor found {offset} commit(s) back from the "
-                  "working copy", file=sys.stderr)
-            return 1
-
-        return _move_to(args, settings, ws, repo, tx, targets, edit, "prev")
+    return _next_prev(
+        args, "prev", walk_dir="parents",
+        conflict_edit_rel="ancestors",
+        conflict_noedit_rel="ancestors",
+        plain_edit_tpl="Error: No ancestor found {offset} commit(s) back "
+                       "from the working copy",
+        plain_noedit_tpl="Error: No ancestor found {offset} commit(s) back "
+                         "from the working copy",
+        noedit_from_parents=False)

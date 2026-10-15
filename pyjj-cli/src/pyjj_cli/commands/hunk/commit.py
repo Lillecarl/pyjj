@@ -1,6 +1,4 @@
 """hunk subcommand: hunk_commit."""
-import sys
-
 import pyjj.hunk as hunk_mod
 from ..common import (
     _finish,
@@ -9,39 +7,16 @@ from ..common import (
     command,
     write_tx,
 )
-from .helpers import _resolve_message_arg
+from .helpers import _hunk_spec
 
 @command(catch=(ValueError,))
 def hunk_commit(args) -> int:
     """`pyjj hunk commit <spec> <message>` — commit selected hunks from working copy."""
     with write_tx(args) as (settings, ws, repo, tx):
-        spec_str = getattr(args, "spec", None)
-        spec_flag = getattr(args, "spec_flag", None)
-        spec_file = getattr(args, "spec_file", None)
-        message = getattr(args, "message", None)
-        use_stdin = bool(getattr(args, "stdin", False))
-        if spec_flag is not None:
-            if spec_str is not None or spec_file is not None:
-                print("Error: hunk commit: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
-                return 2
-            spec_str = spec_flag
-        if spec_file and message is None:
-            message = spec_str
-            spec_str = None
-        message = _resolve_message_arg(message, use_stdin)
-        if message is None:
-            print("Error: hunk commit requires a commit message (use '-' or --stdin for stdin)", file=sys.stderr)
+        resolved = _hunk_spec(args, "hunk commit", require_message=True)
+        if resolved is None:
             return 2
-        if spec_file:
-            if spec_str is not None:
-                print("Error: hunk commit: omit <spec> when using --spec-file", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(None, spec_file)
-        else:
-            if spec_str is None:
-                print("Error: hunk commit requires a spec (or use --spec/--spec-file)", file=sys.stderr)
-                return 2
-            spec = hunk_mod.load_spec_from_input(spec_str, None)
+        spec, message = resolved
         # For commit, the target is the working copy commit
         target = _wc_commit(repo, ws)
         # Collect file contents for working copy changes? For commit, we need to snapshot working copy

@@ -25,9 +25,11 @@ from ..common import (
     _diff_formats_for_log,
     _format_timestamp,
     _resolve_operation,
+    _restore_view_command,
     _write_lines,
     use_color,
     read_repo,
+    write_tx,
 )
 
 
@@ -49,6 +51,36 @@ def _op_summary_spans(op, prefix: str):
         [id_short, when, [(first_line, f"{base} description first_line")]],
         labels=base,
     )
+
+
+def _restore_command(args, which: str) -> int:
+    """Shared `jj undo`/`jj redo` body.
+
+    `which` is `"undo"`/`"redo"` (the `Transaction` method). Undo prints
+    both the undone operation and the restore target, and warns when the
+    undone operation removed a workspace (the record comes back, the
+    directory does not); redo prints only the restore target.
+    """
+    with write_tx(args) as (settings, ws, repo, tx):
+        undone, restored_to, description = getattr(tx, which)(
+            ws.workspace_name, getattr(args, "allow_cross_workspace", False))
+        coloured = use_color(settings)
+        if which == "undo":
+            if undone.description.startswith("remove workspace"):
+                print("Warning: Undoing a workspace removal restores the "
+                      "workspace, but does not restore the workspace directory.",
+                      file=sys.stderr)
+                print("Hint: Run `jj workspace forget` then `jj workspace add` "
+                      "to recreate the directory.", file=sys.stderr)
+            print(render_block(
+                [[("Undid operation: ", ""), *_op_summary_spans(undone, "")]],
+                (), coloured))
+        print(render_block(
+            [[("Restored to operation: ", ""),
+              *_op_summary_spans(restored_to, "")]],
+            (), coloured))
+        _restore_view_command(tx, description, settings, ws, repo)
+        return 0
 
 
 def _summary_spans(repo, settings, commit, wc_id, prefix: str):
