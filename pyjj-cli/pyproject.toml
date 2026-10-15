@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyjj-cli"
-version = "0.1.0"
+version = "0.1.0"  # independent; pyjj/pyjj-bindings track the jj release
 description = "Python CLI for Jujutsu VCS using pyjj bindings"
 requires-python = ">=3.11"
 license = "Apache-2.0"

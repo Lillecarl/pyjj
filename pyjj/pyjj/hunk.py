@@ -551,6 +551,23 @@ def file_spec_decides_keep(spec: Spec, path: str, hunk_idx: int | None = None, h
     return None
 
 
+def _filtered_hunk_lines(detailed_hunks: list[dict[str, Any]], idx: int,
+                         line_set: set[int], field: str) -> str | None:
+    """The kept `field` lines of hunk `idx`, or `None` when it is missing.
+
+    The three per-hunk filters (`per_hunk_lines`/`per_hunk_added` over
+    `"added"`, `per_hunk_removed` over `"removed"`) differ only in which
+    dict they read and which field they slice; the lookup, the bounds
+    guard, and the missing-hunk skip are shared. The `removed`
+    complement semantics stay where they are used -- this only slices.
+    """
+    hunk = next((h for h in detailed_hunks if h["index"] == idx), None)
+    if hunk is None:
+        return None
+    lines = _split_lines_with_endings(hunk[field])
+    return "".join(lines[i] for i in sorted(line_set) if 0 <= i < len(lines))
+
+
 def apply_spec_to_file_content(before: bytes, after: bytes, file_spec: FileSpec | None, default: str, detailed_hunks: list[dict[str, Any]] | None = None) -> bytes:
     """Apply file_spec to a single file's before/after content, returning the content for the 'keep' side.
     If file_spec is None, default applies.
@@ -682,21 +699,13 @@ def _reconstruct_with_line_filters(
     filtered_hunks: dict[int, str] = {}
     for idx, line_set in file_spec.per_hunk_lines.items():
         # Find the hunk with this index
-        hunk = next((h for h in detailed_hunks if h["index"] == idx), None)
-        if not hunk:
-            continue
-        added = hunk["added"]
-        added_lines = _split_lines_with_endings(added)
-        filtered = "".join(added_lines[i] for i in sorted(line_set) if 0 <= i < len(added_lines))
-        filtered_hunks[idx] = filtered
+        filtered = _filtered_hunk_lines(detailed_hunks, idx, line_set, "added")
+        if filtered is not None:
+            filtered_hunks[idx] = filtered
     for idx, line_set in file_spec.per_hunk_added.items():
-        hunk = next((h for h in detailed_hunks if h["index"] == idx), None)
-        if not hunk:
-            continue
-        added = hunk["added"]
-        added_lines = _split_lines_with_endings(added)
-        filtered = "".join(added_lines[i] for i in sorted(line_set) if 0 <= i < len(added_lines))
-        filtered_hunks[idx] = filtered
+        filtered = _filtered_hunk_lines(detailed_hunks, idx, line_set, "added")
+        if filtered is not None:
+            filtered_hunks[idx] = filtered
     for idx, line_set in file_spec.per_hunk_removed.items():
         hunk = next((h for h in detailed_hunks if h["index"] == idx), None)
         if not hunk:

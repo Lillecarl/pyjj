@@ -64,11 +64,12 @@ pip install -e pyjj-bindings[test] -e pyjj[test]
 
 Run each project's `pytest` from inside its own directory, as above.
 `pyjj/pyproject.toml` and `pyjjui/pyproject.toml` set different
-`[tool.pytest.ini_options]` (only `pyjjui`'s sets `anyio_mode = "auto"`), and
-one `pytest pyjj/tests pyjjui/tests` invocation from the repo root picks just
-*one* project's config for the whole session -- `pyjjui`'s async tests then
-fail with "async def functions are not natively supported", because
-`anyio_mode` never got applied.
+`[tool.pytest.ini_options]` (both set `anyio_mode = "auto"`, with
+different `testpaths`), and one `pytest pyjj/tests pyjjui/tests`
+invocation from the repo root picks just *one* project's config for the
+whole session -- the other project's async tests then fail with "async
+def functions are not natively supported", because its `anyio_mode`
+never got applied.
 
 A third suite, `pyjj/tests/parity/`, is conformance testing against the real
 `jj` binary: every scenario runs the *same argv* through `jj` and through

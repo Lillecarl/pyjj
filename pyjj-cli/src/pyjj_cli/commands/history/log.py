@@ -257,7 +257,7 @@ def log(args) -> int:
         if pre is None:
             return 2
         dot, dot_fields = pre
-        if getattr(args, "dot_key", "commit_id") != "commit_id":
+        if not dot and getattr(args, "dot_key", "commit_id") != "commit_id":
             print("Error: --dot-key requires --dot", file=sys.stderr)
             return 2
 

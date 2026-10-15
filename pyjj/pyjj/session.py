@@ -46,6 +46,17 @@ class PyjjError(Exception):
     """
 
 
+def _revision_error(kind: str, revision: str, error: Exception) -> PyjjError:
+    """One wording for a revision that did not resolve.
+
+    `resolve`, `revset`, and `Atomic._commit` differ only in the noun;
+    the shape -- what was asked, then jj's own reason -- is shared so
+    a fourth call site cannot invent a third phrasing.
+    """
+    return PyjjError(
+        f"{kind} {revision!r}: {getattr(error, 'message', error)}")
+
+
 def open(path: str | None = None) -> Repo:
     """The repository at `path`, or the one containing the working
     directory.
@@ -122,16 +133,14 @@ class Repo:
         try:
             return self._repo.resolve_single(self._settings, revision)
         except Exception as e:  # noqa: BLE001
-            raise PyjjError(
-                f"revision {revision!r}: {getattr(e, 'message', e)}") from e
+            raise _revision_error("revision", revision, e) from e
 
     def revset(self, revision: str) -> list:
         """Every commit a revset names, in jj's order."""
         try:
             return self._repo.revset(self._settings, revision)
         except Exception as e:  # noqa: BLE001
-            raise PyjjError(
-                f"revset {revision!r}: {getattr(e, 'message', e)}") from e
+            raise _revision_error("revset", revision, e) from e
 
     def log(self, revision: str = "::@", limit: int | None = None) -> list:
         """`jj log`'s rows: each commit with its edges to the ancestors
@@ -283,8 +292,7 @@ class Atomic:
         try:
             found = self._tx.revset(self._repo.settings, revision)
         except Exception as e:  # noqa: BLE001
-            raise PyjjError(
-                f"revision {revision!r}: {getattr(e, 'message', e)}") from e
+            raise _revision_error("revision", revision, e) from e
         if len(found) != 1:
             raise PyjjError(
                 f"revision {revision!r} names {len(found)} commits; "
@@ -306,6 +314,20 @@ class Atomic:
     def _record(self, *commits) -> None:
         self._touched.extend(commit for commit in commits if commit is not None)
 
+    def _finish(self, *commits) -> None:
+        """Rebase the block's descendants and record what a verb wrote.
+
+        Every verb ends this way: jj_lib asserts no pending rewrites
+        remain before it will commit, and an assertion inside a native
+        extension takes the interpreter with it rather than raising --
+        so the invariant lives here, not in each verb's memory. Verbs
+        that record nothing (`absorb` returns stats, not commits) or
+        rebase nothing (`duplicate`, `abandon --restore-descendants`)
+        call the pieces directly and stay visibly different.
+        """
+        self._tx.rebase_descendants(False)
+        self._record(*commits)
+
     # ---- the operations -------------------------------------------------
 
     def describe(self, revision: str = "@", *, message: str):
@@ -315,8 +337,7 @@ class Atomic:
         builder = self._tx.rewrite_commit(self._repo.settings, target)
         builder.set_description(message)
         written = builder.write(self._repo._repo)
-        self._tx.rebase_descendants(False)
-        self._record(written)
+        self._finish(written)
         return written
 
     def new(self, parents: str | Sequence[str] = "@", *,
@@ -335,8 +356,7 @@ class Atomic:
         if edit:
             self._tx.set_wc_commit(self._repo.workspace.workspace_name,
                                    written.id)
-        self._tx.rebase_descendants(False)
-        self._record(written)
+        self._finish(written)
         return written
 
     def commit(self, *, message: str, revision: str = "@"):
@@ -367,8 +387,7 @@ class Atomic:
                 f"{into or 'its parent'!r}: nothing to move. "
                 "The paths or hunks named no change.")
         written = builder.write(self._repo._repo)
-        self._tx.rebase_descendants(False)
-        self._record(written)
+        self._finish(written)
         return written
 
     def split(self, revision: str = "@", *,
@@ -398,8 +417,7 @@ class Atomic:
                           else self._tx.split_remainder(target, first))
         second = second_builder.write(self._repo._repo)
         self._tx.set_wc_commit(self._repo.workspace.workspace_name, second.id)
-        self._tx.rebase_descendants(False)
-        self._record(first, second)
+        self._finish(first, second)
         return first, second
 
     def rebase(self, revisions: str | Sequence[str], *,
@@ -440,8 +458,7 @@ class Atomic:
         self._tx.move_commits([] if whole_branch else ids,
                               ids if whole_branch else [],
                               parents, children)
-        self._tx.rebase_descendants(False)
-        self._record(*targets)
+        self._finish(*targets)
         return targets
 
     def abandon(self, revisions: str | Sequence[str], *,
@@ -499,8 +516,7 @@ class Atomic:
         builder = self._tx.restore(source, target,
                                    list(paths) if paths else None)
         written = builder.write(self._repo._repo)
-        self._tx.rebase_descendants(False)
-        self._record(written)
+        self._finish(written)
         return written
 
     def revert(self, revisions: str | Sequence[str], *,
@@ -523,8 +539,7 @@ class Atomic:
                 f"This reverts commit {target.id.hex()}.\n")
             current = builder.write(self._repo._repo)
             out.append(current)
-        self._tx.rebase_descendants(False)
-        self._record(*out)
+        self._finish(*out)
         return out
 
     def bookmark(self, name: str, revision: str = "@"):
