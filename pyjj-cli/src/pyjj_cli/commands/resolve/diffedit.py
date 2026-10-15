@@ -2,19 +2,21 @@
 import subprocess
 import sys
 
-import pyjj
 from ..common import (
     _check_rewritable,
-    CommandError,
+    command,
     _finish,
     _resolve_one,
+    _rev,
     _changed_files,
+    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
     write_tx,
 )
 
 
+@command
 def diffedit(args) -> int:
     """`jj diffedit`: edit a revision's own changes, or the diff between
     two revisions. Either way the edit lands on the destination side."""
@@ -31,11 +33,10 @@ def diffedit(args) -> int:
                 return 2
 
             if args.from_ or args.into:
-                to_commit = _resolve_one(repo, settings, args.into or "@")
-                from_commit = _resolve_one(repo, settings, args.from_ or "@")
-                changed = _changed_files(repo, settings, from_commit, to_commit)
-                before = {p: b for p, (b, _a) in changed.items()}
-                after = {p: a for p, (_b, a) in changed.items()}
+                to_commit = _resolve_one(repo, settings, _rev(args, "into"))
+                from_commit = _resolve_one(repo, settings, _rev(args, "from_"))
+                before, after = _split_changed(
+                    _changed_files(repo, settings, from_commit, to_commit))
             else:
                 # `-r` edits the revision's own changes, which are its diff
                 # against the merge of its parents.
@@ -61,9 +62,6 @@ def diffedit(args) -> int:
                 tx, f"edit commit {to_commit.id.hex()}", settings, ws, repo,
                 restore_descendants=getattr(args, "restore_descendants", False),
             )
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)

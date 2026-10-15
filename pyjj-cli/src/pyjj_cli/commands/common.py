@@ -157,6 +157,36 @@ def select_fields(selection, default, catalogue) -> list[str]:
     return [name for name in catalogue if name in chosen]
 
 
+def _dot_preamble(args, conflicts, default, catalogue):
+    """Shared `--dot` gating: conflict refusal, field selection, and the
+    `--dot-fields requires --dot` guard.
+
+    Returns `(dot, fields)`, or `None` after printing jj's refusal when
+    the flags do not combine -- call sites `return 2` on `None`, the
+    usage exit code. The conflict sets, defaults, and catalogues stay
+    per-command constants passed in, so neither the wording nor the
+    vocabularies move.
+    """
+    dot = getattr(args, "dot", False)
+    if dot:
+        conflicting = conflicting_flags(args, conflicts)
+        if conflicting:
+            print(f"Error: --dot cannot be used with {conflicting[0]}",
+                  file=sys.stderr)
+            return None
+        try:
+            fields = select_fields(getattr(args, "dot_fields", None),
+                                   default, catalogue)
+        except CommandError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return None
+        return True, fields
+    if getattr(args, "dot_fields", None):
+        print("Error: --dot-fields requires --dot", file=sys.stderr)
+        return None
+    return False, []
+
+
 def remote_state(repo, kind: str = "bookmark") -> dict:
     """Each local bookmark's remotes: `{name: [{remote, ...}, ...]}`.
 
@@ -995,6 +1025,22 @@ def _commit_location(repo, settings, ontos, afters, befores):
     return list(seen.values()), [c.id for c in children]
 
 
+def _prepare_insertion(tx, repo, settings, ontos, afters, befores):
+    """Locate an insertion point and guard what it moves.
+
+    `_commit_location` resolves the parents and children the placement
+    flags ask for; an empty parent list means nothing was found, and the
+    children get rebased onto the new commit, so both guards run here,
+    in this order. Which revisions are passed in stays the caller's
+    policy -- only the sequencing is shared.
+    """
+    parents, children = _commit_location(repo, settings, ontos, afters, befores)
+    if not parents:
+        raise CommandError("No revisions found to use as parent")
+    _check_rewritable(tx, settings, children)
+    return parents, children
+
+
 def _insert_between(tx, repo, new_parent_ids, new_child_ids, head_id):
     """Hook the named children onto a commit inserted above them.
 
@@ -1158,6 +1204,43 @@ def _changed_files(repo, settings, from_commit, to_commit):
 
         changed[path] = (read(from_commit), read(to_commit))
     return changed
+
+def _split_changed(changed: dict) -> tuple[dict, dict]:
+    """Unpack `_changed_files` output into `(before, after)` dicts.
+
+    The sentinel-absence convention (`None` for a side that holds no
+    such path) is what the diff-editor protocol reads, so every unpack
+    has to agree -- this is the one place that knows it.
+    """
+    before = {path: before for path, (before, _after) in changed.items()}
+    after = {path: after for path, (_before, after) in changed.items()}
+    return before, after
+
+def _render_or_error(template, context):
+    """Render a template row, or print jj's render failure.
+
+    Returns the rendered text, or `None` after flushing stdout and
+    printing `Error: template render failed: ...` -- call sites return
+    1 on `None`. The template language, context vocabulary, and output
+    bytes are untouched; only the failure edge is shared.
+    """
+    try:
+        return template.render(context)
+    except Exception as e:
+        sys.stdout.buffer.flush()
+        print(f"Error: template render failed: {e}", file=sys.stderr)
+        return None
+
+def _rev(args, attr: str, default: str = "@") -> str:
+    """A revision argument with jj's default.
+
+    `args.X or "@"` is spelled at ~25 call sites with occasional
+    `getattr`-vs-direct drift; the default lives here once. How the
+    value resolves (`_resolve_one` vs `_resolve_all`) stays at the
+    call site.
+    """
+    value = getattr(args, attr, None)
+    return value if value else default
 
 def _run_diff_tool(settings, tool: str, before: dict, after: dict) -> dict:
     """The merge-tools edit protocol: materialize $left/$right temp dirs

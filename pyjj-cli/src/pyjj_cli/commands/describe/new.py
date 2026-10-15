@@ -1,12 +1,10 @@
 """describe subcommand: new."""
-import sys
 
 import pyjj
 from ..common import (
     _check_rewritable,
     _commit_location,
     _insert_between,
-    CommandError,
     _finish,
     _resolve_in_arg_order,
     _wc_commit,
@@ -30,41 +28,37 @@ def new(args) -> int:
         parents_given = (list(args.parents_pos)
                          + list(getattr(args, "parents_opt", None) or []))
 
-        try:
-            if afters or befores:
-                parents, children = _commit_location(
-                    repo, settings, [], afters, befores)
-            elif parents_given:
-                parents = [c.id for c in
-                           _resolve_in_arg_order(repo, settings, parents_given)]
-                children = []
-            else:
-                parents = [_wc_commit(repo, ws).id]
-                children = []
+        if afters or befores:
+            parents, children = _commit_location(
+                repo, settings, [], afters, befores)
+        elif parents_given:
+            parents = [c.id for c in
+                       _resolve_in_arg_order(repo, settings, parents_given)]
+            children = []
+        else:
+            parents = [_wc_commit(repo, ws).id]
+            children = []
 
-            # `-A`/`-B` rebase whatever followed the insertion point, so those
-            # commits have to be rewritable.
-            _check_rewritable(tx, settings, children)
-            builder = tx.new_commit(settings, parents)
-            if args.message:
-                builder = builder.set_description(complete_newline(args.message))
-            child = builder.write(repo)
-            if children:
-                # The commits that followed the insertion point move onto the
-                # new change, together with their own descendants.
-                _insert_between(tx, repo, parents, children, child.id)
-            if not getattr(args, "no_edit", False):
-                # `edit`, not `set_wc_commit`: jj abandons the commit the
-                # working copy leaves behind when it is empty, undescribed
-                # and nothing else points at it. Moving forward onto a
-                # child never triggers that -- the child already made the
-                # old commit a non-head -- so this only differs when `new`
-                # names a revision somewhere else.
-                tx.edit(ws.workspace_name, child)
-            _finish(tx, "new empty commit", settings, ws, repo)
-        except (pyjj.JjError, CommandError) as e:
-            print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-            return 1
+        # `-A`/`-B` rebase whatever followed the insertion point, so those
+        # commits have to be rewritable.
+        _check_rewritable(tx, settings, children)
+        builder = tx.new_commit(settings, parents)
+        if args.message:
+            builder = builder.set_description(complete_newline(args.message))
+        child = builder.write(repo)
+        if children:
+            # The commits that followed the insertion point move onto the
+            # new change, together with their own descendants.
+            _insert_between(tx, repo, parents, children, child.id)
+        if not getattr(args, "no_edit", False):
+            # `edit`, not `set_wc_commit`: jj abandons the commit the
+            # working copy leaves behind when it is empty, undescribed
+            # and nothing else points at it. Moving forward onto a
+            # child never triggers that -- the child already made the
+            # old commit a non-head -- so this only differs when `new`
+            # names a revision somewhere else.
+            tx.edit(ws.workspace_name, child)
+        _finish(tx, "new empty commit", settings, ws, repo)
         return 0
 
 

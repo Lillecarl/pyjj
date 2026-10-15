@@ -7,15 +7,13 @@ from pyjj.graph_layout import reverse_graph
 
 from ...formatter import render_block, separate
 from ..common import (
-    CommandError,
     _ago,
     _diff_formats_for_log,
+    _dot_preamble,
     _duration,
     _pyjj_template,
     _resolve_template,
-    conflicting_flags,
     dot_attribute,
-    select_fields,
     use_color,
     read_repo,
     command,
@@ -219,23 +217,10 @@ def _dot_attributes(op, current: bool, fields) -> dict[str, str]:
 @command
 def op_log(args) -> int:
     """`jj op log` — the repository's own history of transactions."""
-    dot = getattr(args, "dot", False)
-    dot_fields: list[str] = []
-    if dot:
-        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
-        if conflicting:
-            print(f"Error: --dot cannot be used with {conflicting[0]}",
-                  file=sys.stderr)
-            return 2
-        try:
-            dot_fields = select_fields(getattr(args, "dot_fields", None),
-                                       _DOT_DEFAULT, _DOT_CATALOGUE)
-        except CommandError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 2
-    elif getattr(args, "dot_fields", None):
-        print("Error: --dot-fields requires --dot", file=sys.stderr)
+    pre = _dot_preamble(args, _DOT_CONFLICTS, _DOT_DEFAULT, _DOT_CATALOGUE)
+    if pre is None:
         return 2
+    dot, dot_fields = pre
 
     with read_repo(args) as (settings, ws, repo):
         ops = repo.operation_log()

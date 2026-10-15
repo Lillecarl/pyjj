@@ -9,6 +9,7 @@ from ..common import (
     _indent,
     _print_diff,
     _resolve_template,
+    _render_or_error,
     _tags_by_commit,
     _resolve_all,
     _signature_spans,
@@ -62,7 +63,10 @@ def show(args) -> int:
                 context["description_indented"] = _indent(
                     commit.description.rstrip() or "(no description set)"
                 )
-                print(template.render(context))
+                rendered = _render_or_error(template, context)
+                if rendered is None:
+                    return 1
+                print(rendered)
                 if not getattr(args, "no_patch", False):
                     _print_diff(args, ws, settings, _diff_base(repo, settings, commit),
                                 commit, None)

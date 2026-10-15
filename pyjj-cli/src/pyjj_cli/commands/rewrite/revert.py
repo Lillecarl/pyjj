@@ -2,8 +2,7 @@
 import sys
 
 from ..common import (
-    _check_rewritable,
-    _commit_location,
+    _prepare_insertion,
     _insert_between,
     _finish,
     _resolve_all,
@@ -71,15 +70,11 @@ def revert(args) -> int:
             return 2
 
         # `-A` and `-B` combine: together they name both sides of the
-        # insertion point directly.
-        new_parent_ids, new_child_ids = _commit_location(
-            repo, settings, plain, afters, befores)
-        if not new_parent_ids:
-            print("Error: No revisions found to use as parent", file=sys.stderr)
-            return 1
-
-        # `-A`/`-B` rebase whatever followed the insertion point.
-        _check_rewritable(tx, settings, new_child_ids)
+        # insertion point directly. The children get rebased, so the
+        # guards live in `_prepare_insertion`, which raises like the
+        # print-and-return below it used to.
+        new_parent_ids, new_child_ids = _prepare_insertion(
+            tx, repo, settings, plain, afters, befores)
         # Chain reverts in the determined order (which should be reverse topological,
         # i.e. children first). The first revert is onto new_parent_ids, subsequent
         # ones are onto the previous revert's commit.

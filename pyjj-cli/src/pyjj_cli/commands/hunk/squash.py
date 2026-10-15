@@ -5,6 +5,7 @@ import pyjj.hunk as hunk_mod
 from ..common import (
     _finish,
     _resolve_one,
+    _rev,
     command,
     write_tx,
 )
@@ -31,7 +32,7 @@ def hunk_squash(args) -> int:
                 print("Error: hunk squash requires a spec (or use --spec/--spec-file)", file=sys.stderr)
                 return 2
             spec = hunk_mod.load_spec_from_input(spec_str, None)
-        target = _resolve_one(repo, settings, args.revision or "@")
+        target = _resolve_one(repo, settings, _rev(args, "revision"))
         if not target.parent_ids:
             print("Error: cannot squash root commit", file=sys.stderr)
             return 1

@@ -30,13 +30,14 @@ from ..common import (
     conflicting_flags,
     dot_attribute,
     remote_state,
-    select_fields,
     unpushed,
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
     _pyjj_template,
     _resolve_template,
+    _dot_preamble,
+    _render_or_error,
     _short_id,
     _short_id_spans,
     use_color,
@@ -252,24 +253,11 @@ def log(args) -> int:
         if limit == 0:
             limit = None
 
-        dot = getattr(args, "dot", False)
-        dot_fields: list[str] = []
-        if dot:
-            conflicting = conflicting_flags(args, _DOT_CONFLICTS)
-            if conflicting:
-                print(f"Error: --dot cannot be used with {conflicting[0]}",
-                      file=sys.stderr)
-                return 2
-            try:
-                dot_fields = select_fields(getattr(args, "dot_fields", None),
-                                           _DOT_DEFAULT, _DOT_CATALOGUE)
-            except CommandError as e:
-                print(f"Error: {e}", file=sys.stderr)
-                return 2
-        elif getattr(args, "dot_fields", None):
-            print("Error: --dot-fields requires --dot", file=sys.stderr)
+        pre = _dot_preamble(args, _DOT_CONFLICTS, _DOT_DEFAULT, _DOT_CATALOGUE)
+        if pre is None:
             return 2
-        elif getattr(args, "dot_key", "commit_id") != "commit_id":
+        dot, dot_fields = pre
+        if getattr(args, "dot_key", "commit_id") != "commit_id":
             print("Error: --dot-key requires --dot", file=sys.stderr)
             return 2
 
@@ -396,13 +384,10 @@ def log(args) -> int:
                                          f"{text}\n{patch}" if patch else text))
 
             if jinja_template is not None:
-                try:
-                    rendered = jinja_template.render(_context(
-                        repo, settings, commit, names, short_year,
-                        hex_id in all_wc_ids, hex_id in wc_ids))
-                except Exception as e:
-                    sys.stdout.buffer.flush()
-                    print(f"Error: template render failed: {e}", file=sys.stderr)
+                rendered = _render_or_error(jinja_template, _context(
+                    repo, settings, commit, names, short_year,
+                    hex_id in all_wc_ids, hex_id in wc_ids))
+                if rendered is None:
                     return 1
                 # A template is the whole row, exactly like `jj log -T`.
                 emit([Line([(line, "")], kind)

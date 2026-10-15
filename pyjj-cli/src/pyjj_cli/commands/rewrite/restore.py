@@ -2,19 +2,21 @@
 import subprocess
 import sys
 
-import pyjj
 from ..common import (
     _check_rewritable,
-    CommandError,
+    command,
     _finish,
     _resolve_one,
+    _rev,
     _changed_files,
+    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
     write_tx,
 )
 
 
+@command
 def restore(args) -> int:
     try:
         with write_tx(args) as (settings, ws, repo, tx):
@@ -39,8 +41,8 @@ def restore(args) -> int:
             # of its own parents, which is what makes a bare `jj restore`
             # undo the working copy.
             if args.from_ or args.into:
-                dst = _resolve_one(repo, settings, args.into or "@")
-                src = _resolve_one(repo, settings, args.from_ or "@")
+                dst = _resolve_one(repo, settings, _rev(args, "into"))
+                src = _resolve_one(repo, settings, _rev(args, "from_"))
             else:
                 dst = _resolve_one(repo, settings, changes_in or "@")
                 src = None
@@ -59,9 +61,6 @@ def restore(args) -> int:
                 tx.set_wc_commit(ws.workspace_name, restored.id)
             _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo,
                     restore_descendants=getattr(args, "restore_descendants", False))
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)
@@ -78,9 +77,7 @@ def _selected(repo, settings, tool, dst, src):
     means the editor left the destination as it was.
     """
     if src is not None:
-        changed = _changed_files(repo, settings, dst, src)
-        before = {path: b for path, (b, _a) in changed.items()}
-        after = {path: a for path, (_b, a) in changed.items()}
+        before, after = _split_changed(_changed_files(repo, settings, dst, src))
     else:
         paths = [entry.path for entry in dst.diff_from_parents(repo)]
         after = dst.parent_contents(repo, paths)

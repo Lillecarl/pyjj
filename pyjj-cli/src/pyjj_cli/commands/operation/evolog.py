@@ -22,10 +22,10 @@ from ..common import (
     _pyjj_template,
     _resolve_all,
     _resolve_template,
+    _dot_preamble,
+    _render_or_error,
     _short_id,
-    conflicting_flags,
     dot_attribute,
-    select_fields,
     use_color,
     read_repo,
 )
@@ -67,23 +67,10 @@ def _operation_spans(operation):
 
 
 def evolog(args) -> int:
-    dot = getattr(args, "dot", False)
-    dot_fields: list[str] = []
-    if dot:
-        conflicting = conflicting_flags(args, _DOT_CONFLICTS)
-        if conflicting:
-            print(f"Error: --dot cannot be used with {conflicting[0]}",
-                  file=sys.stderr)
-            return 2
-        try:
-            dot_fields = select_fields(getattr(args, "dot_fields", None),
-                                       _DOT_DEFAULT, _DOT_CATALOGUE)
-        except CommandError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 2
-    elif getattr(args, "dot_fields", None):
-        print("Error: --dot-fields requires --dot", file=sys.stderr)
+    pre = _dot_preamble(args, _DOT_CONFLICTS, _DOT_DEFAULT, _DOT_CATALOGUE)
+    if pre is None:
         return 2
+    dot, dot_fields = pre
 
     try:
         with read_repo(args) as (settings, ws, repo):
@@ -201,12 +188,10 @@ def evolog(args) -> int:
                                      f"{text}\n{patch}" if patch else text))
 
         if jinja_template is not None:
-            try:
-                rendered = jinja_template.render(
-                    _context(repo, settings, commit, operation))
-            except Exception as e:
-                sys.stdout.buffer.flush()
-                print(f"Error: template render failed: {e}", file=sys.stderr)
+            rendered = _render_or_error(
+                jinja_template,
+                _context(repo, settings, commit, operation))
+            if rendered is None:
                 return 1
             # A template is the whole entry, as it is for `log`.
             emit([[(line, "")] for line in rendered.splitlines() or [""]])

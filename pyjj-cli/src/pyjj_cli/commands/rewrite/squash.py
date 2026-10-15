@@ -2,15 +2,17 @@
 import subprocess
 import sys
 
-import pyjj
 from ..common import (
     _changed_files,
+    _split_changed,
     _check_rewritable,
-    _commit_location,
+    _prepare_insertion,
     CommandError,
+    command,
     _finish,
     _resolve_all,
     _resolve_one,
+    _rev,
     _run_diff_tool,
     complete_newline,
     _run_editor,
@@ -45,6 +47,7 @@ def _conflicting_flag(args) -> str | None:
     return None
 
 
+@command
 def squash(args) -> int:
     refusal = _conflicting_flag(args)
     if refusal is not None:
@@ -114,9 +117,6 @@ def squash(args) -> int:
             _finish(tx, squashed if inserting
                     else f"squash commits into {dest.id.hex()}",
                     settings, ws, repo)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)
@@ -132,9 +132,7 @@ def _selected(repo, settings, tool, source):
     exits is what moves, so leaving it alone moves everything.
     """
     parent = repo.get_commit(source.parent_ids[0])
-    changed = _changed_files(repo, settings, parent, source)
-    before = {path: b for path, (b, _a) in changed.items()}
-    after = {path: a for path, (_b, a) in changed.items()}
+    before, after = _split_changed(_changed_files(repo, settings, parent, source))
     return _run_diff_tool(settings, tool, before, after)
 
 
@@ -151,11 +149,11 @@ def _sources_and_destination(args, repo, settings, inserting):
         sources = _resolve_all(repo, settings, list(args.from_ or ["@"]))
         if inserting:
             return _oldest_first(sources), None
-        dest = _resolve_one(repo, settings, args.into or "@")
+        dest = _resolve_one(repo, settings, _rev(args, "into"))
         # A destination named on both sides is not a source.
         sources = [c for c in sources if c.id.hex() != dest.id.hex()]
         return _oldest_first(sources), dest
-    source = _resolve_one(repo, settings, args.revision or "@")
+    source = _resolve_one(repo, settings, _rev(args, "revision"))
     if len(source.parent_ids) != 1:
         raise CommandError(
             "Cannot squash merge commits without a specified destination")
@@ -210,10 +208,8 @@ def _place_new_commit(tx, repo, settings, source, ontos, afters, befores):
     rebase would write a second version of it, so the source is read
     back by its change id, which a rebase keeps.
     """
-    parents, children = _commit_location(repo, settings, ontos, afters, befores)
-    if not parents:
-        raise CommandError("No revisions found to use as parent")
-    _check_rewritable(tx, settings, children)
+    parents, children = _prepare_insertion(
+        tx, repo, settings, ontos, afters, befores)
     dest = tx.new_commit(settings, parents).write(repo)
     if not children:
         return dest, source

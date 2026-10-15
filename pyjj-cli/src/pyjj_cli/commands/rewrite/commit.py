@@ -2,18 +2,19 @@
 import subprocess
 import sys
 
-import pyjj
 from ..common import (
-    CommandError,
+    command,
     _finish,
     _wc_commit,
     complete_newline,
     _run_editor,
     _changed_files,
+    _split_changed,
     _run_diff_tool,
     write_tx,
 )
 
+@command
 def commit(args) -> int:
     """`jj commit`: describe @, then put the selected paths (or all of @'s
     change) into it and create a new working-copy child on top."""
@@ -63,9 +64,6 @@ def commit(args) -> int:
                 child = tx.new_commit(settings, [described.id]).write(repo)
             tx.set_wc_commit(ws.workspace_name, child.id)
             _finish(tx, f"commit {wc.id.hex()}", settings, ws, repo)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)
@@ -94,7 +92,5 @@ def _description(args, settings, wc) -> str:
 def _selected(repo, settings, tool, wc):
     """What the diff editor chose to keep in the commit, per path."""
     parent = repo.get_commit(wc.parent_ids[0])
-    changed = _changed_files(repo, settings, parent, wc)
-    before = {path: b for path, (b, _a) in changed.items()}
-    after = {path: a for path, (_b, a) in changed.items()}
+    before, after = _split_changed(_changed_files(repo, settings, parent, wc))
     return _run_diff_tool(settings, tool, before, after)

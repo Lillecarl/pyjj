@@ -8,6 +8,7 @@ from ..common import (
     _description_diff_bytes,
     _print_diff_files,
     _resolve_one,
+    _rev,
     use_color,
     read_repo,
 )
@@ -26,8 +27,8 @@ def interdiff(args) -> int:
         return 2
     try:
         with read_repo(args) as (settings, ws, repo):
-            source = _resolve_one(repo, settings, args.from_ or "@")
-            target = _resolve_one(repo, settings, args.to or "@")
+            source = _resolve_one(repo, settings, _rev(args, "from_"))
+            target = _resolve_one(repo, settings, _rev(args, "to"))
             paths = list(getattr(args, "paths", None) or []) or None
             files = repo.interdiff_files([source], target, settings, paths)
     except (pyjj.JjError, CommandError) as e:

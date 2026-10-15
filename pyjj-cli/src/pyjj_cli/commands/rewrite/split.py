@@ -2,21 +2,23 @@
 import subprocess
 import sys
 
-import pyjj
 from ..common import (
     _check_rewritable,
-    _commit_location,
-    CommandError,
+    _prepare_insertion,
+    command,
     _finish,
     _resolve_one,
+    _rev,
     complete_newline,
     _run_bulk_editor,
     _changed_files,
+    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
     write_tx,
 )
 
+@command
 def split(args) -> int:
     try:
         with write_tx(args) as (settings, ws, repo, tx):
@@ -52,21 +54,18 @@ def split(args) -> int:
                       file=sys.stderr)
                 return 2
 
-            target = _resolve_one(repo, settings, args.revision or "@")
+            target = _resolve_one(repo, settings, _rev(args, "revision"))
 
             _check_rewritable(tx, settings, [target])
             new_parent_ids: list = []
             new_child_ids: list = []
             if moving:
-                new_parent_ids, new_child_ids = _commit_location(
-                    repo, settings, ontos, afters, befores)
-                # The commits that followed the insertion point get rebased,
-                # so they have to be rewritable.
-                _check_rewritable(tx, settings, new_child_ids)
-                if not new_parent_ids:
-                    print("Error: No revisions found to use as parent",
-                          file=sys.stderr)
-                    return 1
+                # The commits that followed the insertion point get
+                # rebased, so they have to be rewritable. Both guards
+                # live in `_prepare_insertion`, which raises into the
+                # `CommandError` tail below -- same text, same exit 1.
+                new_parent_ids, new_child_ids = _prepare_insertion(
+                    tx, repo, settings, ontos, afters, befores)
             if args.paths_pos:
                 first_builder = tx.split_selected(target, list(args.paths_pos))
             else:
@@ -78,9 +77,8 @@ def split(args) -> int:
                           file=sys.stderr)
                     return 2
                 parent = repo.get_commit(target.parent_ids[0])
-                changed = _changed_files(repo, settings, parent, target)
-                before = {p: b for p, (b, _a) in changed.items()}
-                after = {p: a for p, (_b, a) in changed.items()}
+                before, after = _split_changed(
+                    _changed_files(repo, settings, parent, target))
                 selections = _run_diff_tool(settings, args.tool, before, after)
                 if _selection_is_empty(selections, before):
                     print("No changes selected.")
@@ -152,9 +150,6 @@ def split(args) -> int:
                     _by_change_ids(tx, settings, parent_changes),
                     _by_change_ids(tx, settings, child_changes))
             _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-        return 1
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)
