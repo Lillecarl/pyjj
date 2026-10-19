@@ -36,7 +36,12 @@ let
   # jj-lib crate pin (flake.nix input `jj-vcs`) -- never the machine's own
   # `jj`. Conformance tests (pyjj/tests/parity) drive this against
   # pyjj-built repos so both sides of a comparison speak the same release.
-  jj = inputs.jj-vcs.packages.${system}.jujutsu;
+  # Built from jj-vcs's own `default.nix` with the given `pkgs`, not its
+  # flake's `packages`, which instantiate a nixpkgs and a nightly toolchain
+  # of their own. jj's `rust-version` has to fit `pkgs.rustc`.
+  jj = pkgs.callPackage "${inputs.jj-vcs}/default.nix" {
+    gitRev = inputs.jj-vcs.rev or null;
+  };
 
   pyprojectLib = import ./nix/pyproject.nix {
     pyproject-nix-src = inputs.pyproject-nix;
