@@ -572,7 +572,27 @@ class RepoPair:
                 "tags": sorted(tags.split()),
                 "files": files,
             }
-        return {"commits": commits, "remote_refs": self._remote_refs(repo)}
+        return {"commits": commits, "remote_refs": self._remote_refs(repo),
+                "git": self._git_state(repo)}
+
+    def _git_state(self, repo: Path) -> dict | None:
+        """What Git itself sees in a colocated workspace. Nothing jj
+        reads shows HEAD or the index, so a command that skips the HEAD
+        reset compares equal without this."""
+        if not (repo / ".git").exists():
+            return None
+
+        def git(*argv: str) -> str:
+            # No `check`: an unborn HEAD fails `rev-parse` and must read as "".
+            return subprocess.run(
+                ["git", "-C", str(repo), *argv],
+                env=self._env(bump=False), capture_output=True, text=True,
+            ).stdout.strip()
+
+        return {
+            "head": git("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
+            "status": git("status", "--porcelain"),
+        }
 
     def _remote_refs(self, repo: Path) -> dict:
         """Remote-tracking refs live outside the commit graph, so nothing
@@ -654,7 +674,8 @@ class RepoPair:
                 "working_copies": sorted(wcs.split()),
                 "tags": sorted(tags.split()),
             }
-        return {"commits": commits, "remote_refs": self._remote_refs(repo)}
+        return {"commits": commits, "remote_refs": self._remote_refs(repo),
+                "git": self._git_state(repo)}
 
     def assert_parity(self) -> None:
         fast = {
