@@ -17,15 +17,14 @@ pub const REDO_OP_DESC_PREFIX: &str = "redo: restore to operation ";
 /// workspace unless allowed: undoing across workspaces is usually not
 /// what was meant. The check runs on the walked target (after the
 /// undo/redo-stack jumping below), against the workspace the command
-/// runs in -- exactly `cli/src/commands/undo.rs`/`redo.rs`, message and
-/// hint included (the hint rides in the message: the CLI prints
-/// `Error: {message}`, which renders jj's two lines verbatim).
+/// runs in -- exactly `cli/src/commands/undo.rs`/`redo.rs`. It raises
+/// `CrossWorkspaceError` with jj's message; the hint names CLI flags, so
+/// the CLI adds it.
 fn check_cross_workspace(
     target_op: &Operation,
     workspace_name: Option<&str>,
     allow_cross_workspace: bool,
     verb: &str,
-    revert_hint: &str,
 ) -> PyResult<()> {
     if allow_cross_workspace {
         return Ok(());
@@ -39,8 +38,8 @@ fn check_cross_workspace(
     if op_workspace.as_str() == current {
         return Ok(());
     }
-    Err(JjError::new_err(format!(
-        "Refusing to {verb} operation {} because it was performed in workspace {}\nHint: Use `--allow-cross-workspace` to {verb} it anyway, or use `jj op revert` to revert a specific {revert_hint}",
+    Err(crate::errors::CrossWorkspaceError::new_err(format!(
+        "Refusing to {verb} operation {} because it was performed in workspace {}",
         &target_op.id().hex()[..12],
         op_workspace.as_symbol(),
     )))
@@ -361,7 +360,7 @@ pub fn undo(
         target_op = op;
     }
 
-    check_cross_workspace(&target_op, workspace_name, allow_cross_workspace, "undo", "operation")?;
+    check_cross_workspace(&target_op, workspace_name, allow_cross_workspace, "undo")?;
     let parents = pollster::block_on(target_op.parents()).map_err(map_py_err)?;
     let mut target_op_parent = match <[Operation; 1]>::try_from(parents) {
         Ok([parent]) => parent,
@@ -422,13 +421,7 @@ pub fn redo(
         return Err(JjError::new_err("Nothing to redo"));
     }
 
-    check_cross_workspace(
-        &target_op,
-        workspace_name,
-        allow_cross_workspace,
-        "redo",
-        "undo operation",
-    )?;
+    check_cross_workspace(&target_op, workspace_name, allow_cross_workspace, "redo")?;
     let parents = pollster::block_on(target_op.parents()).map_err(map_py_err)?;
     let mut target_op_parent = match <[Operation; 1]>::try_from(parents) {
         Ok([parent]) => parent,

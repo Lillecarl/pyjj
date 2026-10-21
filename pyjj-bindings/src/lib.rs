@@ -56,6 +56,8 @@ mod pyjj_bindings {
     #[pymodule_export]
     use crate::errors::TransactionError;
     #[pymodule_export]
+    use crate::errors::CrossWorkspaceError;
+    #[pymodule_export]
     use crate::errors::WorkspaceInitError;
     #[pymodule_export]
     use crate::errors::WorkspaceLoadError;

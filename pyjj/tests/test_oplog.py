@@ -197,17 +197,15 @@ def _second_workspace_operation(workspace, settings, tmp_path):
 def test_undo_refuses_a_cross_workspace_operation(workspace, settings,
                                                   tmp_path):
     """Since jj 0.46 undoing an operation performed in another workspace
-    is refused unless allowed -- the message and hint are jj's own."""
+    is refused unless allowed. The message is jj's; the CLI adds the
+    hint, which names its flags."""
     repo = _second_workspace_operation(workspace, settings, tmp_path)
     tx = repo.start_transaction(settings)
-    with pytest.raises(pyjj.JjError) as excinfo:
+    with pytest.raises(pyjj.CrossWorkspaceError) as excinfo:
         tx.undo("default")
-    message = str(excinfo.value)
-    assert message.startswith(
+    assert excinfo.value.message == (
         f"Refusing to undo operation {repo.operation.id[:12]} "
-        f"because it was performed in workspace second\n"
-        f"Hint: Use `--allow-cross-workspace` to undo it anyway, "
-        f"or use `jj op revert` to revert a specific operation")
+        f"because it was performed in workspace second")
 
 
 def test_undo_allow_cross_workspace_goes_through(workspace, settings,
@@ -238,7 +236,7 @@ def test_redo_refuses_a_cross_workspace_undo(workspace, settings, tmp_path):
     assert repo_after_undo.operation.workspace_name == "second"
 
     tx = repo_after_undo.start_transaction(settings)
-    with pytest.raises(pyjj.JjError) as excinfo:
+    with pytest.raises(pyjj.CrossWorkspaceError) as excinfo:
         tx.redo("default")
     assert "Refusing to redo operation " in str(excinfo.value)
     assert "performed in workspace second" in str(excinfo.value)

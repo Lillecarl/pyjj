@@ -62,8 +62,15 @@ def _restore_command(args, which: str) -> int:
     directory does not); redo prints only the restore target.
     """
     with write_tx(args) as (settings, ws, repo, tx):
-        undone, restored_to, description = getattr(tx, which)(
-            ws.workspace_name, getattr(args, "allow_cross_workspace", False))
+        try:
+            undone, restored_to, description = getattr(tx, which)(
+                ws.workspace_name, getattr(args, "allow_cross_workspace", False))
+        except pyjj.CrossWorkspaceError as e:
+            target = "operation" if which == "undo" else "undo operation"
+            print(f"Error: {e.message}\nHint: Use `--allow-cross-workspace` to "
+                  f"{which} it anyway, or use `jj op revert` to revert a specific "
+                  f"{target}", file=sys.stderr)
+            return 1
         coloured = use_color(settings)
         if which == "undo":
             if undone.description.startswith("remove workspace"):

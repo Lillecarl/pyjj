@@ -67,6 +67,8 @@ py_error!(ConfigError, JjError);
 
 // Transaction errors
 py_error!(TransactionError, JjError);
+// An undo or redo of an operation another workspace made.
+py_error!(CrossWorkspaceError, JjError);
 
 // Workspace errors
 py_error!(WorkspaceInitError, JjError);
