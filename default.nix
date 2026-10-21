@@ -54,7 +54,7 @@ let
     inherit (pyprojectLib) renderPyproject;
   };
   pyjj-cli = pkgs.callPackage ./pyjj-cli/package.nix {
-    inherit pyjj;
+    inherit pyjj pyjjui;
     inherit (pyprojectLib) renderPyproject;
   };
   pyjjui = pkgs.callPackage ./pyjjui/package.nix {
@@ -84,8 +84,6 @@ let
         ps: [
           pyjj
           pyjj-cli
-          # `pyjj arrange` imports pyjjui's arrange screen.
-          pyjjui
           ps.pytest
           ps.anyio
           # `cli_surface` reads `jj util markdown-help` with a real

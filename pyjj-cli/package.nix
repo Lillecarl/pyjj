@@ -2,13 +2,16 @@
   lib,
   python3,
   pyjj,
+  pyjjui,
   renderPyproject,
   installShellFiles,
 }: let
   attrs = renderPyproject {
     projectRoot = ./.;
     python = python3;
-    pythonPackages = python3.pkgs // {inherit pyjj;};
+    pythonPackages = python3.pkgs // {inherit pyjj pyjjui;};
+    # `pyjj arrange` opens pyjjui's arrange screen.
+    extras = ["tui"];
   };
 
   # Pure text generator from the argcomplete dependency: prints the shellcode

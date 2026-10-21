@@ -16,9 +16,10 @@ in {
     projectRoot,
     python,
     pythonPackages ? python.pkgs,
+    extras ? [],
   }:
     (pyproject-nix.lib.project.loadPyproject {inherit projectRoot;}).renderers.buildPythonPackage {
-      inherit python pythonPackages;
+      inherit python pythonPackages extras;
     };
 
   # `root` must be a real filesystem path outside the Nix store (typically
