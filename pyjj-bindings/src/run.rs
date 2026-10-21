@@ -142,17 +142,35 @@ impl PyRunPool {
 
     /// Take a free slot and check `commit`'s tree out into it.
     ///
-    /// Blocks until a slot frees up. Release the returned slot (by
-    /// `finish()` or `discard()`) before acquiring another one, or a
-    /// single-slot pool deadlocks.
-    fn acquire(&self, py: Python<'_>, commit: &PyCommit) -> PyResult<PyRunSlot> {
-        py.detach(|| self.acquire_inner(&commit.inner))
+    /// Blocks until a slot frees up, `timeout` seconds pass (`TimeoutError`)
+    /// or a signal handler raises, so Ctrl-C works. Release the returned
+    /// slot (by `finish()` or `discard()`) before acquiring another one, or
+    /// a single-slot pool waits on itself.
+    #[pyo3(signature = (commit, timeout=None))]
+    fn acquire(
+        &self,
+        py: Python<'_>,
+        commit: &PyCommit,
+        timeout: Option<f64>,
+    ) -> PyResult<PyRunSlot> {
+        let deadline = timeout
+            .map(|secs| {
+                std::time::Duration::try_from_secs_f64(secs.max(0.0))
+                    .map(|wait| std::time::Instant::now() + wait)
+                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(format!("invalid timeout: {secs}")))
+            })
+            .transpose()?;
+        py.detach(|| self.acquire_inner(&commit.inner, deadline))
     }
 }
 
 impl PyRunPool {
-    fn acquire_inner(&self, commit: &Commit) -> PyResult<PyRunSlot> {
-        let (slot_index, lock) = self.acquire_any_slot()?;
+    fn acquire_inner(
+        &self,
+        commit: &Commit,
+        deadline: Option<std::time::Instant>,
+    ) -> PyResult<PyRunSlot> {
+        let (slot_index, lock) = self.acquire_any_slot(deadline)?;
         let slot_path = self.base_path.join(slot_index.to_string());
         let working_copy_dir = slot_path.join("working_copy");
         let state_dir = slot_path.join("state");
@@ -225,17 +243,30 @@ impl PyRunPool {
     }
 
     /// Lock the first free slot, waiting if every slot is busy.
-    fn acquire_any_slot(&self) -> PyResult<(usize, FileLock)> {
+    ///
+    /// This polls: a file lock has no way to say "any of these is free".
+    /// Each pass checks for Python signals and the deadline.
+    fn acquire_any_slot(
+        &self,
+        deadline: Option<std::time::Instant>,
+    ) -> PyResult<(usize, FileLock)> {
+        fs::create_dir_all(&self.base_path).map_err(map_py_err)?;
         let mut backoff = std::time::Duration::from_millis(10);
         let max_backoff = std::time::Duration::from_millis(250);
         loop {
             for slot in 1..=self.size {
-                let slot_path = self.base_path.join(slot.to_string());
-                fs::create_dir_all(&slot_path).map_err(map_py_err)?;
                 let lock_path = self.base_path.join(format!("{slot}.lock"));
                 if let Some(lock) = FileLock::try_lock(lock_path).map_err(map_py_err)? {
+                    fs::create_dir_all(self.base_path.join(slot.to_string()))
+                        .map_err(map_py_err)?;
                     return Ok((slot, lock));
                 }
+            }
+            Python::attach(|py| py.check_signals())?;
+            if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                return Err(pyo3::exceptions::PyTimeoutError::new_err(
+                    "no run slot became free before the timeout",
+                ));
             }
             std::thread::sleep(backoff);
             backoff = std::cmp::min(backoff * 2, max_backoff);

@@ -118,14 +118,7 @@ pub fn remove_repo_config_dir(config_dir: &str) -> PyResult<()> {
 /// missing root as "nothing to collect" rather than an error.
 #[pyfunction]
 pub fn repo_configs_root_dir() -> PyResult<Option<String>> {
-    let base: PathBuf = match std::env::var_os("XDG_CONFIG_HOME") {
-        Some(dir) if !dir.is_empty() => PathBuf::from(dir),
-        _ => match std::env::var_os("HOME") {
-            Some(home) => PathBuf::from(home).join(".config"),
-            None => return Ok(None),
-        },
-    };
-    Ok(Some(
-        base.join("jj").join("repos").to_string_lossy().into_owned(),
-    ))
+    // The same resolution the loader uses, so `jj config gc` scans the
+    // directory jj writes, relative `XDG_CONFIG_HOME` and Windows included.
+    Ok(crate::config::secure_config_root("repos").map(|dir| dir.to_string_lossy().into_owned()))
 }

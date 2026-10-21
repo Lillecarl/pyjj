@@ -44,11 +44,14 @@ impl PyReadonlyRepo {
             // set-but-not-a-string value is a real type error, surfaced
             // the same way every other `get_string` call-site surfaces
             // it rather than silently ignored.
-            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => settings
-                .0
-                .get_string("revsets.log")
-                .unwrap_or_else(|_| String::new()),
-            Err(err) => return Err(crate::errors::map_py_err(err)),
+            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => {
+                match settings.0.get_string("revsets.log") {
+                    Ok(value) => value,
+                    Err(jj_lib::config::ConfigGetError::NotFound { .. }) => String::new(),
+                    Err(err) => return Err(crate::errors::map_config_err(err)),
+                }
+            }
+            Err(err) => return Err(crate::errors::map_config_err(err)),
         };
         if revset_string.is_empty() {
             return Ok(context);
@@ -1111,11 +1114,6 @@ impl PyTransaction {
         })
     }
 
-    /// `jj split` equivalent, first half: a `CommitBuilder` for the changes
-    /// matched by whole `paths` and/or specific `hunks` (a
-    /// `{path: [hunk_index, ...]}` map, indices from
-    /// `pyjj_bindings.diff_hunks(before, after)`). Write this, then pass
-    /// the result to `split_remainder()`.
     /// `jj squash --tool`: squash a diff-editor's selection instead of a
     /// set of paths. `selections` is the tool's output, per path: bytes
     /// to write that content, `None` to leave the path out.
@@ -1132,6 +1130,11 @@ impl PyTransaction {
         })
     }
 
+    /// `jj split` equivalent, first half: a `CommitBuilder` for the changes
+    /// matched by whole `paths` and/or specific `hunks` (a
+    /// `{path: [hunk_index, ...]}` map, indices from
+    /// `pyjj_bindings.diff_hunks(before, after)`). Write this, then pass
+    /// the result to `split_remainder()`.
     #[pyo3(signature = (target, paths=None, hunks=None))]
     fn split_selected(
         slf: &Bound<'_, Self>,

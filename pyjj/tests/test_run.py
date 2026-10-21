@@ -161,3 +161,11 @@ def test_run_rewrite_rejects_an_unreadable_commit_id(workspace, settings, commit
     tx = repo.start_transaction(settings)
     with pytest.raises(pyjj.JjError):
         tx.run_rewrite([commit.id], {"nothex": pyjj.TreeId("00" * 20)})
+
+
+def test_acquire_on_a_full_pool_times_out(workspace, wc_commit):
+    pool = pyjj.RunPool(workspace.repo_path, 1)
+    held = pool.acquire(wc_commit)
+    with pytest.raises(TimeoutError):
+        pool.acquire(wc_commit, timeout=0.2)
+    held.discard()
