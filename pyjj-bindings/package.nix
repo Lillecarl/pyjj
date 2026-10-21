@@ -2,6 +2,7 @@
   lib,
   python3Packages,
   rustPlatform,
+  runtimeShell,
 }: let
   packageVersion = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
 in
@@ -31,6 +32,24 @@ in
 
     # Ships pyjj_bindings/_native.pyi, from pyo3's experimental-inspect.
     maturinBuildFlags = ["--generate-stubs"];
+
+    # maturinBuildHook always passes --strip, and maturin strips the
+    # library before it reads the stub data out of it ("No module named
+    # _native found"). The fixup phase strips the .so anyway. A wrapper
+    # on PATH, not a shell function: the hook calls maturin through `env`.
+    preBuild = ''
+      mkdir -p "$TMPDIR/maturin-no-strip"
+      cat > "$TMPDIR/maturin-no-strip/maturin" <<EOF
+      #!${runtimeShell}
+      args=()
+      for arg in "\$@"; do
+        [[ \$arg == --strip ]] || args+=("\$arg")
+      done
+      exec $(command -v maturin) "\''${args[@]}"
+      EOF
+      chmod +x "$TMPDIR/maturin-no-strip/maturin"
+      export PATH="$TMPDIR/maturin-no-strip:$PATH"
+    '';
 
     # The stub cannot see the `*_async` methods `_async.py` installs at
     # import time; this adds them, typed like their sync methods.
