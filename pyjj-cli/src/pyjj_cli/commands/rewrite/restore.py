@@ -77,7 +77,8 @@ def restore(args: argparse.Namespace) -> int:
     return 0
 
 
-def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, dst, src):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool: str,
+              dst: pyjj.Commit, src: pyjj.Commit | None):
     """What the diff editor chose the destination should hold.
 
     jj puts the destination's current content on the left and the

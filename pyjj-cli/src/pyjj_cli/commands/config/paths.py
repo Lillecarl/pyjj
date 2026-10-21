@@ -11,12 +11,15 @@ invisible to `jj` -- and to pyjj itself once it started loading the
 layer. `pyjj_bindings.secure_config_file` makes jj create the
 directory, which is the only way the two tools agree on it.
 """
+
+from __future__ import annotations
+
 import os
-import tomllib
 from pathlib import Path
-from typing import Literal, overload
+from typing import Any, Literal, overload
 
 import pyjj_bindings
+import tomllib
 
 Scope = Literal["user", "repo", "workspace"]
 
@@ -61,7 +64,7 @@ def config_path(workspace_root: str | None, scope: Scope, create: bool = False) 
     return path
 
 
-def read_config(path) -> dict:
+def read_config(path: Path | None) -> dict[str, Any]:
     """A scope that has never been written reads as empty, and
     `config_path` gives `None` for one."""
     if path is None or not path.exists():
@@ -70,13 +73,13 @@ def read_config(path) -> dict:
         return tomllib.load(handle)
 
 
-def write_config(path: Path, data: dict) -> None:
+def write_config(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "\n".join(_dump(data, [])).rstrip("\n")
     path.write_text(text + "\n" if text else "")
 
 
-def set_key(data: dict, dotted: str, value) -> None:
+def set_key(data: dict[str, Any], dotted: str, value: Any) -> None:
     *tables, leaf = dotted.split(".")
     node = data
     for name in tables:
@@ -86,7 +89,7 @@ def set_key(data: dict, dotted: str, value) -> None:
     node[leaf] = value
 
 
-def unset_key(data: dict, dotted: str) -> bool:
+def unset_key(data: dict[str, Any], dotted: str) -> bool:
     *tables, leaf = dotted.split(".")
     nodes = [data]
     for name in tables:
@@ -108,7 +111,7 @@ def unset_key(data: dict, dotted: str) -> bool:
 _MISSING = object()
 
 
-def _dump(data: dict, prefix: list) -> list:
+def _dump(data: dict[str, Any], prefix: list[str]) -> list[str]:
     """A TOML rendering good enough for jj's config: scalars, strings,
     string lists and nested tables. jj re-parses it, so layout only has
     to be valid, not byte-identical to what jj itself writes."""
@@ -130,7 +133,7 @@ def _dump(data: dict, prefix: list) -> list:
     return lines
 
 
-def _value(value) -> str:
+def _value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):

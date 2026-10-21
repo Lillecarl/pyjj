@@ -18,6 +18,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable
 
 @command
 def rebase(args: argparse.Namespace) -> int:
@@ -37,6 +38,8 @@ def rebase(args: argparse.Namespace) -> int:
         if mode_count > 1:
             print("Error: specify only one of -r, -s, -b", file=sys.stderr)
             return 2
+        target_commit_ids: list[pyjj.CommitId]
+        target_root_ids: list[pyjj.CommitId]
         if revisions:
             targets = _resolve_all(repo, settings, revisions)
             target_commit_ids = [c.id for c in targets]
@@ -124,7 +127,8 @@ def rebase(args: argparse.Namespace) -> int:
         return 0
 
 
-def _branch_roots(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, branches, new_parent_ids):
+def _branch_roots(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+                  branches: Iterable[str], new_parent_ids: Iterable[pyjj.CommitId]):
     """`roots(destination..branch)`: the commits `jj rebase -b` moves.
 
     A branch commit that is already an ancestor of the destination stays

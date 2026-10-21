@@ -67,7 +67,7 @@ def _should_colocate(ws: pyjj.Workspace, settings: pyjj.UserSettings, args: argp
     return settings.get_bool("git.colocate") != False
 
 
-def _sparse_patterns(ws: pyjj.Workspace, args: argparse.Namespace):
+def _sparse_patterns(ws: pyjj.Workspace, args: argparse.Namespace) -> list[str] | None:
     """What the new workspace's sparse patterns start as. `None` is
     `copy`, the binding's default as it is jj's; `[""]` is everything."""
     choice = getattr(args, "sparse_patterns", "copy")

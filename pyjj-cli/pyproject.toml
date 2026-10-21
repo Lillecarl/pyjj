@@ -18,6 +18,6 @@ tui = ["pyjjui"]
 pyjj = "pyjj_cli.__main__:main"
 
 [tool.pyrefly]
-preset = "default"
+preset = "strict"
 project-includes = ["src"]
 python-version = "3.11"

@@ -49,7 +49,7 @@ def help_command(args: argparse.Namespace):
     return 0
 
 
-def _subparser(parser: argparse.ArgumentParser, name):
+def _subparser(parser: argparse.ArgumentParser, name: str):
     for action in parser._actions:
         mapping = getattr(action, "_name_parser_map", None)
         if mapping and name in mapping:

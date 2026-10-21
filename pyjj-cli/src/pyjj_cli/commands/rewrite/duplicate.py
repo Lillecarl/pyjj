@@ -40,7 +40,8 @@ def duplicate(args: argparse.Namespace) -> int:
         return 0
 
 
-def _placement(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace):
+def _placement(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace,
+) -> tuple[list[pyjj.CommitId], list[pyjj.CommitId]]:
     """New parents and new children for the duplicates, from -o/-A/-B."""
     ontos = getattr(args, "ontos", None) or []
     afters = getattr(args, "insert_afters", None) or []
@@ -50,8 +51,8 @@ def _placement(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argpa
     if ontos:
         return [c.id for c in _resolve_in_arg_order(repo, settings, ontos)], []
 
-    parents: list = []
-    children: list = []
+    parents: list[pyjj.CommitId] = []
+    children: list[pyjj.CommitId] = []
     if afters:
         parents = [c.id for c in _resolve_in_arg_order(repo, settings, afters)]
         expression = " | ".join(f"children({a})" for a in afters)

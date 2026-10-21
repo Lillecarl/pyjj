@@ -1,8 +1,8 @@
 """re-exports for sparse."""
-from .sparse_list import sparse_list
-from .sparse_set import sparse_set
-from .sparse_reset import sparse_reset
 from .sparse_edit import sparse_edit
+from .sparse_list import sparse_list
+from .sparse_reset import sparse_reset
+from .sparse_set import sparse_set
 
 __all__ = [
     "sparse_list",

@@ -40,7 +40,7 @@ def workspace_forget(args: argparse.Namespace) -> int:
         return 0
 
 
-def _unlink_worktree(settings: pyjj.UserSettings, ws: pyjj.Workspace, name) -> None:
+def _unlink_worktree(settings: pyjj.UserSettings, ws: pyjj.Workspace, name: str) -> None:
     """Drop the Git worktree backing a forgotten workspace, if any.
 
     A leftover gitlink or stale metadata is not worth failing over,

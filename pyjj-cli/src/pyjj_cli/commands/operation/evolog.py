@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
@@ -37,6 +37,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
 
 # Same list as `log`'s: a flag that shapes a row or its order has
 # nothing to act on in a DOT graph.
@@ -62,7 +63,7 @@ _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
                 "operation_description")
 
 
-def _operation_spans(operation):
+def _operation_spans(operation: pyjj.Operation):
     """jj's evolog operation line: `-- operation <id> <what it did>`."""
     first_line = (operation.description.splitlines()[0]
                   if operation.description else "")
@@ -172,7 +173,7 @@ def evolog(args: argparse.Namespace) -> int:
                 for field in dot_fields
             }
 
-        def emit(lines) -> None:
+        def emit(lines: Sequence[Line | list[tuple[str, str]]]) -> None:
             """One row, buffered: renderdag takes a finished string.
 
             The patch goes into the same buffer as the row, so the
@@ -238,7 +239,8 @@ def _write(text: str) -> None:
     sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
 
 
-def _patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo, entry, formats) -> bytes:
+def _patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo,
+                 entry: pyjj.EvolutionEntry, formats: tuple[str | None, str | None]) -> bytes:
     """What `jj evolog --patch` prints under one version.
 
     jj compares the version with the ones it was rewritten from, and
@@ -271,7 +273,8 @@ def _patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.Us
             + _diff_files_bytes(args, ws, files, settings, formats))
 
 
-def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, operation) -> dict:
+def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit,
+             operation: pyjj.Operation | None) -> dict[str, Any]:
     """What a user's own Jinja template can name."""
     change = _short_id(
         commit.change_id.reverse_hex(),

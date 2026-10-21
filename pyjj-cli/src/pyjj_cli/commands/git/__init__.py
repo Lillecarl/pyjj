@@ -1,13 +1,13 @@
 """re-exports for backwards compat."""
-from .init import git_init
 from .clone import git_clone
-from .fetch import git_fetch
-from .push import git_push
-from .import_ import git_import
+from .colocation import git_colocation
 from .export import git_export
+from .fetch import git_fetch
+from .import_ import git_import
+from .init import git_init
+from .push import git_push
 from .remote import git_remote
 from .root import git_root
-from .colocation import git_colocation
 
 __all__ = [
     "git_init",

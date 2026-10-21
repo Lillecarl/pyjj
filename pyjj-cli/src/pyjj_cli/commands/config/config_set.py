@@ -60,7 +60,7 @@ def config_set(args: argparse.Namespace) -> int:
     return 0
 
 
-def _warn_wc_author(args: argparse.Namespace, value, part: str) -> None:
+def _warn_wc_author(args: argparse.Namespace, value: object, part: str) -> None:
     """The full warning jj prints when the author setting changes."""
     try:
         with read_repo(args) as (_settings, ws, repo):

@@ -36,6 +36,7 @@ def new(args: argparse.Namespace) -> int:
         parents_given = (list(args.parents_pos)
                          + list(getattr(args, "parents_opt", None) or []))
 
+        children: list[pyjj.CommitId]
         if afters or befores:
             parents, children = _commit_location(
                 repo, settings, [], afters, befores)

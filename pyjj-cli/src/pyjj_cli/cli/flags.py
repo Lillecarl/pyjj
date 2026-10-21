@@ -15,8 +15,14 @@ set at once:
 No heavy imports — only ``argparse`` and ``enum``.
 """
 
+from __future__ import annotations
+
 import argparse
 from enum import Enum, auto
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
 
 
 class Flag(Enum):
@@ -175,11 +181,11 @@ def add_no_graph_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-G", "--no-graph", action="store_true", help="Don't show the graph")
 
 
-def add_from_flag(parser: argparse.ArgumentParser, dest: str = "from_", default=None, help: str = "Show changes from this revision") -> None:
+def add_from_flag(parser: argparse.ArgumentParser, dest: str = "from_", default: str | None = None, help: str = "Show changes from this revision") -> None:
     parser.add_argument("-f", "--from", dest=dest, default=default, metavar="REVSET", help=help)
 
 
-def add_to_flag(parser: argparse.ArgumentParser, dest: str = "to", default=None, help: str = "Show changes to this revision") -> None:
+def add_to_flag(parser: argparse.ArgumentParser, dest: str = "to", default: str | None = None, help: str = "Show changes to this revision") -> None:
     parser.add_argument("-t", "--to", dest=dest, default=default, metavar="REVSET", help=help)
 
 
@@ -312,7 +318,7 @@ def add_use_dest_message_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-u", "--use-destination-message", dest="use_destination_message", action="store_true", help="Keep destination's description unchanged")
 
 
-def add_into_flag(parser: argparse.ArgumentParser, dest: str = "into", default=None, help: str = "Destination revision (default: source's parent)") -> None:
+def add_into_flag(parser: argparse.ArgumentParser, dest: str = "into", default: str | None = None, help: str = "Destination revision (default: source's parent)") -> None:
     # jj spells this `-t`, `--into` with `--to` as a visible alias, on
     # every command that has it: squash, restore and absorb.
     parser.add_argument("-t", "--into", "--to", dest=dest, default=default, metavar="REVSET", help=help)
@@ -448,7 +454,7 @@ def add_json_schema_flag(parser: argparse.ArgumentParser) -> None:
 
 
 # Registry for add_flags(enum set)
-_FLAG_HANDLERS = {
+_FLAG_HANDLERS: dict[Flag, Callable[[argparse.ArgumentParser], None]] = {
     Flag.REVISION: lambda p: add_revision_flag(p),
     Flag.REVISIONS: lambda p: add_revisions_flag(p),
     Flag.REVISIONS_SINGULAR: lambda p: add_revisions_flag(p, singular=True),
@@ -515,7 +521,7 @@ _FLAG_HANDLERS = {
 }
 
 
-def add_flags(parser: argparse.ArgumentParser, flags) -> None:
+def add_flags(parser: argparse.ArgumentParser, flags: Iterable[Flag]) -> None:
     """Register a set of shared flags on ``parser``.
 
     Example::

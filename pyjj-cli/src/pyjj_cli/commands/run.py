@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 _DEFAULT_REVSET = "reachable(@, mutable())"
 
 
-def _resolve_jobs(settings: pyjj.UserSettings, jobs) -> int:
+def _resolve_jobs(settings: pyjj.UserSettings, jobs: int | None) -> int:
     """Precedence: `--jobs`, the `run.jobs` config key, 1."""
     if jobs is not None:
         if jobs < 1:
@@ -72,7 +72,7 @@ def _subdir(workspace_root: str, use_root: bool) -> str | None:
         return ""
 
 
-def _sparsity(ws: pyjj.Workspace, args: argparse.Namespace):
+def _sparsity(ws: pyjj.Workspace, args: argparse.Namespace) -> list[str] | None:
     """What each slot checks out, for `--sparse-patterns`.
 
     `full` (the binding default, `None`) materializes the whole tree;

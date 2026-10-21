@@ -17,6 +17,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable, Sequence
 
     import pyjj
 
@@ -75,7 +76,8 @@ def parallelize(args: argparse.Namespace) -> int:
         return 0
 
 
-def _reconnect(args: argparse.Namespace, settings: pyjj.UserSettings, target_changes, follower_changes):
+def _reconnect(args: argparse.Namespace, settings: pyjj.UserSettings,
+               target_changes: Sequence[str], follower_changes: Sequence[str]):
     """Put every follower on all of the now-parallel targets."""
     ws, repo = _reload(settings, args)
     # Not write_tx: the repo here comes from _reload, and a fresh _load
@@ -90,8 +92,8 @@ def _reconnect(args: argparse.Namespace, settings: pyjj.UserSettings, target_cha
     _finish(tx, "parallelize: reconnect descendants", settings, ws, repo)
 
 
-def _by_change_id(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_hexes):
-    commits = []
+def _by_change_id(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_hexes: Iterable[str]):
+    commits: list[pyjj.Commit] = []
     for change_hex in change_hexes:
         commits.extend(repo.revset(settings, change_hex))
     return commits

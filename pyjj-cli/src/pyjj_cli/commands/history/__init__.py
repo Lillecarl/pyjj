@@ -1,8 +1,8 @@
 """re-exports for history."""
-from .status import status
-from .log import log
 from .diff import diff
+from .log import log
 from .show import show
+from .status import status
 
 __all__ = [
     "status",

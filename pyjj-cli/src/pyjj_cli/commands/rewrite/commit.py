@@ -80,13 +80,13 @@ def commit(args: argparse.Namespace) -> int:
     return 0
 
 
-def _remainder(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, wc, kept):
+def _remainder(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, wc: pyjj.Commit, kept: pyjj.Commit):
     """The new working copy. `jj commit` gives it no description --
     unlike `jj split`, which asks for one for each half."""
     return tx.split_remainder(wc, kept).set_description("").write(repo)
 
 
-def _description(args: argparse.Namespace, settings: pyjj.UserSettings, wc) -> str:
+def _description(args: argparse.Namespace, settings: pyjj.UserSettings, wc: pyjj.Commit) -> str:
     """`-m` alone means no editor. `--editor` opens one anyway, seeded
     with whatever `-m` gave, and no `-m` at all opens one seeded with
     the commit's own description."""
@@ -98,7 +98,7 @@ def _description(args: argparse.Namespace, settings: pyjj.UserSettings, wc) -> s
     return text
 
 
-def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, wc):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool: str, wc: pyjj.Commit):
     """What the diff editor chose to keep in the commit, per path."""
     parent = repo.get_commit(wc.parent_ids[0])
     before, after = _split_changed(_changed_files(repo, settings, parent, wc))

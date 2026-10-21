@@ -60,7 +60,7 @@ def config_list(args: argparse.Namespace) -> int:
 
     # Per key, every layer's value in precedence order; the winner is
     # the last one standing.
-    by_name: dict[str, list] = {}
+    by_name: dict[str, list[pyjj.ConfigLayer]] = {}
     for layer in layers:
         for name in sorted(layer.entries):
             if prefix and not (name == prefix or name.startswith(prefix + ".")):

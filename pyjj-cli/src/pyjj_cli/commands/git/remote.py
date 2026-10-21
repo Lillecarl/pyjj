@@ -23,13 +23,13 @@ def git_remote(args: argparse.Namespace) -> int:
         cmd = getattr(args, "remote_command", None)
         if cmd == "list":
             try:
-                remotes = repo.git_remotes()  # type: ignore
+                remotes = repo.git_remotes()
             except Exception:
                 remotes = tx.git_remotes()
             # jj prints the URL beside each name, and says so when the
             # fetch and push URLs differ.
             try:
-                urls = {name: (fetch, push)
+                urls: dict[str, tuple[str, str]] = {name: (fetch, push)
                         for name, fetch, push in repo.git_remote_urls()}
             except Exception:
                 urls = {}

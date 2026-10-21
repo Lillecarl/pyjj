@@ -24,6 +24,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable
 
     import pyjj
 
@@ -66,8 +67,8 @@ def split(args: argparse.Namespace) -> int:
             target = _resolve_one(repo, settings, _rev(args, "revision"))
 
             _check_rewritable(tx, settings, [target])
-            new_parent_ids: list = []
-            new_child_ids: list = []
+            new_parent_ids: list[pyjj.CommitId] = []
+            new_child_ids: list[pyjj.CommitId] = []
             if moving:
                 # The commits that followed the insertion point get
                 # rebased, so they have to be rewritable. Both guards
@@ -168,17 +169,17 @@ def split(args: argparse.Namespace) -> int:
     return 0
 
 
-def _change_ids(repo: pyjj.ReadonlyRepo, commit_ids):
+def _change_ids(repo: pyjj.ReadonlyRepo, commit_ids: Iterable[pyjj.CommitId]):
     """The change id behind each commit id, in order."""
     return [repo.get_commit(commit_id).change_id.reverse_hex()
             for commit_id in commit_ids]
 
 
-def _by_change_ids(tx: pyjj.Transaction, settings: pyjj.UserSettings, change_hexes):
+def _by_change_ids(tx: pyjj.Transaction, settings: pyjj.UserSettings, change_hexes: Iterable[str]):
     """Back to commit ids, after a rebase may have moved them. The query
     runs against the transaction, which is the only place the rebased
     commits exist yet."""
-    ids = []
+    ids: list[pyjj.CommitId] = []
     for change_hex in change_hexes:
         ids.extend(tx.revset(settings, change_hex))
     return ids

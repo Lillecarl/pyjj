@@ -6,10 +6,12 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     import pyjj
 
 
-def update_sparse_patterns(ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, patterns) -> None:
+def update_sparse_patterns(ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, patterns: Iterable[str]) -> None:
     """jj's `update_sparse_patterns_with`: deduplicate and sort, set the
     patterns, then report the checkout like `print_checkout_stats`.
 

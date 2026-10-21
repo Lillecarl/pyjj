@@ -25,6 +25,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
 
     import pyjj
 
@@ -133,7 +134,7 @@ def squash(args: argparse.Namespace) -> int:
     return 0
 
 
-def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, source):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool: str, source: pyjj.Commit):
     """What a diff editor chose to move, per path.
 
     The tool edits the source's own diff: left is the source's parent,
@@ -145,7 +146,7 @@ def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, source
     return _run_diff_tool(settings, tool, before, after)
 
 
-def _sources_and_destination(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, inserting):
+def _sources_and_destination(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, inserting: bool):
     """The commits to squash from, and the one to squash into.
 
     The destination is `None` when a placement flag asks for a commit
@@ -169,13 +170,14 @@ def _sources_and_destination(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, 
     return [source], repo.get_commit(source.parent_ids[0])
 
 
-def _oldest_first(sources):
+def _oldest_first(sources: Sequence[pyjj.Commit]) -> list[pyjj.Commit]:
     """jj applies the oldest source first, which avoids building a
     conflict that the next source would only resolve again."""
     return list(reversed(sources))
 
 
-def _description(args: argparse.Namespace, settings: pyjj.UserSettings, source, dest) -> str:
+def _description(args: argparse.Namespace, settings: pyjj.UserSettings,
+                 source: pyjj.Commit, dest: pyjj.Commit | None) -> str:
     """The description the squashed commit ends up with.
 
     `-m` gives it outright and `-u` keeps the destination's. With
@@ -191,7 +193,7 @@ def _description(args: argparse.Namespace, settings: pyjj.UserSettings, source, 
     else:
         sides = [source] if dest is None else [source, dest]
         candidates = [c.description for c in sides if c.description]
-        if len(candidates) > 1:
+        if dest is not None and len(candidates) > 1:
             # Two descriptions cannot be joined without a choice, so the
             # editor opens whether or not `--editor` asked for it.
             combined = (
@@ -207,7 +209,9 @@ def _description(args: argparse.Namespace, settings: pyjj.UserSettings, source, 
     return text
 
 
-def _place_new_commit(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, source, ontos, afters, befores):
+def _place_new_commit(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+                      source: pyjj.Commit, ontos: Sequence[str], afters: Sequence[str],
+                      befores: Sequence[str]):
     """The empty commit `-o`/`-A`/`-B` squash into, and the source as it
     stands once that commit is in the graph.
 

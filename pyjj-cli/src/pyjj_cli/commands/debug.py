@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import pyjj_bindings
 
@@ -29,6 +29,9 @@ from .common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Callable
+
+_T = TypeVar("_T")
 
 
 def _no_snapshot(args: argparse.Namespace):
@@ -151,7 +154,9 @@ class _UsageError(Exception):
     pass
 
 
-def _object(fn, required: bool, name: str, write):
+def _object(
+    fn: Callable[..., _T], required: bool, name: str, write: Callable[[_T], object],
+):
     @command(catch=(pyjj.WorkspaceLoadError,))
     def run(args: argparse.Namespace) -> int:
         try:
@@ -224,7 +229,7 @@ def debug_template(args: argparse.Namespace) -> int:
     return 0
 
 
-def _pretty(value, indent: int = 0) -> str:
+def _pretty(value: object, indent: int = 0) -> str:
     from jinja2 import nodes
 
     pad = "    " * (indent + 1)

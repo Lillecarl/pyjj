@@ -52,6 +52,9 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable, Mapping, Sequence
+
+    from ..common import RemoteState
 
 # jj's own builtin template names. `builtin_log_compact` builds its
 # spans directly, because a Jinja render carries no labels and a label
@@ -103,7 +106,7 @@ _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
                 "description", "bookmarks", "unpushed_bookmarks")
 
 
-def _log_revset(settings: pyjj.UserSettings, revisions, paths) -> str:
+def _log_revset(settings: pyjj.UserSettings, revisions: str | None, paths: Sequence[str] | None) -> str:
     """Which commits `jj log` walks, given what was asked for.
 
     The configured `revsets.log` applies only when neither a revision
@@ -136,7 +139,11 @@ def _fileset_literal(path: str) -> str:
     return f'"{escaped}"'
 
 
-def _dot_keys(repo: pyjj.ReadonlyRepo, items, by_id):
+def _dot_keys(
+    repo: pyjj.ReadonlyRepo,
+    items: Sequence[tuple[str, Sequence[tuple[str, str]]]],
+    by_id: Mapping[str, pyjj.GraphNode],
+) -> dict[str, str]:
     """`{commit hex: change id}` for every node the graph names.
 
     A commit id is a content hash, so a rewrite replaces it, and the
@@ -152,10 +159,9 @@ def _dot_keys(repo: pyjj.ReadonlyRepo, items, by_id):
     vanish from the graph without a word. jj refuses to resolve such an
     id too (`Change ID ... is divergent`), so this refuses to write it.
     """
-    keys = {}
+    keys: dict[str, str] = {}
     for hex_id, parents in items:
-        node = by_id.get(hex_id)
-        keys[hex_id] = node.commit.change_id.reverse_hex()
+        keys[hex_id] = by_id[hex_id].commit.change_id.reverse_hex()
         for target, _edge_type in parents:
             if target not in keys and target not in by_id:
                 keys[target] = repo.get_commit(
@@ -176,14 +182,17 @@ def _dot_keys(repo: pyjj.ReadonlyRepo, items, by_id):
     return keys
 
 
-def _rekey(items, keys):
+def _rekey(
+    items: Sequence[tuple[str, Sequence[tuple[str, str]]]],
+    keys: Mapping[str, str],
+) -> list[tuple[str, list[tuple[str, str]]]]:
     return [(keys[hex_id], [(keys[target], edge_type)
                             for target, edge_type in parents])
             for hex_id, parents in items]
 
 
-def _dot_attributes(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, ws: pyjj.Workspace, commit: pyjj.Commit, context, fields, paths,
-                    names, remotes):
+def _dot_attributes(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, ws: pyjj.Workspace, commit: pyjj.Commit, context: Mapping[str, object], fields: Iterable[str], paths: Sequence[str] | None,
+                    names: Sequence[str], remotes: RemoteState):
     """One row's selected fields, as DOT node attributes.
 
     Four fields are not in the template context. `files` and `diff`
@@ -193,7 +202,7 @@ def _dot_attributes(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: 
     a reader parsing attributes. The two bookmark fields need the
     remote refs, which a row never reads.
     """
-    attributes = {}
+    attributes: dict[str, str] = {}
     base = None
     for field in fields:
         if field == "remote_bookmarks":
@@ -227,7 +236,7 @@ def _write(text: str) -> None:
     sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
 
 
-def _local(timestamp, fmt: str) -> str:
+def _local(timestamp: pyjj.Timestamp, fmt: str) -> str:
     """A timestamp in the zone it was stamped in."""
     tz = datetime.timezone(
         datetime.timedelta(minutes=timestamp.tz_offset_minutes))
@@ -235,7 +244,7 @@ def _local(timestamp, fmt: str) -> str:
         timestamp.millis_since_epoch / 1000, tz=tz).strftime(fmt)
 
 
-def _spans_millennia(nodes) -> bool:
+def _spans_millennia(nodes: Iterable[pyjj.GraphNode]) -> bool:
     """Whether two rows sit in different millennia.
 
     The default row prints a two-digit year, which reads as `26` for
@@ -297,7 +306,7 @@ def log(args: argparse.Namespace) -> int:
         # is what makes a row bold. Another workspace's commit is named in
         # the row instead, and only when there is more than one.
         current_wc = view.get(ws.workspace_name)
-        wc_ids = {current_wc} if current_wc else set()
+        wc_ids: set[str] = {current_wc} if current_wc else set()
         all_wc_ids = set(view.values())
         names_by_hex = {hex_id: name for name, hex_id in view.items()}
         many_workspaces = len(view) > 1
@@ -359,7 +368,7 @@ def log(args: argparse.Namespace) -> int:
                              hex_id in all_wc_ids, hex_id in wc_ids),
                     dot_fields, paths, names, dot_remotes)
 
-            def emit(lines, indent: bool = True) -> None:
+            def emit(lines: Sequence[Line], indent: bool = True) -> None:
                 """One row, buffered: renderdag takes a finished string.
 
                 jj writes the patch into the same buffer as the row, so the
@@ -403,8 +412,8 @@ def log(args: argparse.Namespace) -> int:
             elif builtin:
                 # jj names another workspace's working copy in the row, and
                 # only when the repository has more than one.
-                workspaces = ([f"{names_by_hex[hex_id]}@"]
-                              if many_workspaces and hex_id in all_wc_ids else [])
+                workspaces: list[str] = ([f"{names_by_hex[hex_id]}@"]
+                                         if many_workspaces and hex_id in all_wc_ids else [])
                 if root:
                     emit([Line(_commit_root_spans(repo, settings, commit),
                                "immutable")], indent=False)
@@ -442,8 +451,8 @@ def log(args: argparse.Namespace) -> int:
         return 0
 
 
-def _default_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, kind, names, root: bool,
-                   short_year: bool):
+def _default_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, kind: str, names: Sequence[str], root: bool,
+                   short_year: bool) -> list[Line]:
     """pyjj-cli's own row: the author's name, and a two-digit year.
 
     The fields are jj's, so the labels are jj's too and the palette
@@ -484,8 +493,8 @@ def _default_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit:
     ]
 
 
-def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names, short_year, is_wc: bool,
-             is_current_wc: bool) -> dict:
+def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names: Sequence[str], short_year: bool, is_wc: bool,
+             is_current_wc: bool) -> dict[str, object]:
     """What a user's own Jinja template can name.
 
     `templates set` validates against this set of names, so a name that

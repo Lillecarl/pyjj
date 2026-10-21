@@ -24,6 +24,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable, Sequence
 
     import pyjj
 
@@ -93,14 +94,14 @@ def show(args: argparse.Namespace) -> int:
         return 0
 
 
-def _detailed_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names, remote_names, tags):
+def _detailed_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names: Sequence[str], remote_names: Sequence[tuple[str, str]], tags: Sequence[str]):
     """jj's `builtin_log_detailed`: the block `show` prints above a diff.
 
     Every label sits under `show commit`, which is what jj labels the
     whole template. A bookmark line lists the local names first and the
     remote ones after, and a remote name's three parts colour apart.
     """
-    lines = [
+    lines: list[Sequence[tuple[str, str | Iterable[str]]]] = [
         [("Commit ID: ", ""), (commit.id.hex(), "commit_id")],
         [("Change ID: ", ""),
          (commit.change_id.reverse_hex(), "change_id")],

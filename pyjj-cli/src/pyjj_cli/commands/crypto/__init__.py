@@ -1,7 +1,7 @@
 """re-exports for crypto."""
+from .metaedit import metaedit
 from .sign import sign
 from .unsign import unsign
-from .metaedit import metaedit
 from .version import version
 
 __all__ = [

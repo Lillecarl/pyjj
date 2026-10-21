@@ -10,20 +10,45 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable, Container, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, overload
 
 import pyjj
 
-from ..formatter import Formatter, Line, render_block, separate
+from ..formatter import Formatter, Line, _labels, render_block, separate
 
 if TYPE_CHECKING:
     import argparse
 
+    from jinja2 import Template
+
 #: How two lines compare: exactly, or across whitespace (`-w`, `-b`).
 CompareMode = Literal["exact", "ignore-all-space", "ignore-space-change"]
+
+#: A piece of text and the space-separated labels it prints under.
+Span = tuple[str, str]
+#: One output line, as spans.
+SpanLine = list[Span]
+#: Spans as `separate` returns them, with labels written either way.
+LooseSpans = list[tuple[str, str | Iterable[str]]]
+#: A row of a diff body: plain spans, or spans with a base label of their own.
+Row = SpanLine | Line
+#: How a repo-relative path reads to the user.
+UiPath = Callable[[str], str]
+#: A path's content before and after, `None` where the path is absent.
+FileBytes = dict[str, bytes | None]
+#: Word-diff hunks as `(kind, left, right)`.
+WordHunks = Iterable[tuple[str, bytes, bytes]]
+#: A line's tokens as `(kind, content)`.
+Tokens = list[tuple[str, bytes]]
+#: `{name: [{remote, tracked, synced, ahead, behind}, ...]}`.
+RemoteState = dict[str, list[dict[str, object]]]
+#: A local bookmark or tag.
+LocalRef = pyjj.Bookmark | pyjj.Tag
+#: A remote-tracking bookmark or tag.
+RemoteRef = pyjj.RemoteBookmark | pyjj.RemoteTag
 
 
 def complete_newline(s: str) -> str:
@@ -35,13 +60,13 @@ def complete_newline(s: str) -> str:
         return s + "\n"
     return s
 
-def join_message_paragraphs(paragraphs) -> str:
+def join_message_paragraphs(paragraphs: Iterable[str]) -> str:
     """The real CLI's description_util::join_message_paragraphs: each -m
     becomes a paragraph completed with a newline, paragraphs separated by
     one blank line."""
     return "\n".join(complete_newline(p) for p in paragraphs)
 
-def conflicting_flags(args: argparse.Namespace, names) -> list[str]:
+def conflicting_flags(args: argparse.Namespace, names: Iterable[str]) -> list[str]:
     """Which of `names` the invocation also carries.
 
     clap says a flag is exclusive in one attribute. argparse cannot, so
@@ -57,7 +82,7 @@ Handler = Callable[["argparse.Namespace"], int]
 
 
 class CommandError(Exception):
-    def __init__(self, message):
+    def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
 
@@ -117,15 +142,15 @@ _CONFIG_HELP_FOOTER = ("For help, see https://docs.jj-vcs.dev/latest/config/ "
 # The `--config`/`--config-file` layers in argv order, set once per
 # process next to the recorded argv. Each item is a `(kind, text)`
 # pair, `kind` one of `"config"`/`"config-file"`.
-_CONFIG_ARGS: list[tuple] = []
+_CONFIG_ARGS: list[tuple[str, str]] = []
 
 
-def set_config_args(config_args) -> None:
+def set_config_args(config_args: Iterable[tuple[str, str]]) -> None:
     global _CONFIG_ARGS
     _CONFIG_ARGS = list(config_args)
 
 
-def apply_config_args(settings: pyjj.UserSettings):
+def apply_config_args(settings: pyjj.UserSettings) -> pyjj.UserSettings:
     """Settings with this run's `--config`/`--config-file` layers on top.
 
     Every command builds settings through here (via `settings_for` or
@@ -154,7 +179,7 @@ def apply_config_args(settings: pyjj.UserSettings):
 _CONFIG_WARNED: set[str] = set()
 
 
-def select_fields(selection, default, catalogue) -> list[str]:
+def select_fields(selection: str | None, default: Iterable[str], catalogue: Sequence[str]) -> list[str]:
     """Which fields `--dot-fields` asks for, as a list in catalogue order.
 
     A bare list replaces the default set. A list where every item
@@ -188,7 +213,10 @@ def select_fields(selection, default, catalogue) -> list[str]:
     return [name for name in catalogue if name in chosen]
 
 
-def _dot_preamble(args: argparse.Namespace, conflicts, default, catalogue):
+def _dot_preamble(
+        args: argparse.Namespace, conflicts: Iterable[str],
+        default: Iterable[str], catalogue: Sequence[str],
+) -> tuple[bool, list[str]] | None:
     """Shared `--dot` gating: conflict refusal, field selection, and the
     `--dot-fields requires --dot` guard.
 
@@ -218,7 +246,7 @@ def _dot_preamble(args: argparse.Namespace, conflicts, default, catalogue):
     return False, []
 
 
-def remote_state(repo: pyjj.ReadonlyRepo, kind: str = "bookmark") -> dict:
+def remote_state(repo: pyjj.ReadonlyRepo, kind: str = "bookmark") -> RemoteState:
     """Each local bookmark's remotes: `{name: [{remote, ...}, ...]}`.
 
     Whether a bookmark still needs pushing is *not* a revset question.
@@ -237,7 +265,7 @@ def remote_state(repo: pyjj.ReadonlyRepo, kind: str = "bookmark") -> dict:
     local = {ref.name: ref.target_ids
              for ref in (repo.bookmarks() if kind == "bookmark"
                          else repo.tags())}
-    out: dict[str, list[dict]] = {}
+    out: RemoteState = {}
     for ref in refs:
         local_ids = local.get(ref.name, [])
         counts = dict((word, count) for word, count, _exact
@@ -253,7 +281,7 @@ def remote_state(repo: pyjj.ReadonlyRepo, kind: str = "bookmark") -> dict:
     return out
 
 
-def unpushed(remotes: dict, name: str, ignore=("git",)) -> bool:
+def unpushed(remotes: RemoteState, name: str, ignore: Sequence[str] = ("git",)) -> bool:
     """Whether pushing `name` would create or move a remote ref.
 
     Only *tracked* remotes count. An untracked remote ref is another
@@ -271,7 +299,7 @@ def unpushed(remotes: dict, name: str, ignore=("git",)) -> bool:
     return not all(entry["synced"] for entry in entries)
 
 
-def dot_attribute(value) -> str:
+def dot_attribute(value: object) -> str:
     """One field's value, as the text of a DOT attribute.
 
     A bool reads as `true`/`false` rather than Python's capitalized
@@ -301,7 +329,9 @@ def _run_editor(settings: pyjj.UserSettings, content: str) -> str:
     return _clean_description_lines(edited.splitlines())
 
 
-def _run_bulk_editor(settings: pyjj.UserSettings, sections) -> dict:
+def _run_bulk_editor(
+        settings: pyjj.UserSettings, sections: Sequence[tuple[str, str | None, str]],
+) -> dict[str, str]:
     """One editor session for several commit descriptions, like jj 0.46's
     `edit_multiple_descriptions` (which `jj split` uses for both halves
     since 0.46 opened a single session instead of one per half).
@@ -333,7 +363,7 @@ def _run_bulk_editor(settings: pyjj.UserSettings, sections) -> dict:
     buffer.append('JJ: Lines starting with "JJ:" (like this one) will be removed.')
     edited = _run_editor_raw(settings, "\n".join(buffer) + "\n")
 
-    parsed: list = []
+    parsed: list[tuple[str, list[str]]] = []
     for line in edited.splitlines():
         if line.startswith("JJ: describe "):
             # jj trims trailing whitespace and dashes only (its
@@ -341,7 +371,7 @@ def _run_bulk_editor(settings: pyjj.UserSettings, sections) -> dict:
             # form feed); a leading gap stays part of the prefix and
             # matches nothing.
             key = line[len("JJ: describe "):].rstrip(" \t\r\n\x0b\x0c-")
-            parsed.append([key, []])
+            parsed.append((key, []))
         elif parsed:
             parsed[-1][1].append(line)
         elif line.strip() and not line.startswith("JJ:"):
@@ -410,7 +440,7 @@ def _run_editor_raw(settings: pyjj.UserSettings, content: str,
     return edited
 
 
-def _clean_description_lines(lines) -> str:
+def _clean_description_lines(lines: Iterable[str]) -> str:
     """jj's `cleanup_description_lines`, shared by `_run_editor` and the
     bulk parser: stop at `JJ: ignore-rest`, drop `JJ:` comment lines,
     trim blank edges, complete the trailing newline."""
@@ -504,7 +534,7 @@ _ARG_SAFE = frozenset(
 _OPERATION_ARGV: list[str] = []
 
 
-def set_operation_args(argv) -> None:
+def set_operation_args(argv: Iterable[str]) -> None:
     global _OPERATION_ARGV
     _OPERATION_ARGV = list(argv)
 
@@ -610,14 +640,14 @@ def read_repo(args: argparse.Namespace):
     yield settings, ws, repo
 
 
-def report_refused(stats) -> None:
+def report_refused(stats: pyjj.SnapshotStats | None) -> None:
     """jj's warning for the files a snapshot would not take.
 
     A refusal is silent otherwise: the file simply does not appear, and
     `snapshot.max-new-file-size` is exactly the setting whose effect a
     user needs told. jj words it per path; so does the binding.
     """
-    refused = stats.refused if stats is not None else {}
+    refused: dict[str, str] = stats.refused if stats is not None else {}
     if not refused:
         return
     print("Warning: Refused to snapshot some files:", file=sys.stderr)
@@ -681,7 +711,7 @@ def _reload(settings: pyjj.UserSettings, args: argparse.Namespace):
     difference between matching `jj` and not."""
     return _open(settings, args)
 
-def _resolve_all(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions):
+def _resolve_all(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions: Sequence[str]) -> list[pyjj.Commit]:
     """Resolve positional REVSETS the way the real CLI does for target
     SETS (describe/abandon/duplicate/...): as ONE union expression, so
     evaluation order -- which drives seeded change-id draws -- matches
@@ -693,16 +723,16 @@ def _resolve_all(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressio
     union = " | ".join(f"({expr})" for expr in expressions)
     return repo.revset(settings, union)
 
-def _resolve_in_arg_order(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions):
+def _resolve_in_arg_order(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions: Iterable[str]) -> list[pyjj.Commit]:
     """Resolve expressions where the ARGUMENT ORDER is semantic (parents
     of a new commit, rebases' -d destinations): evaluate each positional
     separately and concatenate, like the real CLI's parent-list handling."""
-    commits = []
+    commits: list[pyjj.Commit] = []
     for expr in expressions:
         commits.extend(repo.revset(settings, expr))
     return commits
 
-def _resolve_one(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expression):
+def _resolve_one(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expression: str) -> pyjj.Commit:
     matches = repo.revset(settings, expression)
     if len(matches) != 1:
         raise CommandError(f"revset `{expression}` resolved to {len(matches)} revisions")
@@ -711,7 +741,7 @@ def _resolve_one(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressio
 def _wc_commit(repo: pyjj.ReadonlyRepo, ws: pyjj.Workspace):
     return repo.get_commit(pyjj.CommitId(repo.view()[ws.workspace_name]))
 
-def _checkout_if_moved(settings: pyjj.UserSettings, ws: pyjj.Workspace, old_wc_hex) -> None:
+def _checkout_if_moved(settings: pyjj.UserSettings, ws: pyjj.Workspace, old_wc_hex: str) -> None:
     """Mirror the real CLI's transaction-finish behavior: when the current
     view's working-copy commit differs from `old_wc_hex`, update the
     on-disk working copy to match."""
@@ -733,15 +763,22 @@ class _DeletedRef:
     still heads the item with `name (deleted)`.
     """
 
-    has_conflict = False
-    removed_ids = ()
-    target_ids = ()
+    has_conflict: bool = False
+    removed_ids: tuple[pyjj.CommitId, ...] = ()
+    target_ids: tuple[pyjj.CommitId, ...] = ()
 
     def __init__(self, name: str) -> None:
         self.name = name
 
 
-def _ref_list_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, kind: str = "bookmark"):
+#: Anything a listing item can head with.
+ListedRef = LocalRef | RemoteRef | _DeletedRef
+#: A listing item: its head, then the tracked remote refs under it with the
+#: local ids each is measured against.
+RefItem = tuple[ListedRef, list[tuple[RemoteRef, list[pyjj.CommitId]]]]
+
+
+def _ref_list_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, kind: str = "bookmark") -> list[RefItem]:
     """The items `jj bookmark list` and `jj tag list` print, in jj's order.
 
     This is `collect_items` from jj's `cli/src/commit_ref_list.rs`,
@@ -784,7 +821,7 @@ def _ref_list_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: 
         # Git-tracking remote is noise in a listing about remotes.
         return not (tracked_only and remote == "git")
 
-    def selected(name: str, local) -> bool:
+    def selected(name: str, local: LocalRef | None) -> bool:
         if names:
             if any(_name_matches(name, pattern) for pattern in names):
                 return True
@@ -795,29 +832,31 @@ def _ref_list_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: 
             return False
         return any(i.hex() in targets for i in local.target_ids)
 
-    def conflicted_only(local) -> bool:
+    def conflicted_only(local: LocalRef | None) -> bool:
         if not getattr(args, "conflicted", False):
             return True
         return local is not None and local.has_conflict
 
-    def synced(local, remote_ref) -> bool:
+    def synced(local: LocalRef | None, remote_ref: RemoteRef) -> bool:
         return (
             local is not None
             and list(remote_ref.target_ids) == list(local.target_ids)
             and list(remote_ref.removed_ids) == list(local.removed_ids)
         )
 
+    locals_: dict[str, LocalRef]
+    remotes: Sequence[RemoteRef]
     if kind == "tag":
         locals_ = {ref.name: ref for ref in repo.tags()}
         remotes = repo.remote_tags()
     else:
         locals_ = {ref.name: ref for ref in repo.bookmarks()}
         remotes = repo.remote_bookmarks()
-    by_name: dict[str, list] = {}
+    by_name: dict[str, list[RemoteRef]] = {}
     for remote_ref in remotes:
         by_name.setdefault(remote_ref.name, []).append(remote_ref)
 
-    items = []
+    items: list[RefItem] = []
     for name in sorted(set(locals_) | set(by_name)):
         local = locals_.get(name)
         if not selected(name, local) or not conflicted_only(local):
@@ -860,7 +899,7 @@ _SORT_KEYS = (
 )
 
 
-def _sort_ref_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, items, args: argparse.Namespace, kind: str = "bookmark"):
+def _sort_ref_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, items: list[RefItem], args: argparse.Namespace, kind: str = "bookmark") -> list[RefItem]:
     """Sort listing items by `--sort`, or by the setting that defaults it.
 
     jj sorts one key at a time from the least significant, which its
@@ -885,7 +924,7 @@ def _sort_ref_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, items,
     return items
 
 
-def _sort_value(repo: pyjj.ReadonlyRepo, ref, key):
+def _sort_value(repo: pyjj.ReadonlyRepo, ref: ListedRef, key: str) -> tuple[object, ...]:
     """One item's value under one sort key.
 
     A ref with no target has no commit to read, and jj sorts it before
@@ -918,17 +957,21 @@ def _name_matches(name: str, pattern: str) -> bool:
     """
     import fnmatch
 
-    for prefix, test in (
+    tests: tuple[tuple[str, Callable[[str, str], bool]], ...] = (
         ("exact:", lambda n, p: n == p),
         ("glob:", fnmatch.fnmatchcase),
         ("substring:", lambda n, p: p in n),
-    ):
+    )
+    for prefix, test in tests:
         if pattern.startswith(prefix):
             return test(name, pattern[len(prefix):].strip("\"'"))
     return fnmatch.fnmatchcase(name, pattern)
 
 
-def _resolve_remote_refs(names, default_remote, *, kind, fan_out=None):
+def _resolve_remote_refs(
+        names: Iterable[str], default_remote: str | None, *, kind: str,
+        fan_out: Callable[[], Sequence[RemoteRef]] | None = None,
+) -> list[tuple[str, str]]:
     """`(ref, remote)` pairs for `track`/`untrack` names.
 
     `NAME@REMOTE` resolves exactly; `--remote` supplies the remote for
@@ -938,7 +981,7 @@ def _resolve_remote_refs(names, default_remote, *, kind, fan_out=None):
     what jj does for tags -- and is an error otherwise (jj's bookmark
     behavior: no guessing at `origin`).
     """
-    pairs = []
+    pairs: list[tuple[str, str]] = []
     for name in names:
         ref, sep, remote = name.rpartition("@")
         if sep:
@@ -1042,7 +1085,7 @@ def _wants_edit(args: argparse.Namespace) -> bool:
     the same result."""
     return bool(getattr(args, "edit", False))
 
-def _walk(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes, direction, steps, exclude=()):
+def _walk(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes: Iterable[str], direction: str, steps: int, exclude: Container[str] = ()) -> list[str]:
     """Walk `steps` graph edges from `start_hexes`, forward or backward.
 
     Returns the hex ids reached, or `[]` when the walk runs out of edges.
@@ -1064,7 +1107,7 @@ def _walk(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes, dir
         current = reached
     return current
 
-def _nearest_conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes, direction, exclude=()):
+def _nearest_conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes: Iterable[str], direction: str, exclude: Iterable[str] = ()) -> list[str]:
     """The nearest conflicted commit(s) walking `direction` from `start_hexes`.
 
     `jj next/prev --conflict` jumps to the first conflicted descendant or
@@ -1174,7 +1217,7 @@ def _insert_between(
         tx.rebase(child, parents)
 
 
-def _check_rewritable(tx: pyjj.Transaction, settings: pyjj.UserSettings, commits) -> None:
+def _check_rewritable(tx: pyjj.Transaction, settings: pyjj.UserSettings, commits: Iterable[pyjj.Commit | pyjj.CommitId]) -> None:
     """`jj`'s guard against rewriting shared history: refuse when any of
     `commits` falls inside `immutable()`.
 
@@ -1191,11 +1234,12 @@ def _check_rewritable(tx: pyjj.Transaction, settings: pyjj.UserSettings, commits
     """
     if _IGNORE_IMMUTABLE:
         return
-    ids = [getattr(commit, "id", commit) for commit in commits]
+    ids = [cast("pyjj.CommitId", getattr(commit, "id", commit))
+           for commit in commits]
     tx.check_rewritable(settings, ids)
 
 
-def _move_to(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, tx: pyjj.Transaction, targets, edit: bool, name: str) -> int:
+def _move_to(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, tx: pyjj.Transaction, targets: Sequence[str], edit: bool, name: str) -> int:
     """Land `jj next`/`jj prev` on `targets`: edit the target itself, or
     create a new empty commit on top of it.
 
@@ -1364,9 +1408,9 @@ def _advance_if_immutable(tx: pyjj.Transaction, settings: pyjj.UserSettings, ws:
           "has been created on top of it.", file=sys.stderr)
 
 
-def _finish(tx: pyjj.Transaction, description, settings: pyjj.UserSettings, ws: pyjj.Workspace, base_repo, *,
-            delete_abandoned_bookmarks=False, restore_descendants=False,
-            rebase=True):
+def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings, ws: pyjj.Workspace, base_repo: pyjj.ReadonlyRepo, *,
+            delete_abandoned_bookmarks: bool = False, restore_descendants: bool = False,
+            rebase: bool = True) -> None:
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
     commit (e.g. an abandon or rebase rebased it), update the on-disk
@@ -1391,7 +1435,7 @@ def _finish(tx: pyjj.Transaction, description, settings: pyjj.UserSettings, ws: 
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
 
-def _restore_view_command(tx: pyjj.Transaction, description, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo):
+def _restore_view_command(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> None:
     """Shared tail for view-restoring operations (undo/redo/op restore):
     they produce no rewrites to rebase and take their operation description
     verbatim from the binding -- for undo/redo it encodes the target op so
@@ -1401,21 +1445,21 @@ def _restore_view_command(tx: pyjj.Transaction, description, settings: pyjj.User
 
 # -- commands --------------------------------------------------------------
 
-def _changed_files(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, from_commit, to_commit):
+def _changed_files(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, from_commit: pyjj.Commit, to_commit: pyjj.Commit) -> dict[str, tuple[bytes | None, bytes | None]]:
     """{path: (before_bytes_or_absent, after_bytes_or_absent)} for the diff
     between two commits, using the same sentinel-absence convention the
     diff-editor protocol needs."""
-    changed = {}
+    changed: dict[str, tuple[bytes | None, bytes | None]] = {}
     for entry in from_commit.diff(to_commit):
         path = entry.path
 
-        def read(commit: pyjj.Commit, p=path):
+        def read(commit: pyjj.Commit, p: str = path) -> bytes | None:
             return commit.read_file(p) if commit.file_exists(p) else None
 
         changed[path] = (read(from_commit), read(to_commit))
     return changed
 
-def _split_changed(changed: dict) -> tuple[dict, dict]:
+def _split_changed(changed: Mapping[str, tuple[bytes | None, bytes | None]]) -> tuple[FileBytes, FileBytes]:
     """Unpack `_changed_files` output into `(before, after)` dicts.
 
     The sentinel-absence convention (`None` for a side that holds no
@@ -1426,7 +1470,7 @@ def _split_changed(changed: dict) -> tuple[dict, dict]:
     after = {path: after for path, (_before, after) in changed.items()}
     return before, after
 
-def _render_or_error(template, context):
+def _render_or_error(template: Template, context: Mapping[str, object]) -> str | None:
     """Render a template row, or print jj's render failure.
 
     Returns the rendered text, or `None` after flushing stdout and
@@ -1452,7 +1496,7 @@ def _rev(args: argparse.Namespace, attr: str, default: str = "@") -> str:
     value = getattr(args, attr, None)
     return value if value else default
 
-def _run_diff_tool(settings: pyjj.UserSettings, tool: str, before: dict, after: dict) -> dict:
+def _run_diff_tool(settings: pyjj.UserSettings, tool: str, before: FileBytes, after: FileBytes) -> FileBytes:
     """The merge-tools edit protocol: materialize $left/$right temp dirs
     holding exactly the changed paths (left = before, read-only in spirit;
     right = editable), invoke merge-tools.<tool>.edit-args with the
@@ -1496,7 +1540,7 @@ def _run_diff_tool(settings: pyjj.UserSettings, tool: str, before: dict, after: 
                     selections[rel] = p.read_bytes()
         return selections
 
-def _selection_is_empty(selections: dict, before: dict) -> bool:
+def _selection_is_empty(selections: FileBytes, before: FileBytes) -> bool:
     """True when every path ended up identical to its before-state."""
     for rel, content in selections.items():
         if content != before.get(rel):
@@ -1513,7 +1557,7 @@ def _merge_marker_len(materialized: bytes) -> int:
             longest = max(longest, len(line) - len(line.lstrip(b"<")))
     return longest
 
-def _run_merge_tool(settings: pyjj.UserSettings, tool: str, sides: dict, path: str,
+def _run_merge_tool(settings: pyjj.UserSettings, tool: str, sides: Mapping[str, bytes | bool], path: str,
                     edits_markers: bool, materialized: bytes) -> bytes:
     """The 3-way merge-tool protocol for one conflicted file: materialize
     $base/$left/$right (read-only) plus $output into a temp dir named like
@@ -1531,9 +1575,9 @@ def _run_merge_tool(settings: pyjj.UserSettings, tool: str, sides: dict, path: s
     filename = PurePosixPath(path).name or "file"
     with tempfile.TemporaryDirectory(prefix="jj-resolve-") as td:
         roles = {
-            "base": sides["base"],
-            "left": sides["left"],
-            "right": sides["right"],
+            "base": cast("bytes", sides["base"]),
+            "left": cast("bytes", sides["left"]),
+            "right": cast("bytes", sides["right"]),
             "output": materialized if edits_markers else b"",
         }
         variables = {}
@@ -1596,7 +1640,7 @@ def _fix_pattern_matches(pattern: str, path: str) -> bool:
     return False
 
 
-def _jj_config_get(key: str, cwd=None) -> str | None:
+def _jj_config_get(key: str, cwd: str | None = None) -> str | None:
     """Read one dotted config key the way `jj` itself does, repo config
     included.
 
@@ -1624,7 +1668,7 @@ def _jj_config_get(key: str, cwd=None) -> str | None:
         value = value[:-1]
     return value or None
 
-def _pyjj_template(settings: pyjj.UserSettings, name: str, cwd=None) -> str | None:
+def _pyjj_template(settings: pyjj.UserSettings, name: str, cwd: str | None = None) -> str | None:
     """Look up `pyjj.templates.<name>`: user config first, then repo config."""
     key = f"pyjj.templates.{name}"
     try:
@@ -1636,7 +1680,7 @@ def _pyjj_template(settings: pyjj.UserSettings, name: str, cwd=None) -> str | No
     return _jj_config_get(key, cwd)
 
 
-def _tracking_distance_spans(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
+def _tracking_distance_spans(repo: pyjj.ReadonlyRepo, remote_ids: Sequence[pyjj.CommitId], local_ids: Sequence[pyjj.CommitId]) -> list[Span]:
     """How far a tracked remote sits from its local ref, in the pieces
     jj labels it in.
 
@@ -1659,7 +1703,7 @@ def _tracking_distance_spans(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
     return out
 
 
-def _tracking_counts(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
+def _tracking_counts(repo: pyjj.ReadonlyRepo, remote_ids: Sequence[pyjj.CommitId], local_ids: Sequence[pyjj.CommitId]) -> list[tuple[str, int, bool]]:
     """How far a tracked remote ref sits from the local ref, jj's way.
 
     Ahead counts the commits the remote ref reaches and the local one
@@ -1673,7 +1717,7 @@ def _tracking_counts(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
     if not local_ids:
         # The local ref is gone, so there is nothing to measure against.
         return []
-    out = []
+    out: list[tuple[str, int, bool]] = []
     for word, wanted, unwanted in (
         ("ahead", remote_ids, local_ids),
         ("behind", local_ids, remote_ids),
@@ -1690,8 +1734,9 @@ def _formatter(settings: pyjj.UserSettings | None = None) -> Formatter:
     return Formatter(sys.stdout, use_color(settings))
 
 
-def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, template=None, tracked=(), *,
-               kind: str = "bookmark", fmt=None) -> None:
+def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref: ListedRef, template: Template | None = None,
+               tracked: Sequence[tuple[RemoteRef, Sequence[pyjj.CommitId]]] = (), *,
+               kind: str = "bookmark", fmt: Formatter | None = None) -> None:
     """One listing item: a ref, then the remote refs that follow it.
 
     jj renders bookmarks and tags from the same `format_commit_ref`, so
@@ -1714,9 +1759,9 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, templa
     if own:
         fmt = Formatter(sys.stdout, False)
     fmt.push(f"{kind}_list")
-    remotes = remote_state(repo, kind) if template is not None else {}
+    remotes: RemoteState = remote_state(repo, kind) if template is not None else {}
 
-    def spans(pieces) -> None:
+    def spans(pieces: Iterable[Span]) -> None:
         for text, labels in pieces:
             fmt.write(text, *labels.split())
 
@@ -1725,7 +1770,7 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, templa
     # pointing at `@` is common enough that leaving it out shows.
     wc_ids = set(repo.view().values())
 
-    def summary(commit_id, under: str) -> None:
+    def summary(commit_id: pyjj.CommitId, under: str) -> None:
         commit = repo.get_commit(commit_id)
         labels = under.split()
         if commit_id.hex() in wc_ids:
@@ -1733,7 +1778,7 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, templa
         with fmt.labeled(*labels):
             spans(_commit_summary_spans(repo, settings, commit, []))
 
-    def line(commit_id, head=None, prefix: str = "",
+    def line(commit_id: pyjj.CommitId, head: Callable[[], None] | None = None, prefix: str = "",
              under: str = "normal_target") -> None:
         if template is not None:
             commit = repo.get_commit(commit_id)
@@ -1754,7 +1799,7 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, templa
         summary(commit_id, under)
         fmt.write("\n")
 
-    def targets(item, head, absent: str = " (deleted)") -> None:
+    def targets(item: ListedRef, head: Callable[[], None], absent: str = " (deleted)") -> None:
         if getattr(item, "has_conflict", False):
             head()
             fmt.write(" ")
@@ -1788,7 +1833,10 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, templa
         fmt.close()
 
 
-def _write_lines(fmt, lines, base: str = "") -> None:
+def _write_lines(
+        fmt: Formatter, lines: Iterable[Iterable[tuple[str, str | Iterable[str]]]],
+        base: str = "",
+) -> None:
     """Each line's spans, then the newline jj writes under no labels.
 
     jj ends a line in two steps: back to the row's own labels, then the
@@ -1798,12 +1846,12 @@ def _write_lines(fmt, lines, base: str = "") -> None:
     under = base.split()
     for line in lines:
         for text, labels in line:
-            fmt.write(text, *under, *labels.split())
+            fmt.write(text, *under, *_labels(labels))
         fmt.sync(*under)
         fmt.write("\n")
 
 
-def _conflict_spans(commit: pyjj.Commit, to_ui_path):
+def _conflict_spans(commit: pyjj.Commit, to_ui_path: UiPath) -> list[SpanLine]:
     """The paths jj lists under its unresolved-conflicts warning.
 
     Each reads `<path> <n>-sided conflict`, and names anything in the
@@ -1822,7 +1870,7 @@ def _conflict_spans(commit: pyjj.Commit, to_ui_path):
         return []
     paths = [to_ui_path(path) for path, _, _, _ in entries]
     width = min(max(len(p) for p in paths), 32) + 3
-    lines = []
+    lines: list[SpanLine] = []
     for path, (_, sides, adds, objects) in zip(paths, entries):
         # The path stays plain; everything after it is the description.
         described = "conflict_description"
@@ -1849,13 +1897,13 @@ def _conflict_spans(commit: pyjj.Commit, to_ui_path):
     return lines
 
 
-def _conflict_lines(commit: pyjj.Commit, to_ui_path) -> list[str]:
+def _conflict_lines(commit: pyjj.Commit, to_ui_path: UiPath) -> list[str]:
     """`_conflict_spans` as plain text."""
     return ["".join(text for text, _labels in line)
             for line in _conflict_spans(commit, to_ui_path)]
 
 
-def _commit_context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None) -> dict:
+def _commit_context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks: Sequence[str] | None = None) -> dict[str, object]:
     """The variables a listing's Jinja template can use for one commit.
 
     Every listing offers the same names, so a template written for one
@@ -1894,7 +1942,7 @@ def _commit_context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit
     }
 
 
-def _compile_template(template_str: str):
+def _compile_template(template_str: str) -> Template:
     """Compiles one Jinja template the way pyjj-cli's listings expect.
 
     Sandboxed on purpose: a context binds live `Commit` objects, so
@@ -1906,11 +1954,14 @@ def _compile_template(template_str: str):
     from jinja2.sandbox import SandboxedEnvironment
 
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
-    env.filters["short"] = lambda value, n=8: value[:n] if isinstance(value, str) else value
+    def short(value: Any, n: int = 8) -> Any:
+        return value[:n] if isinstance(value, str) else value
+
+    env.filters["short"] = short
     return env.from_string(template_str)
 
 
-def _resolve_template(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: argparse.Namespace, name: str, builtins=None):
+def _resolve_template(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: argparse.Namespace, name: str, builtins: Mapping[str, str] | None = None) -> Template | None:
     """The template a listing should render, or `None` for its default.
 
     jj drives each listing from a named entry under `[templates]`, and
@@ -1940,7 +1991,7 @@ def _resolve_template(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: arg
     return _compile_template(template_str)
 
 
-def _resolve_operation(repo: pyjj.ReadonlyRepo, name: str | None):
+def _resolve_operation(repo: pyjj.ReadonlyRepo, name: str | None) -> pyjj.Operation:
     """Resolve an operation the way `jj` names them on the command line.
 
     `@` means the operation the repo is loaded at, and `None` means `@`
@@ -2019,7 +2070,7 @@ def _restore_what(
     return translated
 
 
-def _resolve_operation_prefix(repo: pyjj.ReadonlyRepo, symbol: str, load_error):
+def _resolve_operation_prefix(repo: pyjj.ReadonlyRepo, symbol: str, load_error: pyjj.JjError) -> pyjj.Operation:
     """The one reachable operation whose id starts with `symbol`.
 
     Called with the error a direct `load_operation(symbol)` raised, so
@@ -2065,7 +2116,33 @@ _SUMMARY_STATUS_LABELS = {
 }
 
 
-def _summary_spans(entries, to_ui_path=None):
+class _PathEntry(Protocol):
+    """What the `--summary` and `--types` listings read from a changed path."""
+
+    @property
+    def path(self) -> str: ...
+    @property
+    def status(self) -> str: ...
+    @property
+    def before_type(self) -> str: ...
+    @property
+    def after_type(self) -> str: ...
+
+
+class _StatEntry(Protocol):
+    """What the `--stat` histogram reads from a changed path."""
+
+    @property
+    def path(self) -> str: ...
+    @property
+    def added(self) -> int | None: ...
+    @property
+    def removed(self) -> int | None: ...
+    @property
+    def bytes_delta(self) -> int: ...
+
+
+def _summary_spans(entries: Iterable[_PathEntry], to_ui_path: UiPath | None = None) -> list[SpanLine]:
     """`jj diff --summary`'s lines: one status letter, a space, the path.
 
     jj has no separate letter for a mode-only change, so an
@@ -2077,20 +2154,20 @@ def _summary_spans(entries, to_ui_path=None):
               _SUMMARY_STATUS_LABELS[e.status])] for e in entries]
 
 
-def _summary_lines(entries, to_ui_path=None) -> list[str]:
+def _summary_lines(entries: Iterable[_PathEntry], to_ui_path: UiPath | None = None) -> list[str]:
     """`_summary_spans` as plain text."""
     return ["".join(text for text, _labels in line)
             for line in _summary_spans(entries, to_ui_path)]
 
 
-def _print_summary(entries, to_ui_path=None, settings: pyjj.UserSettings | None = None) -> None:
+def _print_summary(entries: Iterable[_PathEntry], to_ui_path: UiPath | None = None, settings: pyjj.UserSettings | None = None) -> None:
     """The summary listing, coloured the way jj colours it."""
     lines = _summary_spans(entries, to_ui_path)
     if lines:
         print(render_block(lines, "diff summary", use_color(settings)))
 
 
-def _types_spans(entries, to_ui_path=None):
+def _types_spans(entries: Iterable[_PathEntry], to_ui_path: UiPath | None = None) -> list[SpanLine]:
     """`jj diff --types`: what each path is before and after.
 
     Two characters, one a side, then the path. jj answers "what is it"
@@ -2103,7 +2180,7 @@ def _types_spans(entries, to_ui_path=None):
               "modified")] for e in entries]
 
 
-def _print_types(entries, to_ui_path=None, settings: pyjj.UserSettings | None = None) -> None:
+def _print_types(entries: Iterable[_PathEntry], to_ui_path: UiPath | None = None, settings: pyjj.UserSettings | None = None) -> None:
     """The types listing, coloured the way jj colours it."""
     lines = _types_spans(entries, to_ui_path)
     if lines:
@@ -2128,7 +2205,7 @@ def _relative_path(from_dir: Path, to: Path) -> str:
     return str(to)
 
 
-def _ui_path_formatter(ws: pyjj.Workspace):
+def _ui_path_formatter(ws: pyjj.Workspace) -> UiPath:
     """How this invocation spells a repo-relative path back to the user.
 
     jj prints paths relative to the current directory, not to the
@@ -2166,7 +2243,7 @@ def _short_id(hex_str: str, shortest_len: int) -> str:
     return hex_str[: max(8, shortest_len)]
 
 
-def _short_id_spans(hex_str: str, shortest_len: int, kind: str):
+def _short_id_spans(hex_str: str, shortest_len: int, kind: str) -> list[Span]:
     """The same id, split where jj colours it.
 
     jj labels the unique prefix and the rest apart, so the prefix a
@@ -2232,7 +2309,7 @@ _TIME_UNITS = (
 )
 
 
-def _relative(millis: int, units, suffix: str, floor: str) -> str:
+def _relative(millis: int, units: Sequence[tuple[str, int]], suffix: str, floor: str) -> str:
     """The largest single unit that fits, or `floor` if none does."""
     for name, size in units:
         if millis >= size:
@@ -2264,7 +2341,7 @@ def _duration(start_millis: int, end_millis: int) -> str:
                      "less than a microsecond")
 
 
-def _format_timestamp(timestamp, century: bool = True) -> str:
+def _format_timestamp(timestamp: pyjj.Timestamp, century: bool = True) -> str:
     """jj's `format_timestamp`: the local time, to the second.
 
     `century=False` is the shorter spelling pyjj-cli's listings use --
@@ -2281,7 +2358,7 @@ def _format_timestamp(timestamp, century: bool = True) -> str:
     return local.strftime("%y-%m-%d %H:%M")
 
 
-def _detailed_signature(signature) -> str:
+def _detailed_signature(signature: pyjj.Signature) -> str:
     """jj's `format_detailed_signature`: name, angle-bracketed email and
     the timestamp in parentheses, with a placeholder for either half
     that is missing."""
@@ -2290,7 +2367,7 @@ def _detailed_signature(signature) -> str:
     return f"{name} <{email}> ({_format_timestamp(signature.timestamp)})"
 
 
-def _signature_spans(signature, kind: str):
+def _signature_spans(signature: pyjj.Signature, kind: str) -> list[Span]:
     """jj's `format_detailed_signature`, in labelled pieces.
 
     The name, the email in angle brackets and the timestamp in
@@ -2329,7 +2406,7 @@ def _indent(text: str, prefix: str = "    ") -> str:
     return "\n".join(prefix + line if line else line for line in text.split("\n"))
 
 
-def _immutable_ids(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commits) -> set[str]:
+def _immutable_ids(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commits: Iterable[pyjj.Commit]) -> set[str]:
     """Which of `commits` jj refuses to rewrite.
 
     jj asks this once per row, to decide whether the row reads
@@ -2352,7 +2429,7 @@ def _immutable_ids(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commits
         return set()
 
 
-def _commit_kind(repo: pyjj.ReadonlyRepo, commit: pyjj.Commit, wc_ids=(), immutable_ids=()) -> str:
+def _commit_kind(repo: pyjj.ReadonlyRepo, commit: pyjj.Commit, wc_ids: Container[str] = (), immutable_ids: Container[str] = ()) -> str:
     """jj's outer label on a log row: what kind of commit this is.
 
     `builtin_log_compact` wraps a whole row in these, and the palette
@@ -2383,8 +2460,9 @@ def _commit_glyph(kind: str) -> str:
 
 
 def _commit_header_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = "",
-                         bookmarks=(), tags=(), working_copies=(),
-                         author=None, timestamp=None):
+                         bookmarks: Iterable[str] = (), tags: Iterable[str] = (),
+                         working_copies: Iterable[str] = (),
+                         author: str | None = None, timestamp: str | None = None) -> LooseSpans:
     """jj's `format_short_commit_header`: the first line of a log row.
 
     The change id with its offset, the author's email, the committer's
@@ -2398,7 +2476,7 @@ def _commit_header_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, c
     email with a plain string, and `timestamp` replaces the full
     stamp, which is what pyjj-cli's own default prints.
     """
-    def under(*names) -> str:
+    def under(*names: str) -> str:
         return " ".join(part for part in (kw, *names) if part)
 
     hidden = commit.is_hidden(repo)
@@ -2435,7 +2513,7 @@ def _commit_header_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, c
                                  ("working_copies", working_copies))
              for name in group]
 
-    labels = []
+    labels: list[SpanLine] = []
     # jj's order: whichever of hidden/divergent applies, then conflict.
     if marker:
         labels.append([(f"({marker})", marker)])
@@ -2457,7 +2535,7 @@ def _commit_header_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, c
     ])
 
 
-def _commit_root_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = ""):
+def _commit_root_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = "") -> LooseSpans:
     """jj's `format_root_commit`: the row the root commit gets.
 
     It has no author and no timestamp worth printing -- the epoch reads
@@ -2465,7 +2543,7 @@ def _commit_root_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, com
     would go. The whole row is `immutable`, whatever the immutable
     revset says.
     """
-    def under(*names) -> str:
+    def under(*names: str) -> str:
         return " ".join(part for part in (kw, *names) if part)
 
     return separate([
@@ -2481,7 +2559,7 @@ def _commit_root_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, com
     ])
 
 
-def _commit_body_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = ""):
+def _commit_body_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = "") -> LooseSpans:
     """jj's second line of `builtin_log_compact`: empty, then the text."""
     empty = _is_empty(repo, commit)
     parts = [[("(empty)", "empty")]] if empty else []
@@ -2497,7 +2575,7 @@ def _commit_body_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, com
     return separate(parts)
 
 
-def _commit_summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None):
+def _commit_summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks: Sequence[str] | None = None) -> list[Span]:
     """One commit as jj's `commit_summary` template renders it, in the
     labelled pieces jj colours it in.
 
@@ -2581,7 +2659,7 @@ def _commit_summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, 
     return spans
 
 
-def _commit_summary(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None) -> str:
+def _commit_summary(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks: Sequence[str] | None = None) -> str:
     """`_commit_summary_spans` as plain text."""
     return "".join(
         text for text, _ in
@@ -2589,7 +2667,7 @@ def _commit_summary(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit
     )
 
 
-def _git_diff_lines(files, context: int = 3, compare: CompareMode = "exact"):
+def _git_diff_lines(files: Iterable[pyjj.GitDiffFile], context: int = 3, compare: CompareMode = "exact") -> list[SpanLine]:
     """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
 
     The layout follows jj's `show_git_diff`. Two details differ from what
@@ -2600,7 +2678,7 @@ def _git_diff_lines(files, context: int = 3, compare: CompareMode = "exact"):
     File content is bytes, and may not be text at all, so the spans
     carry it decoded with `surrogateescape`.
     """
-    lines = []
+    lines: list[SpanLine] = []
 
     def line(text: str) -> None:
         lines.append([(text, "file_header")])
@@ -2641,14 +2719,14 @@ def _git_diff_lines(files, context: int = 3, compare: CompareMode = "exact"):
     return lines
 
 
-def _git_diff_bytes(files, context: int = 3, coloured: bool = False,
+def _git_diff_bytes(files: Iterable[pyjj.GitDiffFile], context: int = 3, coloured: bool = False,
                     compare: CompareMode = "exact") -> bytes:
     """`_git_diff_lines` as bytes, ready to write to stdout."""
     return _render_diff(_git_diff_lines(files, context, compare), coloured)
 
 
 def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
-                        compare: CompareMode = "exact"):
+                        compare: CompareMode = "exact") -> list[SpanLine]:
     """The `@@` headers and their lines, as labelled spans.
 
     jj prints these for a file and, in `--git` format, for a commit
@@ -2660,7 +2738,7 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
     token can land empty, and the escape sequence that closes the
     underline is written all the same.
     """
-    lines = []
+    lines: list[SpanLine] = []
     for hunk in pyjj.unified_hunks(before, after, context, compare=compare):
         lines.append([(f"@@ -{hunk.left_start},{hunk.left_len} "
                        f"+{hunk.right_start},{hunk.right_len} @@",
@@ -2688,7 +2766,7 @@ def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3,
                         False)
 
 
-def _render_diff(lines, coloured: bool, base: str = "diff git") -> bytes:
+def _render_diff(lines: Sequence[Row], coloured: bool, base: str = "diff git") -> bytes:
     """A diff's lines as bytes, coloured or not.
 
     File content is bytes and may not be text at all, so the spans carry
@@ -2720,7 +2798,7 @@ _FILE_TYPES = {
     "040000": "Git submodule",
 }
 
-def _color_words_header(f, to_ui_path) -> str:
+def _color_words_header(f: pyjj.GitDiffFile, to_ui_path: UiPath) -> str:
     """The line jj writes above a file's color-words diff.
 
     jj names the file by what it is on each side, so a mode change reads
@@ -2732,12 +2810,12 @@ def _color_words_header(f, to_ui_path) -> str:
     conflict flags can tell that the change created, resolved or moved a
     conflict.
     """
-    def kind(mode, conflict) -> str:
+    def kind(mode: str, conflict: bool) -> str:
         return "conflict" if conflict else _FILE_TYPES[mode]
 
     path = to_ui_path(f.path)
     if f.before_mode is None:
-        return f"Added {kind(f.after_mode, f.after_conflict)} {path}:"
+        return f"Added {kind(cast('str', f.after_mode), f.after_conflict)} {path}:"
     if f.after_mode is None:
         return f"Removed {kind(f.before_mode, f.before_conflict)} {path}:"
     before, after = f.before_mode, f.after_mode
@@ -2787,13 +2865,13 @@ _MAX_INLINE_ALTERNATION = 3
 _COLOR_WORDS_SIDES = {"left": "removed", "right": "added"}
 
 
-def _split_by_matching_newline(hunks):
+def _split_by_matching_newline(hunks: WordHunks) -> Iterator[list[tuple[str, bytes, bytes]]]:
     """Groups of hunks that belong to one run of changed lines.
 
     jj's `split_diff_hunks_by_matching_newline`: a matching hunk that
     holds a newline ends the group it is in.
     """
-    group = []
+    group: list[tuple[str, bytes, bytes]] = []
     for kind, lhs, rhs in hunks:
         group.append((kind, lhs, rhs))
         if kind == "matching" and b"\n" in lhs and b"\n" in rhs:
@@ -2803,7 +2881,7 @@ def _split_by_matching_newline(hunks):
         yield group
 
 
-def _count_alternation(group) -> int:
+def _count_alternation(group: WordHunks) -> int:
     """How often a group of hunks changes side, matching hunks aside.
 
     jj's measure of how busy a row would look: `[left]` counts 1,
@@ -2811,7 +2889,7 @@ def _count_alternation(group) -> int:
     matching, right, left]` counts 3.
     """
     count = 0
-    previous = None
+    previous: int | None = None
     for kind, lhs, rhs in group:
         if kind != "different":
             continue
@@ -2823,14 +2901,14 @@ def _count_alternation(group) -> int:
     return count
 
 
-def _can_inline(hunks) -> bool:
+def _can_inline(hunks: WordHunks) -> bool:
     """Whether a changed region fits one row per line."""
     return max((_count_alternation(group)
                 for group in _split_by_matching_newline(hunks)),
                default=0) <= _MAX_INLINE_ALTERNATION
 
 
-def _diff_line_rows(hunks, left: int, right: int):
+def _diff_line_rows(hunks: WordHunks, left: int, right: int) -> tuple[list[tuple[int, int, Tokens]], int, int]:
     """jj_lib's `DiffLineIterator`: word-diff hunks grouped into rows.
 
     A row is `(left, right, parts)`, and each part is `(side, text)`
@@ -2840,12 +2918,12 @@ def _diff_line_rows(hunks, left: int, right: int):
 
     Returns the rows and the numbers the next region starts from.
     """
-    rows = []
-    current: list[tuple[str, bytes]] = []
+    rows: list[tuple[int, int, Tokens]] = []
+    current: Tokens = []
     for kind, lhs, rhs in hunks:
         # jj's iterator refills only when its queue is empty, so the
         # blank-line check below sees this hunk's own rows and no others.
-        queue: list[tuple[int, int, list]] = []
+        queue: list[tuple[int, int, Tokens]] = []
         if kind == "matching":
             for token in _split_inclusive(lhs):
                 current.append(("both", token))
@@ -2881,13 +2959,13 @@ def _diff_line_rows(hunks, left: int, right: int):
     return rows, left, right
 
 
-def _unzip_word_hunks(hunks):
+def _unzip_word_hunks(hunks: WordHunks) -> tuple[list[Tokens], list[Tokens]]:
     """jj_lib's `unzip_diff_hunks_to_lines`: one token list per line.
 
     This is what a row looks like when the two sides cannot share it.
     """
-    lines: list[list] = [[], []]
-    pending: list[list] = [[], []]
+    lines: list[list[Tokens]] = [[], []]
+    pending: list[Tokens] = [[], []]
 
     def push(index: int, kind: str, data: bytes) -> None:
         for token in _split_inclusive(data):
@@ -2906,7 +2984,7 @@ def _unzip_word_hunks(hunks):
     return lines[0], lines[1]
 
 
-def _color_words_number_spans(left, right):
+def _color_words_number_spans(left: int | None, right: int | None) -> list[Span]:
     """The `   1    1: ` gutter. A missing number leaves its column blank."""
     spans = []
     if left is None:
@@ -2922,7 +3000,7 @@ def _color_words_number_spans(left, right):
     return spans
 
 
-def _strip_newline(parts):
+def _strip_newline(parts: Iterable[tuple[str, bytes]]) -> Tokens:
     """Drops the row's trailing newline; `render_block` writes it back.
 
     jj writes a newline outside every label, so the escape that closes
@@ -2936,7 +3014,7 @@ def _strip_newline(parts):
     return parts
 
 
-def _color_words_content_spans(parts):
+def _color_words_content_spans(parts: Iterable[tuple[str, bytes]]) -> list[Span]:
     """One row's text, which may come from both sides at once."""
     spans = []
     for side, data in _strip_newline(parts):
@@ -2946,14 +3024,14 @@ def _color_words_content_spans(parts):
     return spans
 
 
-def _color_words_token_spans(tokens, side: str):
+def _color_words_token_spans(tokens: Iterable[tuple[str, bytes]], side: str) -> list[Span]:
     """One single-sided row. Only the words that moved carry `token`."""
     return [(data.decode("utf-8", "surrogateescape"),
              f"{side} token" if kind == "different" else side)
             for kind, data in _strip_newline(tokens)]
 
 
-def _changed_rows(rows, before: bytes, after: bytes, numbers, coloured) -> None:
+def _changed_rows(rows: list[SpanLine] | list[Row], before: bytes, after: bytes, numbers: list[int], coloured: bool) -> None:
     """Rows for one changed region, word-diffed.
 
     An inline row tells the two sides apart by colour alone, so a plain
@@ -2983,14 +3061,15 @@ def _changed_rows(rows, before: bytes, after: bytes, numbers, coloured) -> None:
         numbers[1] += 1
 
 
-def _unchanged_rows(rows, left_lines, right_lines, numbers, coloured) -> None:
+def _unchanged_rows(rows: list[Row], left_lines: Sequence[bytes], right_lines: Sequence[bytes],
+                    numbers: list[int], coloured: bool) -> None:
     """Rows for lines both sides share, under the `context` label."""
     if left_lines != right_lines:
         # Only `-w` or `-b` reaches this: the line diff called the
         # lines the same and they still differ to the eye. jj
         # word-diffs them and keeps the `context` label on the rows,
         # so they stay dim however they are told apart.
-        changed: list = []
+        changed: list[SpanLine] = []
         _changed_rows(changed, b"".join(left_lines), b"".join(right_lines),
                       numbers, coloured)
         rows.extend(Line(spans, "context") for spans in changed)
@@ -3003,13 +3082,13 @@ def _unchanged_rows(rows, left_lines, right_lines, numbers, coloured) -> None:
         numbers[1] += 1
 
 
-def _context_rows(rows, pending, numbers, num_after, num_before,
-                  coloured) -> None:
+def _context_rows(rows: list[Row], pending: tuple[bytes, bytes] | None, numbers: list[int],
+                  num_after: int, num_before: int, coloured: bool) -> None:
     """`num_after` unchanged rows, `    ...`, then `num_before` more."""
     if pending is None:
         return
 
-    def split(side: bytes):
+    def split(side: bytes) -> tuple[list[bytes], list[bytes], int]:
         lines = _split_inclusive(side)
         head = lines[:num_after]
         rest = lines[num_after:]
@@ -3036,16 +3115,16 @@ def _context_rows(rows, pending, numbers, num_after, num_before,
 
 
 def _color_words_rows(before: bytes, after: bytes, context: int = 3,
-                      coloured: bool = False, compare: CompareMode = "exact"):
+                      coloured: bool = False, compare: CompareMode = "exact") -> list[Row]:
     """The numbered body of a color-words diff, as labelled rows.
 
     jj keeps `context` unchanged lines after a change and `context`
     before the next one, and replaces what is left with `    ...`. It
     keeps nothing before the first change and nothing after the last.
     """
-    rows: list = []
+    rows: list[Row] = []
     numbers = [1, 1]
-    pending = None
+    pending: tuple[bytes, bytes] | None = None
     emitted = False
     for kind, lhs, rhs in pyjj.content_hunks(before, after, by="line", compare=compare):
         if kind == "matching":
@@ -3061,8 +3140,8 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
     return rows
 
 
-def _color_words_lines(files, to_ui_path, context: int = 3,
-                       coloured: bool = False, compare: CompareMode = "exact"):
+def _color_words_lines(files: Iterable[pyjj.GitDiffFile], to_ui_path: UiPath, context: int = 3,
+                       coloured: bool = False, compare: CompareMode = "exact") -> list[Row]:
     """`jj diff`'s default output for a list of `Commit.git_diff()` files.
 
     A conflicted path reads as a regular file here. jj names it a
@@ -3070,7 +3149,7 @@ def _color_words_lines(files, to_ui_path, context: int = 3,
     `git_diff()` has already materialized the markers by this point, so
     that distinction is gone. The status scenarios mark the gap.
     """
-    rows: list = []
+    rows: list[Row] = []
     for f in files:
         rows.append([(_color_words_header(f, to_ui_path), "header")])
         added = f.before_mode is None
@@ -3091,7 +3170,7 @@ def _color_words_lines(files, to_ui_path, context: int = 3,
     return rows
 
 
-def _color_words_bytes(files, to_ui_path, context: int = 3,
+def _color_words_bytes(files: Iterable[pyjj.GitDiffFile], to_ui_path: UiPath, context: int = 3,
                        coloured: bool = False, compare: CompareMode = "exact") -> bytes:
     """`_color_words_lines` as bytes, ready to write to stdout."""
     return _render_diff(
@@ -3099,8 +3178,9 @@ def _color_words_bytes(files, to_ui_path, context: int = 3,
         coloured, "diff color_words")
 
 
-def _print_color_words_diff(from_commit, to_commit, settings: pyjj.UserSettings, ws: pyjj.Workspace, paths=None,
-                            context=3, compare: CompareMode = "exact") -> None:
+def _print_color_words_diff(from_commit: pyjj.Commit, to_commit: pyjj.Commit, settings: pyjj.UserSettings, ws: pyjj.Workspace,
+                            paths: Sequence[str] | None = None,
+                            context: int = 3, compare: CompareMode = "exact") -> None:
     """Writes `jj diff`'s default output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
@@ -3114,7 +3194,8 @@ def _print_color_words_diff(from_commit, to_commit, settings: pyjj.UserSettings,
 _DIFF_SIGILS = {"context": " ", "removed": "-", "added": "+"}
 
 
-def _print_git_diff(from_commit, to_commit, settings: pyjj.UserSettings, paths=None, context=3,
+def _print_git_diff(from_commit: pyjj.Commit, to_commit: pyjj.Commit, settings: pyjj.UserSettings,
+                    paths: Sequence[str] | None = None, context: int = 3,
                     compare: CompareMode = "exact") -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
@@ -3124,7 +3205,7 @@ def _print_git_diff(from_commit, to_commit, settings: pyjj.UserSettings, paths=N
     sys.stdout.buffer.flush()
 
 
-def _diff_stats_lines(stats):
+def _diff_stats_lines(stats: Sequence[_StatEntry]) -> list[SpanLine]:
     """`--stat`'s output, in the shape `jj diff --stat` prints it.
 
     Each file gets its changed-line count and a `+`/`-` bar; a binary
@@ -3139,7 +3220,7 @@ def _diff_stats_lines(stats):
     width = max((len(path) for path in paths), default=0)
     total_added = 0
     total_removed = 0
-    lines = []
+    lines: list[SpanLine] = []
     for stat in stats:
         if stat.added is None:
             lines.append([(f"{stat.path:<{width}} | ", ""),
@@ -3150,8 +3231,8 @@ def _diff_stats_lines(stats):
                 lines[-1].append((" bytes", ""))
             continue
         total_added += stat.added
-        total_removed += stat.removed
-        changed = stat.added + stat.removed
+        total_removed += cast("int", stat.removed)
+        changed = stat.added + cast("int", stat.removed)
         if changed:
             # Keep at least one mark for each side that moved, so a bar
             # never claims a file gained nothing when it gained a line.
@@ -3174,13 +3255,13 @@ def _diff_stats_lines(stats):
     return lines
 
 
-def _print_diff_stats(stats, settings: pyjj.UserSettings | None = None) -> None:
+def _print_diff_stats(stats: Sequence[_StatEntry], settings: pyjj.UserSettings | None = None) -> None:
     """The histogram, coloured the way jj colours it."""
     print(render_block(_diff_stats_lines(stats), "diff stat",
                        use_color(settings)))
 
 
-def _diff_base(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit):
+def _diff_base(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit) -> pyjj.Commit:
     """What a one-revision diff compares against: the first parent, or
     the root commit when there is none.
 
@@ -3199,7 +3280,8 @@ _DESCRIPTION_PATH = "JJ-COMMIT-DESCRIPTION"
 
 
 def _description_diff_bytes(args: argparse.Namespace, before: str, after: str,
-                            coloured: bool = False, formats=None) -> bytes:
+                            coloured: bool = False,
+                            formats: tuple[str | None, str | None] | None = None) -> bytes:
     """What jj prints when two commits' descriptions differ.
 
     `jj interdiff` compares descriptions as well as trees. The short
@@ -3215,6 +3297,7 @@ def _description_diff_bytes(args: argparse.Namespace, before: str, after: str,
         return b""
     left, right = before.encode(), after.encode()
     compare = _compare_mode(args)
+    lines: list[Row]
     if long == "git":
         lines = [
             [(f"diff --git a/{_DESCRIPTION_PATH} b/{_DESCRIPTION_PATH}",
@@ -3237,7 +3320,7 @@ class _FileStat:
     """
 
     @staticmethod
-    def _type(mode, conflict) -> str:
+    def _type(mode: str | None, conflict: bool) -> str:
         """jj's type character, from what `git_diff()` reports."""
         if mode is None:
             return "-"
@@ -3245,7 +3328,7 @@ class _FileStat:
             return "C"
         return {"120000": "L", "040000": "G"}.get(mode, "F")
 
-    def __init__(self, f, compare: CompareMode = "exact"):
+    def __init__(self, f: pyjj.GitDiffFile, compare: CompareMode = "exact") -> None:
         self.path = f.path
         self.status = (
             "added" if f.before_mode is None
@@ -3372,7 +3455,7 @@ def _compare_mode(args: argparse.Namespace) -> CompareMode:
     return "exact"
 
 
-def _diff_tool_bytes(settings: pyjj.UserSettings, tool: str, files) -> bytes:
+def _diff_tool_bytes(settings: pyjj.UserSettings, tool: str, files: Iterable[pyjj.GitDiffFile]) -> bytes:
     """What an external program prints for a diff.
 
     jj writes the two sides of every changed path into a `left` and a
@@ -3418,7 +3501,8 @@ def _diff_tool_bytes(settings: pyjj.UserSettings, tool: str, files) -> bytes:
         return done.stdout
 
 
-def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files, settings: pyjj.UserSettings, formats=None) -> bytes:
+def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files: Sequence[pyjj.GitDiffFile], settings: pyjj.UserSettings,
+                      formats: tuple[str | None, str | None] | None = None) -> bytes:
     """The same format choice as `_diff_bytes`, from file content alone.
 
     `jj interdiff` diffs a rebased tree that has no commit id, so the
@@ -3432,7 +3516,7 @@ def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files, setti
     short, long = _diff_formats(args) if formats is None else formats
     coloured = use_color(settings)
 
-    def block(lines, label: str) -> bytes:
+    def block(lines: Sequence[Row], label: str) -> bytes:
         if not lines:
             return b""
         return (render_block(lines, label, coloured)
@@ -3462,15 +3546,15 @@ def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files, setti
                                     compare)
 
 
-def _print_diff_files(args: argparse.Namespace, ws: pyjj.Workspace, files, settings: pyjj.UserSettings) -> None:
+def _print_diff_files(args: argparse.Namespace, ws: pyjj.Workspace, files: Sequence[pyjj.GitDiffFile], settings: pyjj.UserSettings) -> None:
     """`_diff_files_bytes`, written to stdout."""
     sys.stdout.flush()
     sys.stdout.buffer.write(_diff_files_bytes(args, ws, files, settings))
     sys.stdout.buffer.flush()
 
 
-def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base, target, paths,
-                formats=None) -> bytes:
+def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base: pyjj.Commit, target: pyjj.Commit,
+                paths: Sequence[str] | None, formats: tuple[str | None, str | None] | None = None) -> bytes:
     """One place that decides which format a diff prints.
 
     jj's default is the color-words diff, not a file listing. Every
@@ -3488,7 +3572,7 @@ def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.Use
     short, long = _diff_formats(args) if formats is None else formats
     coloured = use_color(settings)
 
-    def block(lines, label: str) -> bytes:
+    def block(lines: Sequence[Row], label: str) -> bytes:
         """One rendered listing, with the newline that ends its last row.
 
         A listing of nothing is nothing: jj writes a line per file, so
@@ -3525,7 +3609,7 @@ def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.Use
                                     compare)
 
 
-def _print_diff(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base, target, paths) -> None:
+def _print_diff(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base: pyjj.Commit, target: pyjj.Commit, paths: Sequence[str] | None) -> None:
     """`_diff_bytes`, written to stdout."""
     sys.stdout.flush()
     sys.stdout.buffer.write(_diff_bytes(args, ws, settings, base, target,

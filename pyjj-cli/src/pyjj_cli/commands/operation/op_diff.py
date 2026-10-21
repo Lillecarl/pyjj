@@ -38,6 +38,8 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
+    from typing import TextIO
 
 
 def _op_summary_spans(op: pyjj.Operation, prefix: str):
@@ -98,7 +100,8 @@ def _restore_command(args: argparse.Namespace, which: str) -> int:
         return 0
 
 
-def _summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, wc_id, prefix: str):
+def _summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit,
+                   wc_id: str | None, prefix: str):
     """A commit as `op diff` prints it, bookmarks and all.
 
     jj renders these with its `commit_summary` template, which names the
@@ -120,7 +123,8 @@ def _summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit:
             in _commit_summary_spans(repo, settings, commit, bookmarks)]
 
 
-def _target_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, summary, added: bool, wc_id, prefix: str):
+def _target_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+                  summary: pyjj.RefTargetSummary, added: bool, wc_id: str | None, prefix: str):
     """One side of a changed ref, `+` for the new state, `-` for the old.
 
     The sign is labelled `diff added` or `diff removed` on its own,
@@ -148,7 +152,8 @@ def _target_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, summary,
             for commit in summary.commits]
 
 
-def _ref_section(fmt, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, heading: str, changes, wc_id,
+def _ref_section(fmt: Formatter, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, heading: str,
+                 changes: Sequence[pyjj.RefChange], wc_id: str | None,
                  prefix: str) -> None:
     if not changes:
         return
@@ -165,7 +170,7 @@ def _ref_section(fmt, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, head
                                         wc_id, prefix))
 
 
-def _change_key(change):
+def _change_key(change: pyjj.ModifiedChange):
     """The commit id jj keys a modified change by.
 
     A change that still exists is keyed by its new commit; one that was
@@ -175,7 +180,8 @@ def _change_key(change):
     return commits[0].id
 
 
-def _change_patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo, change, formats) -> bytes:
+def _change_patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo,
+                        change: pyjj.ModifiedChange, formats: tuple[str | None, str | None]) -> bytes:
     """What `--patch` prints under one changed commit.
 
     A change that still exists is compared with the version it was
@@ -201,14 +207,17 @@ def _change_patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: 
             + _diff_files_bytes(args, ws, files, settings, formats))
 
 
-def _changed_commits(fmt, out, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, changes, no_graph: bool, wc_id,
+def _changed_commits(fmt: Formatter, out: TextIO, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+                     changes: Sequence[pyjj.ModifiedChange], no_graph: bool, wc_id: str | None,
                      prefix: str, coloured: bool, args: argparse.Namespace | None = None, ws: pyjj.Workspace | None = None,
-                     formats=(None, None)) -> None:
+                     formats: tuple[str | None, str | None] = (None, None)) -> None:
     """The `Changed commits:` block, with or without its graph."""
-    def summary_lines(change):
-        sign = lambda added: [("+" if added else "-",
-                               "diff added" if added else "diff removed"),
-                              (" ", "")]
+    def summary_lines(change: pyjj.ModifiedChange):
+        def sign(added: bool) -> list[tuple[str, str]]:
+            return [("+" if added else "-",
+                     "diff added" if added else "diff removed"),
+                    (" ", "")]
+
         return (
             [sign(True) + _summary_spans(repo, settings, commit, wc_id, prefix)
              for commit in change.added]
@@ -217,7 +226,7 @@ def _changed_commits(fmt, out, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSetti
                for commit in change.removed]
         )
 
-    def patch(change) -> str:
+    def patch(change: pyjj.ModifiedChange) -> str:
         if formats == (None, None) or args is None or ws is None:
             return ""
         return _change_patch_bytes(args, ws, settings, repo, change,
@@ -247,7 +256,7 @@ def _changed_commits(fmt, out, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSetti
             node_id, edges, "○", f"{text}\n{body}" if body else text))
 
 
-def _elided_count(estimate) -> str | None:
+def _elided_count(estimate: tuple[int, int | None]) -> str | None:
     """`(lower, upper)` as jj words it: a number, `N+`, or `some`."""
     lower, upper = estimate
     if lower == 0 and upper == 0:
@@ -259,9 +268,10 @@ def _elided_count(estimate) -> str | None:
     return f"{lower}+"
 
 
-def print_operation_diff(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, from_ops, to_op,
+def print_operation_diff(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo,
+                         from_ops: Sequence[pyjj.Operation], to_op: pyjj.Operation,
                          *, heading: bool = True,
-                         prefix: str = "op_diff", out=None) -> int:
+                         prefix: str = "op_diff", out: TextIO | None = None) -> int:
     """What changed between `from_ops` and `to_op`.
 
     `op diff` leads with the two operation summaries; `op show` has

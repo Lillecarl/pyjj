@@ -21,14 +21,14 @@ if TYPE_CHECKING:
     import argparse
 
 
-def _missing_repo_configs(root: Path):
+def _missing_repo_configs(root: Path) -> list[tuple[Path, Path]]:
     """`(config_dir, repo_path)` for every directory whose repo is gone.
 
     Sorted by directory name, as jj sorts them.
     """
     if not root.exists():
         return []
-    missing = []
+    missing: list[tuple[Path, Path]] = []
     for entry in sorted(root.iterdir()):
         if not entry.is_dir():
             continue

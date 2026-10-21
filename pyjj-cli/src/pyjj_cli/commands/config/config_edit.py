@@ -78,5 +78,5 @@ def config_edit(args: argparse.Namespace) -> int:
     return proc.returncode
 
 
-def _editor_argv(settings: pyjj.UserSettings) -> list:
+def _editor_argv(settings: pyjj.UserSettings) -> list[str]:
     return shlex.split(_editor_cmd(settings))

@@ -27,7 +27,7 @@ def _watchman_help(args: argparse.Namespace):
     return 2
 
 
-def _object_target(p, name: str, metavar: str) -> None:
+def _object_target(p: argparse.ArgumentParser, name: str, metavar: str) -> None:
     p.add_argument(name, metavar=metavar)
     p.add_argument("id", nargs="?", metavar="ID")
     p.add_argument("-r", "--revision", metavar="REVSET")
@@ -40,7 +40,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p.set_defaults(_handler=f"{__name__}:_debug_help")
     debug = p.add_subparsers(dest="debug_command")
 
-    def add(name, handler, help_=None):
+    def add(name: str, handler: str, help_: str | None = None) -> argparse.ArgumentParser:
         child = debug.add_parser(name, help=help_)
         child.set_defaults(_handler=f"{_H}:{handler}")
         return child

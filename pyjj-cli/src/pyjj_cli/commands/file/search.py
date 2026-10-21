@@ -18,6 +18,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Callable
 
 # What `--pattern` means when it names no kind. jj reads the pattern as
 # `kind:pattern`, and a bare pattern as a regular expression.
@@ -74,7 +75,9 @@ def _searchable_contents(
             if isinstance(side, bytes)]
 
 
-def _print_matches(path, content, matches, line_number):
+def _print_matches(
+    path: str, content: bytes, matches: Callable[[bytes], bool], line_number: bool,
+) -> None:
     """Each matching line as `path:line`, numbered under `-n`.
 
     Lines keep whatever newline they carry, and a last line without
@@ -103,7 +106,7 @@ def _lines(content: bytes):
     return lines
 
 
-def _line_matcher(pattern: str):
+def _line_matcher(pattern: str) -> Callable[[bytes], bool]:
     """One line's worth of jj's string-pattern matching.
 
     The kinds are jj's own: `exact`, `substring`, `glob` and `regex`,

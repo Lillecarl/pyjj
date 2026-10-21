@@ -129,7 +129,7 @@ GLOBAL_FLAGS_OUTSIDE_ARGPARSE = frozenset(
 )
 
 
-def _hoist_global_options(argv):
+def _hoist_global_options(argv: list[str]):
     """Pull the behaviour-changing globals out of `argv`.
 
     Returns the remaining argv, a dict of what was found, and the
@@ -137,11 +137,11 @@ def _hoist_global_options(argv):
     anywhere on the command line; argparse would only see them in
     front of the subcommand.
     """
-    kept = []
-    found = {}
-    config_args = []
-    pending = None
-    pending_config = None
+    kept: list[str] = []
+    found: dict[str, str | bool] = {}
+    config_args: list[tuple[str, str]] = []
+    pending: str | None = None
+    pending_config: str | None = None
     for arg in argv:
         if pending is not None:
             found[pending] = arg
@@ -189,7 +189,7 @@ def _hoist_global_options(argv):
     return kept, found, config_args
 
 
-def _drop_ignored_global_flags(argv):
+def _drop_ignored_global_flags(argv: list[str]):
     """Strip display-only global options from anywhere in `argv`."""
     kept = []
     skip = False
@@ -242,7 +242,7 @@ def _complete(parser: argparse.ArgumentParser) -> None:
     argcomplete.autocomplete(parser, exclude=_NOT_OFFERED)
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     # Completion runs the CLI itself on every <TAB>; keep everything heavy
     # out of that path — handlers are not imported yet.

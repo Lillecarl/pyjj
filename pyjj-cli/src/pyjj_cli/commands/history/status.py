@@ -59,7 +59,8 @@ def status(args: argparse.Namespace) -> int:
                 fmt.write("Parent commit (@-): ")
                 _write_lines(fmt, [summary(parent, False)])
 
-            conflicts = _conflict_spans(wc, to_ui_path) if wc.has_conflict else []
+            conflicts: list[list[tuple[str, str]]] = (
+                _conflict_spans(wc, to_ui_path) if wc.has_conflict else [])
             if conflicts:
                 # jj writes a warning's heading as its own span, so the word
                 # `Warning:` is bright while the sentence is only bold.

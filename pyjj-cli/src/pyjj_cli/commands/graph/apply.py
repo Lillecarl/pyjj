@@ -37,11 +37,12 @@ from .resolve import read_graph, resolve
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable
 
 
-def _conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, keys) -> list[str]:
+def _conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, keys: Iterable[str]) -> list[str]:
     """Which of `keys` name a commit carrying a conflict now."""
-    out = []
+    out: list[str] = []
     for key in keys:
         try:
             commit = repo.resolve_single(settings, key)

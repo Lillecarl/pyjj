@@ -33,14 +33,15 @@ from .common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
 
 
-def _short_change(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_id) -> str:
+def _short_change(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_id: pyjj.ChangeId) -> str:
     n = repo.shortest_change_id_prefix_len(change_id, settings)
     return change_id.hex()[:n]
 
 
-def _report(found) -> None:
+def _report(found: Sequence[pyjj.DivergentChange]) -> None:
     """`Found N divergent change(s)...`, jj's shape, on stderr."""
     print(f"Found {len(found)} divergent change(s) in the specified "
           f"revset:", file=sys.stderr)

@@ -27,6 +27,9 @@ from .op_diff import print_operation_diff
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Iterable
+
+    from jinja2 import Template
 
 # jj's own builtin template names. These carry labels, and a label
 # decides a colour, so pyjj-cli builds their spans itself rather than
@@ -56,7 +59,7 @@ def _shape(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: argparse.Names
     return None, _resolve_template(settings, ws, args, name)
 
 
-def _fields(op: pyjj.Operation) -> list[tuple[str, tuple[str, ...]]]:
+def _fields(op: pyjj.Operation) -> list[tuple[str, str | Iterable[str]]]:
     """The header fields of an operation, jj's `format_operation` shape.
 
     jj joins these with `separate(" ", ...)`, which drops the empty
@@ -79,7 +82,9 @@ def _fields(op: pyjj.Operation) -> list[tuple[str, tuple[str, ...]]]:
     return separate(parts)
 
 
-def _op_lines(op: pyjj.Operation, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
+def _op_lines(
+    op: pyjj.Operation, shape: str | None,
+) -> list[list[tuple[str, str | Iterable[str]]]]:
     """One operation's lines, as labelled spans, without the graph."""
     if not op.parent_ids:
         # The root operation has no user, no time and nothing it did.
@@ -87,19 +92,20 @@ def _op_lines(op: pyjj.Operation, shape: str) -> list[list[tuple[str, tuple[str,
         return [[(op.id[:12], ("id", "short")), (" ", ()),
                  ("root()", ("root",))]]
     first_line = op.description.splitlines()[0] if op.description else ""
-    description: list[list[tuple[str, tuple[str, ...]]]] = [
+    description: list[list[tuple[str, str | Iterable[str]]]] = [
         [(first_line, ("description", "first_line"))]]
-    attributes: list[list[tuple[str, tuple[str, ...]]]] = [
+    attributes: list[list[tuple[str, str | Iterable[str]]]] = [
         [(f"{key}: {value}", ("attributes",))] for key, value in op.attributes]
     if shape == "oneline":
         return [separate([_fields(op), *description, *attributes])]
-    lines = [_fields(op), *description, *attributes]
+    lines: list[list[tuple[str, str | Iterable[str]]]] = [
+        _fields(op), *description, *attributes]
     if shape == "comfortable":
         lines.append([])
     return lines
 
 
-def _jinja_lines(op: pyjj.Operation, current: bool, template):
+def _jinja_lines(op: pyjj.Operation, current: bool, template: Template):
     """A user template's output, as one unlabelled span per line."""
     attributes = "\n".join(f"{key}: {value}" for key, value in op.attributes)
     root = not op.parent_ids
@@ -132,7 +138,7 @@ def _jinja_lines(op: pyjj.Operation, current: bool, template):
     return [[(line, ())] for line in lines or [""]]
 
 
-def render_operation(op: pyjj.Operation, current: bool, shape, template, prefix: str,
+def render_operation(op: pyjj.Operation, current: bool, shape: str | None, template: Template | None, prefix: str,
                      coloured: bool) -> str:
     """One operation's block, ready to print or to hand to the graph.
 
@@ -200,7 +206,7 @@ _DOT_CATALOGUE = (
 _DOT_DEFAULT = ("id", "user", "time_ago", "description", "attributes")
 
 
-def _dot_attributes(op: pyjj.Operation, current: bool, fields) -> dict[str, str]:
+def _dot_attributes(op: pyjj.Operation, current: bool, fields: Iterable[str]) -> dict[str, str]:
     """One operation's selected fields, as DOT node attributes."""
     values = {
         "id": op.id,

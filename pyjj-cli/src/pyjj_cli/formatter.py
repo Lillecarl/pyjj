@@ -31,6 +31,8 @@ import typing
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+
     import pyjj
 
 # The eight names and their bright forms, as 256-colour indices. jj
@@ -44,7 +46,7 @@ _COLOURS.update({f"bright {name}": index + 8
                  for name, index in list(_COLOURS.items())})
 
 
-_RULES: tuple[tuple[tuple[str, ...], dict], ...] = (
+_RULES: tuple[tuple[tuple[str, ...], dict[str, str | bool]], ...] = (
     (('error',), {'fg': 'default', 'bold': True}),
     (('error_source',), {'fg': 'default'}),
     (('warning',), {'fg': 'default', 'bold': True}),
@@ -156,7 +158,10 @@ _RULES: tuple[tuple[tuple[str, ...], dict], ...] = (
 )
 
 
-def style_for(labels: tuple[str, ...], rules=_RULES) -> dict:
+def style_for(
+    labels: tuple[str, ...],
+    rules: Sequence[tuple[tuple[str, ...], dict[str, str | bool]]] = _RULES,
+) -> dict[str, str | bool]:
     """The style a label stack asks for.
 
     A rule matches when its labels appear in the stack in order, though
@@ -167,9 +172,9 @@ def style_for(labels: tuple[str, ...], rules=_RULES) -> dict:
     `d` and `a b c` against the stack `a b c d`. Rules that tie fall
     back to the palette's own order, which is why it is kept.
     """
-    matched = []
+    matched: list[tuple[list[int], int, dict[str, str | bool]]] = []
     for index, (required, style) in enumerate(rules):
-        positions = []
+        positions: list[int] = []
         start = 0
         for label in required:
             while start < len(labels) and labels[start] != label:
@@ -182,7 +187,7 @@ def style_for(labels: tuple[str, ...], rules=_RULES) -> dict:
             positions.reverse()
             matched.append((positions, index, style))
     matched.sort(key=lambda item: (item[0], item[1]))
-    out: dict = {}
+    out: dict[str, str | bool] = {}
     for _positions, _index, style in matched:
         out.update(style)
     return out
@@ -207,7 +212,7 @@ _ATTRIBUTES = (
 )
 
 
-def transition(old: dict, new: dict) -> str:
+def transition(old: Mapping[str, str | bool], new: Mapping[str, str | bool]) -> str:
     """The escape sequences that carry `old` to `new`.
 
     Turning bold or dim off is the awkward case. The code for it resets
@@ -217,7 +222,7 @@ def transition(old: dict, new: dict) -> str:
     """
     if old == new:
         return ""
-    out = []
+    out: list[str] = []
     if (old.get("bold") and not new.get("bold")) or (
             old.get("dim") and not new.get("dim")):
         out.append("\x1b[0m")
@@ -232,7 +237,7 @@ def transition(old: dict, new: dict) -> str:
             out.append(f"\x1b[{off}m")
     for name, ground in (("fg", 38), ("bg", 48)):
         if old.get(name) != new.get(name):
-            colour = new.get(name, "default")
+            colour = typing.cast("str", new.get(name, "default"))
             out.append(f"\x1b[{_colour_code(colour, ground)}m")
     return "".join(out)
 
@@ -246,11 +251,11 @@ class Formatter:
     jj does when it drops a formatter.
     """
 
-    def __init__(self, out, enabled: bool) -> None:
+    def __init__(self, out: typing.TextIO, enabled: bool) -> None:
         self._out = out
         self._enabled = enabled
         self._labels: list[str] = []
-        self._style: dict = {}
+        self._style: dict[str, str | bool] = {}
 
     @property
     def enabled(self) -> bool:
@@ -304,16 +309,16 @@ class Formatter:
             self._out.write(transition(self._style, {}))
             self._style = {}
 
-    def __enter__(self) -> "Formatter":
+    def __enter__(self) -> Formatter:
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: object) -> None:
         # An error part way through a listing must still leave the
         # terminal plain, so the reset runs even when the block raises.
         self.close()
 
 
-def formatter(out, settings: pyjj.UserSettings | None = None) -> Formatter:
+def formatter(out: typing.TextIO, settings: pyjj.UserSettings | None = None) -> Formatter:
     """The formatter for this run's stdout.
 
     The import is local: this module is the colour engine and nothing
@@ -325,7 +330,7 @@ def formatter(out, settings: pyjj.UserSettings | None = None) -> Formatter:
     return Formatter(out, use_color(settings))
 
 
-def _labels(labels) -> tuple[str, ...]:
+def _labels(labels: str | Iterable[str]) -> tuple[str, ...]:
     """Labels as a tuple, whether written as one or as a string.
 
     A span carries `"bookmark name"` in some callers and
@@ -334,14 +339,18 @@ def _labels(labels) -> tuple[str, ...]:
     return tuple(labels.split()) if isinstance(labels, str) else tuple(labels)
 
 
-def separate(parts, gap: str = " ", labels=()):
+def separate(
+    parts: Iterable[Sequence[tuple[str, str | Iterable[str]]]],
+    gap: str = " ",
+    labels: str | Iterable[str] = (),
+) -> list[tuple[str, str | Iterable[str]]]:
     """jj's `separate(sep, ...)`: a gap between the non-empty parts.
 
     Each part is a list of spans. A part with no text drops, and so
     does the gap that would have led it -- a commit that carries no
     bookmarks prints no double space.
     """
-    spans = []
+    spans: list[tuple[str, str | Iterable[str]]] = []
     for part in parts:
         if not any(text for text, _labels in part):
             continue
@@ -360,11 +369,15 @@ class Line(typing.NamedTuple):
     they share.
     """
 
-    spans: list
-    base: object = ()
+    spans: Sequence[tuple[str, str | Iterable[str]]]
+    base: str | Iterable[str] = ()
 
 
-def render_block(lines, base=(), enabled: bool = True) -> str:
+def render_block(
+    lines: Sequence[Line | Sequence[tuple[str, str | Iterable[str]]]],
+    base: str | Iterable[str] = (),
+    enabled: bool = True,
+) -> str:
     """Rows of labelled spans, rendered into one string.
 
     `lines` is a list of lines. A line is a list of `(text, labels)`

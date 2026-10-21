@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
 
 _FOOTER = """<hr/>
 
@@ -27,7 +31,7 @@ def util_markdown_help(args: argparse.Namespace) -> int:
     return 0
 
 
-def render(parser: argparse.ArgumentParser, global_flags=()) -> str:
+def render(parser: argparse.ArgumentParser, global_flags: Sequence[str] = ()) -> str:
     commands = list(_walk(parser, parser.prog, parser.description or ""))
     out = [f"# Command-Line Help for `{parser.prog}`\n\n",
            f"This document contains the help content for the "
@@ -43,7 +47,9 @@ def render(parser: argparse.ArgumentParser, global_flags=()) -> str:
     return "".join(out)
 
 
-def _walk(parser: argparse.ArgumentParser, path, about):
+def _walk(
+    parser: argparse.ArgumentParser, path: str, about: str,
+) -> Iterator[tuple[str, argparse.ArgumentParser, str]]:
     yield path, parser, about
     subparsers = _subparsers(parser)
     if subparsers is None:
@@ -59,7 +65,9 @@ def _subparsers(parser: argparse.ArgumentParser):
     return None
 
 
-def _children(action):
+def _children(
+    action: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> list[tuple[str, argparse.ArgumentParser, str]]:
     """`(name, parser, help)` per visible subcommand, sorted by name. An
     alias shares its parser, and argparse lists the canonical name first."""
     helps = {a.dest: a.help for a in action._choices_actions}
@@ -76,13 +84,15 @@ def _children(action):
     return sorted(children, key=lambda child: child[0])
 
 
-def _visible(action) -> bool:
+def _visible(action: argparse.Action) -> bool:
     return (action.help != argparse.SUPPRESS
             and not isinstance(action, (argparse._HelpAction,
                                         argparse._SubParsersAction)))
 
 
-def _section(path, parser: argparse.ArgumentParser, about, global_flags) -> str:
+def _section(
+    path: str, parser: argparse.ArgumentParser, about: str, global_flags: Sequence[str],
+) -> str:
     positionals = [a for a in parser._actions
                    if not a.option_strings and _visible(a)]
     options = [a for a in parser._actions if a.option_strings and _visible(a)]
@@ -121,32 +131,33 @@ def _section(path, parser: argparse.ArgumentParser, about, global_flags) -> str:
     return "".join(out)
 
 
-def _name(action) -> str:
+def _name(action: argparse.Action) -> str:
     metavar = action.metavar
     if isinstance(metavar, tuple):
         metavar = metavar[0]
     return (metavar or action.dest).upper()
 
 
-def _positional(action) -> str:
+def _positional(action: argparse.Action) -> str:
     name = _name(action)
-    return {None: f"<{name}>", "?": f"[{name}]", "*": f"[{name}]...",
-            "+": f"<{name}>...",
-            argparse.REMAINDER: f"[{name}]..."}.get(action.nargs, f"<{name}>")
+    forms: dict[int | str | None, str] = {
+        None: f"<{name}>", "?": f"[{name}]", "*": f"[{name}]...",
+        "+": f"<{name}>...", argparse.REMAINDER: f"[{name}]..."}
+    return forms.get(action.nargs, f"<{name}>")
 
 
-def _option(action) -> str:
+def _option(action: argparse.Action) -> str:
     spellings = [f"`{s}`" for s in action.option_strings]
     if action.nargs != 0:
         spellings[-1] = spellings[-1][:-1] + f" <{_name(action)}>`"
     return ", ".join(spellings)
 
 
-def _text(help_) -> str:
+def _text(help_: str | None) -> str:
     return (help_ or "").replace("%%", "%")
 
 
-def _item(label: str, help_, choices=None) -> str:
+def _item(label: str, help_: str | None, choices: Iterable[object] | None = None) -> str:
     text = _text(help_)
     line = f"* {label} — {text}\n" if text else f"* {label}\n"
     if choices:

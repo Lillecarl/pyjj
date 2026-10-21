@@ -17,6 +17,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Callable, Sequence
 
 #: The remote jj falls back to when nothing else names one.
 _DEFAULT_REMOTE = "origin"
@@ -96,16 +97,15 @@ def _remote(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.Us
     return _DEFAULT_REMOTE
 
 
-def _remote_names(repo: pyjj.ReadonlyRepo) -> list:
-    """Every remote the repository knows, whatever shape it reports."""
+def _remote_names(repo: pyjj.ReadonlyRepo) -> list[str]:
+    """Every remote the repository knows."""
     try:
-        remotes = repo.git_remotes()
+        return repo.git_remotes()
     except Exception:
         return []
-    return [r if isinstance(r, str) else r[0] for r in remotes]
 
 
-def _update_term(before, after) -> str:
+def _update_term(before: pyjj.CommitId | None, after: pyjj.CommitId | None) -> str:
     if before is None:
         return "Add"
     if after is None:
@@ -113,7 +113,7 @@ def _update_term(before, after) -> str:
     return "Move forward"
 
 
-def _updates(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote):
+def _updates(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote: str):
     """What to push, as `[(name, before, after)]`, and the bookmarks
     `--change` and `--named` have to create first.
 
@@ -127,11 +127,11 @@ def _updates(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.U
     names = sorted(set(local) | set(remotes))
     deleted = getattr(args, "deleted", False)
     validator = _Validator(args, repo, settings, remote)
-    created = {}
-    updates = []
-    seen = set()
+    created: dict[str, pyjj.CommitId] = {}
+    updates: list[tuple[str, pyjj.CommitId | None, pyjj.CommitId | None]] = []
+    seen: set[str] = set()
 
-    def take(name, allow_new, allow_delete, strict):
+    def take(name: str, allow_new: bool, allow_delete: bool, strict: bool) -> None:
         """Classify one name, and keep it if there is anything to push.
 
         `strict` is whether the reader named this bookmark. jj refuses
@@ -193,15 +193,15 @@ class _Created:
     does not exist in the repository yet, so classification reads it
     from here rather than from the view."""
 
-    has_conflict = False
-    removed_ids = ()
+    has_conflict: bool = False
+    removed_ids: Sequence[pyjj.CommitId] = ()
 
-    def __init__(self, name, target):
+    def __init__(self, name: str, target: pyjj.CommitId):
         self.name = name
         self.target_ids = [target]
 
 
-def _by_revisions(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote, local):
+def _by_revisions(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote: str, local: dict[str, pyjj.Bookmark | _Created]) -> list[str]:
     """The bookmarks jj adds from `-r`, or from its default revset.
 
     The default is `remote_bookmarks(remote=<remote>)..@`, narrowed to
@@ -230,13 +230,13 @@ def _by_revisions(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: p
             if any(i.hex() in targets for i in bookmark.target_ids)]
 
 
-def _create_bookmarks(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, local, remotes):
+def _create_bookmarks(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, local: dict[str, pyjj.Bookmark | _Created], remotes: dict[str, pyjj.RemoteBookmark]):
     """The bookmarks `--change` and `--named` create, name to target.
 
     Neither moves a bookmark that already exists: jj refuses rather
     than guessing which of the two the reader meant.
     """
-    created = {}
+    created: dict[str, pyjj.CommitId] = {}
     for expression in getattr(args, "changes", None) or []:
         for commit in repo.revset(settings, expression):
             name = (_CHANGE_PREFIX
@@ -250,7 +250,13 @@ def _create_bookmarks(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, setting
     return created
 
 
-def _ensure_new(name, target, local, remotes, reuse: bool) -> None:
+def _ensure_new(
+    name: str,
+    target: pyjj.CommitId,
+    local: dict[str, pyjj.Bookmark | _Created],
+    remotes: dict[str, pyjj.RemoteBookmark],
+    reuse: bool,
+) -> None:
     """`reuse` is whether an existing bookmark already at `target` is
     allowed. `--change` names a revision, so a bookmark that already
     says the same thing is what it asked for; `--named` names the
@@ -265,7 +271,7 @@ def _ensure_new(name, target, local, remotes, reuse: bool) -> None:
             f"Tracked remote bookmarks exist for deleted bookmark: {name}")
 
 
-def _parse_named(spec, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings):
+def _parse_named(spec: str, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings):
     """`--named NAME=REVISION`, split at the first `=`."""
     name, sep, revision = spec.partition("=")
     if not sep or not name or not revision:
@@ -282,11 +288,12 @@ def _parse_named(spec, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings):
 def _matches(name: str, pattern: str) -> bool:
     """jj's string patterns, as far as a bookmark name needs them: a
     bare pattern is a glob, and the three prefixes name the rest."""
-    for prefix, test in (
+    tests: tuple[tuple[str, Callable[[str, str], bool]], ...] = (
         ("exact:", lambda n, p: n == p),
         ("glob:", fnmatch.fnmatchcase),
         ("substring:", lambda n, p: p in n),
-    ):
+    )
+    for prefix, test in tests:
         if pattern.startswith(prefix):
             return test(name, _unquote(pattern[len(prefix):]))
     return fnmatch.fnmatchcase(name, pattern)
@@ -298,7 +305,7 @@ def _unquote(text: str) -> str:
     return text
 
 
-def _has_tracked_remote(repo: pyjj.ReadonlyRepo, name) -> bool:
+def _has_tracked_remote(repo: pyjj.ReadonlyRepo, name: str) -> bool:
     """Whether a real remote tracks this bookmark. jj uses it to decide
     that a `-b` the reader typed may create a remote ref.
 
@@ -310,7 +317,14 @@ def _has_tracked_remote(repo: pyjj.ReadonlyRepo, name) -> bool:
                for b in repo.remote_bookmarks())
 
 
-def _classify(name, remote, local, remote_ref, allow_new, allow_delete):
+def _classify(
+    name: str,
+    remote: str,
+    local: pyjj.Bookmark | _Created | None,
+    remote_ref: pyjj.RemoteBookmark | None,
+    allow_new: bool,
+    allow_delete: bool,
+):
     """jj's `classify_ref_push_action`, plus the two refusals around it.
 
     Returns `(name, before, after)`, or `None` when the remote already
@@ -323,7 +337,7 @@ def _classify(name, remote, local, remote_ref, allow_new, allow_delete):
         return None
     if local is not None and local.has_conflict:
         raise _Refused(f"Bookmark {name} is conflicted")
-    if tracked and remote_ref.has_conflict:
+    if tracked and remote_ref is not None and remote_ref.has_conflict:
         raise _Refused(f"Bookmark {name}@{remote} is conflicted")
     if remote_ref is not None and not tracked:
         raise _Refused(f"Non-tracking remote bookmark {name}@{remote} exists")
@@ -336,7 +350,7 @@ def _classify(name, remote, local, remote_ref, allow_new, allow_delete):
     return (name, before, after)
 
 
-def _target(ref):
+def _target(ref: pyjj.Bookmark | pyjj.RemoteBookmark | _Created | None):
     """A ref's whole target, comparable: what it points at and, for a
     conflicted one, what it moved away from."""
     if ref is None:
@@ -355,7 +369,7 @@ class _Validator:
     not walk the same commits again.
     """
 
-    def __init__(self, args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote):
+    def __init__(self, args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote: str):
         self.repo = repo
         self.settings = settings
         self.allow_empty = getattr(args, "allow_empty", False)
@@ -365,7 +379,7 @@ class _Validator:
         self.known = [i.hex() for b in repo.remote_bookmarks()
                       if b.remote == remote for i in b.target_ids]
 
-    def refusal(self, after):
+    def refusal(self, after: pyjj.CommitId | None):
         """Why this update cannot be pushed, or `None`."""
         if after is None:
             return None

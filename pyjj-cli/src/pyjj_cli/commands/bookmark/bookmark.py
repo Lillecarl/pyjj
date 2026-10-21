@@ -24,6 +24,7 @@ from ..common import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
 
 
 def bookmark(args: argparse.Namespace) -> int:
@@ -73,7 +74,7 @@ def bookmark(args: argparse.Namespace) -> int:
                 if not getattr(args, "allow_backwards", False):
                     for name in names:
                         existing = repo.get_bookmark(name)
-                        targets = list(existing.target_ids) if existing else []
+                        targets: list[pyjj.CommitId] = list(existing.target_ids) if existing else []
                         if not _is_fast_forward(repo, settings, targets, target.id):
                             raise CommandError(
                                 "Refusing to move bookmark backwards or "
@@ -223,7 +224,9 @@ def bookmark(args: argparse.Namespace) -> int:
     return 2
 
 
-def _is_fast_forward(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, old_ids, new_id) -> bool:
+def _is_fast_forward(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+    old_ids: Sequence[pyjj.CommitId], new_id: pyjj.CommitId,
+) -> bool:
     """Whether moving a bookmark from `old_ids` to `new_id` only goes
     forward.
 

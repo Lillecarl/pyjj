@@ -1,146 +1,132 @@
 """pyjj_cli.commands package — re-exports for backwards compat."""
+from .bookmark import (
+    bookmark,
+    bookmark_advance,
+    bookmark_track,
+    bookmark_untrack,
+)
 from .common import (
-    complete_newline,
-    join_message_paragraphs,
     CommandError,
-    _run_editor,
+    _changed_files,
+    _checkout_if_moved,
+    _finish,
+    _fix_pattern_matches,
     _load,
+    _merge_marker_len,
     _resolve_all,
     _resolve_in_arg_order,
     _resolve_one,
-    _wc_commit,
-    _checkout_if_moved,
-    _finish,
     _restore_view_command,
-    _changed_files,
     _run_diff_tool,
-    _selection_is_empty,
-    _merge_marker_len,
+    _run_editor,
     _run_merge_tool,
-    _fix_pattern_matches,
+    _selection_is_empty,
+    _wc_commit,
+    complete_newline,
+    join_message_paragraphs,
 )
-
-from .git import (
-    git_init,
-    git_clone,
-    git_fetch,
-    git_push,
-    git_import,
-    git_export,
-    git_remote,
-    git_root,
-    git_colocation,
-)
-
-from .history import (
-    status,
-    log,
-    diff,
-    show,
-)
-
-from .file import (
-    file_list,
-    file_show,
-    file_annotate,
-    file_chmod,
-    file_track,
-    file_untrack,
-    file_search,
-)
-
-from .sparse import (
-    sparse_list,
-    sparse_set,
-    sparse_reset,
-    sparse_edit,
-)
-
-from .workspace import (
-    workspace_list,
-    workspace_add,
-    workspace_forget,
-    workspace_rename,
-    workspace_root,
-    workspace_update_stale,
-)
-
-from .tag import (
-    tag_list,
-    tag_set,
-    tag_delete,
-    tag_track,
-    tag_untrack,
-)
-
 from .config import (
     config_get,
     config_list,
     config_set,
     config_unset,
 )
-
 from .crypto import (
+    metaedit,
     sign,
     unsign,
-    metaedit,
     version,
 )
-
-from .bookmark import (
-    bookmark,
-    bookmark_track,
-    bookmark_untrack,
-    bookmark_advance,
-)
-
-from .operation import (
-    evolog,
-    next_commit,
-    prev_commit,
-    parallelize,
-    interdiff,
-    op_log,
-    op_show,
-    op_abandon,
-    op_diff,
-    op_integrate,
-    op_revert,
-    undo,
-    redo,
-    op_restore,
-)
-
 from .describe import (
     describe,
     new,
 )
-
-from .rewrite import (
-    squash,
-    rebase,
-    absorb,
-    fix,
-    revert,
-    abandon,
-    duplicate,
-    edit,
-    commit,
-    restore,
-    split,
+from .file import (
+    file_annotate,
+    file_chmod,
+    file_list,
+    file_search,
+    file_show,
+    file_track,
+    file_untrack,
 )
-
+from .git import (
+    git_clone,
+    git_colocation,
+    git_export,
+    git_fetch,
+    git_import,
+    git_init,
+    git_push,
+    git_remote,
+    git_root,
+)
+from .history import (
+    diff,
+    log,
+    show,
+    status,
+)
+from .hunk import (
+    hunk_commit,
+    hunk_list,
+    hunk_schema,
+    hunk_split,
+    hunk_squash,
+)
+from .operation import (
+    evolog,
+    interdiff,
+    next_commit,
+    op_abandon,
+    op_diff,
+    op_integrate,
+    op_log,
+    op_restore,
+    op_revert,
+    op_show,
+    parallelize,
+    prev_commit,
+    redo,
+    undo,
+)
 from .resolve import (
     diffedit,
     resolve,
 )
-
-from .hunk import (
-    hunk_list,
-    hunk_split,
-    hunk_commit,
-    hunk_squash,
-    hunk_schema,
+from .rewrite import (
+    abandon,
+    absorb,
+    commit,
+    duplicate,
+    edit,
+    fix,
+    rebase,
+    restore,
+    revert,
+    split,
+    squash,
+)
+from .sparse import (
+    sparse_edit,
+    sparse_list,
+    sparse_reset,
+    sparse_set,
+)
+from .tag import (
+    tag_delete,
+    tag_list,
+    tag_set,
+    tag_track,
+    tag_untrack,
+)
+from .workspace import (
+    workspace_add,
+    workspace_forget,
+    workspace_list,
+    workspace_rename,
+    workspace_root,
+    workspace_update_stale,
 )
 
 __all__ = [

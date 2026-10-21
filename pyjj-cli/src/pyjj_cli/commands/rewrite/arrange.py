@@ -24,6 +24,7 @@ def arrange(args: argparse.Namespace) -> int:
     The TUI is pyjjui's port of jj's, so this needs pyjjui installed.
     """
     try:
+        from pyjjui.arrange_plan import PlanEntry
         from pyjjui.screens.arrange import ArrangeScreen
         from textual.app import App
 
@@ -50,7 +51,7 @@ def arrange(args: argparse.Namespace) -> int:
             return 0
         state, commits, _targets = prepared
 
-        class ArrangeApp(App):
+        class ArrangeApp(App[list[PlanEntry] | None]):
             def on_mount(self) -> None:
                 self.push_screen(ArrangeScreen(state, commits),
                                  callback=self.exit)

@@ -22,6 +22,7 @@ from .markdown_help import (
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Sequence
 
 
 def util_install_man_pages(args: argparse.Namespace) -> int:
@@ -42,7 +43,7 @@ def util_install_man_pages(args: argparse.Namespace) -> int:
     return 0
 
 
-def _esc(text) -> str:
+def _esc(text: object) -> str:
     """roff-escape: a backslash and a hyphen are literal, and a leading
     `.` or `'` would start a request."""
     text = str(text or "").replace("\\", "\\e").replace("-", "\\-")
@@ -54,7 +55,10 @@ def _bold(flag: str) -> str:
     return f"\\fB{_esc(flag)}\\fR"
 
 
-def _page(name, path, parser: argparse.ArgumentParser, about, global_flags) -> str:
+def _page(
+    name: str, path: str, parser: argparse.ArgumentParser, about: str | None,
+    global_flags: Sequence[str],
+) -> str:
     positionals = [a for a in parser._actions
                    if not a.option_strings and _visible(a)]
     options = [a for a in parser._actions if a.option_strings and _visible(a)]
@@ -93,7 +97,7 @@ def _page(name, path, parser: argparse.ArgumentParser, about, global_flags) -> s
     return "".join(out)
 
 
-def _help(action) -> str:
+def _help(action: argparse.Action) -> str:
     text = (action.help or "").replace("%%", "%")
     if action.choices:
         text += "\n\nPossible values: " + ", ".join(map(str, action.choices))

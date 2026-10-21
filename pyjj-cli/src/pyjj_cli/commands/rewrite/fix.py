@@ -38,6 +38,7 @@ def fix(args: argparse.Namespace) -> int:
             return 0
 
         # Discover fix tools from config, sorted lexicographically like jj does.
+        tool_names: list[str]
         try:
             tool_names = sorted(settings.list_fix_tools())
         except AttributeError:
