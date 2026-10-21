@@ -232,6 +232,8 @@ pub fn untrack_paths(
         .iter()
         .map(|path| crate::tree::repo_path(path))
         .collect::<PyResult<Vec<_>>>()?;
+    let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
+    let workspace_root = workspace.workspace_root().to_path_buf();
 
     let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
         .map_err(map_working_copy_err)?;
@@ -280,6 +282,11 @@ pub fn untrack_paths(
         return Ok((py_repo, added_back));
     }
 
+    // `finish_transaction`: a moved `@` resets Git HEAD and the index.
+    if colocated {
+        crate::git::reset_head(&mut mut_repo, workspace_name.as_str(), &workspace_root)?;
+        crate::git::export_refs_only(&mut mut_repo)?;
+    }
     let tx = Transaction::new(mut_repo, &settings.0);
     let new_repo = pollster::block_on(tx.commit("untrack paths")).map_err(map_transaction_err)?;
     pollster::block_on(locked_ws.finish(new_repo.operation().id().clone()))
