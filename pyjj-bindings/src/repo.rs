@@ -613,12 +613,13 @@ impl PyReadonlyRepo {
     /// referenced its new objects yet. `jj util gc` defaults to two
     /// weeks; `--expire=now` passes 0.
     ///
-    /// Sweeps from this repo's own operation, so a repo loaded at a past
-    /// operation would delete everything the newer ones added. `jj`
-    /// refuses that; the caller must make the same check.
-    #[pyo3(signature = (max_age_secs=0.0))]
-    fn gc(&self, max_age_secs: f64) -> PyResult<()> {
-        crate::gc::gc(self, max_age_secs)
+    /// Raises `JjError` unless this repo is at the head operation, and
+    /// `ValueError` for a cutoff no clock can represent.
+    #[pyo3(signature = (max_age_secs=14.0 * 86400.0))]
+    fn gc(&self, py: Python<'_>, max_age_secs: f64) -> PyResult<()> {
+        py.detach(|| {
+            crate::gc::gc(self, max_age_secs)
+        })
     }
 
     /// Folds `operations` into the single operation their merge
