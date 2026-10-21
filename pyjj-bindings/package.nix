@@ -35,7 +35,7 @@ in
     # The stub cannot see the `*_async` methods `_async.py` installs at
     # import time; this adds them, typed like their sync methods.
     postInstall = ''
-      ${python3Packages.python.interpreter} stub_async.py \
+      ${python3Packages.python.interpreter} fix_stub.py \
         python/pyjj_bindings/_async.py \
         $out/${python3Packages.python.sitePackages}/pyjj_bindings/_native.pyi
     '';

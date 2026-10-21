@@ -9,7 +9,7 @@ so a cancelled call never leaves a working-copy lock half held.
 `Transaction` has no async API. jj_lib's `MutableRepo` is not `Send`, so
 `PyTransaction` is `unsendable` and touching it from a worker thread panics.
 
-The tables are keyed by class name, not class, so `stub_async.py` reads
+The tables are keyed by class name, not class, so `fix_stub.py` reads
 them without importing the extension. It adds each sibling to the
 generated stub with the sync method's signature.
 """

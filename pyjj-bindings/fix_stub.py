@@ -1,9 +1,13 @@
-"""Add the `*_async` siblings to the stub maturin generates.
+"""Finish the stub maturin generates.
 
-`_async.py` installs them at import time, so pyo3's introspection cannot
-see them. Each one gets the sync method's parameters and returns an
-awaitable of its result. Usage: `python3 stub_async.py ASYNC_PY STUB_PYI`;
-the stub is rewritten in place.
+- Add the `*_async` siblings. `_async.py` installs them at import time,
+  so pyo3's introspection cannot see them. Each one gets the sync
+  method's parameters and returns an awaitable of its result.
+- Import `typing`. The `#[pyo3(signature)]` annotations name
+  `typing.Literal`, and pyo3 writes them without the import.
+
+Usage: `python3 fix_stub.py ASYNC_PY STUB_PYI`; the stub is rewritten in
+place.
 """
 
 from __future__ import annotations
@@ -58,9 +62,26 @@ def add_siblings(stub: str, async_source: str) -> str:
     return "".join(lines)
 
 
+def import_typing(stub: str) -> str:
+    """`stub` with `import typing` after its docstring, when it uses it."""
+    tree = ast.parse(stub)
+    imported = any(isinstance(node, ast.Import) and any(a.name == "typing" for a in node.names)
+                   for node in tree.body)
+    if imported or "typing." not in stub:
+        return stub
+    first = tree.body[0]
+    has_docstring = (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                     and isinstance(first.value.value, str))
+    at = first.end_lineno if has_docstring and first.end_lineno is not None else 0
+    lines = stub.splitlines(keepends=True)
+    lines.insert(at, "\nimport typing\n")
+    return "".join(lines)
+
+
 def main() -> None:
     async_py, stub_pyi = (Path(arg) for arg in sys.argv[1:3])
-    stub_pyi.write_text(add_siblings(stub_pyi.read_text(), async_py.read_text()))
+    stub = add_siblings(stub_pyi.read_text(), async_py.read_text())
+    stub_pyi.write_text(import_typing(stub))
 
 
 if __name__ == "__main__":

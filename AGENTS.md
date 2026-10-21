@@ -1770,7 +1770,7 @@ trio alike. The lists there name which methods get one.
   added there are cut from an error's traceback (kept as a note), and
   no loop-side frame keeps the call's function. `test_session.py`
   turns that warning into a failure.
-- Typing: `stub_async.py` adds every `*_async` sibling to the generated
+- Typing: `fix_stub.py` adds every `*_async` sibling to the generated
   `_native.pyi`, typed like its sync method. The package build runs it.
 
 ## Notes
