@@ -25,7 +25,11 @@ def _missing_repo_configs(root: Path):
     for entry in sorted(root.iterdir()):
         if not entry.is_dir():
             continue
-        repo_path = pyjj.repo_config_repo_path(str(entry))
+        try:
+            repo_path = pyjj.repo_config_repo_path(str(entry))
+        except pyjj.JjError:
+            # jj skips a directory whose metadata it cannot read.
+            continue
         if repo_path is None:
             continue
         try:

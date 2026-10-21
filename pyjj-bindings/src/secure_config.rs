@@ -98,14 +98,20 @@ pub(crate) fn load_scoped(
 
 /// The repository a per-repo config directory belongs to.
 ///
-/// `None` when the directory holds no recorded path -- an older layout,
-/// or a directory that is not a config directory at all. `jj config gc`
-/// skips those rather than guessing, and so should any caller.
+/// `None` when the directory holds no metadata file or no recorded path
+/// -- an older layout, or a directory that is not a config directory at
+/// all. Any other read error raises: a permission error is not "absent".
 #[pyfunction]
 pub fn repo_config_repo_path(config_dir: &str) -> PyResult<Option<String>> {
     let dir = Path::new(config_dir);
-    let Ok(metadata) = jj_lib::secure_config::read_metadata(dir) else {
-        return Ok(None);
+    let metadata = match jj_lib::secure_config::read_metadata(dir) {
+        Ok(metadata) => metadata,
+        Err(jj_lib::secure_config::SecureConfigError::PathError(err))
+            if err.source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            return Ok(None);
+        }
+        Err(err) => return Err(map_py_err(err)),
     };
     let path = jj_lib::secure_config::metadata_path(&metadata).map_err(map_py_err)?;
     Ok(path.map(|path| path.to_string_lossy().into_owned()))
