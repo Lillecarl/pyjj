@@ -701,6 +701,37 @@ def test_absorb_keeps_described_source(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def _absorb_two_files(pair: RepoPair) -> None:
+    pair.init()
+    pair.op(files={"a.txt": b"a1\na2\n", "b.txt": b"b1\nb2\n"},
+            jj=["describe", "-m", "base"])
+    pair.op(jj=["new"])
+    pair.op(files={"a.txt": b"a1\nA2\n", "b.txt": b"b1\nB2\n"},
+            jj=["status"])
+
+
+@pytest.mark.covers("absorb", "--tool")
+def test_absorb_tool_absorbs_only_the_selection(pair: RepoPair) -> None:
+    """What the diff editor leaves on the right is all that absorbs;
+    `b.txt` stays in the source."""
+    _absorb_two_files(pair)
+    pair.op(jj=["absorb", "--tool", "parity-diff"],
+            diff_spec={"op": "keep", "paths": ["a.txt"]})
+    pair.assert_parity()
+
+
+@pytest.mark.covers("absorb", "--tool")
+def test_absorb_tool_with_nothing_selected_fails(pair: RepoPair) -> None:
+    _absorb_two_files(pair)
+    # An emptied $right selects deletions; only $right == $left is none.
+    revert = [{"path": "a.txt", "find": "A2", "replace": "a2"},
+              {"path": "b.txt", "find": "B2", "replace": "b2"}]
+    assert pair.op(jj=["absorb", "--tool", "parity-diff"],
+                   diff_spec={"op": "edit", "edits": revert},
+                   may_fail=True) != 0
+    pair.assert_parity()
+
+
 # -- fix ----------------------------------------------------------------------
 
 def _add_fix_tool(pair: RepoPair) -> None:

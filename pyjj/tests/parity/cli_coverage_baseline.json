@@ -15,11 +15,8 @@
   ],
   "absorb": [
     "--from",
-    "--interactive",
     "--to",
-    "--tool",
     "-f",
-    "-i",
     "-t"
   ],
   "bisect": [

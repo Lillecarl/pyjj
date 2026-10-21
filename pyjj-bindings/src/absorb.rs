@@ -1,12 +1,14 @@
+use std::collections::HashMap;
+
 use pyo3::prelude::*;
 
 use jj_lib::absorb::{AbsorbSource, absorb_hunks, split_hunks_to_trees};
 use jj_lib::repo::MutableRepo;
 
 use crate::commit::PyCommit;
-use crate::errors::map_py_err;
+use crate::errors::{JjError, map_py_err};
 use crate::repo::PyTransaction;
-use crate::rewrite::paths_matcher;
+use crate::rewrite::{overlay_contents, paths_matcher};
 use crate::settings::PyUserSettings;
 
 /// Result of `Transaction.absorb()`: which commits `jj absorb` touched.
@@ -40,6 +42,10 @@ pub struct PyAbsorbStats {
 /// hunk actually lands in. It is off by default, because it needs the
 /// `immutable()` alias from jj's bundled `revsets.toml` and this is a
 /// primitive, not the CLI. pyjj-cli turns it on.
+///
+/// `selections` is `--tool`'s diff-editor result, the same per-path map
+/// `split_selected_edited` takes: only what it changes against `source`'s
+/// parent is considered for absorption.
 pub fn absorb(
     tx: &PyTransaction,
     mut_repo: &mut MutableRepo,
@@ -48,6 +54,7 @@ pub fn absorb(
     destinations: &str,
     paths: Option<Vec<String>>,
     check_immutable: bool,
+    selections: Option<HashMap<String, Option<Vec<u8>>>>,
 ) -> PyResult<PyAbsorbStats> {
     let matcher = paths_matcher(paths)?;
     let destinations_expr = crate::revset::resolve_revset(
@@ -58,10 +65,23 @@ pub fn absorb(
         destinations,
     )?;
 
-    let source = pollster::block_on(AbsorbSource::from_commit(
-        mut_repo,
-        source_commit.inner.clone(),
-    ))
+    let source = match selections {
+        None => pollster::block_on(AbsorbSource::from_commit(
+            mut_repo,
+            source_commit.inner.clone(),
+        )),
+        Some(selections) => {
+            let commit = &source_commit.inner;
+            let parent_tree =
+                pollster::block_on(commit.parent_tree(mut_repo)).map_err(map_py_err)?;
+            let selected =
+                overlay_contents(parent_tree.clone(), Some(&commit.tree()), selections)?;
+            if selected.tree_ids() == parent_tree.tree_ids() {
+                return Err(JjError::new_err("No changes selected"));
+            }
+            pollster::block_on(AbsorbSource::from_tree(commit.clone(), selected, parent_tree))
+        }
+    }
     .map_err(map_py_err)?;
     let selected_trees = pollster::block_on(split_hunks_to_trees(
         mut_repo,

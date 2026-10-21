@@ -251,7 +251,7 @@ pub fn split_selected(
 /// diff-editor result model — the tool edits copies of the changed files,
 /// and whatever exists in its output directory afterwards becomes the new
 /// state, deletions and additions included.
-fn overlay_contents(
+pub(crate) fn overlay_contents(
     base_tree: MergedTree,
     commit_tree: Option<&MergedTree>,
     selections: HashMap<String, Option<Vec<u8>>>,

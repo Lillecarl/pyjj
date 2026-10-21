@@ -1358,7 +1358,9 @@ impl PyTransaction {
     /// empirically: omitting it panics with "Descendants have not been
     /// rebased after the last rewrites", same assertion every other
     /// rewrite-registering call here is subject to).
-    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None, check_immutable=false))]
+    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None,
+                        check_immutable=false, selections=None))]
+    #[allow(clippy::too_many_arguments)]
     fn absorb(
         &self,
         settings: &PyUserSettings,
@@ -1366,6 +1368,7 @@ impl PyTransaction {
         destinations: Option<&str>,
         paths: Option<Vec<String>>,
         check_immutable: bool,
+        selections: Option<std::collections::HashMap<String, Option<Vec<u8>>>>,
     ) -> PyResult<crate::absorb::PyAbsorbStats> {
         with_mut_repo(self, |mut_repo| {
             crate::absorb::absorb(
@@ -1376,6 +1379,7 @@ impl PyTransaction {
                 destinations.unwrap_or("mutable()"),
                 paths,
                 check_immutable,
+                selections,
             )
         })
     }
