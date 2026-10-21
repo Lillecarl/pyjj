@@ -1,5 +1,7 @@
 """operation subcommand: op_abandon."""
 
+import sys
+
 from ..common import (
     command,
     read_repo,
@@ -14,5 +16,9 @@ def op_abandon(args) -> int:
             op_str = ops[0]
         else:
             op_str = "..".join(ops)
-        ws.op_abandon(op_str)
+        stats = ws.op_abandon(op_str)
+        if stats.unmapped_working_copy_operation is not None:
+            print(f"Warning: The working copy operation "
+                  f"{stats.unmapped_working_copy_operation[:12]} is not updated "
+                  "because it differs from the repo.", file=sys.stderr)
         return 0

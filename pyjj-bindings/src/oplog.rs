@@ -79,6 +79,9 @@ pub struct PyOpAbandonStats {
     /// unreachable/rewritten), matching `jj op abandon`'s own "Nothing
     /// changed." case.
     pub changed: bool,
+    /// The working-copy operation, hex, when the abandon could not remap
+    /// it because it differs from every repo head. jj warns about it.
+    pub unmapped_working_copy_operation: Option<String>,
 }
 
 /// `jj op abandon <operation>` equivalent: prunes the operation (or, with
@@ -161,6 +164,7 @@ pub fn op_abandon(
         .collect();
     let changed = reparented.iter().any(|(old, new_id)| old.id() != *new_id);
 
+    let mut unmapped_working_copy_operation = None;
     if changed {
         for (old, new_id) in &reparented {
             if old.id() != *new_id {
@@ -175,6 +179,8 @@ pub fn op_abandon(
         let old_op_id = locked_ws.locked_wc().old_operation_id().clone();
         if let Some((_, new_id)) = reparented.iter().find(|(old, _)| *old.id() == old_op_id) {
             pollster::block_on(locked_ws.finish((*new_id).clone())).map_err(map_py_err)?;
+        } else {
+            unmapped_working_copy_operation = Some(old_op_id.hex());
         }
     }
 
@@ -182,6 +188,7 @@ pub fn op_abandon(
         abandoned_count: stats.unreachable_count,
         rewritten_count: stats.rewritten_count,
         changed,
+        unmapped_working_copy_operation,
     })
 }
 
