@@ -105,7 +105,8 @@ def rebase(args) -> int:
         _check_rewritable(
             tx, settings, target_commit_ids + target_root_ids + new_child_ids)
         tx.move_commits(
-            target_commit_ids, target_root_ids, new_parent_ids, new_child_ids,
+            target_commit_ids=target_commit_ids, target_root_ids=target_root_ids,
+            new_parent_ids=new_parent_ids, new_child_ids=new_child_ids,
             skip_emptied=getattr(args, "skip_emptied", False),
             # jj abandons a divergent commit the destination already holds
             # with identical contents, unless this asks it not to.

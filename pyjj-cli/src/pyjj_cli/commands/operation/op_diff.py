@@ -64,7 +64,8 @@ def _restore_command(args, which: str) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         try:
             undone, restored_to, description = getattr(tx, which)(
-                ws.workspace_name, getattr(args, "allow_cross_workspace", False))
+                ws.workspace_name,
+                allow_cross_workspace=getattr(args, "allow_cross_workspace", False))
         except pyjj.CrossWorkspaceError as e:
             target = "operation" if which == "undo" else "undo operation"
             print(f"Error: {e.message}\nHint: Use `--allow-cross-workspace` to "

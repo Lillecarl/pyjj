@@ -62,7 +62,7 @@ def test_splitting_it_raises(repo, settings, root):
 def test_moving_it_raises(repo, settings, root, wc_commit):
     tx = repo.start_transaction(settings)
     with pytest.raises(pyjj.JjError, match="root commit"):
-        tx.move_commits([root.id], [], [wc_commit.id], [])
+        tx.move_commits(target_commit_ids=[root.id], target_root_ids=[], new_parent_ids=[wc_commit.id], new_child_ids=[])
 
 
 def test_fixing_it_raises(repo, settings, root):

@@ -275,7 +275,7 @@ class Repo:
                 atomic._refuse_conflicts()
             # `Transaction.commit` refuses pending rewrites. This is
             # idempotent, so a verb that forgets it costs nothing.
-            transaction.rebase_descendants(False)
+            transaction.rebase_descendants()
             self._export_git_refs(transaction)
         except BaseException as e:
             # Deliberately broad: an unpredicted error is exactly when a
@@ -407,7 +407,7 @@ class Atomic:
         rebase nothing (`duplicate`, `abandon --restore-descendants`)
         call the pieces directly and stay visibly different.
         """
-        self._tx.rebase_descendants(False)
+        self._tx.rebase_descendants()
         self._record(*commits)
 
     # ---- the operations -------------------------------------------------
@@ -469,7 +469,7 @@ class Atomic:
         self._guard([source, destination])
         builder = self._tx.squash(source, destination,
                                   list(paths) if paths else None,
-                                  hunks, keep_emptied)
+                                  hunks, keep_emptied=keep_emptied)
         if builder is None:
             raise PyjjError(
                 f"squash {revision!r} into "
@@ -552,9 +552,9 @@ class Atomic:
             parents = list(dict.fromkeys(
                 parent for c in anchors for parent in c.parent_ids
                 if parent not in moving))
-        self._tx.move_commits([] if whole_branch else ids,
-                              ids if whole_branch else [],
-                              parents, children)
+        self._tx.move_commits(target_commit_ids=[] if whole_branch else ids,
+                              target_root_ids=ids if whole_branch else [],
+                              new_parent_ids=parents, new_child_ids=children)
         self._finish(*targets)
         return targets
 
@@ -573,7 +573,7 @@ class Atomic:
         else:
             for commit in targets:
                 self._tx.abandon_commit(commit)
-            self._tx.rebase_descendants(False)
+            self._tx.rebase_descendants()
         return targets
 
     def duplicate(self, revisions: Revisions) -> list[Commit]:
@@ -594,8 +594,8 @@ class Atomic:
         source = self._commit(revision)
         stats = self._tx.absorb(self._repo.settings, source, into,
                                 list(paths) if paths else None,
-                                not self._allow_immutable)
-        self._tx.rebase_descendants(False)
+                                check_immutable=not self._allow_immutable)
+        self._tx.rebase_descendants()
         return stats
 
     def restore(self, paths: Sequence[str] | None = None, *,

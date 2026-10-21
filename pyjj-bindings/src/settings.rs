@@ -127,7 +127,7 @@ impl PyUserSettings {
     /// Repo and workspace config need a repository to belong to, so they
     /// arrive through `for_repo` instead.
     #[new]
-    #[pyo3(signature = (load_config=true))]
+    #[pyo3(signature = (*, load_config=true))]
     fn new(load_config: bool) -> PyResult<Self> {
         let config = if load_config {
             crate::config::load_default_config().map_err(crate::errors::map_config_err)?
@@ -154,10 +154,10 @@ impl PyUserSettings {
     /// layers `immutable_heads()` set by `jj config set --repo` has no
     /// effect, and a rewrite real jj refuses goes through.
     #[staticmethod]
-    fn for_repo(repo_path: &str, workspace_root: &str) -> PyResult<Self> {
+    fn for_repo(repo_path: std::path::PathBuf, workspace_root: std::path::PathBuf) -> PyResult<Self> {
         let (config, warnings) = crate::config::load_config_for_repo(
-            std::path::Path::new(repo_path),
-            std::path::Path::new(workspace_root),
+            &repo_path,
+            &workspace_root,
         )?;
         Self::from_config(config, warnings)
     }

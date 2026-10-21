@@ -81,7 +81,7 @@ def workspace_remove(args) -> int:
         noun = "workspace" if len(targets) == 1 else "workspaces"
         try:
             ws.forget_workspaces(settings, [name for name, _, _ in targets],
-                                 f"remove {noun} {joined}")
+                                 description=f"remove {noun} {joined}")
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
             return 1

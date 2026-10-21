@@ -861,7 +861,7 @@ impl PyTransaction {
     /// Commits in `immutable()` stay as they are, and so do their
     /// descendants, as in jj: a fetch can move an immutable commit, and
     /// its immutable descendants must not follow.
-    #[pyo3(signature = (delete_abandoned_bookmarks=false))]
+    #[pyo3(signature = (*, delete_abandoned_bookmarks=false))]
     fn rebase_descendants(&self, delete_abandoned_bookmarks: bool) -> PyResult<usize> {
         let settings = PyUserSettings(self.settings.clone(), Vec::new());
         with_tx(self, |tx| {
@@ -911,7 +911,7 @@ impl PyTransaction {
     /// their descendants down with their content untouched. Returns how
     /// many descendants moved. See
     /// `pyjj_bindings.rewrite::abandon_restoring_descendants`.
-    #[pyo3(signature = (targets, delete_abandoned_bookmarks=false))]
+    #[pyo3(signature = (targets, *, delete_abandoned_bookmarks=false))]
     fn abandon_restoring_descendants(
         &self,
         targets: Vec<PyCommitId>,
@@ -945,12 +945,12 @@ impl PyTransaction {
     /// exports refs, and it keeps `HEAD` one step behind `@` because `@`
     /// is the commit being written rather than a checked-out one. Does
     /// nothing when the workspace has no working-copy commit here.
-    fn git_reset_head(&self, workspace_name: &str, workspace_root: &str) -> PyResult<()> {
+    fn git_reset_head(&self, workspace_name: &str, workspace_root: std::path::PathBuf) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
             crate::git::reset_head(
                 mut_repo,
                 workspace_name,
-                std::path::Path::new(workspace_root),
+                &workspace_root,
             )
         })
     }
@@ -1048,7 +1048,7 @@ impl PyTransaction {
     /// tags this repository already tracks. Naming none of the three
     /// fetches what the remote's Git refspec says, plus every tag the
     /// fetched commits reach.
-    #[pyo3(signature = (settings, remote, branches=None, tags=None, tracked=false))]
+    #[pyo3(signature = (settings, remote, branches=None, tags=None, *, tracked=false))]
     fn git_fetch(
         &self,
         settings: &PyUserSettings,
@@ -1083,7 +1083,7 @@ impl PyTransaction {
     /// `pyjj_bindings.diff_hunks(before, after)`) into `destination`.
     /// Returns `None` if there's nothing to squash. See
     /// `pyjj_bindings.rewrite.squash` docs.
-    #[pyo3(signature = (source, destination, paths=None, hunks=None, keep_emptied=false))]
+    #[pyo3(signature = (source, destination, paths=None, hunks=None, *, keep_emptied=false))]
     fn squash(
         slf: &Bound<'_, Self>,
         source: &PyCommit,
@@ -1100,7 +1100,7 @@ impl PyTransaction {
     /// `jj squash --tool`: squash a diff-editor's selection instead of a
     /// set of paths. `selections` is the tool's output, per path: bytes
     /// to write that content, `None` to leave the path out.
-    #[pyo3(signature = (source, destination, selections, keep_emptied=false))]
+    #[pyo3(signature = (source, destination, selections, *, keep_emptied=false))]
     fn squash_edited(
         slf: &Bound<'_, Self>,
         source: &PyCommit,
@@ -1162,7 +1162,7 @@ impl PyTransaction {
     /// which is what `jj split --onto/-A/-B` does -- there the selected
     /// half moves away and the remainder stays put. See
     /// `pyjj_bindings.rewrite::split_remainder`.
-    #[pyo3(signature = (target, first, new_change_id=true))]
+    #[pyo3(signature = (target, first, *, new_change_id=true))]
     fn split_remainder(
         slf: &Bound<'_, Self>,
         target: &PyCommit,
@@ -1220,6 +1220,7 @@ impl PyTransaction {
     /// :ours` (side 0) / `:theirs` (side 1). The chosen side's `FileId`
     /// is kept verbatim. Raises `JjError` unless every path is a
     /// resolvable two-sided plain-file conflict.
+    #[pyo3(signature = (commit, paths, side: "typing.Literal[0, 1]"))]
     fn pick_conflict_sides(
         slf: &Bound<'_, Self>,
         commit: &PyCommit,
@@ -1305,7 +1306,7 @@ impl PyTransaction {
     /// empirically: omitting it panics with "Descendants have not been
     /// rebased after the last rewrites", same assertion every other
     /// rewrite-registering call here is subject to).
-    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None,
+    #[pyo3(signature = (settings, source_commit, destinations=None, paths=None, *,
                         check_immutable=false, selections=None))]
     #[allow(clippy::too_many_arguments)]
     fn absorb(
@@ -1378,7 +1379,7 @@ impl PyTransaction {
     /// subprocesses itself, see `cli/src/commands/fix.rs`), but the trait
     /// itself is satisfied here by a plain Rust closure over
     /// already-computed data, not by calling back into Python.
-    #[pyo3(signature = (settings, revset=None, paths=None, include_unchanged_files=false, check_immutable=false))]
+    #[pyo3(signature = (settings, revset=None, paths=None, *, include_unchanged_files=false, check_immutable=false))]
     fn fix_enumerate(
         &self,
         settings: &PyUserSettings,
@@ -1401,7 +1402,7 @@ impl PyTransaction {
     /// same rule real `jj fix` follows. A file whose key is missing from
     /// `fixes` is left unchanged. Still needs `rebase_descendants()` before
     /// `commit()`, same as every other rewrite here.
-    #[pyo3(signature = (settings, fixes, revset=None, paths=None, include_unchanged_files=false))]
+    #[pyo3(signature = (settings, fixes, revset=None, paths=None, *, include_unchanged_files=false))]
     fn fix_apply(
         &self,
         settings: &PyUserSettings,
@@ -1482,7 +1483,7 @@ impl PyTransaction {
     /// Returns `(rewritten, reparented)`. Still needs
     /// `rebase_descendants()` before `commit()`, same as every other
     /// rewrite here.
-    #[pyo3(signature = (targets, new_trees, restore_descendants=false))]
+    #[pyo3(signature = (targets, new_trees, *, restore_descendants=false))]
     fn run_rewrite(
         &self,
         targets: Vec<PyCommitId>,
@@ -1511,7 +1512,7 @@ impl PyTransaction {
     /// the target's descendants -- call `rebase_descendants()` afterward
     /// only for other pending rewrites in this transaction, same as
     /// everywhere else in this API.
-    #[pyo3(signature = (target_commit_ids, target_root_ids, new_parent_ids, new_child_ids,
+    #[pyo3(signature = (*, target_commit_ids, target_root_ids, new_parent_ids, new_child_ids,
                         skip_emptied=false, keep_divergent=true, simplify_parents=false))]
     fn move_commits(
         &self,
@@ -1541,7 +1542,7 @@ impl PyTransaction {
     /// restoring everything (`["repo", "remote_tracking"]`); pass a subset
     /// to restore only part of the view. Does not commit -- call
     /// `.commit(description)` afterward.
-    #[pyo3(signature = (target_op, what=None))]
+    #[pyo3(signature = (target_op, what: "typing.Sequence[typing.Literal['repo', 'remote_tracking']] | None" = None))]
     fn restore_operation(
         &self,
         target_op: &crate::operation::PyOperation,
@@ -1555,7 +1556,7 @@ impl PyTransaction {
     /// `jj op revert <operation>`: merge one operation's effect back out,
     /// keeping everything that happened after it. Returns the description
     /// for `commit()`. See `pyjj_bindings.oplog::revert_operation`.
-    #[pyo3(signature = (target_op, what=None))]
+    #[pyo3(signature = (target_op, what: "typing.Sequence[typing.Literal['repo', 'remote_tracking']] | None" = None))]
     fn revert_operation(
         &self,
         target_op: &crate::operation::PyOperation,
@@ -1575,7 +1576,7 @@ impl PyTransaction {
     /// Since jj 0.46 undoing an operation performed in another
     /// workspace is refused unless `allow_cross_workspace` is given;
     /// `workspace_name` defaults to this transaction's workspace.
-    #[pyo3(signature = (workspace_name=None, allow_cross_workspace=false))]
+    #[pyo3(signature = (workspace_name=None, *, allow_cross_workspace=false))]
     fn undo(
         &self,
         workspace_name: Option<String>,
@@ -1594,7 +1595,7 @@ impl PyTransaction {
     /// `jj redo` equivalent, the complement of `undo()`. Same return shape
     /// and description-handling as `undo()`, same cross-workspace rule
     /// (`--allow-cross-workspace`).
-    #[pyo3(signature = (workspace_name=None, allow_cross_workspace=false))]
+    #[pyo3(signature = (workspace_name=None, *, allow_cross_workspace=false))]
     fn redo(
         &self,
         workspace_name: Option<String>,
@@ -1800,6 +1801,7 @@ impl PyCommitBuilder {
         Ok(slf)
     }
 
+    #[pyo3(signature = (behavior: "typing.Literal['drop', 'keep', 'own', 'force']"))]
     fn set_sign_behavior<'a>(
         mut slf: PyRefMut<'a, Self>,
         behavior: &'a str,

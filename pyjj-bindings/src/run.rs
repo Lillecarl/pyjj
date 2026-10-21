@@ -104,7 +104,7 @@ impl PyRunPool {
     /// `repo_path` is the `.jj/repo` directory (`Workspace.repo_path`).
     /// The pool lives beside it, under `.jj/run`, never inside it.
     #[new]
-    #[pyo3(signature = (repo_path, size, clean=false, sparsity=None))]
+    #[pyo3(signature = (repo_path, size, *, clean=false, sparsity=None))]
     fn new(
         repo_path: &str,
         size: usize,

@@ -185,7 +185,7 @@ impl PyUnifiedHunk {
 /// `compare` is how two lines are compared: `"exact"`,
 /// `"ignore-all-space"` or `"ignore-space-change"`.
 #[pyfunction]
-#[pyo3(signature = (before, after, context=3, compare="exact"))]
+#[pyo3(signature = (before, after, context=3, *, compare: "typing.Literal['exact', 'ignore-all-space', 'ignore-space-change']" = "exact"))]
 pub fn unified_hunks(
     before: &[u8],
     after: &[u8],
@@ -254,7 +254,7 @@ pub fn unified_hunks(
 /// tokenizer reads it: jj's `-w` and `-b` decide which lines changed,
 /// never which words did.
 #[pyfunction]
-#[pyo3(signature = (before, after, by="line", compare="exact"))]
+#[pyo3(signature = (before, after, *, by: "typing.Literal['line', 'word']" = "line", compare: "typing.Literal['exact', 'ignore-all-space', 'ignore-space-change']" = "exact"))]
 pub fn content_hunks(
     before: &[u8],
     after: &[u8],

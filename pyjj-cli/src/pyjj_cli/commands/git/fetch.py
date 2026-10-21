@@ -81,7 +81,7 @@ def git_fetch(args) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         remotes = _remotes(repo, settings, args)
         for remote in remotes:
-            tx.git_fetch(settings, remote, branches, tags, tracked)
+            tx.git_fetch(settings, remote, branches, tags, tracked=tracked)
         _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
                 settings, ws, repo)
         return 0

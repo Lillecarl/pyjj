@@ -124,8 +124,10 @@ def split(args) -> int:
                 # one first -- a merge's parent order is part of its id.
                 children = repo.revset(settings, f"children({target.id.hex()})")
                 if children:
-                    tx.move_commits([c.id for c in children], [],
-                                    [first.id, second.id], [])
+                    tx.move_commits(target_commit_ids=[c.id for c in children],
+                                    target_root_ids=[],
+                                    new_parent_ids=[first.id, second.id],
+                                    new_child_ids=[])
             else:
                 second = (tx.split_remainder(target, first,
                                              new_change_id=not moving)
@@ -146,9 +148,9 @@ def split(args) -> int:
                 child_changes = _change_ids(repo, new_child_ids)
                 tx.rebase_descendants(delete_abandoned_bookmarks=False)
                 tx.move_commits(
-                    [first.id], [],
-                    _by_change_ids(tx, settings, parent_changes),
-                    _by_change_ids(tx, settings, child_changes))
+                    target_commit_ids=[first.id], target_root_ids=[],
+                    new_parent_ids=_by_change_ids(tx, settings, parent_changes),
+                    new_child_ids=_by_change_ids(tx, settings, child_changes))
             _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",

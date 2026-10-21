@@ -39,7 +39,7 @@ def test_move_commits_onto_rebases_the_target_commit(two_branches, settings):
     repo, _wc_commit, dest, side = two_branches
 
     tx = repo.start_transaction(settings)
-    stats = tx.move_commits([side.id], [], [dest.id], [])
+    stats = tx.move_commits(target_commit_ids=[side.id], target_root_ids=[], new_parent_ids=[dest.id], new_child_ids=[])
     tx.rebase_descendants()
     repo = tx.commit("rebase side onto dest")
 
@@ -60,7 +60,7 @@ def test_move_commits_with_root_target_pulls_descendants_along(two_branches, set
     side = repo.get_commit(side.id)
 
     tx2 = repo.start_transaction(settings)
-    stats = tx2.move_commits([], [side.id], [dest.id], [])
+    stats = tx2.move_commits(target_commit_ids=[], target_root_ids=[side.id], new_parent_ids=[dest.id], new_child_ids=[])
     tx2.rebase_descendants()
     repo = tx2.commit("rebase side and its descendant onto dest")
 
@@ -94,7 +94,7 @@ def test_move_commits_insert_after_splices_in_as_a_new_child(repo, settings, wc_
     # and original_child (wc_commit's existing child) becomes inserted's
     # child instead -- same as `jj rebase -r inserted -A wc_commit`.
     tx3 = repo.start_transaction(settings)
-    stats = tx3.move_commits([inserted.id], [], [wc_commit.id], [original_child.id])
+    stats = tx3.move_commits(target_commit_ids=[inserted.id], target_root_ids=[], new_parent_ids=[wc_commit.id], new_child_ids=[original_child.id])
     tx3.rebase_descendants()
     repo = tx3.commit("insert after wc_commit")
 
@@ -116,7 +116,7 @@ def test_move_commits_insert_before_splices_in_as_a_new_parent(two_branches, set
     # parents, dest becomes side's child -- same as
     # `jj rebase -r side -B dest`.
     tx = repo.start_transaction(settings)
-    stats = tx.move_commits([side.id], [], dest.parent_ids, [dest.id])
+    stats = tx.move_commits(target_commit_ids=[side.id], target_root_ids=[], new_parent_ids=dest.parent_ids, new_child_ids=[dest.id])
     tx.rebase_descendants()
     repo = tx.commit("insert before dest")
 
@@ -133,6 +133,6 @@ def test_move_commits_insert_before_splices_in_as_a_new_parent(two_branches, set
 def test_move_commits_requires_exactly_one_target_kind(repo, settings, wc_commit):
     tx = repo.start_transaction(settings)
     with pytest.raises(pyjj.JjError):
-        tx.move_commits([], [], [wc_commit.id], [])
+        tx.move_commits(target_commit_ids=[], target_root_ids=[], new_parent_ids=[wc_commit.id], new_child_ids=[])
     with pytest.raises(pyjj.JjError):
-        tx.move_commits([wc_commit.id], [wc_commit.id], [wc_commit.id], [])
+        tx.move_commits(target_commit_ids=[wc_commit.id], target_root_ids=[wc_commit.id], new_parent_ids=[wc_commit.id], new_child_ids=[])

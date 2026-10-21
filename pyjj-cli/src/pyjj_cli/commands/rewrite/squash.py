@@ -214,6 +214,7 @@ def _place_new_commit(tx, repo, settings, source, ontos, afters, befores):
     if not children:
         return dest, source
     change = source.change_id.reverse_hex()
-    tx.move_commits([dest.id], [], parents, children)
+    tx.move_commits(target_commit_ids=[dest.id], target_root_ids=[],
+                    new_parent_ids=parents, new_child_ids=children)
     moved = tx.revset(settings, change)
     return dest, repo.get_commit(moved[0]) if moved else source

@@ -39,7 +39,7 @@ def config_path(workspace_root, scope: str, create: bool = False):
         return config_home() / "jj" / "config.toml"
     root = Path(workspace_root)
     found = pyjj_bindings.secure_config_file(
-        str(root), str(root / ".jj" / "repo"), scope, create)
+        str(root), str(root / ".jj" / "repo"), scope, create=create)
     if not found:
         return None
     path = Path(found)

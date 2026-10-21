@@ -116,7 +116,7 @@ def test_clean_wipes_files_the_last_job_left(workspace, settings, committed):
     artifact.write_bytes(b"built\n")
     slot.finish(True)
 
-    clean_pool = pyjj.RunPool(workspace.repo_path, 1, True)
+    clean_pool = pyjj.RunPool(workspace.repo_path, 1, clean=True)
     slot = clean_pool.acquire(commit)
     try:
         assert not artifact.exists()

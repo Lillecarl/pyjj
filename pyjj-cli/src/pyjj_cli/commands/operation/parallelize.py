@@ -50,7 +50,8 @@ def parallelize(args) -> int:
             # One target at a time: `move_commits` keeps the edges
             # *among* its targets, which is exactly what parallelizing
             # has to break.
-            tx.move_commits([commit.id], [], outside_ids, [])
+            tx.move_commits(target_commit_ids=[commit.id], target_root_ids=[],
+                            new_parent_ids=outside_ids, new_child_ids=[])
         _finish(tx, f"parallelize {len(targets)} commits", settings, ws, repo)
 
         if follower_changes:
@@ -68,7 +69,8 @@ def _reconnect(args, settings, target_changes, follower_changes):
     if not targets or not followers:
         return
     tx = _start_transaction(repo, settings)
-    tx.move_commits([c.id for c in followers], [], [c.id for c in targets], [])
+    tx.move_commits(target_commit_ids=[c.id for c in followers], target_root_ids=[],
+                    new_parent_ids=[c.id for c in targets], new_child_ids=[])
     _finish(tx, "parallelize: reconnect descendants", settings, ws, repo)
 
 

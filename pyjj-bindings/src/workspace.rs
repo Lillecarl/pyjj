@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -92,7 +93,7 @@ impl PyWorkspace {
     fn add_workspace_inner(
         inner: &Workspace,
         settings: &PyUserSettings,
-        destination_path: String,
+        destination_path: PathBuf,
         name: Option<String>,
         revision_ids: Option<Vec<PyCommitId>>,
         description: Option<String>,
@@ -129,7 +130,7 @@ impl PyWorkspace {
 
         if !dest_path.exists() {
             std::fs::create_dir(dest_path)
-                .map_err(|err| JjError::new_err(format!("{destination_path}: {err}")))?;
+                .map_err(|err| JjError::new_err(format!("{}: {err}", destination_path.display())))?;
         } else if !file_util::is_empty_dir(dest_path).map_err(map_backend_err)? {
             return Err(JjError::new_err(
                 "Destination path exists and is not an empty directory",
@@ -310,7 +311,7 @@ impl PyWorkspace {
     #[pyo3(signature = (settings, workspace_path, object_hash=None))]
     fn init_internal_git(
         settings: &PyUserSettings,
-        workspace_path: String,
+        workspace_path: PathBuf,
         object_hash: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
@@ -333,7 +334,7 @@ impl PyWorkspace {
     #[pyo3(signature = (settings, workspace_path, object_hash=None))]
     fn init_colocated_git(
         settings: &PyUserSettings,
-        workspace_path: String,
+        workspace_path: PathBuf,
         object_hash: Option<String>,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
@@ -360,8 +361,8 @@ impl PyWorkspace {
     #[staticmethod]
     fn init_external_git(
         settings: &PyUserSettings,
-        workspace_path: String,
-        git_repo_path: String,
+        workspace_path: PathBuf,
+        git_repo_path: PathBuf,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
         let git_path = std::path::Path::new(&git_repo_path);
@@ -398,13 +399,13 @@ impl PyWorkspace {
     /// (`jj git clone --tag`); naming either narrows the whole clone,
     /// tags included. `depth` makes a shallow clone.
     #[staticmethod]
-    #[pyo3(signature = (settings, url, destination_path, remote_name=None, colocate=true,
+    #[pyo3(signature = (settings, url, destination_path, *, remote_name=None, colocate=true,
                         branches=None, tags=None, depth=None, object_hash=None))]
     fn clone_git(
         py: Python<'_>,
         settings: &PyUserSettings,
         url: String,
-        destination_path: String,
+        destination_path: PathBuf,
         remote_name: Option<String>,
         colocate: bool,
         branches: Option<Vec<String>>,
@@ -418,7 +419,7 @@ impl PyWorkspace {
             let created = !path.exists();
             if created {
                 std::fs::create_dir_all(path)
-                    .map_err(|err| JjError::new_err(format!("{destination_path}: {err}")))?;
+                    .map_err(|err| JjError::new_err(format!("{}: {err}", destination_path.display())))?;
             } else if !file_util::is_empty_dir(path).map_err(map_backend_err)? {
                 return Err(JjError::new_err(
                     "destination path exists and is not an empty directory",
@@ -602,7 +603,7 @@ impl PyWorkspace {
 
     /// Load an existing jj workspace from `workspace_path`.
     #[staticmethod]
-    fn load(settings: &PyUserSettings, workspace_path: String) -> PyResult<Self> {
+    fn load(settings: &PyUserSettings, workspace_path: PathBuf) -> PyResult<Self> {
         let path = std::path::Path::new(&workspace_path);
         let store_factories = default_backend_factories();
         let working_copy_factories = default_working_copy_factories();
@@ -676,7 +677,7 @@ impl PyWorkspace {
         &self,
         py: Python<'_>,
         settings: &PyUserSettings,
-        destination_path: String,
+        destination_path: PathBuf,
     ) -> PyResult<()> {
         self.with_ws(py, move |inner| {
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
@@ -702,7 +703,7 @@ impl PyWorkspace {
         &self,
         py: Python<'_>,
         settings: &PyUserSettings,
-        workspace_path: String,
+        workspace_path: PathBuf,
     ) -> PyResult<bool> {
         self.with_ws(py, move |inner| {
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
@@ -927,13 +928,13 @@ impl PyWorkspace {
     /// whole repo and `[]` is nothing.
     /// `colocate` backs the new workspace with a Git worktree and points
     /// its HEAD at the new `@`'s first parent.
-    #[pyo3(signature = (settings, destination_path, name=None, revision_ids=None,
+    #[pyo3(signature = (settings, destination_path, *, name=None, revision_ids=None,
                         description=None, sparse_patterns=None, colocate=false))]
     fn add_workspace(
         &self,
         py: Python<'_>,
         settings: &PyUserSettings,
-        destination_path: String,
+        destination_path: PathBuf,
         name: Option<String>,
         revision_ids: Option<Vec<PyCommitId>>,
         description: Option<String>,
@@ -964,7 +965,7 @@ impl PyWorkspace {
     /// path outlives it); `jj remove` drops it along with the deleted
     /// directory. Defaults to dropping, preserving the historical
     /// behavior for existing callers.
-    #[pyo3(signature = (settings, names, description=None, forget_store=true))]
+    #[pyo3(signature = (settings, names, description=None, *, forget_store=true))]
     fn forget_workspaces(
         &self,
         py: Python<'_>,

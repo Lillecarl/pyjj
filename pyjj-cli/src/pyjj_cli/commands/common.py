@@ -1350,7 +1350,7 @@ def _finish(tx, description, settings, ws, base_repo, *,
         if restore_descendants:
             tx.reparent_descendants()
         else:
-            tx.rebase_descendants(delete_abandoned_bookmarks)
+            tx.rebase_descendants(delete_abandoned_bookmarks=delete_abandoned_bookmarks)
     _advance_if_immutable(tx, settings, ws, base_repo)
     _export_git_refs(tx, ws)
     tx.commit(description)
@@ -2624,7 +2624,7 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
     underline is written all the same.
     """
     lines = []
-    for hunk in pyjj.unified_hunks(before, after, context, compare):
+    for hunk in pyjj.unified_hunks(before, after, context, compare=compare):
         lines.append([(f"@@ -{hunk.left_start},{hunk.left_len} "
                        f"+{hunk.right_start},{hunk.right_len} @@",
                        "hunk_header")])
@@ -2923,7 +2923,7 @@ def _changed_rows(rows, before: bytes, after: bytes, numbers, coloured) -> None:
     rendering always splits it into a removed row and an added row. That
     is why the coloured and the plain output are not the same shape.
     """
-    hunks = pyjj.content_hunks(before, after, "word")
+    hunks = pyjj.content_hunks(before, after, by="word")
     if coloured and _can_inline(hunks):
         grouped, left, right = _diff_line_rows(hunks, numbers[0], numbers[1])
         for row_left, row_right, parts in grouped:
@@ -3010,7 +3010,7 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
     numbers = [1, 1]
     pending = None
     emitted = False
-    for kind, lhs, rhs in pyjj.content_hunks(before, after, "line", compare):
+    for kind, lhs, rhs in pyjj.content_hunks(before, after, by="line", compare=compare):
         if kind == "matching":
             pending = (lhs, rhs)
             continue
@@ -3224,7 +3224,7 @@ class _FileStat:
             return
         self.added = self.removed = 0
         for hunk in pyjj.unified_hunks(f.before_content, f.after_content, 0,
-                                       compare):
+                                       compare=compare):
             for kind, _ in hunk.lines:
                 if kind == "added":
                     self.added += 1
@@ -3468,7 +3468,7 @@ def _diff_bytes(args, ws, settings, base, target, paths,
                     "diff summary")
     elif short == "stat":
         out = block(_diff_stats_lines(
-            base.diff_stats(target, settings, paths, compare)), "diff stat")
+            base.diff_stats(target, settings, paths, compare=compare)), "diff stat")
     elif short == "types":
         out = block(_types_spans(base.diff(target, paths), to_ui_path),
                     "diff types")

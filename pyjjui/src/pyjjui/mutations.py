@@ -146,7 +146,8 @@ def rebase(
     else:
         raise ValueError(f"unknown rebase mode: {mode!r}")
 
-    tx.move_commits(target_commit_ids, target_root_ids, new_parent_ids, new_child_ids)
+    tx.move_commits(target_commit_ids=target_commit_ids, target_root_ids=target_root_ids,
+                    new_parent_ids=new_parent_ids, new_child_ids=new_child_ids)
     tx.rebase_descendants()
 
     if len(sources) > 1:

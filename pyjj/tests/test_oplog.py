@@ -212,7 +212,7 @@ def test_undo_allow_cross_workspace_goes_through(workspace, settings,
                                                  tmp_path):
     repo = _second_workspace_operation(workspace, settings, tmp_path)
     tx = repo.start_transaction(settings)
-    undone, _restored, description = tx.undo("default", True)
+    undone, _restored, description = tx.undo("default", allow_cross_workspace=True)
     assert undone.id == repo.operation.id
     assert description.startswith("undo: restore to operation ")
     tx.commit(description)
@@ -242,6 +242,6 @@ def test_redo_refuses_a_cross_workspace_undo(workspace, settings, tmp_path):
     assert "performed in workspace second" in str(excinfo.value)
 
     tx = repo_after_undo.start_transaction(settings)
-    _redone, _restored, redo_description = tx.redo("default", True)
+    _redone, _restored, redo_description = tx.redo("default", allow_cross_workspace=True)
     assert redo_description.startswith("redo: restore to operation ")
     tx.commit(redo_description)

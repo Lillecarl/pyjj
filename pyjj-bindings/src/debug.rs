@@ -85,7 +85,7 @@ fn default_index_store(loader: &RepoLoader) -> PyResult<&DefaultIndexStore> {
 
 /// `jj debug revset`.
 #[pyfunction]
-#[pyo3(signature = (repo, settings, revision, no_resolve=false, no_optimize=false))]
+#[pyo3(signature = (repo, settings, revision, *, no_resolve=false, no_optimize=false))]
 pub fn debug_revset(
     repo: &PyReadonlyRepo,
     settings: &PyUserSettings,

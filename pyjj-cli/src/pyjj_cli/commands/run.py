@@ -120,8 +120,8 @@ def run(args) -> int:
         spec = " ".join(argv)
 
         subdir = _subdir(ws.workspace_root, args.root)
-        pool = pyjj.RunPool(ws.repo_path, jobs, args.clean,
-                            _sparsity(ws, args))
+        pool = pyjj.RunPool(ws.repo_path, jobs, clean=args.clean,
+                            sparsity=_sparsity(ws, args))
 
         new_trees: dict[str, pyjj.TreeId] = {}
         for commit in commits:
@@ -198,7 +198,8 @@ def run(args) -> int:
             return 0
 
         count, moved = tx.run_rewrite(
-            [c.id for c in commits], new_trees, args.restore_descendants)
+            [c.id for c in commits], new_trees,
+            restore_descendants=args.restore_descendants)
         print(f"Rewrote {count} commits.")
         if moved > 0:
             if args.restore_descendants:

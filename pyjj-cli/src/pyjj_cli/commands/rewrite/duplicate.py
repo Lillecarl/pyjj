@@ -25,7 +25,8 @@ def duplicate(args) -> int:
             # `tx.duplicate` always lands the copies beside their
             # originals; a placement flag then moves them where jj would
             # have put them in the first place.
-            tx.move_commits([c.id for c in copies], [], parents, children)
+            tx.move_commits(target_commit_ids=[c.id for c in copies], target_root_ids=[],
+                            new_parent_ids=parents, new_child_ids=children)
         _finish(tx, "duplicate commit", settings, ws, repo)
         return 0
 

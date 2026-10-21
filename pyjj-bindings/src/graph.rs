@@ -179,7 +179,7 @@ impl PyGraphRenderer {
     /// `style` is jj's `ui.graph.style`: `"curved"` (the default),
     /// `"square"`, `"ascii"` or `"ascii-large"`.
     #[new]
-    #[pyo3(signature = (style="curved"))]
+    #[pyo3(signature = (style: "typing.Literal['curved', 'square', 'ascii', 'ascii-large']" = "curved"))]
     fn new(style: &str) -> PyResult<Self> {
         let builder = GraphRowRenderer::new().output().with_min_row_height(0);
         let inner: Box<dyn Renderer<String, Output = String>> = match style {

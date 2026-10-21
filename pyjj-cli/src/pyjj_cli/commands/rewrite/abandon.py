@@ -23,7 +23,7 @@ def abandon(args) -> int:
             # reparented rather than rebased -- one call that abandons and
             # moves together, because the choice lives per commit.
             tx.abandon_restoring_descendants(
-                [c.id for c in targets], delete_bookmarks)
+                [c.id for c in targets], delete_abandoned_bookmarks=delete_bookmarks)
             _finish(tx, f"abandon commit {targets[0].id.hex()}", settings, ws,
                     repo, delete_abandoned_bookmarks=delete_bookmarks)
             return 0

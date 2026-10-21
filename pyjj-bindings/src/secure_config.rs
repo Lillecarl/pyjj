@@ -55,7 +55,7 @@ pub(crate) fn scoped(
 /// that has never had scoped config returns `None` and nothing is
 /// written.
 #[pyfunction]
-#[pyo3(signature = (workspace_root, repo_path, kind, create=false))]
+#[pyo3(signature = (workspace_root, repo_path, kind: "typing.Literal['repo', 'workspace']", *, create=false))]
 pub fn secure_config_file(
     workspace_root: &str,
     repo_path: &str,

@@ -108,7 +108,8 @@ def apply(args) -> int:
             target = _current_id(tx, settings, changes[key])
             new_parents = [_current_id(tx, settings, changes[parent])
                            for parent in parents]
-            tx.move_commits([target], [], new_parents, [])
+            tx.move_commits(target_commit_ids=[target], target_root_ids=[],
+                            new_parent_ids=new_parents, new_child_ids=[])
             applied.append(key)
 
         parts = []

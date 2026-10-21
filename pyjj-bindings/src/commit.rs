@@ -218,7 +218,7 @@ impl PyCommit {
     /// `compare` is how two lines are compared, as for
     /// `pyjj.content_hunks()`: jj's `-w` and `-b` change these counts,
     /// because they change which lines it calls the same.
-    #[pyo3(signature = (other, settings, paths=None, compare="exact"))]
+    #[pyo3(signature = (other, settings, paths=None, *, compare: "typing.Literal['exact', 'ignore-all-space', 'ignore-space-change']" = "exact"))]
     fn diff_stats(
         &self,
         py: Python<'_>,
@@ -238,7 +238,7 @@ impl PyCommit {
     /// Pair it with `pyjj.unified_hunks()` to format a git-style diff.
     /// What this settles is the part that has to agree with jj; the
     /// formatting is the caller's.
-    #[pyo3(signature = (other, settings, paths=None, copies=true))]
+    #[pyo3(signature = (other, settings, paths=None, *, copies=true))]
     fn git_diff(
         &self,
         py: Python<'_>,
@@ -322,6 +322,7 @@ impl PyCommit {
     /// The kind of tree entry at `path` — `"file"`, `"symlink"`, `"dir"`,
     /// `"submodule"`, `"absent"`, `"file-conflict"`, or
     /// `"other-conflict"` (see `pyjj_bindings.file.file_kind`).
+    #[pyo3(signature = (path) -> "typing.Literal['file', 'symlink', 'dir', 'submodule', 'absent', 'file-conflict', 'other-conflict']")]
     fn file_kind(&self, py: Python<'_>, path: &str) -> PyResult<String> {
         py.detach(|| {
             crate::file::file_kind(self, path)
