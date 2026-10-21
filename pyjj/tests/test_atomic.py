@@ -59,7 +59,7 @@ def test_restore_lands_in_the_tree(session):
 
 def test_restore_of_an_unknown_path_is_refused(session):
     (Path(session.root) / "first.txt").write_text("edited\n")
-    with pytest.raises(pyjj.PyjjError, match="no such file"):
+    with pytest.raises(pyjj.JjError, match="no such file"):
         with session.atomic("restore a typo") as tx:
             tx.restore(["no-such-file.txt"])
 

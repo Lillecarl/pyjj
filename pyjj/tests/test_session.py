@@ -54,7 +54,7 @@ def test_open_names_the_repository(session):
 
 
 def test_open_outside_a_repository_says_so(tmp_path):
-    with pytest.raises(pyjj.PyjjError, match="no jj repository"):
+    with pytest.raises(pyjj.JjError, match="no jj repository"):
         pyjj.open(str(tmp_path))
 
 
@@ -86,8 +86,8 @@ def test_a_failed_block_leaves_no_operation_either(session):
     assert session.reload().operation_id == before
 
 
-def test_a_pyjj_error_inside_a_block_is_explained(session):
-    with pytest.raises(pyjj.PyjjError, match="Nothing was written"):
+def test_a_jj_error_inside_a_block_keeps_its_class(session):
+    with pytest.raises(pyjj.JjError, match="nothing was written") as caught:
         with session.atomic("bad revision") as tx:
             tx.describe("nonexistent-revision", message="x")
 
@@ -247,7 +247,7 @@ def test_an_immutable_commit_is_refused(colliding):
 
     session = pyjj.open(str(root))
     before = _state(session)
-    with pytest.raises(pyjj.PyjjError, match="immutable"):
+    with pytest.raises(pyjj.JjError, match="immutable"):
         with session.atomic("rewrite a") as tx:
             tx.describe("a", message="should be refused")
     assert _state(session) == before

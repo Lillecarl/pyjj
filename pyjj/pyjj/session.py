@@ -19,11 +19,16 @@ names: `revision`, `destination`, `into`, `after`, `before`,
             tx.squash("@", into="@-")
             tx.describe("@-", message="the whole change")
 
-**A failed block writes nothing.** The operations accumulate in one jj
-transaction, which becomes an operation only when the block ends
-cleanly, so an exception halfway through leaves no trace -- not a
-half-applied change, and not a rollback entry in the operation log
-either. `Atomic.rolled_back` says which way a block ended.
+**A failed block writes nothing but the snapshot.** Like every jj
+command, a block first snapshots the working copy. The block's
+operations then accumulate in one jj transaction, which becomes an
+operation only when the block ends cleanly. An exception halfway through
+leaves no half-applied change and no rollback entry in the operation
+log. `Atomic.rolled_back` says which way a block ended.
+
+Errors keep their class: a jj failure raises the `pyjj.JjError` subclass
+jj gave, with notes that say what was asked and that nothing was
+written. `PyjjError` is only for what this wrapper refuses itself.
 """
 
 from __future__ import annotations
@@ -46,17 +51,6 @@ class PyjjError(Exception):
     """
 
 
-def _revision_error(kind: str, revision: str, error: Exception) -> PyjjError:
-    """One wording for a revision that did not resolve.
-
-    `resolve`, `revset`, and `Atomic._commit` differ only in the noun;
-    the shape -- what was asked, then jj's own reason -- is shared so
-    a fourth call site cannot invent a third phrasing.
-    """
-    return PyjjError(
-        f"{kind} {revision!r}: {getattr(error, 'message', error)}")
-
-
 def open(path: str | None = None) -> Repo:
     """The repository at `path`, or the one containing the working
     directory.
@@ -69,10 +63,9 @@ def open(path: str | None = None) -> Repo:
     settings = _bindings.UserSettings()
     try:
         workspace = _bindings.Workspace.load(settings, root)
-    except Exception as e:  # noqa: BLE001 -- reported, not swallowed
-        raise PyjjError(
-            f"no jj repository at {root}: {getattr(e, 'message', e)}"
-        ) from e
+    except _bindings.JjError as e:
+        e.add_note(f"no jj repository at {root}")
+        raise
     settings = _bindings.UserSettings.for_repo(
         workspace.repo_path, workspace.workspace_root)
     # Reloaded under the full settings, the way the CLI does it.
@@ -132,15 +125,17 @@ class Repo:
         """
         try:
             return self._repo.resolve_single(self._settings, revision)
-        except Exception as e:  # noqa: BLE001
-            raise _revision_error("revision", revision, e) from e
+        except _bindings.JjError as e:
+            e.add_note(f"revision {revision!r}")
+            raise
 
     def revset(self, revision: str) -> list:
         """Every commit a revset names, in jj's order."""
         try:
             return self._repo.revset(self._settings, revision)
-        except Exception as e:  # noqa: BLE001
-            raise _revision_error("revset", revision, e) from e
+        except _bindings.JjError as e:
+            e.add_note(f"revset {revision!r}")
+            raise
 
     def log(self, revision: str = "::@", limit: int | None = None) -> list:
         """`jj log`'s rows: each commit with its edges to the ancestors
@@ -165,10 +160,11 @@ class Repo:
     ) -> Iterator[Atomic]:
         """Everything in the block, or nothing.
 
-        The block's operations accumulate in one jj transaction, which
-        becomes an operation only on a clean exit. An exception writes
-        nothing at all -- there is no half-applied state to undo, and
-        no rollback entry in the operation log.
+        The working copy is snapshotted first, as every jj command does.
+        The block's operations then accumulate in one jj transaction,
+        which becomes an operation only on a clean exit. An exception
+        before that writes nothing more: there is no half-applied state
+        to undo, and no rollback entry in the operation log.
 
         `allow_immutable` lets the block rewrite commits
         `immutable_heads()` protects; without it the first such rewrite
@@ -179,27 +175,31 @@ class Repo:
         self.snapshot()
         transaction = self._repo.start_transaction(self._settings)
         atomic = Atomic(self, transaction, allow_immutable=allow_immutable)
+        old_wc_hex = self._repo.view()[self._workspace.workspace_name]
         try:
             yield atomic
             if not allow_conflicts:
                 atomic._refuse_conflicts()
+            # `Transaction.commit` refuses pending rewrites. This is
+            # idempotent, so a verb that forgets it costs nothing.
+            transaction.rebase_descendants(False)
+            self._export_git_refs(transaction)
         except BaseException as e:
-            # Deliberately broad. A rollback that only covered the
-            # errors this module predicted would leave the repository
-            # half-changed for the ones it did not, and an unpredicted
-            # error is exactly when a caller is relying on this.
+            # Deliberately broad: an unpredicted error is exactly when a
+            # caller relies on the discard.
             atomic._discarded = True
-            raise self._explain(e, description) from e
-        # jj_lib asserts this before it will commit, and an assertion
-        # inside a native extension takes the interpreter with it
-        # rather than raising. It is idempotent, so the guard costs
-        # nothing and a verb that forgets it cannot panic the caller.
-        old_wc_hex = self._repo.view()[self._workspace.workspace_name]
-        transaction.rebase_descendants(False)
-        self._export_git_refs(transaction)
+            e.add_note(f"{description}: nothing was written; the block's "
+                       "transaction was discarded.")
+            raise
         transaction.commit(description)
         self.reload()
-        self._checkout_if_moved(old_wc_hex)
+        try:
+            self._checkout_if_moved(old_wc_hex)
+        except BaseException as e:
+            e.add_note(f"{description}: the operation was written, but the "
+                       "working copy on disk was not updated. Run "
+                       "`pyjj workspace update-stale`.")
+            raise
 
     def _checkout_if_moved(self, old_wc_hex: str) -> None:
         """What the CLI does after every transaction: when the block
@@ -235,16 +235,6 @@ class Repo:
         transaction.git_reset_head(
             self._workspace.workspace_name, self._workspace.workspace_root)
         transaction.git_export_refs()
-
-    def _explain(self, error: BaseException, description: str):
-        """The failure, said in a way the caller can act on."""
-        if isinstance(error, (PyjjError, _bindings.JjError)):
-            message = getattr(error, "message", str(error))
-            return PyjjError(
-                f"{description}: {message}\n"
-                "Nothing was written: the block's transaction was "
-                "discarded, so the repository is as it was.")
-        return error
 
 
 class Atomic:
@@ -291,8 +281,9 @@ class Atomic:
             return revision
         try:
             found = self._tx.revset(self._repo.settings, revision)
-        except Exception as e:  # noqa: BLE001
-            raise _revision_error("revision", revision, e) from e
+        except _bindings.JjError as e:
+            e.add_note(f"revision {revision!r}")
+            raise
         if len(found) != 1:
             raise PyjjError(
                 f"revision {revision!r} names {len(found)} commits; "
@@ -317,10 +308,9 @@ class Atomic:
     def _finish(self, *commits) -> None:
         """Rebase the block's descendants and record what a verb wrote.
 
-        Every verb ends this way: jj_lib asserts no pending rewrites
-        remain before it will commit, and an assertion inside a native
-        extension takes the interpreter with it rather than raising --
-        so the invariant lives here, not in each verb's memory. Verbs
+        Every verb ends this way, so a later verb in the block sees
+        rebased descendants and `Transaction.commit` finds no pending
+        rewrites. Verbs
         that record nothing (`absorb` returns stats, not commits) or
         rebase nothing (`duplicate`, `abandon --restore-descendants`)
         call the pieces directly and stay visibly different.
