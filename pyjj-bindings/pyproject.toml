@@ -18,5 +18,15 @@ features = ["pyo3/extension-module"]
 module-name = "pyjj_bindings._native"
 python-source = "python"
 
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "RUF", "FA", "BLE", "PLC0415", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"asyncio".msg = "Use anyio."
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
