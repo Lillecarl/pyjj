@@ -84,6 +84,8 @@ let
         ps: [
           pyjj
           pyjj-cli
+          # `pyjj arrange` imports pyjjui's arrange screen.
+          pyjjui
           ps.pytest
           ps.anyio
           # `cli_surface` reads `jj util markdown-help` with a real
@@ -184,6 +186,7 @@ let
           python = pkgs.python3;
           pythonPackages = pkgs.python3.pkgs // {
             pyjj = pyjjEditable;
+            pyjjui = pyjjuiEditable;
           };
         });
 

@@ -2725,6 +2725,35 @@ def test_tag_set_then_move(pair: RepoPair) -> None:
 
 
 @pytest.mark.covers("tag set", "--allow-move")
+# -- arrange --------------------------------------------------------------
+#
+# The TUI itself cannot run here; these cover what both sides decide
+# before it opens. pyjjui's own tests drive the screen and the plan.
+
+
+@pytest.mark.covers("arrange")
+def test_arrange_refuses_a_set_with_gaps(pair: RepoPair) -> None:
+    chain(pair)
+    assert pair.op(jj=["arrange", f"{rev('base')} | {rev('two')}"],
+                   may_fail=True) != 0
+    pair.assert_parity()
+
+
+@pytest.mark.covers("arrange", "-r")
+def test_arrange_with_nothing_to_arrange(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["arrange", "-r", "none()"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("arrange")
+def test_arrange_refuses_an_immutable_target(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["tag", "set", "v1", "-r", rev("one")])
+    assert pair.op(jj=["arrange", rev("one")], may_fail=True) != 0
+    pair.assert_parity()
+
+
 def test_tag_set_refuses_to_move_without_the_flag(pair: RepoPair) -> None:
     """A tag is meant to stay put: moving it needs `--allow-move`."""
     chain(pair)
@@ -3546,7 +3575,6 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 # -- commands this suite leaves out ---------------------------------------
 #
 # Excluded on purpose:
-#   arrange       an interactive TUI, so there is no argv to compare
 #   gerrit        needs a Gerrit server
 #   debug         hidden developer command
 #   hunk,         pyjj-cli's own commands; jj has no such subcommand, so

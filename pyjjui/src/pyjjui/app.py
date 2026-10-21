@@ -10,7 +10,6 @@ from textual.widgets import Footer, Header
 import pyjj
 
 from . import mutations
-from .arrange_plan import ArrangeState
 from .render.diff import render_commit_diff
 from .screens.arrange import ArrangeScreen, describe_plan
 from .screens.confirm import ConfirmScreen
@@ -253,61 +252,18 @@ class PyjjuiApp(App[None]):
             )
             return
         try:
-            targets = repo.revset(settings, revset)
+            prepared = mutations.arrange_targets(repo, settings, revset)
+        except mutations.ArrangeRefused as exc:
+            self.notify(f"{exc} {exc.hint}", title="Cannot arrange",
+                        severity="error")
+            return
         except pyjj.JjError as exc:
             self.notify(str(exc), title="Cannot arrange", severity="error")
             return
-        if not targets:
+        if prepared is None:
             self.notify("No revisions to arrange.", title="Cannot arrange")
             return
-        union = "(" + "|".join(c.id.hex() for c in targets) + ")"
-        try:
-            gaps = repo.revset(settings, f"connected{union} ~ {union}")
-        except pyjj.JjError as exc:
-            self.notify(str(exc), title="Cannot arrange", severity="error")
-            return
-        if gaps:
-            self.notify(
-                "Cannot arrange revset with gaps in. Revision"
-                f" {gaps[0].hex()[:12]} would need to be in the set.",
-                title="Cannot arrange",
-                severity="error",
-            )
-            return
-
-        commits = {c.id.hex(): c for c in targets}
-        parents = {
-            hex: [p.hex() for p in c.parent_ids]
-            for hex, c in commits.items()
-        }
-        external: set[str] = set()
-        for hex, ps in list(parents.items()):
-            for parent in ps:
-                if parent not in parents:
-                    external.add(parent)
-        try:
-            children = repo.revset(settings, f"children{union}")
-        except pyjj.JjError as exc:
-            self.notify(str(exc), title="Cannot arrange", severity="error")
-            return
-        for child in children:
-            hex = child.id.hex()
-            if hex in parents:
-                continue
-            commits[hex] = child
-            parents[hex] = [p.hex() for p in child.parent_ids]
-            external.add(hex)
-        for hex in sorted(external):
-            if hex not in commits:
-                commits[hex] = repo.get_commit(pyjj.CommitId(hex))
-                parents[hex] = [
-                    p.hex() for p in commits[hex].parent_ids
-                ]
-        child_of = set()
-        for ps in parents.values():
-            child_of.update(ps)
-        heads = [c.id.hex() for c in targets if c.id.hex() not in child_of]
-        state = ArrangeState(parents, external=external, heads=heads)
+        state, commits, targets = prepared
 
         plan = await self.push_screen_wait(ArrangeScreen(state, commits))
         if plan is None:

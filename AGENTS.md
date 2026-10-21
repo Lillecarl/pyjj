@@ -614,7 +614,6 @@ Deliberately excluded, with the reason:
 
 | Excluded | Why |
 | --- | --- |
-| `arrange` | an interactive TUI; there is no argv to run on both sides |
 | `gerrit` | needs a Gerrit server |
 | `config edit` | opens the editor on both sides |
 | `debug` | hidden developer command, not part of the CLI surface |

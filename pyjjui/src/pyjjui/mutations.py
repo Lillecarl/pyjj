@@ -11,7 +11,7 @@ one thread `run_mutation()` runs it on. `Transaction`/`CommitBuilder` are
 
 import pyjj
 
-from .arrange_plan import PlanEntry, resolve_parents
+from .arrange_plan import ArrangeState, PlanEntry, resolve_parents
 
 
 def _sync_working_copy(
@@ -357,10 +357,79 @@ def arrange(
     (`parents_changed`), and `rebase_descendants()` settles whatever
     sat below the plan.
     """
+    tx = repo.start_transaction(settings)
+    apply_arrange_plan(tx, repo, settings, plan)
+    tx.rebase_descendants()
+    new_repo = tx.commit("arrange revisions")
+    _sync_working_copy(workspace, new_repo, settings)
+    return new_repo
+
+
+class ArrangeRefused(Exception):
+    """Why `jj arrange` will not open, with jj's hint when it has one."""
+
+    def __init__(self, message: str, hint: str | None = None):
+        super().__init__(message)
+        self.hint = hint
+
+
+def arrange_targets(
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    revset: str,
+) -> tuple[ArrangeState, dict[str, pyjj.Commit], list[pyjj.Commit]] | None:
+    """`cmd_arrange`'s setup before the TUI opens: the target set, its
+    external parents and children, and the heads. `None` when the set
+    is empty. Raises `ArrangeRefused` for a set with gaps; a revset
+    error passes through as `pyjj.JjError`.
+    """
+    targets = repo.revset(settings, revset)
+    if not targets:
+        return None
+    union = "(" + "|".join(c.id.hex() for c in targets) + ")"
+    gaps = repo.revset(settings, f"connected{union} ~ {union}")
+    if gaps:
+        raise ArrangeRefused(
+            "Cannot arrange revset with gaps in.",
+            f"Revision {gaps[0].hex()[:12]} would need to be in the set.")
+
+    commits = {c.id.hex(): c for c in targets}
+    parents = {hex: [p.hex() for p in c.parent_ids]
+               for hex, c in commits.items()}
+    external: set[str] = set()
+    for ps in list(parents.values()):
+        for parent in ps:
+            if parent not in parents:
+                external.add(parent)
+    for child in repo.revset(settings, f"children{union}"):
+        hex = child.id.hex()
+        if hex in parents:
+            continue
+        commits[hex] = child
+        parents[hex] = [p.hex() for p in child.parent_ids]
+        external.add(hex)
+    for hex in sorted(external):
+        if hex not in commits:
+            commits[hex] = repo.get_commit(pyjj.CommitId(hex))
+            parents[hex] = [p.hex() for p in commits[hex].parent_ids]
+    child_of = set()
+    for ps in parents.values():
+        child_of.update(ps)
+    heads = [c.id.hex() for c in targets if c.id.hex() not in child_of]
+    return ArrangeState(parents, external=external, heads=heads), commits, targets
+
+
+def apply_arrange_plan(
+    tx: pyjj.Transaction,
+    repo: pyjj.ReadonlyRepo,
+    settings: pyjj.UserSettings,
+    plan: list[PlanEntry],
+) -> None:
+    """`RewritePlan::execute`: abandon or reparent each entry in plan
+    order. The caller rebases descendants and commits."""
     originals = {
         entry.id: repo.get_commit(pyjj.CommitId(entry.id)) for entry in plan
     }
-    tx = repo.start_transaction(settings)
     rewritten: dict[str, str] = {}
     abandoned: dict[str, list[str]] = {}
     for entry in plan:
@@ -379,7 +448,3 @@ def arrange(
             .write(repo)
         )
         rewritten[entry.id] = new_commit.id.hex()
-    tx.rebase_descendants()
-    new_repo = tx.commit("arrange revisions")
-    _sync_working_copy(workspace, new_repo, settings)
-    return new_repo

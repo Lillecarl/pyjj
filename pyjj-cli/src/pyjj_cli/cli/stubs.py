@@ -1,3 +1,4 @@
+import argparse
 import sys
 
 
@@ -10,12 +11,13 @@ def _stub(message: str):
 
 def add_parsers(sub) -> None:
     p_arrange = sub.add_parser("arrange", help="Interactively arrange the commit graph")
-    # Parse-only: the stub below still refuses, but `arrange -r` is argv
-    # jj accepts, so the surface ledger must see it parsed.
+    p_arrange.add_argument("revisions", nargs="*", metavar="REVSETS",
+                           help="The revisions to arrange (default: the "
+                                "`revsets.arrange` setting)")
     p_arrange.add_argument("-r", "--revision", dest="revision_flags",
                            action="append", metavar="REVSETS",
-                           help="Revisions to arrange")
-    p_arrange.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_arrange")
+                           help=argparse.SUPPRESS)
+    p_arrange.set_defaults(_handler="pyjj_cli.commands.rewrite.arrange:arrange")
     p_gerrit = sub.add_parser("gerrit", help="Interact with Gerrit Code Review")
     p_gerrit.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_gerrit")
     p_help = sub.add_parser("help", help="Print this message or the help of the given subcommand(s)")
@@ -24,12 +26,6 @@ def add_parsers(sub) -> None:
     p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
     p_debug = sub.add_parser("debug", help="Low-level commands not intended for users")
     p_debug.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_debug")
-
-
-def _stub_arrange(args):
-    import sys
-    print("Error: arrange is not yet supported", file=sys.stderr)
-    return 2
 
 
 def _stub_gerrit(args):
