@@ -7,9 +7,6 @@ def _load_spec(args) -> hunk_mod.Spec:
     """Load spec from args.spec / args.spec_file / stdin, handling '-'."""
     spec_str = getattr(args, "spec", None)
     spec_file = getattr(args, "spec_file", None)
-    # Handle case where spec_file is provided and spec is None, but message is in spec position
-    # For hunk split, args has spec and message; for commit, similar.
-    # The _load_spec_from_input helper already handles '-'
     return hunk_mod.load_spec_from_input(spec_str, spec_file)
 
 def _resolve_message_arg(msg: str | None, use_stdin: bool) -> str | None:
@@ -40,6 +37,8 @@ def _hunk_spec(args, cmd: str, *, require_message: bool) -> tuple[hunk_mod.Spec,
     spec_file = getattr(args, "spec_file", None)
     message = getattr(args, "message", None)
     if spec_flag is not None:
+        if require_message and message is None:
+            message, spec_str = spec_str, None
         if spec_str is not None or spec_file is not None:
             print(f"Error: {cmd}: use either --spec, --spec-file or positional <spec>, not both", file=sys.stderr)
             return None
