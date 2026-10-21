@@ -1,0 +1,9 @@
+pyjj/graph_dot.py:27: error: Skipping analyzing "pygraphviz": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+pyjj/graph_dot.py:27: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+pyjj/graph_dot.py:99: error: Incompatible types in assignment (expression has type "set[str]", variable has type "list[str]")  [assignment]
+pyjj/graph_dot.py:101: error: "list[str]" has no attribute "discard"  [attr-defined]
+pyjj/graph_layout.py:75: error: Argument 1 to "_allocate_lane" has incompatible type "list[tuple[object, str] | None]"; expected "list[tuple[CommitId, str] | None]"  [arg-type]
+pyjj/graph_layout.py:99: error: Argument 1 to "_find_or_allocate" has incompatible type "list[tuple[object, str] | None]"; expected "list[tuple[CommitId, str] | None]"  [arg-type]
+pyjj/graph_layout.py:128: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+pyjj/hunk.py:435: error: Incompatible types in assignment (expression has type "Any | None", variable has type "int")  [assignment]
+Found 6 errors in 3 files (checked 6 source files)

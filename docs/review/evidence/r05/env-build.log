@@ -1,0 +1,11 @@
+pynixd: building on sg1-n1
+building '/nix/store/ay49zy78xc5g89wq39ixl7fcbxid0v16-python3-3.14.7-env.drv'...
+pynixd: building on sg1-n1
+building '/nix/store/bwbvrq1kgb31xxxix997niipl75gyb51-r05tools.drv'...
+{
+  "dryRun": false,
+  "outputs": {
+    "out": "/nix/store/5w8ly4bsyny6ihy44plqmn2nb8gdga0p-r05tools"
+  },
+  "updatedFods": 0
+}

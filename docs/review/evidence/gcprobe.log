@@ -1,0 +1,6 @@
+gc inf -> PanicException cannot convert float seconds to Duration: value is either too big or NaN
+gc 1e+20 -> PanicException cannot convert float seconds to Duration: value is either too big or NaN
+head op: 08e5da2e0965
+reload ok
+ops on disk: ['649e29b24826']
+load_at_head -> RepoLoadError Object 08e5da2e09656dbf214040ab854c1492779a6e4c16b930239534399af932ab78a109f0e30fa345b8433a96fcad8bc3fd126f6af8c3551050573b5171775d9d88 of type operation not found

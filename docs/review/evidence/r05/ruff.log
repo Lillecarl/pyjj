@@ -1,0 +1,184 @@
+pyjj/__init__.py:5:5: F401 `pyjj_bindings.VERSION` imported but unused
+pyjj/__init__.py:76:33: RUF100 [*] Unused `noqa` directive (unused: `F401`)
+pyjj/__init__.py:77:29: RUF100 [*] Unused `noqa` directive (unused: `F401`)
+pyjj/__init__.py:78:25: RUF100 [*] Unused `noqa` directive (unused: `F401`)
+pyjj/__init__.py:85:11: RUF022 [*] `__all__` is not sorted
+pyjj/_async.py:48:5: ANN202 Missing return type annotation for private function `_wrap_instance_method`
+pyjj/_async.py:48:27: ANN001 Missing type annotation for function argument `func`
+pyjj/_async.py:50:15: ANN202 Missing return type annotation for private function `wrapper`
+pyjj/_async.py:50:23: ANN001 Missing type annotation for function argument `self`
+pyjj/_async.py:50:29: ANN002 Missing type annotation for `*args`
+pyjj/_async.py:50:36: ANN003 Missing type annotation for `**kwargs`
+pyjj/_async.py:56:5: ANN202 Missing return type annotation for private function `_wrap_static_method`
+pyjj/_async.py:56:25: ANN001 Missing type annotation for function argument `func`
+pyjj/_async.py:58:15: ANN202 Missing return type annotation for private function `wrapper`
+pyjj/_async.py:58:23: ANN002 Missing type annotation for `*args`
+pyjj/_async.py:58:30: ANN003 Missing type annotation for `**kwargs`
+pyjj/_async.py:64:5: ANN202 Missing return type annotation for private function `_install`
+pyjj/graph_layout.py:54:18: ANN001 Missing type annotation for function argument `items`
+pyjj/graph_layout.py:120:5: ANN201 Missing return type annotation for public function `reverse_graph`
+pyjj/graph_layout.py:120:19: ANN001 Missing type annotation for function argument `items`
+pyjj/graph_layout.py:135:32: FA102 Missing `from __future__ import annotations`, but uses PEP 604 union
+pyjj/graph_layout.py:144:17: FA102 Missing `from __future__ import annotations`, but uses PEP 604 union
+pyjj/hunk.py:9:101: E501 Line too long (120 > 100)
+pyjj/hunk.py:17:101: E501 Line too long (137 > 100)
+pyjj/hunk.py:18:101: E501 Line too long (123 > 100)
+pyjj/hunk.py:19:101: E501 Line too long (128 > 100)
+pyjj/hunk.py:27:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:29:101: E501 Line too long (101 > 100)
+pyjj/hunk.py:47:101: E501 Line too long (109 > 100)
+pyjj/hunk.py:77:101: E501 Line too long (137 > 100)
+pyjj/hunk.py:102:13: ANN206 Missing return type annotation for classmethod `validate_id`
+pyjj/hunk.py:102:30: ANN001 Missing type annotation for function argument `v`
+pyjj/hunk.py:111:13: ANN201 Missing return type annotation for public function `check_index_or_id`
+pyjj/hunk.py:124:13: ANN206 Missing return type annotation for classmethod `validate_ids`
+pyjj/hunk.py:124:31: ANN001 Missing type annotation for function argument `v`
+pyjj/hunk.py:135:13: ANN206 Missing return type annotation for classmethod `validate_lines`
+pyjj/hunk.py:135:33: ANN001 Missing type annotation for function argument `v`
+pyjj/hunk.py:150:13: ANN206 Missing return type annotation for classmethod `validate_hunks`
+pyjj/hunk.py:150:33: ANN001 Missing type annotation for function argument `v`
+pyjj/hunk.py:168:29: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+pyjj/hunk.py:198:101: E501 Line too long (110 > 100)
+pyjj/hunk.py:225:101: E501 Line too long (106 > 100)
+pyjj/hunk.py:264:5: PLC0415 `import` should be at the top-level of a file
+pyjj/hunk.py:316:101: E501 Line too long (103 > 100)
+pyjj/hunk.py:341:101: E501 Line too long (106 > 100)
+pyjj/hunk.py:362:101: E501 Line too long (105 > 100)
+pyjj/hunk.py:366:101: E501 Line too long (109 > 100)
+pyjj/hunk.py:368:101: E501 Line too long (103 > 100)
+pyjj/hunk.py:369:101: E501 Line too long (163 > 100)
+pyjj/hunk.py:373:101: E501 Line too long (123 > 100)
+pyjj/hunk.py:403:101: E501 Line too long (117 > 100)
+pyjj/hunk.py:431:25: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+pyjj/hunk.py:434:101: E501 Line too long (104 > 100)
+pyjj/hunk.py:455:101: E501 Line too long (112 > 100)
+pyjj/hunk.py:456:101: E501 Line too long (130 > 100)
+pyjj/hunk.py:457:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:459:101: E501 Line too long (101 > 100)
+pyjj/hunk.py:462:101: E501 Line too long (109 > 100)
+pyjj/hunk.py:470:101: E501 Line too long (104 > 100)
+pyjj/hunk.py:476:101: E501 Line too long (110 > 100)
+pyjj/hunk.py:482:101: E501 Line too long (114 > 100)
+pyjj/hunk.py:484:17: SIM102 Use a single `if` statement instead of nested `if` statements
+pyjj/hunk.py:515:101: E501 Line too long (119 > 100)
+pyjj/hunk.py:520:5: SIM110 Use `return any(start < hunk_end and end > hunk_after_start for start, end in line_ranges)` instead of `for` loop
+pyjj/hunk.py:528:101: E501 Line too long (184 > 100)
+pyjj/hunk.py:541:5: SIM102 Use a single `if` statement instead of nested `if` statements
+pyjj/hunk.py:545:101: E501 Line too long (109 > 100)
+pyjj/hunk.py:548:5: SIM102 Use a single `if` statement instead of nested `if` statements
+pyjj/hunk.py:571:101: E501 Line too long (163 > 100)
+pyjj/hunk.py:572:101: E501 Line too long (106 > 100)
+pyjj/hunk.py:612:101: E501 Line too long (110 > 100)
+pyjj/hunk.py:618:101: E501 Line too long (114 > 100)
+pyjj/hunk.py:620:101: E501 Line too long (116 > 100)
+pyjj/hunk.py:625:101: E501 Line too long (102 > 100)
+pyjj/hunk.py:651:101: E501 Line too long (105 > 100)
+pyjj/hunk.py:652:101: E501 Line too long (104 > 100)
+pyjj/hunk.py:656:101: E501 Line too long (111 > 100)
+pyjj/hunk.py:658:101: E501 Line too long (122 > 100)
+pyjj/hunk.py:659:101: E501 Line too long (128 > 100)
+pyjj/hunk.py:662:101: E501 Line too long (106 > 100)
+pyjj/hunk.py:665:101: E501 Line too long (127 > 100)
+pyjj/hunk.py:668:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:670:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:671:101: E501 Line too long (109 > 100)
+pyjj/hunk.py:672:101: E501 Line too long (111 > 100)
+pyjj/hunk.py:674:101: E501 Line too long (121 > 100)
+pyjj/hunk.py:676:101: E501 Line too long (115 > 100)
+pyjj/hunk.py:678:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:679:101: E501 Line too long (130 > 100)
+pyjj/hunk.py:680:101: E501 Line too long (132 > 100)
+pyjj/hunk.py:681:101: E501 Line too long (114 > 100)
+pyjj/hunk.py:682:101: E501 Line too long (107 > 100)
+pyjj/hunk.py:683:101: E501 Line too long (101 > 100)
+pyjj/hunk.py:684:101: E501 Line too long (125 > 100)
+pyjj/hunk.py:685:101: E501 Line too long (197 > 100)
+pyjj/hunk.py:686:101: E501 Line too long (133 > 100)
+pyjj/hunk.py:689:101: E501 Line too long (141 > 100)
+pyjj/hunk.py:692:101: E501 Line too long (132 > 100)
+pyjj/hunk.py:695:101: E501 Line too long (266 > 100)
+pyjj/hunk.py:696:101: E501 Line too long (155 > 100)
+pyjj/hunk.py:697:101: E501 Line too long (121 > 100)
+pyjj/hunk.py:715:101: E501 Line too long (138 > 100)
+pyjj/hunk.py:716:101: E501 Line too long (120 > 100)
+pyjj/hunk.py:717:101: E501 Line too long (108 > 100)
+pyjj/hunk.py:718:101: E501 Line too long (116 > 100)
+pyjj/hunk.py:719:101: E501 Line too long (143 > 100)
+pyjj/hunk.py:720:101: E501 Line too long (231 > 100)
+pyjj/hunk.py:721:101: E501 Line too long (178 > 100)
+pyjj/hunk.py:722:101: E501 Line too long (151 > 100)
+pyjj/hunk.py:723:101: E501 Line too long (111 > 100)
+pyjj/hunk.py:725:101: E501 Line too long (136 > 100)
+pyjj/hunk.py:727:101: E501 Line too long (114 > 100)
+pyjj/hunk.py:728:101: E501 Line too long (101 > 100)
+pyjj/hunk.py:731:101: E501 Line too long (133 > 100)
+pyjj/hunk.py:733:101: E501 Line too long (104 > 100)
+pyjj/hunk.py:735:101: E501 Line too long (113 > 100)
+pyjj/hunk.py:741:101: E501 Line too long (121 > 100)
+pyjj/hunk.py:742:101: E501 Line too long (110 > 100)
+pyjj/hunk.py:745:101: E501 Line too long (147 > 100)
+pyjj/hunk.py:747:101: E501 Line too long (112 > 100)
+pyjj/hunk.py:748:101: E501 Line too long (123 > 100)
+pyjj/hunk.py:750:101: E501 Line too long (196 > 100)
+pyjj/hunk.py:752:101: E501 Line too long (108 > 100)
+pyjj/hunk.py:754:101: E501 Line too long (110 > 100)
+pyjj/hunk.py:781:101: E501 Line too long (125 > 100)
+pyjj/hunk.py:799:27: ANN001 Missing type annotation for function argument `commit`
+pyjj/hunk.py:799:35: ANN001 Missing type annotation for function argument `settings`
+pyjj/hunk.py:801:101: E501 Line too long (103 > 100)
+pyjj/hunk.py:808:101: E501 Line too long (102 > 100)
+pyjj/hunk.py:814:38: ANN001 Missing type annotation for function argument `repo`
+pyjj/hunk.py:814:44: ANN001 Missing type annotation for function argument `commit`
+pyjj/hunk.py:814:52: ANN001 Missing type annotation for function argument `settings`
+pyjj/hunk.py:828:16: BLE001 Do not catch blind exception: `Exception`
+pyjj/hunk.py:832:16: BLE001 Do not catch blind exception: `Exception`
+pyjj/hunk.py:840:23: ANN001 Missing type annotation for function argument `repo`
+pyjj/hunk.py:840:29: ANN001 Missing type annotation for function argument `commit`
+pyjj/hunk.py:840:49: ANN001 Missing type annotation for function argument `settings`
+pyjj/hunk.py:843:101: E501 Line too long (116 > 100)
+pyjj/hunk.py:845:101: E501 Line too long (118 > 100)
+pyjj/hunk.py:847:101: E501 Line too long (105 > 100)
+pyjj/hunk.py:854:24: B007 Loop control variable `after` not used within loop body
+pyjj/hunk.py:858:101: E501 Line too long (114 > 100)
+pyjj/hunk.py:860:101: E501 Line too long (149 > 100)
+pyjj/hunk.py:861:101: E501 Line too long (120 > 100)
+pyjj/hunk.py:862:101: E501 Line too long (147 > 100)
+pyjj/hunk.py:868:101: E501 Line too long (130 > 100)
+pyjj/hunk.py:869:101: E501 Line too long (167 > 100)
+pyjj/hunk.py:871:101: E501 Line too long (120 > 100)
+pyjj/hunk.py:877:5: PLC0415 `import` should be at the top-level of a file
+pyjj/hunk.py:878:5: PLC0415 `import` should be at the top-level of a file
+pyjj/session.py:72:29: RUF100 [*] Unused `noqa` directive (unused: `BLE001`)
+pyjj/session.py:86:24: ANN001 Missing type annotation for function argument `workspace`
+pyjj/session.py:86:35: ANN001 Missing type annotation for function argument `settings`
+pyjj/session.py:94:24: ANN002 Missing type annotation for `*_exc`
+pyjj/session.py:105:9: ANN201 Missing return type annotation for public function `settings`
+pyjj/session.py:111:9: ANN201 Missing return type annotation for public function `workspace`
+pyjj/session.py:126:9: ANN201 Missing return type annotation for public function `resolve`
+pyjj/session.py:135:33: RUF100 [*] Unused `noqa` directive (unused: `BLE001`)
+pyjj/session.py:142:33: RUF100 [*] Unused `noqa` directive (unused: `BLE001`)
+pyjj/session.py:224:32: ANN001 Missing type annotation for function argument `transaction`
+pyjj/session.py:239:9: ANN202 Missing return type annotation for private function `_explain`
+pyjj/session.py:257:36: ANN001 Missing type annotation for function argument `transaction`
+pyjj/session.py:275:9: ANN201 Missing return type annotation for public function `transaction`
+pyjj/session.py:280:9: ANN202 Missing return type annotation for private function `_commit`
+pyjj/session.py:280:23: ANN001 Missing type annotation for function argument `revision`
+pyjj/session.py:294:33: RUF100 [*] Unused `noqa` directive (unused: `BLE001`)
+pyjj/session.py:302:24: ANN001 Missing type annotation for function argument `revisions`
+pyjj/session.py:307:22: ANN001 Missing type annotation for function argument `commits`
+pyjj/session.py:314:23: ANN002 Missing type annotation for `*commits`
+pyjj/session.py:317:23: ANN002 Missing type annotation for `*commits`
+pyjj/session.py:333:9: ANN201 Missing return type annotation for public function `describe`
+pyjj/session.py:343:9: ANN201 Missing return type annotation for public function `new`
+pyjj/session.py:362:9: ANN201 Missing return type annotation for public function `commit`
+pyjj/session.py:368:9: ANN201 Missing return type annotation for public function `squash`
+pyjj/session.py:393:9: ANN201 Missing return type annotation for public function `split`
+pyjj/session.py:423:9: ANN201 Missing return type annotation for public function `rebase`
+pyjj/session.py:464:9: ANN201 Missing return type annotation for public function `abandon`
+pyjj/session.py:482:9: ANN201 Missing return type annotation for public function `duplicate`
+pyjj/session.py:488:9: ANN201 Missing return type annotation for public function `absorb`
+pyjj/session.py:504:9: ANN201 Missing return type annotation for public function `restore`
+pyjj/session.py:522:9: ANN201 Missing return type annotation for public function `revert`
+pyjj/session.py:545:9: ANN201 Missing return type annotation for public function `bookmark`
+Found 182 errors.
+[*] 8 fixable with the `--fix` option (5 hidden fixes can be enabled with the `--unsafe-fixes` option).

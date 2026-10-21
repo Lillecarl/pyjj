@@ -1,0 +1,9 @@
+c1 {'a.txt': b'1\n2\n', 'b.txt': b'y\n'}
+c2 {'b.txt': b'y2\n', 'c.txt': b'new\n'}
+hunks a.txt: 1
+split first (asked: only a.txt deletion hunks) {'a.txt': b'', 'b.txt': b'y2\n', 'c.txt': b'new\n'}
+split first (asked: zero hunks of c.txt) {'b.txt': b'y2\n', 'c.txt': b'new\n'}
+enumerate: [('x.rs', '1275430f1765c63e539cb0452565563bd6aef6a6'), ('x.txt', '1275430f1765c63e539cb0452565563bd6aef6a6')]
+rewrote acc1f6ad7baa073767a3a1399e4c9ea8f5328a3f -> 4ca908c00b7adb24cc6147b0ddc7df373302342b
+summary fixed 1
+after fix (only .rs given new content) {'x.rs': b'FORMATTED\n', 'x.txt': b'FORMATTED\n'}

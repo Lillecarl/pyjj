@@ -1,0 +1,69 @@
+🐍 Found CPython 3.14 at /nix/store/lb41b0anx1f98y9y5s9mdv97gjgsq740-python3-3.14.7/bin/python3
+🔗 Found pyo3 bindings
+📡 Using build options features from pyproject.toml
+   Compiling pyo3-ffi v0.29.0
+   Compiling pyo3 v0.29.0
+   Compiling pyo3-async-runtimes v0.29.0
+   Compiling pyjj-bindings v0.46.0 (/tmp/claude-1000/-home-lillecarl-Code-pyjj/ec083ca3-e535-474a-b178-c438dd3554da/scratchpad/stubtry)
+warning: unused import: `RevsetStreamExt as _`
+  --> src/debug.rs:23:46
+   |
+23 | use jj_lib::revset::{self, RevsetExtensions, RevsetStreamExt as _, SymbolResolver};
+   |                                              ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+  --> src/converge.rs:16:1
+   |
+16 | #[pyclass(name = "DivergentChange", frozen)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+   = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+  --> src/converge.rs:41:1
+   |
+41 | #[pyclass(name = "ConvergedAuthor", frozen)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+  --> src/converge.rs:99:1
+   |
+99 | #[pyclass(name = "ConvergedDescription", frozen)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+   --> src/converge.rs:157:1
+    |
+157 | #[pyclass(name = "ConvergedParents", frozen)]
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+   --> src/converge.rs:218:1
+    |
+218 | #[pyclass(name = "ConvergeTree", frozen)]
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated constant `pyo3::impl_::deprecated::HasAutomaticFromPyObject::<true>::MSG`: The `FromPyObject` implementation for `#[pyclass]` types which implement `Clone` is changing to an opt-in option. Use `#[pyclass(from_py_object)]` to opt-in to the `FromPyObject` derive now, or `#[pyclass(skip_from_py_object)]` to skip the `FromPyObject` implementation.
+   --> src/converge.rs:227:1
+    |
+227 | #[pyclass(name = "ConvergeResult", frozen)]
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this warning originates in the attribute macro `pyclass` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `pyjj-bindings` (lib) generated 7 warnings (run `cargo fix --lib -p pyjj-bindings` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.15s
+🚉 Overriding platform tag from _PYTHON_HOST_PLATFORM environment variable as linux_x86_64.
+📖 Type stub extracted from the built binary
+📦 Built wheel for CPython 3.14 to /tmp/claude-1000/-home-lillecarl-Code-pyjj/ec083ca3-e535-474a-b178-c438dd3554da/scratchpad/stubtry/target/wheels/pyjj_bindings-0.46.0-cp314-cp314-linux_x86_64.whl

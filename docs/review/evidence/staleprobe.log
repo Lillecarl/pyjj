@@ -1,0 +1,4 @@
+before: ['f']
+head @ after other op: ['f', 'g']
+snapshot stats: {'untracked_paths': 0, 'refused': {}, 'changed': True}
+after pyjj snapshot: ['f']

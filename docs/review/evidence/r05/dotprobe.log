@@ -1,0 +1,4 @@
+resolved M: [('B', 'direct'), ('B', 'direct')]
+PlanError: node M names parent B twice
+parsed nodes: ['Y']
+dashed,bold: {'a': [('b', 'direct')]}

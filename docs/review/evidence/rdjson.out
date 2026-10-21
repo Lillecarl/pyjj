@@ -1,0 +1,11 @@
+format_version 60
+reachable public fns+inherent methods: 944
+  simple      520  55%
+  async       161  17%
+  generic     137  15%
+  lifetime     56  6%
+  dyn          56  6%
+  closure      14  1%
+  of simple, only plain std types: 159
+  &mut self receivers: 140
+public traits: 36

@@ -1,0 +1,10 @@
+case 1 'x\na\nb\nx\n' -> 'x\nb\na\nx\n'
+  rust: [(b'a\n', b''), (b'', b'a\n')]
+  py:   [(b'', b'b\n'), (b'b\n', b'')]
+case 2 'a\nb\nc\n' -> 'c\nb\na\n'
+  rust: [(b'a\nb\n', b''), (b'', b'b\na\n')]
+  py:   [(b'', b'c\nb\n'), (b'b\nc\n', b'')]
+case 12 'c\nb\nc\na\n{\nb\nc\nc\n' -> 'b\nb\nc\nz\na\nx\nb\nc\n}\n'
+  rust: [(b'c\nb\nc\n', b'b\nb\nc\nz\n'), (b'{\n', b'x\n'), (b'c\n', b'}\n')]
+  py:   [(b'c\n', b'b\n'), (b'', b'z\n'), (b'{\n', b'x\n'), (b'c\n', b'}\n')]
+105/304 cases disagree

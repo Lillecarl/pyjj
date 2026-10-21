@@ -1,0 +1,21 @@
+no-eol hunks: [('b', 'c')]
+no-eol keep all: b'a\nc'
+add-eol hunks: [('a', 'a\n')]
+crlf keep: b'a\r\nB\r\n'
+u2028 keep: b'x\xe2\x80\xa8z\n'
+empty->content hunks: [('insert', {'start': 1, 'lines': 0})]
+empty->content keep: b'x\n'
+binary hunks[0]: b'\xff\x00a'
+binary lines: b'\xff\x00a'
+replace keep added line 0: b'new1\n'
+delete hunk removed_lines=[0]: b'a\n'
+lines [2,2] accepted: [(2, 2)]
+delete hunk vs lines [1,3]: b'a\nc\n'
+id+lines (pydantic): ({'hunk-ab'}, {})
+id+lines (manual) raised: "Per-hunk lines with 'id' not yet supported for 'f', use 'index'"
+bool index (manual): {True}
+bool index (pydantic): {1}
+action reset + hunks: b'a\n'
+collected: {'bin.dat': (b'\xff\x00\x01', b'\xff\x00\x02'), 'gone.txt': (b'x\n', b'')}
+overrides default=keep: {'bin.dat': b'\xff\x00\x02', 'gone.txt': b''}
+list_hunks_for_commit: {}

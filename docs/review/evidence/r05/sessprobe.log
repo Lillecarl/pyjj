@@ -1,0 +1,21 @@
+== split_non_wc: exit 0
+before: @ = ('', 'pkvnlplk') @- = ('ab', 'zkppmtlw')
+after:  @ = ('ab', 'lzuotprl') @- = ('only a', 'zkppmtlw')
+@ parents: ['only a']
+== rebase_after_moved: exit 0
+raised PyjjError two-step: revision "description(exact:'y\n')" names 0 commits; an operation needs exactly one
+Nothing was written: the block's transaction was discarded, so the repository is as it was.
+== new_leaves_empty: exit 0
+empty undescribed non-root commits: 1
+== error_type: exit 0
+only PyjjError; cause: PyjjError cause.cause: RevsetEvalError
+== failed_block_writes: exit 0
+raised boom cause is self: True
+op changed after failed block: True
+== squash_root_child: exit 0
+raised (<class 'IndexError'>, <class 'LookupError'>) list index out of range
+== squash_merge: exit 0
+squash of a merge went into: first parent (no error)
+== second_block_after_checkout: exit 0
+@ = B files: ['a', 'b']
+@- files: ['a']

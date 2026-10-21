@@ -1,0 +1,10 @@
+total pub fn (non-test, incl. non-reachable modules): 995
+no async/generic/impl/dyn/lifetime/closure/mut/stream: 473
+  mut: 172
+  async: 161
+  impl_trait: 137
+  lifetime: 127
+  dyn: 102
+  stream_iter: 90
+  generic: 81
+  closure: 24

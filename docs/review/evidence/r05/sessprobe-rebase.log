@@ -1,0 +1,3 @@
+x desc repr: 'x'
+raised PyjjError two-step: revset '37d3c21608091f2ce7710f1a1b88868be66e2d26+': Revision `37d3c21608091f2ce7710f1a1b88868be66e2d26` doesn't exist
+Nothing was written: the block's transaction was discarded, so the repository is as it was.

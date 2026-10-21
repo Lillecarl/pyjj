@@ -1,0 +1,9 @@
+
+thread '<unnamed>' (3843387) panicked at /home/lillecarl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jj-lib-0.46.0/src/tree_builder.rs:72:9:
+assertion failed: !path.is_root()
+'' -> PanicException assertion failed: !path.is_root()
+'..' -> accepted, files: ['..']
+'a/../b' -> accepted, files: ['a/../b']
+'.' -> accepted, files: ['.']
+'.git/hooks/post-checkout' -> accepted, files: ['.git/hooks/post-checkout']
+'.jj/repo/x' -> accepted, files: ['.jj/repo/x']

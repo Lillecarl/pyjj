@@ -1,0 +1,21 @@
+
+thread '<unnamed>' (3801433) panicked at src/ids.rs:26:21:
+end byte index 99 is out of bounds for string of length 40
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+asyncio rust_async OK True
+asyncio py_async OK (None, None, True)
+anyio-asyncio rust_async OK True
+anyio-asyncio py_async OK (None, None, True)
+anyio-trio rust_async FAIL RuntimeError no running event loop
+anyio-trio py_async OK (None, None, True)
+sync loop 42.0ms, ticker advanced 5 (expect ~84 if GIL released)
+probe raised (<class 'pyo3_runtime.PanicException'>, <class 'BaseException'>, <class 'object'>) end byte index 99 is out of bounds for string of length 40
+probe: no tree_id
+probe raised (<class 'TypeError'>, <class 'Exception'>, <class 'BaseException'>, <class 'object'>) unhashable type: 'builtins.TreeId'
+probe: True
+probe raised (<class 'builtins.JjError'>, <class 'Exception'>, <class 'BaseException'>, <class 'object'>) invalid CommitId: zz
+probe: False
+probe: False
+probe: JjError('x')
+probe: boom
+probe: ('boom',)

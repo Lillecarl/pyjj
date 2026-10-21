@@ -1,0 +1,15 @@
+== commit_without_rebase: exit 0
+raised (<class 'pyo3_runtime.PanicException'>, <class 'BaseException'>, <class 'object'>) BUG: Descendants have not been rebased after the last rewrites.
+repr after: Transaction(consumed)
+stderr: thread '<unnamed>' (3823056) panicked at /home/lillecarl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jj-lib-0.46.0/src/transaction.rs:141:9:
+BUG: Descendants have not been rebased after the last rewrites.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+== builder_after_commit: exit -11
+committed; tx repr: Transaction(consumed) ; now writing stale builder
+== builder_after_tx_dropped: exit -11
+tx dropped; writing builder
+== settings_split: exit 0
+author: Repo Settings | op user: Operation(f7a27d174507f38634fa46f102fc223781924917d187ac3e419b0a08fa901875debfd9bc1704c2c5d4260c7939ad363f45b2996604af5ba53c8d8843d200a572, "x")
+== write_wrong_repo: exit 0
+is_hidden against attached repo: True
+check_out commit: Commit(rrqqttrnnmqsrwpoypzuskrntptklroy, 98bde6458baed7b9461be674363ccd59b862d502)
