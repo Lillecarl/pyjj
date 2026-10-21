@@ -1902,6 +1902,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "sapling-renderdag",
+ "serde",
  "thiserror 2.0.19",
  "toml_edit",
  "whoami",

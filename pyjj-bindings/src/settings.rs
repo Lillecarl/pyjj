@@ -26,16 +26,9 @@ fn flatten_layer(
     out: &mut std::collections::HashMap<String, String>,
 ) {
     for (key, item) in table.iter() {
-        let dotted = if prefix.is_empty() {
-            key.to_string()
-        } else if key
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            format!("{prefix}.{key}")
-        } else {
-            format!("{prefix}.{key:?}")
-        };
+        // TOML's own key quoting, as jj prints a config name.
+        let part = toml_edit::Key::new(key).display_repr().into_owned();
+        let dotted = if prefix.is_empty() { part } else { format!("{prefix}.{part}") };
         match item {
             toml_edit::Item::Table(table) => flatten_layer(table, dotted, out),
             toml_edit::Item::Value(value) => {
@@ -259,28 +252,14 @@ impl PyUserSettings {
     /// string-valued config key a caller might need, the same way `jj`
     /// itself reads arbitrary config via `StackedConfig::get`.
     fn get_string(&self, key: &str) -> PyResult<Option<String>> {
-        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
-        })?;
-        match self.0.config().get::<String>(path) {
-            Ok(value) => Ok(Some(value)),
-            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_config_err(err)),
-        }
+        self.get_opt(key)
     }
 
     /// Reads an arbitrary dotted config key as a list of strings (e.g.
     /// `merge-tools.<name>.edit-args`). Returns `None` if unset anywhere;
     /// raises `JjError` if present but not a string list.
     fn get_string_list(&self, key: &str) -> PyResult<Option<Vec<String>>> {
-        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
-        })?;
-        match self.0.config().get::<Vec<String>>(path) {
-            Ok(value) => Ok(Some(value)),
-            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_config_err(err)),
-        }
+        self.get_opt(key)
     }
 
     /// Reads an arbitrary dotted config key as a boolean (e.g.
@@ -288,28 +267,14 @@ impl PyUserSettings {
     /// `None` if unset anywhere; raises `JjError` if present but not a
     /// bool.
     fn get_bool(&self, key: &str) -> PyResult<Option<bool>> {
-        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
-        })?;
-        match self.0.config().get::<bool>(path) {
-            Ok(value) => Ok(Some(value)),
-            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_config_err(err)),
-        }
+        self.get_opt(key)
     }
 
     /// Reads an arbitrary dotted config key as an integer (e.g.
     /// `run.jobs`). Returns `None` if unset anywhere; raises `JjError` if
     /// present but not an integer.
     fn get_int(&self, key: &str) -> PyResult<Option<i64>> {
-        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
-        })?;
-        match self.0.config().get::<i64>(path) {
-            Ok(value) => Ok(Some(value)),
-            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_config_err(err)),
-        }
+        self.get_opt(key)
     }
 
     /// Lists the tool names under `fix.tools` (e.g. `["clang-format", "black"]`

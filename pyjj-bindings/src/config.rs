@@ -205,12 +205,19 @@ fn load_layers_at(
 /// overrides -- everything except repo/workspace config (see module docs)
 /// and command-line `--config` (not applicable to a library).
 pub fn load_default_config() -> Result<StackedConfig, ConfigLoadError> {
+    let mut config = load_user_layers()?;
+    config.add_layer(env_overrides_layer());
+    Ok(config)
+}
+
+/// Every layer below the scoped ones: defaults, `revsets.toml`, env base,
+/// system and user config.
+fn load_user_layers() -> Result<StackedConfig, ConfigLoadError> {
     let mut config = StackedConfig::with_defaults();
     config.add_layer(revsets_default_layer());
     config.add_layer(env_base_layer());
     load_layers_at(&mut config, ConfigSource::System, &system_config_paths())?;
     load_layers_at(&mut config, ConfigSource::User, &user_config_paths())?;
-    config.add_layer(env_overrides_layer());
     Ok(config)
 }
 
@@ -258,11 +265,8 @@ pub fn load_config_for_repo(
     workspace_root: &Path,
 ) -> PyResult<(StackedConfig, Vec<String>)> {
     let load_err = crate::errors::map_config_err;
-    let mut config = StackedConfig::with_defaults();
-    config.add_layer(revsets_default_layer());
-    config.add_layer(env_base_layer());
-    load_layers_at(&mut config, ConfigSource::System, &system_config_paths()).map_err(load_err)?;
-    load_layers_at(&mut config, ConfigSource::User, &user_config_paths()).map_err(load_err)?;
+    let mut config = load_user_layers().map_err(load_err)?;
+    let mut warnings = Vec::new();
     for (kind, source) in [("repo", ConfigSource::Repo), ("workspace", ConfigSource::Workspace)] {
         if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind, &mut warnings)? {
             load_layers_at(&mut config, source, &[path]).map_err(load_err)?;
