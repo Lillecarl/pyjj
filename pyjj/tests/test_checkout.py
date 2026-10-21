@@ -5,6 +5,8 @@ copy with the commit graph, and Commit.diff() for inspecting the result.
 import os
 from pathlib import Path
 
+import pytest
+
 import pyjj
 
 
@@ -292,3 +294,51 @@ def test_reset_lets_a_matching_snapshot_be_a_clean_no_op(workspace, repo, settin
     op_before = repo.operation.id
     new_repo, _stats = workspace.snapshot(settings)
     assert new_repo.operation.id == op_before
+
+
+def test_snapshot_refuses_a_stale_working_copy(workspace, repo, settings, wc_commit):
+    Path(workspace.workspace_root, "f").write_text("f\n")
+    repo, _stats = workspace.snapshot(settings)
+    wc = repo.resolve_single(settings, "@")
+    tx = repo.start_transaction(settings)
+    tx.edit_commit_tree(wc, {"g": b"g\n"}).write()
+    tx.rebase_descendants()
+    tx.commit("another process adds g to @")
+
+    with pytest.raises(pyjj.WorkingCopyError, match="stale"):
+        workspace.snapshot(settings)
+
+
+def test_snapshot_honours_git_info_exclude(workspace, settings):
+    root = Path(workspace.workspace_root)
+    exclude = root / ".jj" / "repo" / "store" / "git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    exclude.write_text("secret.txt\n")
+    (root / "secret.txt").write_text("hidden\n")
+    (root / "kept.txt").write_text("kept\n")
+
+    repo, _stats = workspace.snapshot(settings)
+    assert repo.resolve_single(settings, "@").list_files() == ["kept.txt"]
+
+
+def test_snapshot_honours_auto_track(workspace):
+    settings = pyjj.UserSettings(load_config=False).with_command_args(
+        [("config", 'snapshot.auto-track="glob:*.txt"')])
+    root = Path(workspace.workspace_root)
+    (root / "a.txt").write_text("a\n")
+    (root / "b.bin").write_text("b\n")
+
+    repo, _stats = workspace.snapshot(settings)
+    assert repo.resolve_single(settings, "@").list_files() == ["a.txt"]
+
+
+def test_snapshot_puts_a_new_commit_on_an_immutable_wc(workspace, wc_commit):
+    settings = pyjj.UserSettings(load_config=False).with_command_args(
+        [("config", 'revset-aliases."immutable()"="@"')])
+    Path(workspace.workspace_root, "new.txt").write_text("new\n")
+
+    repo, stats = workspace.snapshot(settings)
+    new_wc = repo.resolve_single(settings, "@")
+    assert stats["wc_immutable"] is True
+    assert new_wc.parent_ids == [wc_commit.id]
+    assert repo.get_commit(wc_commit.id).list_files() == []

@@ -1,34 +1,198 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use jj_lib::commit::Commit;
+use jj_lib::config::ConfigGetError;
+use jj_lib::fileset::{FilesetAliasesMap, FilesetDiagnostics, FilesetParseContext};
 use jj_lib::gitignore::GitIgnoreFile;
-use jj_lib::matchers::{EverythingMatcher, NothingMatcher};
+use jj_lib::matchers::{Matcher, NothingMatcher};
 use jj_lib::merge::Merge;
 use jj_lib::merged_tree_builder::MergedTreeBuilder;
-use jj_lib::repo::{MutableRepo, Repo as _};
+use jj_lib::op_store::OpStoreError;
+use jj_lib::object_id::ObjectId as _;
+use jj_lib::ref_name::WorkspaceName;
+use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
+use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 use jj_lib::settings::HumanByteSize;
+use jj_lib::store::Store;
 use jj_lib::transaction::Transaction;
-use jj_lib::working_copy::SnapshotOptions;
+use jj_lib::ui_path::RepoPathUiConverter;
+use jj_lib::working_copy::{
+    CheckoutStats, LockedWorkingCopy, SnapshotOptions, UntrackedReason, WorkingCopyFreshness,
+};
 use jj_lib::workspace::Workspace;
 
-use jj_lib::working_copy::UntrackedReason;
-
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::{map_backend_err, map_checkout_err, map_transaction_err, map_working_copy_err};
+use crate::errors::{
+    WorkingCopyError, map_backend_err, map_checkout_err, map_transaction_err, map_working_copy_err,
+};
 use crate::settings::PyUserSettings;
 use crate::workspace::wrap_repo;
 
-/// Reads `snapshot.max-new-file-size` the same way `cli`'s own
-/// `WorkspaceCommandHelper::snapshot_options` does (including its `0` ->
-/// "unlimited" convention) -- falls back to jj_lib's/`cli`'s own bundled
-/// default (`"1MiB"`, in `cli/src/config/misc.toml`) if `settings` didn't
-/// load that config layer (e.g. `UserSettings(load_config=False)`).
-fn max_new_file_size(settings: &PyUserSettings) -> u64 {
-    let HumanByteSize(size) = settings
-        .0
-        .get_value_with("snapshot.max-new-file-size", TryInto::try_into)
-        .unwrap_or(HumanByteSize(1024 * 1024));
-    if size == 0 { u64::MAX } else { size }
+/// What `jj`'s `snapshot_options_with_start_tracking_matcher` reads from
+/// config and from Git, loaded once per snapshot.
+///
+/// A key `settings` did not load (`UserSettings(load_config=False)`)
+/// falls back to jj's bundled default: `snapshot.auto-track = "all()"`
+/// and `snapshot.max-new-file-size = "1MiB"`. A key that is set but
+/// invalid raises.
+pub(crate) struct SnapshotConfig {
+    base_ignores: Arc<GitIgnoreFile>,
+    auto_track: Box<dyn Matcher>,
+    max_new_file_size: u64,
+}
+
+impl SnapshotConfig {
+    pub(crate) fn load(
+        settings: &PyUserSettings,
+        workspace_root: &Path,
+        store: &Store,
+    ) -> PyResult<Self> {
+        let HumanByteSize(size) = match settings
+            .0
+            .get_value_with("snapshot.max-new-file-size", TryInto::try_into)
+        {
+            Err(ConfigGetError::NotFound { .. }) => HumanByteSize(1024 * 1024),
+            other => other.map_err(config_err)?,
+        };
+        Ok(Self {
+            base_ignores: base_ignores(workspace_root, store)?,
+            auto_track: auto_track_matcher(settings, workspace_root)?,
+            max_new_file_size: if size == 0 { u64::MAX } else { size },
+        })
+    }
+
+    pub(crate) fn options(&self) -> SnapshotOptions<'_> {
+        SnapshotOptions {
+            base_ignores: self.base_ignores.clone(),
+            progress: None,
+            start_tracking_matcher: self.auto_track.as_ref(),
+            force_tracking_matcher: &NothingMatcher,
+            max_new_file_size: self.max_new_file_size,
+        }
+    }
+}
+
+fn config_err(err: ConfigGetError) -> PyErr {
+    crate::errors::JjError::new_err(err.to_string())
+}
+
+/// `snapshot.auto-track`, parsed as a fileset rooted at the workspace.
+fn auto_track_matcher(settings: &PyUserSettings, workspace_root: &Path) -> PyResult<Box<dyn Matcher>> {
+    let pattern = match settings.0.get_string("snapshot.auto-track") {
+        Err(ConfigGetError::NotFound { .. }) => "all()".to_owned(),
+        other => other.map_err(config_err)?,
+    };
+    let path_converter = RepoPathUiConverter::Fs {
+        cwd: workspace_root.to_path_buf(),
+        base: workspace_root.to_path_buf(),
+    };
+    let aliases_map: FilesetAliasesMap =
+        crate::revset::load_aliases_map(settings.0.config(), "fileset-aliases");
+    let context = FilesetParseContext {
+        aliases_map: &aliases_map,
+        path_converter: &path_converter,
+    };
+    let expression =
+        jj_lib::fileset::parse(&mut FilesetDiagnostics::new(), &pattern, &context).map_err(|err| {
+            crate::errors::JjError::new_err(format!("In `snapshot.auto-track`: {err}"))
+        })?;
+    Ok(expression.to_matcher())
+}
+
+/// `base_ignores` in jj's cli_util.rs: Git's `core.excludesFile` (default
+/// `$XDG_CONFIG_HOME/git/ignore`) and the repo's `.git/info/exclude`.
+fn base_ignores(workspace_root: &Path, store: &Store) -> PyResult<Arc<GitIgnoreFile>> {
+    let excludes_file = |config: &gix::config::File| -> Option<PathBuf> {
+        match config.string("core.excludesFile") {
+            Some(value) => {
+                let home = etcetera::home_dir().ok();
+                let path = std::str::from_utf8(&value)
+                    .ok()
+                    .map(|path| jj_lib::file_util::expand_home_path(path, home.as_deref()))?;
+                Some(workspace_root.join(path))
+            }
+            None => xdg_config_home().map(|dir| dir.join("git").join("ignore")),
+        }
+    };
+    let ignore_err = |err: jj_lib::gitignore::GitIgnoreError| {
+        crate::errors::JjError::new_err(err.to_string())
+    };
+    let mut ignores = GitIgnoreFile::empty();
+    if let Ok(git_backend) = jj_lib::git::get_git_backend(store) {
+        if let Some(path) = excludes_file(&git_backend.git_repo().config_snapshot()) {
+            ignores = ignores.chain_with_file(RepoPath::root(), path).map_err(ignore_err)?;
+        }
+        ignores = ignores
+            .chain_with_file(
+                RepoPath::root(),
+                git_backend.git_repo_path().join("info").join("exclude"),
+            )
+            .map_err(ignore_err)?;
+    } else if let Ok(config) = gix::config::File::from_globals()
+        && let Some(path) = excludes_file(&config)
+    {
+        ignores = ignores.chain_with_file(RepoPath::root(), path).map_err(ignore_err)?;
+    }
+    Ok(ignores)
+}
+
+fn xdg_config_home() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME")
+        && !dir.is_empty()
+    {
+        return Some(PathBuf::from(dir));
+    }
+    etcetera::home_dir().ok().map(|home| home.join(".config"))
+}
+
+/// `handle_stale_working_copy` in jj's cli_util.rs: the repo and
+/// working-copy commit a snapshot must start from. `None` when the
+/// workspace has no working-copy commit, which jj skips silently.
+fn fresh_wc_commit(
+    locked_wc: &dyn LockedWorkingCopy,
+    repo: Arc<ReadonlyRepo>,
+    workspace_name: &WorkspaceName,
+) -> PyResult<Option<(Arc<ReadonlyRepo>, Commit)>> {
+    let wc_commit = |repo: &ReadonlyRepo| -> PyResult<Option<Commit>> {
+        repo.view()
+            .get_wc_commit_id(workspace_name)
+            .map(|id| pollster::block_on(repo.store().get_commit_async(id)))
+            .transpose()
+            .map_err(map_backend_err)
+    };
+    let Some(commit) = wc_commit(&repo)? else {
+        return Ok(None);
+    };
+    let old_op = locked_wc.old_operation_id().hex();
+    let short = |hex: &str| hex[..12].to_owned();
+    match pollster::block_on(WorkingCopyFreshness::check_stale(locked_wc, &commit, &repo)) {
+        Ok(WorkingCopyFreshness::Fresh) => Ok(Some((repo, commit))),
+        Ok(WorkingCopyFreshness::Updated(wc_op)) => {
+            let repo = pollster::block_on(repo.reload_at(&wc_op))
+                .map_err(crate::errors::map_repo_load_err)?;
+            Ok(wc_commit(&repo)?.map(|commit| (repo, commit)))
+        }
+        Ok(WorkingCopyFreshness::WorkingCopyStale) => Err(WorkingCopyError::new_err(format!(
+            "The working copy is stale (not updated since operation {}). \
+             Run `jj workspace update-stale` to update it.",
+            short(&old_op)
+        ))),
+        Ok(WorkingCopyFreshness::SiblingOperation) => Err(WorkingCopyError::new_err(format!(
+            "The repo was loaded at operation {}, which seems to be a sibling of the \
+             working copy's operation {}",
+            short(&repo.op_id().hex()),
+            short(&old_op)
+        ))),
+        Err(OpStoreError::ObjectNotFound { .. }) => Err(WorkingCopyError::new_err(
+            "Could not read working copy's operation. \
+             Run `jj workspace update-stale` to recover.",
+        )),
+        Err(err) => Err(crate::errors::map_py_err(err)),
+    }
 }
 
 /// Why a path stayed untracked, worded as `jj`'s own
@@ -52,75 +216,87 @@ fn untracked_reason(reason: &UntrackedReason) -> Option<String> {
     }
 }
 
-/// `{path: reason}` for every path a snapshot refused and jj would
-/// name. Empty when it refused nothing worth reporting.
-fn refused_paths(
-    py: Python<'_>,
-    stats: &jj_lib::working_copy::SnapshotStats,
-) -> PyResult<Py<PyAny>> {
-    let dict = PyDict::new(py);
-    for (path, reason) in &stats.untracked_paths {
-        if let Some(message) = untracked_reason(reason) {
-            dict.set_item(path.as_internal_file_string(), message)?;
-        }
-    }
-    Ok(dict.unbind().into_any())
+/// The result of `snapshot()`, as plain data: the caller converts it to
+/// Python after it releases the workspace lock.
+pub struct SnapshotOutcome {
+    untracked_paths: usize,
+    refused: Vec<(String, String)>,
+    changed: bool,
+    wc_immutable: bool,
+    rebased: usize,
 }
 
-/// `jj status`/`jj diff`'s implicit "snapshot the working copy" step, as a
-/// standalone operation: reads the current state of files on disk, updates
-/// the workspace's working-copy commit to match (rewriting its tree; all
-/// other fields like description/author are preserved), and commits that as
-/// a new operation.
+impl SnapshotOutcome {
+    fn new(stats: &jj_lib::working_copy::SnapshotStats) -> Self {
+        Self {
+            untracked_paths: stats.untracked_paths.len(),
+            refused: stats
+                .untracked_paths
+                .iter()
+                .filter_map(|(path, reason)| {
+                    untracked_reason(reason)
+                        .map(|message| (path.as_internal_file_string().to_owned(), message))
+                })
+                .collect(),
+            changed: false,
+            wc_immutable: false,
+            rebased: 0,
+        }
+    }
+
+    /// `{"untracked_paths": int, "refused": {path: reason}, "changed":
+    /// bool, "wc_immutable": bool, "rebased": int}`.
+    pub fn into_py(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
+        dict.set_item("untracked_paths", self.untracked_paths)?;
+        let refused = PyDict::new(py);
+        for (path, message) in self.refused {
+            refused.set_item(path, message)?;
+        }
+        dict.set_item("refused", refused)?;
+        // `jj util snapshot` reports exactly this: whether the walk found
+        // anything, which is the difference between "Snapshot complete."
+        // and "No snapshot needed."
+        dict.set_item("changed", self.changed)?;
+        dict.set_item("wc_immutable", self.wc_immutable)?;
+        dict.set_item("rebased", self.rebased)?;
+        Ok(dict.unbind().into_any())
+    }
+}
+
+/// `jj status`/`jj diff`'s implicit "snapshot the working copy" step
+/// (`snapshot_working_copy` in jj's cli_util.rs), as a standalone
+/// operation: reads the files on disk, rewrites the workspace's
+/// working-copy commit to match, and commits that as a new operation.
 ///
-/// Per-directory `.gitignore` files are discovered and respected while
-/// walking the working copy, same as `jj status`/`jj diff` (this is
-/// `LocalWorkingCopy::snapshot()`'s own behavior, not something pyjj
-/// implements). Not yet wired up: `.git/info/exclude` and the user's
-/// global `core.excludesFile` (jj_lib's `SnapshotOptions::base_ignores`
-/// parameter, left at `GitIgnoreFile::empty()` here) — these apply
-/// repo-wide rather than being discovered from the tree, and reading them
-/// needs the underlying git config, not just a repo-relative walk. All
-/// non-ignored new files are auto-tracked (no `snapshot.auto-track`
-/// pattern support yet, matching jj's own default of `"all()"`).
-/// `snapshot.max-new-file-size` *is* honored (via `settings`), same as the
-/// CLI's own `0` -> "unlimited" convention.
+/// Like jj, it refuses a stale working copy, reloads the repo when the
+/// working copy is ahead of it, honours `snapshot.auto-track`,
+/// `snapshot.max-new-file-size` and Git's global and per-repo excludes,
+/// and puts a new commit on top of an immutable working-copy commit
+/// instead of rewriting it (`wc_immutable` in the result).
 pub fn snapshot(
     workspace: &mut Workspace,
     settings: &PyUserSettings,
     args: Option<String>,
-) -> PyResult<(PyReadonlyRepo, Py<PyAny>)> {
+) -> PyResult<(PyReadonlyRepo, SnapshotOutcome)> {
     let workspace_name = workspace.workspace_name().to_owned();
+    let workspace_root = workspace.workspace_root().to_path_buf();
     let repo = pollster::block_on(workspace.repo_loader().load_at_head())
         .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))?;
-
-    let wc_commit_id = repo
-        .view()
-        .get_wc_commit_id(&workspace_name)
-        .cloned()
-        .ok_or_else(|| {
-            crate::errors::WorkingCopyError::new_err(format!(
-                "Workspace `{}` has no working-copy commit",
-                workspace_name.as_symbol()
-            ))
-        })?;
-    let old_commit = pollster::block_on(repo.store().get_commit_async(&wc_commit_id))
-        .map_err(map_backend_err)?;
+    let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
     let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
-    let workspace_root = workspace.workspace_root().to_path_buf();
 
     let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
         .map_err(map_working_copy_err)?;
-
-    let options = SnapshotOptions {
-        base_ignores: GitIgnoreFile::empty(),
-        progress: None,
-        start_tracking_matcher: &EverythingMatcher,
-        force_tracking_matcher: &NothingMatcher,
-        max_new_file_size: max_new_file_size(settings),
+    let Some((repo, old_commit)) = fresh_wc_commit(locked_ws.locked_wc(), repo, &workspace_name)?
+    else {
+        drop(locked_ws);
+        let empty = SnapshotOutcome::new(&Default::default());
+        return Ok((wrap_repo(workspace, load_head(workspace)?), empty));
     };
-    let (new_tree, stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&options))
+    let (new_tree, stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
         .map_err(map_working_copy_err)?;
+    let mut outcome = SnapshotOutcome::new(&stats);
 
     // Nothing changed on disk: don't rewrite the wc commit (which would
     // bump its committer timestamp and commit id for no reason) or create
@@ -128,70 +304,64 @@ pub fn snapshot(
     if new_tree.tree_ids_and_labels() == old_commit.tree().tree_ids_and_labels() {
         pollster::block_on(locked_ws.finish(repo.operation().id().clone()))
             .map_err(map_working_copy_err)?;
-        let py_repo = wrap_repo(workspace, repo);
-        let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let dict = PyDict::new(py);
-            dict.set_item("untracked_paths", stats.untracked_paths.len())?;
-            dict.set_item("refused", refused_paths(py, &stats)?)?;
-            dict.set_item("changed", false)?;
-            Ok(dict.unbind().into_any())
-        })?;
-        return Ok((py_repo, stats_dict));
+        return Ok((wrap_repo(workspace, repo), outcome));
     }
 
-    let index = repo.readonly_index();
-    let view = repo.view();
-    let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-    let commit_builder = mut_repo.rewrite_commit(&old_commit).set_tree(new_tree.clone());
-    let new_commit = pollster::block_on(commit_builder.write()).map_err(map_backend_err)?;
-    mut_repo
-        .set_wc_commit(workspace_name.clone(), new_commit.id().clone())
-        .map_err(|err| crate::errors::TransactionError::new_err(err.to_string()))?;
-    // Required even though the wc commit has no descendants to rebase here:
-    // any pending rewrite record must be cleared before `Transaction::commit`,
-    // which asserts as much (`transaction.rs`, "Descendants have not been
-    // rebased after the last rewrites").
-    pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
-    // `export_working_copy_changes_to_git` in `cli/src/cli_util.rs`:
-    // without it a new file reads as untracked to `git status`.
-    if colocated {
-        pollster::block_on(jj_lib::git::update_intent_to_add(
-            repo.as_ref(),
-            &workspace_root,
-            &old_commit.tree(),
-            &new_tree,
-        ))
-        .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
-        crate::git::export_refs_only(&mut mut_repo)?;
-    }
-
-    // The operation log records who did what, where and with which
-    // command line. jj stamps all of it on every transaction, and marks
-    // this one as a pure snapshot so `jj op log` can tell it apart.
-    let mut tx = Transaction::new(mut_repo, &settings.0);
+    let mut tx = Transaction::new(
+        MutableRepo::new(repo.clone(), repo.readonly_index(), repo.view()),
+        &settings.0,
+    );
     tx.set_workspace_name(&workspace_name);
     tx.set_is_snapshot(true);
     if let Some(args) = args {
         tx.set_attribute("args".to_string(), args);
     }
-    let new_repo =
-        pollster::block_on(tx.commit("snapshot working copy")).map_err(map_transaction_err)?;
-
+    outcome.wc_immutable = crate::rewrite::is_immutable(
+        tx.repo(),
+        &workspace_root,
+        &workspace_name,
+        settings,
+        old_commit.id(),
+    )?;
+    let mut_repo = tx.repo_mut();
+    let builder = if outcome.wc_immutable {
+        mut_repo.new_commit(vec![old_commit.id().clone()], new_tree.clone())
+    } else {
+        mut_repo.rewrite_commit(&old_commit).set_tree(new_tree.clone())
+    };
+    let new_commit = pollster::block_on(builder.write()).map_err(map_backend_err)?;
+    mut_repo
+        .set_wc_commit(workspace_name.clone(), new_commit.id().clone())
+        .map_err(|err| crate::errors::TransactionError::new_err(err.to_string()))?;
+    outcome.rebased =
+        pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
+    // `export_working_copy_changes_to_git` in `cli/src/cli_util.rs`:
+    // without it a new file reads as untracked to `git status`.
+    if colocated {
+        if outcome.wc_immutable {
+            crate::git::reset_head(mut_repo, workspace_name.as_str(), &workspace_root)?;
+        } else {
+            pollster::block_on(jj_lib::git::update_intent_to_add(
+                repo.as_ref(),
+                &workspace_root,
+                &old_commit.tree(),
+                &new_tree,
+            ))
+            .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
+        }
+        crate::git::export_refs_only(mut_repo)?;
+    }
+    let new_repo = pollster::block_on(tx.commit("snapshot working copy"))
+        .map_err(map_transaction_err)?;
     pollster::block_on(locked_ws.finish(new_repo.operation().id().clone()))
         .map_err(map_working_copy_err)?;
+    outcome.changed = true;
+    Ok((wrap_repo(workspace, new_repo), outcome))
+}
 
-    let py_repo = wrap_repo(workspace, new_repo);
-    let stats_dict = Python::attach(|py| -> PyResult<Py<PyAny>> {
-        let dict = PyDict::new(py);
-        dict.set_item("untracked_paths", stats.untracked_paths.len())?;
-        dict.set_item("refused", refused_paths(py, &stats)?)?;
-        // `jj util snapshot` reports exactly this: whether the walk found
-        // anything, which is the difference between "Snapshot complete."
-        // and "No snapshot needed."
-        dict.set_item("changed", true)?;
-        Ok(dict.unbind().into_any())
-    })?;
-    Ok((py_repo, stats_dict))
+fn load_head(workspace: &Workspace) -> PyResult<Arc<ReadonlyRepo>> {
+    pollster::block_on(workspace.repo_loader().load_at_head())
+        .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))
 }
 
 /// `jj file untrack <paths>`, as one atomic operation.
@@ -213,30 +383,24 @@ pub fn untrack_paths(
     paths: Vec<String>,
 ) -> PyResult<(PyReadonlyRepo, Vec<String>)> {
     let workspace_name = workspace.workspace_name().to_owned();
-    let repo = pollster::block_on(workspace.repo_loader().load_at_head())
-        .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))?;
-    let wc_commit_id = repo
-        .view()
-        .get_wc_commit_id(&workspace_name)
-        .cloned()
-        .ok_or_else(|| {
-            crate::errors::WorkingCopyError::new_err(format!(
-                "Workspace `{}` has no working-copy commit",
-                workspace_name.as_symbol()
-            ))
-        })?;
-    let old_commit = pollster::block_on(repo.store().get_commit_async(&wc_commit_id))
-        .map_err(map_backend_err)?;
-
+    let workspace_root = workspace.workspace_root().to_path_buf();
+    let repo = load_head(workspace)?;
     let repo_paths = paths
         .iter()
         .map(|path| crate::tree::repo_path(path))
         .collect::<PyResult<Vec<_>>>()?;
+    let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
     let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
-    let workspace_root = workspace.workspace_root().to_path_buf();
 
     let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
         .map_err(map_working_copy_err)?;
+    let (repo, old_commit) = fresh_wc_commit(locked_ws.locked_wc(), repo, &workspace_name)?
+        .ok_or_else(|| {
+            WorkingCopyError::new_err(format!(
+                "Workspace `{}` has no working-copy commit",
+                workspace_name.as_symbol()
+            ))
+        })?;
 
     let mut builder = MergedTreeBuilder::new(old_commit.tree());
     for repo_path in &repo_paths {
@@ -256,14 +420,7 @@ pub fn untrack_paths(
 
     pollster::block_on(locked_ws.locked_wc().reset(&new_commit)).map_err(map_working_copy_err)?;
 
-    let options = SnapshotOptions {
-        base_ignores: GitIgnoreFile::empty(),
-        progress: None,
-        start_tracking_matcher: &EverythingMatcher,
-        force_tracking_matcher: &NothingMatcher,
-        max_new_file_size: max_new_file_size(settings),
-    };
-    let (snapshot_tree, _stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&options))
+    let (snapshot_tree, _stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
         .map_err(map_working_copy_err)?;
 
     let mut added_back = Vec::new();
@@ -307,18 +464,35 @@ pub fn check_out(
     workspace: &mut Workspace,
     repo: &PyReadonlyRepo,
     commit: &PyCommit,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<CheckoutStats> {
     let operation_id = repo.inner.operation().id().clone();
-    let stats = pollster::block_on(workspace.check_out(operation_id, None, &commit.inner))
+    pollster::block_on(workspace.check_out(operation_id, None, &commit.inner))
+        .map_err(map_checkout_err)
+}
+
+/// `jj sparse set`: replace the sparse patterns and update the files on
+/// disk to match. Records no operation.
+pub fn set_sparse_patterns(
+    workspace: &mut Workspace,
+    patterns: Vec<RepoPathBuf>,
+) -> PyResult<CheckoutStats> {
+    let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
+        .map_err(map_working_copy_err)?;
+    let stats = pollster::block_on(locked_ws.locked_wc().set_sparse_patterns(patterns))
         .map_err(map_checkout_err)?;
-    Python::attach(|py| -> PyResult<Py<PyAny>> {
-        let dict = PyDict::new(py);
-        dict.set_item("updated_files", stats.updated_files)?;
-        dict.set_item("added_files", stats.added_files)?;
-        dict.set_item("removed_files", stats.removed_files)?;
-        dict.set_item("skipped_files", stats.skipped_files)?;
-        Ok(dict.unbind().into_any())
-    })
+    let operation_id = locked_ws.locked_wc().old_operation_id().clone();
+    pollster::block_on(locked_ws.finish(operation_id)).map_err(map_working_copy_err)?;
+    Ok(stats)
+}
+
+/// `{"updated_files", "added_files", "removed_files", "skipped_files"}`.
+pub fn checkout_stats_into_py(py: Python<'_>, stats: &CheckoutStats) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item("updated_files", stats.updated_files)?;
+    dict.set_item("added_files", stats.added_files)?;
+    dict.set_item("removed_files", stats.removed_files)?;
+    dict.set_item("skipped_files", stats.skipped_files)?;
+    Ok(dict.unbind().into_any())
 }
 
 /// Re-syncs the working copy's *tracked-file-state bookkeeping* (recorded

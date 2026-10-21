@@ -603,8 +603,6 @@ pub fn check_rewritable(
     settings: &crate::settings::PyUserSettings,
     ids: Vec<CommitId>,
 ) -> PyResult<()> {
-    use futures::TryStreamExt as _;
-
     if ids.is_empty() {
         return Ok(());
     }
@@ -612,28 +610,15 @@ pub fn check_rewritable(
     // exists when `settings` loaded config. A caller who opted out asked
     // for a check whose definition they turned off; say that, rather
     // than letting a bare "function doesn't exist" parse error out.
-    let immutable = crate::revset::resolve_revset(
-        mut_repo,
-        workspace_root,
-        workspace_name,
-        settings,
-        "immutable()",
-    )
-    .map_err(|err| {
-        JjError::new_err(format!(
-            "cannot check for immutable commits: the `immutable()` revset alias is \
-             unavailable, which happens when UserSettings was built with \
-             load_config=False ({err})"
-        ))
-    })?;
-    let to_rewrite = jj_lib::revset::RevsetExpression::commits(ids);
-    let evaluated = immutable
-        .intersection(&to_rewrite)
-        .evaluate(mut_repo)
-        .map_err(crate::errors::map_py_err)?;
-    let found = pollster::block_on(evaluated.stream().try_next())
-        .map_err(crate::errors::map_py_err)?;
-    let Some(id) = found else {
+    let immutable =
+        immutable_set(mut_repo, workspace_root, workspace_name, settings).map_err(|err| {
+            JjError::new_err(format!(
+                "cannot check for immutable commits: the `immutable()` revset alias is \
+                 unavailable, which happens when UserSettings was built with \
+                 load_config=False ({err})"
+            ))
+        })?;
+    let Some(id) = first_in(mut_repo, &immutable, ids)? else {
         return Ok(());
     };
     let short = &id.hex()[..12];
@@ -644,6 +629,47 @@ pub fn check_rewritable(
             format!("Commit {short} is immutable")
         },
     ))
+}
+
+/// Whether `id` is in `immutable()`, as jj's snapshot asks before it
+/// rewrites `@`. Without the alias (`UserSettings(load_config=False)`)
+/// only the root commit is immutable, which no working copy can be.
+pub fn is_immutable(
+    repo: &dyn jj_lib::repo::Repo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &crate::settings::PyUserSettings,
+    id: &CommitId,
+) -> PyResult<bool> {
+    if settings.0.get_value(["revset-aliases", "immutable()"]).is_err() {
+        return Ok(id == repo.store().root_commit_id());
+    }
+    let immutable = immutable_set(repo, workspace_root, workspace_name, settings)?;
+    Ok(first_in(repo, &immutable, vec![id.clone()])?.is_some())
+}
+
+fn immutable_set(
+    repo: &dyn jj_lib::repo::Repo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &crate::settings::PyUserSettings,
+) -> PyResult<std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression>> {
+    crate::revset::resolve_revset(repo, workspace_root, workspace_name, settings, "immutable()")
+}
+
+/// The first of `ids` that `set` contains.
+fn first_in(
+    repo: &dyn jj_lib::repo::Repo,
+    set: &std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression>,
+    ids: Vec<CommitId>,
+) -> PyResult<Option<CommitId>> {
+    use futures::TryStreamExt as _;
+
+    let evaluated = set
+        .intersection(&jj_lib::revset::RevsetExpression::commits(ids))
+        .evaluate(repo)
+        .map_err(crate::errors::map_py_err)?;
+    pollster::block_on(evaluated.stream().try_next()).map_err(crate::errors::map_py_err)
 }
 
 /// Refuse to rewrite the root commit.

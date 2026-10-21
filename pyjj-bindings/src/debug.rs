@@ -216,7 +216,7 @@ pub fn debug_copy_detection(repo: &PyReadonlyRepo, commit: &PyCommit) -> PyResul
 pub fn debug_object_commit(workspace: &PyWorkspace, id: &str) -> PyResult<String> {
     let commit_id = CommitId::try_from_hex(id)
         .ok_or_else(|| err(format!(r#"Invalid hex commit id: "{id}""#)))?;
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let commit = pollster::block_on(ws.repo_loader().store().get_commit_async(&commit_id))
         .map_err(map_backend_err)?;
     Ok(format!("{:#?}\n", commit.store_commit()))
@@ -227,7 +227,7 @@ pub fn debug_object_commit(workspace: &PyWorkspace, id: &str) -> PyResult<String
 pub fn debug_object_operation(workspace: &PyWorkspace, id: &str) -> PyResult<String> {
     let op_id = OperationId::try_from_hex(id)
         .ok_or_else(|| err(format!(r#"Invalid hex operation id: "{id}""#)))?;
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let operation =
         pollster::block_on(ws.repo_loader().op_store().read_operation(&op_id)).map_err(err)?;
     Ok(format!("{operation:#?}\n"))
@@ -247,7 +247,7 @@ pub fn debug_object_view(
             .ok_or_else(|| err(format!(r#"Invalid hex view id: "{id}""#)))?,
         (None, None) => return Err(err("debug_object_view needs an id or an operation")),
     };
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let view = pollster::block_on(ws.repo_loader().op_store().read_view(&view_id)).map_err(err)?;
     Ok(format!("{view:#?}\n"))
 }
@@ -282,7 +282,7 @@ pub fn debug_object_file(
             .ok_or_else(|| err(format!(r#"Invalid hex file id: "{id}""#)))?,
         (None, None) => return Err(err("debug_object_file needs an id or a commit")),
     };
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let mut contents = pollster::block_on(ws.repo_loader().store().read_file(&path, &file_id))
         .map_err(map_backend_err)?;
     let mut buf = vec![];
@@ -309,7 +309,7 @@ pub fn debug_object_symlink(
             .ok_or_else(|| err(format!(r#"Invalid hex symlink id: "{id}""#)))?,
         (None, None) => return Err(err("debug_object_symlink needs an id or a commit")),
     };
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let target = pollster::block_on(ws.repo_loader().store().read_symlink(&path, &symlink_id))
         .map_err(map_backend_err)?;
     Ok(format!("{target}\n"))
@@ -335,7 +335,7 @@ pub fn debug_object_tree(
             .ok_or_else(|| err(format!(r#"Invalid hex tree id: "{id}""#)))?,
         (None, None) => return Err(err("debug_object_tree needs an id or a commit")),
     };
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let tree = pollster::block_on(ws.repo_loader().store().get_tree(dir, &tree_id))
         .map_err(map_backend_err)?;
     Ok(format!("{:#?}\n", tree.data()))
@@ -344,7 +344,7 @@ pub fn debug_object_tree(
 /// `jj debug index`: statistics of the index at the head operation.
 #[pyfunction]
 pub fn debug_index(workspace: &PyWorkspace) -> PyResult<String> {
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let loader = ws.repo_loader();
     let op = head_operation(loader)?;
     let index_store = loader.index_store();
@@ -389,7 +389,7 @@ pub fn debug_index(workspace: &PyWorkspace) -> PyResult<String> {
 /// the number of commits indexed.
 #[pyfunction]
 pub fn debug_reindex(workspace: &PyWorkspace) -> PyResult<u32> {
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let loader = ws.repo_loader();
     let op = head_operation(loader)?;
     let store = default_index_store(loader)?;
@@ -407,7 +407,7 @@ pub fn debug_index_changed_paths(
     repo: &PyReadonlyRepo,
     limit: u32,
 ) -> PyResult<String> {
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let store = default_index_store(ws.repo_loader())?;
     let index = pollster::block_on(store.build_changed_path_index_at_operation(
         repo.inner.op_id(),
@@ -454,7 +454,7 @@ pub fn debug_init_simple(settings: &PyUserSettings, path: &str) -> PyResult<()> 
 /// `jj debug working-copy`.
 #[pyfunction]
 pub fn debug_working_copy(workspace: &PyWorkspace) -> PyResult<String> {
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let wc = ws.working_copy();
     Ok(format!(
         "Type: {:?}\nCurrent operation: {:?}\nCurrent tree: {:?}\n",
@@ -485,7 +485,7 @@ pub fn debug_watchman(
     let default_config = WatchmanConfig {
         register_trigger: false,
     };
-    let mut ws = workspace.inner.lock().unwrap();
+    let mut ws = workspace.lock();
 
     if subcommand == "reset-clock" {
         let op_id = ws.working_copy().operation_id().clone();
@@ -563,7 +563,7 @@ pub fn debug_watchman(
 /// `jj debug local-working-copy`: the tracked file states as well.
 #[pyfunction]
 pub fn debug_local_working_copy(workspace: &PyWorkspace) -> PyResult<String> {
-    let ws = workspace.inner.lock().unwrap();
+    let ws = workspace.lock();
     let wc = ws
         .working_copy()
         .downcast_ref::<LocalWorkingCopy>()

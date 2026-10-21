@@ -1,8 +1,7 @@
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 use jj_lib::commit::Commit;
 use jj_lib::default_backend_factories::{
@@ -44,9 +43,40 @@ use crate::settings::PyUserSettings;
 /// around the locked section, so an `asyncio.to_thread()`-wrapped caller
 /// genuinely frees the event loop for the duration -- see `AGENTS.md`'s
 /// async section.
+///
+/// Lock order: the mutex is only taken with the GIL released (`with_ws`),
+/// and nothing attaches to Python while holding it. A thread that held
+/// the mutex and waited for the GIL would deadlock against one that held
+/// the GIL and waited for the mutex.
 #[pyclass(name = "Workspace")]
 pub struct PyWorkspace {
-    pub(crate) inner: Mutex<Workspace>,
+    inner: Mutex<Workspace>,
+}
+
+impl PyWorkspace {
+    pub(crate) fn new(workspace: Workspace) -> Self {
+        Self {
+            inner: Mutex::new(workspace),
+        }
+    }
+
+    /// The on-disk lock is the real guard, so a panic that poisoned the
+    /// mutex leaves nothing inconsistent behind it.
+    ///
+    /// Taking it with the GIL held is safe, because no holder waits for
+    /// the GIL, but it stalls every Python thread until the holder is
+    /// done. Long work goes through `with_ws`.
+    pub(crate) fn lock(&self) -> MutexGuard<'_, Workspace> {
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub(crate) fn with_ws<R, F>(&self, py: Python<'_>, f: F) -> PyResult<R>
+    where
+        R: Send,
+        F: FnOnce(&mut Workspace) -> PyResult<R> + Send,
+    {
+        py.detach(|| f(&mut self.lock()))
+    }
 }
 
 pub(crate) fn wrap_repo(ws: &Workspace, repo: Arc<ReadonlyRepo>) -> PyReadonlyRepo {
@@ -177,12 +207,14 @@ impl PyWorkspace {
         .map_err(map_transaction_err)?;
 
         let py_repo = wrap_repo(&new_ws, new_repo);
-        let py_ws = Self {
-            inner: Mutex::new(new_ws),
-        };
+        let mut new_ws = new_ws;
         if let Some(patterns) = sparse_patterns {
             // Narrow first when the caller asked for less than everything.
-            Python::attach(|py| py_ws.set_sparse_patterns(py, patterns))?;
+            let patterns = patterns
+                .iter()
+                .map(|p| crate::tree::repo_path(p))
+                .collect::<PyResult<_>>()?;
+            crate::checkout::set_sparse_patterns(&mut new_ws, patterns)?;
         }
         // Materialize the new working-copy commit's tree, the way `jj
         // workspace add` does -- in both cases. The unrestricted case
@@ -195,20 +227,12 @@ impl PyWorkspace {
         // new `@` actually holds, and it leaves the recorded operation
         // stale by one. `check_out` respects the just-set patterns and
         // records the new operation, mirroring jj exactly.
-        {
-            let mut inner = py_ws.inner.lock().unwrap();
-            let fresh_repo = PyReadonlyRepo {
-                inner: py_repo.inner.clone(),
-                workspace_root: inner.workspace_root().to_path_buf(),
-                workspace_name: inner.workspace_name().to_owned(),
-            };
-            let fresh_commit = crate::commit::PyCommit {
-                inner: new_wc_commit,
-                _repo: Some(py_repo.inner.clone()),
-            };
-            crate::checkout::check_out(&mut inner, &fresh_repo, &fresh_commit)?;
-        }
-        Ok((py_ws, py_repo))
+        let fresh_commit = crate::commit::PyCommit {
+            inner: new_wc_commit,
+            _repo: Some(py_repo.inner.clone()),
+        };
+        crate::checkout::check_out(&mut new_ws, &py_repo, &fresh_commit)?;
+        Ok((Self::new(new_ws), py_repo))
     }
 }
 
@@ -281,9 +305,7 @@ impl PyWorkspace {
         .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((
-            Self {
-                inner: Mutex::new(ws),
-            },
+            Self::new(ws),
             py_repo,
         ))
     }
@@ -306,9 +328,7 @@ impl PyWorkspace {
         .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((
-            Self {
-                inner: Mutex::new(ws),
-            },
+            Self::new(ws),
             py_repo,
         ))
     }
@@ -332,9 +352,7 @@ impl PyWorkspace {
                 .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((
-            Self {
-                inner: Mutex::new(ws),
-            },
+            Self::new(ws),
             py_repo,
         ))
     }
@@ -526,9 +544,7 @@ impl PyWorkspace {
             let Some(commit) = default_branch_commit else {
                 let py_repo = wrap_repo(&new_ws, repo);
                 return Ok((
-                    Self {
-                        inner: Mutex::new(new_ws),
-                    },
+                    Self::new(new_ws),
                     py_repo,
                 ));
             };
@@ -563,9 +579,7 @@ impl PyWorkspace {
 
             let py_repo = wrap_repo(&new_ws, repo);
             Ok((
-                Self {
-                    inner: Mutex::new(new_ws),
-                },
+                Self::new(new_ws),
                 py_repo,
             ))
         })
@@ -579,31 +593,19 @@ impl PyWorkspace {
         let working_copy_factories = default_working_copy_factories();
         let ws = Workspace::load(&settings.0, path, &store_factories, &working_copy_factories)
             .map_err(map_workspace_load_err)?;
-        Ok(Self {
-            inner: Mutex::new(ws),
-        })
+        Ok(Self::new(ws))
     }
 
     /// The filesystem path to the workspace root.
     #[getter]
-    fn workspace_root(&self) -> String {
-        self.inner
-            .lock()
-            .unwrap()
-            .workspace_root()
-            .display()
-            .to_string()
+    fn workspace_root(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_ws(py, |ws| Ok(ws.workspace_root().display().to_string()))
     }
 
     /// The name of this workspace, as seen in `view()`'s keys.
     #[getter]
-    fn workspace_name(&self) -> String {
-        self.inner
-            .lock()
-            .unwrap()
-            .workspace_name()
-            .as_str()
-            .to_string()
+    fn workspace_name(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_ws(py, |ws| Ok(ws.workspace_name().as_str().to_string()))
     }
 
     /// The recorded filesystem location of the *named* workspace (any
@@ -612,8 +614,8 @@ impl PyWorkspace {
     /// created before `workspace_store` existed). An absolute,
     /// normalized path: the store records it relative to `repo_path`
     /// (`.jj/repo`) and resolving joins the two.
-    fn workspace_path(&self, name: &str) -> PyResult<Option<String>> {
-        let inner = self.inner.lock().unwrap();
+    fn workspace_path(&self, py: Python<'_>, name: &str) -> PyResult<Option<String>> {
+        self.with_ws(py, |inner| {
         // Since jj 0.46 `SimpleWorkspaceStore::load` takes the store
         // directory itself (`.jj/repo/workspace_store`, holding the
         // store's own `index` file) rather than the repo directory --
@@ -628,12 +630,13 @@ impl PyWorkspace {
             .get_workspace_path(workspace_name.as_ref())
             .map_err(|err| JjError::new_err(err.to_string()))?;
         Ok(path.map(|p| p.display().to_string()))
+        })
     }
 
     /// The filesystem path to the repo (.jj/repo).
     #[getter]
-    fn repo_path(&self) -> String {
-        self.inner.lock().unwrap().repo_path().display().to_string()
+    fn repo_path(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_ws(py, |ws| Ok(ws.repo_path().display().to_string()))
     }
 
     /// Whether this workspace shares its working copy with Git (a
@@ -643,11 +646,12 @@ impl PyWorkspace {
     /// `--colocate` default for `workspace add` reads this, not the
     /// mere presence of a `.git` entry (an unrelated repo's file
     /// there would lie).
-    fn is_colocated(&self) -> PyResult<bool> {
-        let inner = self.inner.lock().unwrap();
-        let repo =
-            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
-        is_colocated(&inner, repo.store())
+    fn is_colocated(&self, py: Python<'_>) -> PyResult<bool> {
+        self.with_ws(py, |inner| {
+            let repo = pollster::block_on(inner.repo_loader().load_at_head())
+                .map_err(map_repo_load_err)?;
+            is_colocated(inner, repo.store())
+        })
     }
 
     /// Create the Git worktree backing an existing secondary workspace at
@@ -657,10 +661,11 @@ impl PyWorkspace {
     /// a populated workspace; a new one takes `add_workspace(colocate=True)`.
     fn create_git_worktree(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         destination_path: String,
     ) -> PyResult<()> {
-        let inner = self.inner.lock().unwrap();
+        self.with_ws(py, move |inner| {
         let repo =
             pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
@@ -672,6 +677,7 @@ impl PyWorkspace {
         )
         .map_err(|err| JjError::new_err(err.to_string()))?;
         Ok(())
+        })
     }
 
     /// Disconnect the Git worktree backing the sibling workspace at
@@ -683,10 +689,11 @@ impl PyWorkspace {
     /// forgotten workspace after the record is gone.
     fn unlink_git_worktree(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         workspace_path: String,
     ) -> PyResult<bool> {
-        let inner = self.inner.lock().unwrap();
+        self.with_ws(py, move |inner| {
         let repo =
             pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
@@ -697,12 +704,12 @@ impl PyWorkspace {
             std::path::Path::new(&workspace_path),
         )
         .map_err(|err| JjError::new_err(err.to_string()))
+        })
     }
 
     /// Load the repo at the current operation (head).
     fn load_at_head(&self, py: Python<'_>) -> PyResult<PyReadonlyRepo> {
-        py.detach(|| {
-            let inner = self.inner.lock().unwrap();
+        self.with_ws(py, |inner| {
             let repo: Arc<ReadonlyRepo> = pollster::block_on(inner.repo_loader().load_at_head())
                 .map_err(map_repo_load_err)?;
             Ok(wrap_repo(&inner, repo))
@@ -719,10 +726,10 @@ impl PyWorkspace {
         settings: &PyUserSettings,
         args: Option<String>,
     ) -> PyResult<(PyReadonlyRepo, Py<PyAny>)> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            crate::checkout::snapshot(&mut inner, settings, args)
-        })
+        let (repo, outcome) = self.with_ws(py, move |inner| {
+            crate::checkout::snapshot(inner, settings, args)
+        })?;
+        Ok((repo, outcome.into_py(py)?))
     }
 
     /// `jj file untrack <paths>`: drop `paths` from the working-copy
@@ -737,9 +744,8 @@ impl PyWorkspace {
         settings: &PyUserSettings,
         paths: Vec<String>,
     ) -> PyResult<(PyReadonlyRepo, Vec<String>)> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            crate::checkout::untrack_paths(&mut inner, settings, paths)
+        self.with_ws(py, move |inner| {
+            crate::checkout::untrack_paths(inner, settings, paths)
         })
     }
 
@@ -751,10 +757,8 @@ impl PyWorkspace {
         repo: &PyReadonlyRepo,
         commit: &PyCommit,
     ) -> PyResult<Py<PyAny>> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            crate::checkout::check_out(&mut inner, repo, commit)
-        })
+        let stats = self.with_ws(py, move |inner| crate::checkout::check_out(inner, repo, commit))?;
+        crate::checkout::checkout_stats_into_py(py, &stats)
     }
 
     /// Re-syncs the working copy's tracked-file-state bookkeeping to
@@ -763,9 +767,8 @@ impl PyWorkspace {
     /// unless you specifically know the on-disk files already match
     /// `commit` (e.g. after an external tool updated them directly).
     fn reset(&self, py: Python<'_>, repo: &PyReadonlyRepo, commit: &PyCommit) -> PyResult<()> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            crate::checkout::reset(&mut inner, repo, commit)
+        self.with_ws(py, move |inner| {
+            crate::checkout::reset(inner, repo, commit)
         })
     }
 
@@ -780,9 +783,8 @@ impl PyWorkspace {
         py: Python<'_>,
         operation: &str,
     ) -> PyResult<crate::oplog::PyOpAbandonStats> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            crate::oplog::op_abandon(&mut inner, operation)
+        self.with_ws(py, move |inner| {
+            crate::oplog::op_abandon(inner, operation)
         })
     }
 
@@ -803,8 +805,7 @@ impl PyWorkspace {
     /// via a `Workspace` loaded at the stale op) before calling this,
     /// since it will otherwise simply overwrite them with `repo`'s tree.
     fn update_stale(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<Option<Py<PyAny>>> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
+        let stats = self.with_ws(py, move |inner| {
             let wc_commit_id = repo
                 .inner
                 .view()
@@ -839,33 +840,30 @@ impl PyWorkspace {
                     let operation_id = repo.inner.operation().id().clone();
                     pollster::block_on(locked_ws.finish(operation_id))
                         .map_err(map_working_copy_err)?;
-                    Python::attach(|py| -> PyResult<Option<Py<PyAny>>> {
-                        let dict = PyDict::new(py);
-                        dict.set_item("updated_files", stats.updated_files)?;
-                        dict.set_item("added_files", stats.added_files)?;
-                        dict.set_item("removed_files", stats.removed_files)?;
-                        dict.set_item("skipped_files", stats.skipped_files)?;
-                        Ok(Some(dict.unbind().into_any()))
-                    })
+                    Ok(Some(stats))
                 }
             }
-        })
+        })?;
+        stats
+            .map(|stats| crate::checkout::checkout_stats_into_py(py, &stats))
+            .transpose()
     }
 
     /// The current sparse patterns: repo-relative path strings, each
     /// naming a directory prefix whose files are present in the working
     /// copy. A single empty string (`[""]`) means "the whole repo" -- the
     /// default, unrestricted state. `jj sparse list` equivalent.
-    fn sparse_patterns(&self) -> PyResult<Vec<String>> {
-        let inner = self.inner.lock().unwrap();
-        let patterns = inner
-            .working_copy()
-            .sparse_patterns()
-            .map_err(map_working_copy_err)?;
-        Ok(patterns
-            .iter()
-            .map(|p| p.as_internal_file_string().to_string())
-            .collect())
+    fn sparse_patterns(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        self.with_ws(py, |inner| {
+            let patterns = inner
+                .working_copy()
+                .sparse_patterns()
+                .map_err(map_working_copy_err)?;
+            Ok(patterns
+                .iter()
+                .map(|p| p.as_internal_file_string().to_string())
+                .collect())
+        })
     }
 
     /// Replaces the sparse patterns wholesale and updates the on-disk
@@ -881,24 +879,10 @@ impl PyWorkspace {
             .map(|p| crate::tree::repo_path(p))
             .collect::<PyResult<_>>()?;
 
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            let mut locked_ws = pollster::block_on(inner.start_working_copy_mutation())
-                .map_err(map_working_copy_err)?;
-            let stats = pollster::block_on(locked_ws.locked_wc().set_sparse_patterns(repo_paths))
-                .map_err(map_checkout_err)?;
-            let operation_id = locked_ws.locked_wc().old_operation_id().clone();
-            pollster::block_on(locked_ws.finish(operation_id)).map_err(map_working_copy_err)?;
-
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let dict = PyDict::new(py);
-                dict.set_item("updated_files", stats.updated_files)?;
-                dict.set_item("added_files", stats.added_files)?;
-                dict.set_item("removed_files", stats.removed_files)?;
-                dict.set_item("skipped_files", stats.skipped_files)?;
-                Ok(dict.unbind().into_any())
-            })
-        })
+        let stats = self.with_ws(py, move |inner| {
+            crate::checkout::set_sparse_patterns(inner, repo_paths)
+        })?;
+        crate::checkout::checkout_stats_into_py(py, &stats)
     }
 
     /// `jj workspace add <destination>` equivalent: creates a brand-new
@@ -931,8 +915,7 @@ impl PyWorkspace {
         sparse_patterns: Option<Vec<String>>,
         colocate: bool,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
-        let (ws, repo) = py.detach(move || {
-            let inner = self.inner.lock().unwrap();
+        let (ws, repo) = self.with_ws(py, move |inner| {
             Self::add_workspace_inner(&inner, settings, destination_path, name, revision_ids,
                                       description, sparse_patterns, colocate)
         })?;
@@ -965,8 +948,7 @@ impl PyWorkspace {
         description: Option<String>,
         forget_store: bool,
     ) -> PyResult<PyReadonlyRepo> {
-        py.detach(move || {
-            let inner = self.inner.lock().unwrap();
+        self.with_ws(py, move |inner| {
             if names.is_empty() {
                 return Err(JjError::new_err(
                     "forget_workspaces requires at least one name",
@@ -1043,8 +1025,7 @@ impl PyWorkspace {
         settings: &PyUserSettings,
         new_name: String,
     ) -> PyResult<PyReadonlyRepo> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
+        self.with_ws(py, move |inner| {
             let new_name = WorkspaceNameBuf::from(new_name.as_str());
             if new_name.as_str().is_empty() {
                 return Err(JjError::new_err("new workspace name cannot be empty"));
@@ -1096,10 +1077,7 @@ impl PyWorkspace {
         })
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            "Workspace({})",
-            self.inner.lock().unwrap().workspace_root().display()
-        )
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!("Workspace({})", self.workspace_root(py)?))
     }
 }
