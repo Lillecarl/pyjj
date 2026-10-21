@@ -56,11 +56,16 @@ def git_push(args) -> int:
         stats = tx.git_push_updates(
             settings, remote, updates,
             list(getattr(args, "push_options", None) or []))
-        rejected = list(stats["rejected"]) + list(stats["remote_rejected"])
+        rejected = [*stats.rejected, *stats.remote_rejected]
         for name, reason in rejected:
             print(f"Error: {name} rejected: {reason or 'no reason given'}",
                   file=sys.stderr)
-        if not stats["pushed"] and rejected:
+        if stats.unexported:
+            print("Warning: The following bookmarks couldn't be updated locally:",
+                  file=sys.stderr)
+            for symbol, reason in stats.unexported:
+                print(f"  {symbol}: {reason}", file=sys.stderr)
+        if not stats.pushed and rejected:
             return 1
         _finish(tx, f"push to {remote}", settings, ws, repo)
         if rejected:

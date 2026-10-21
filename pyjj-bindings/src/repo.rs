@@ -1639,21 +1639,9 @@ impl PyTransaction {
         remote: &str,
         updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
         push_options: Vec<String>,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<crate::git::PyGitPushStats> {
         with_mut_repo(self, |mut_repo| {
             crate::git::push_updates(mut_repo, settings, remote, updates, push_options)
-        })
-    }
-
-    /// `jj git push -b <bookmark>` equivalent.
-    fn git_push_bookmark(
-        &self,
-        settings: &PyUserSettings,
-        remote: &str,
-        bookmark: &str,
-    ) -> PyResult<Py<PyAny>> {
-        with_mut_repo(self, |mut_repo| {
-            crate::git::push_bookmark(mut_repo, settings, remote, bookmark)
         })
     }
 

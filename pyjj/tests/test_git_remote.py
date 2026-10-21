@@ -136,8 +136,8 @@ def repo_with_remote(workspace, repo, settings, bare_remote_with_commit):
 def test_fetch_imports_remote_bookmark(repo_with_remote, settings):
     tx = repo_with_remote.start_transaction(settings)
     stats = tx.git_fetch(settings, "origin", ["main"])
-    assert stats["changed_remote_bookmarks"] == 1
-    assert stats["failed_ref_names"] == []
+    assert stats.changed_remote_bookmarks == 1
+    assert stats.failed_ref_names == []
 
     new_repo = tx.commit("fetch")
     # Fetched but not tracked: no local bookmark yet.
@@ -147,7 +147,7 @@ def test_fetch_imports_remote_bookmark(repo_with_remote, settings):
 def test_fetch_nonexistent_branch_changes_nothing(repo_with_remote, settings):
     tx = repo_with_remote.start_transaction(settings)
     stats = tx.git_fetch(settings, "origin", ["does-not-exist"])
-    assert stats["changed_remote_bookmarks"] == 0
+    assert stats.changed_remote_bookmarks == 0
 
 
 def test_track_after_fetch_creates_local_bookmark(repo_with_remote, settings):
@@ -196,10 +196,12 @@ def test_push_bookmark_delivers_to_remote(repo_with_remote, settings, bare_remot
     repo3 = tx2.commit("advance main")
 
     tx3 = repo3.start_transaction(settings)
-    stats = tx3.git_push_bookmark(settings, "origin", "main")
-    assert stats["pushed"] == ["refs/heads/main"]
-    assert stats["rejected"] == []
-    assert stats["remote_rejected"] == []
+    stats = tx3.git_push_updates(
+        settings, "origin", [("main", base_commit.id, new_commit.id)])
+    assert stats.pushed == ["refs/heads/main"]
+    assert stats.rejected == []
+    assert stats.remote_rejected == []
+    assert stats.unexported == []
     tx3.commit("push main")
 
     result = subprocess.run(
@@ -211,21 +213,10 @@ def test_push_bookmark_delivers_to_remote(repo_with_remote, settings, bare_remot
     assert result.stdout.strip() == "pushed from pyjj"
 
 
-def test_push_nonexistent_bookmark_raises(repo_with_remote, settings):
+@pytest.mark.parametrize("target", ["none", "same"])
+def test_a_push_update_that_moves_nothing_is_refused(repo_with_remote, settings, target):
     tx = repo_with_remote.start_transaction(settings)
-    with pytest.raises(pyjj.JjError):
-        tx.git_push_bookmark(settings, "origin", "no-such-bookmark")
-
-
-def test_push_with_nothing_new_is_a_clean_noop(repo_with_remote, settings):
-    tx = repo_with_remote.start_transaction(settings)
-    tx.git_fetch(settings, "origin", ["main"])
-    tx.git_track_remote_bookmark("origin", "main")
-    repo2 = tx.commit("fetch + track")
-
-    # Local bookmark already matches the tracked remote target - pushing
-    # again should be a no-op, not the underlying jj_lib panic this used to
-    # hit ("old/new targets should differ").
-    tx2 = repo2.start_transaction(settings)
-    stats = tx2.git_push_bookmark(settings, "origin", "main")
-    assert stats == {"pushed": [], "rejected": [], "remote_rejected": []}
+    commit_id = repo_with_remote.resolve_single(settings, "@").id
+    same = None if target == "none" else commit_id
+    with pytest.raises(ValueError, match="does not move"):
+        tx.git_push_updates(settings, "origin", [("main", same, same)])

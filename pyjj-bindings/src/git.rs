@@ -519,7 +519,13 @@ pub fn push_updates(
     remote: &str,
     updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
     push_options: Vec<String>,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<PyGitPushStats> {
+    if let Some((name, _, _)) = updates.iter().find(|(_, before, after)| before == after) {
+        // jj-lib panics on a (None, None) update; jj never sends one.
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "update for `{name}` does not move it: before and after are the same"
+        )));
+    }
     let remote_name = RemoteName::new(remote);
     let targets = GitPushRefTargets {
         bookmarks: updates
@@ -548,127 +554,49 @@ pub fn push_updates(
         },
     )
     .map_err(map_git_push_err)?;
-
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item(
-            "pushed",
-            stats
-                .pushed
-                .iter()
-                .map(|n| n.as_str().to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        dict.set_item(
-            "rejected",
-            stats
-                .rejected
-                .iter()
-                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
-                .collect::<Vec<_>>(),
-        )?;
-        dict.set_item(
-            "remote_rejected",
-            stats
-                .remote_rejected
-                .iter()
-                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
-                .collect::<Vec<_>>(),
-        )?;
-        Ok(dict.unbind().into_any())
-    })
+    Ok(stats.into())
 }
 
-/// `jj git push -b <bookmark>` equivalent: pushes the local bookmark's
-/// current target to `remote` (as a subprocess `git push`), expecting the
-/// remote to currently be at whatever `{bookmark}@{remote}` is tracked as
-/// (use `track_remote_bookmark()` first if it isn't tracked yet — otherwise
-/// this expects the remote ref to not exist, and Git will reject a
-/// non-fast-forward push).
-///
-/// The local bookmark must resolve to exactly one commit (not absent, not
-/// conflicted).
-pub fn push_bookmark(
-    mut_repo: &mut MutableRepo,
-    settings: &PyUserSettings,
-    remote: &str,
-    bookmark: &str,
-) -> PyResult<Py<PyAny>> {
-    let remote_name = RemoteName::new(remote);
-    let name = RefName::new(bookmark);
-
-    let local_target = mut_repo.get_local_bookmark(name);
-    if local_target.is_absent() {
-        return Err(crate::errors::JjError::new_err(format!(
-            "bookmark `{bookmark}` doesn't exist locally, nothing to push"
-        )));
-    }
-    let after = local_target.as_normal().cloned().ok_or_else(|| {
-        crate::errors::JjError::new_err(format!(
-            "bookmark `{bookmark}` is conflicted; resolve before pushing"
-        ))
-    })?;
-    let before = mut_repo
-        .view()
-        .get_remote_bookmark(name.to_remote_symbol(remote_name))
-        .tracked_target()
-        .as_normal()
-        .cloned();
-
-    if before.as_ref() == Some(&after) {
-        return Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let dict = PyDict::new(py);
-            dict.set_item("pushed", Vec::<String>::new())?;
-            dict.set_item("rejected", Vec::<(String, Option<String>)>::new())?;
-            dict.set_item("remote_rejected", Vec::<(String, Option<String>)>::new())?;
-            Ok(dict.unbind().into_any())
-        });
-    }
-
-    let targets = GitPushRefTargets {
-        bookmarks: vec![(RefNameBuf::from(bookmark), Diff::new(before, Some(after)))],
-        tags: vec![],
-    };
-
-    let subprocess_options =
-        jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
-    let mut callback = SilentCallback;
-    let stats = git::push_refs(
-        mut_repo,
-        subprocess_options,
-        remote_name,
-        &targets,
-        &mut callback,
-        &GitPushOptions::default(),
-    )
-    .map_err(map_git_push_err)?;
-
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item(
-            "pushed",
-            stats
-                .pushed
-                .iter()
-                .map(|n| n.as_str().to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        dict.set_item(
-            "rejected",
-            stats
-                .rejected
-                .iter()
-                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
-                .collect::<Vec<_>>(),
-        )?;
-        dict.set_item(
-            "remote_rejected",
-            stats
-                .remote_rejected
-                .iter()
-                .map(|(n, reason)| (n.as_str().to_string(), reason.clone()))
-                .collect::<Vec<_>>(),
-        )?;
-        Ok(dict.unbind().into_any())
-    })
+/// What one `git_push_updates` call did, ref by ref.
+#[pyclass(name = "GitPushStats", module = "pyjj_bindings", frozen, get_all)]
+pub struct PyGitPushStats {
+    /// Refs the remote took.
+    pub pushed: Vec<String>,
+    /// `(ref, reason)`: refs that moved on the remote since the last fetch.
+    pub rejected: Vec<(String, Option<String>)>,
+    /// `(ref, reason)`: refs the remote refused.
+    pub remote_rejected: Vec<(String, Option<String>)>,
+    /// `(bookmark@remote, reason)`: pushed bookmarks jj could not record
+    /// in the colocated Git repo. jj warns about each one.
+    pub unexported: Vec<(String, String)>,
 }
+
+impl From<git::GitPushStats> for PyGitPushStats {
+    fn from(stats: git::GitPushStats) -> Self {
+        let refs = |refs: Vec<(jj_lib::ref_name::GitRefNameBuf, Option<String>)>| {
+            refs.into_iter()
+                .map(|(name, reason)| (name.as_str().to_owned(), reason))
+                .collect()
+        };
+        Self {
+            pushed: stats.pushed.iter().map(|name| name.as_str().to_owned()).collect(),
+            rejected: refs(stats.rejected),
+            remote_rejected: refs(stats.remote_rejected),
+            unexported: stats
+                .unexported_bookmarks
+                .into_iter()
+                .map(|(symbol, reason)| {
+                    let chain = std::iter::successors(
+                        Some(&reason as &dyn std::error::Error),
+                        |err| err.source(),
+                    )
+                    .map(|err| err.to_string())
+                    .collect::<Vec<_>>()
+                    .join(": ");
+                    (symbol.to_string(), chain)
+                })
+                .collect(),
+        }
+    }
+}
+
