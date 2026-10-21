@@ -17,18 +17,11 @@ def hunk_commit(args) -> int:
         if resolved is None:
             return 2
         spec, message = resolved
-        # For commit, the target is the working copy commit
         target = _wc_commit(repo, ws)
-        # Collect file contents for working copy changes? For commit, we need to snapshot working copy
-        # The working copy's changes are not yet in a commit; we need to use the working copy's file contents
-        # For now, we treat the working copy's parent as the base, similar to split
-        # Use the same spec_to_overrides but for the working copy's diff against parent
-        overrides = hunk_mod.spec_to_overrides(repo, target, spec, settings)
+        overrides = hunk_mod.spec_to_overrides(repo, target, spec)
         if not overrides:
             print("No changes selected.")
             return 1
-        # For commit, we want to keep selected changes in the current commit, and leave the rest in a new child
-        # This is the same as split, but the current commit is the working copy
         first_builder = tx.split_selected_edited(target, overrides)
         first_builder.set_description(complete_newline(message))
         first = first_builder.write(repo)

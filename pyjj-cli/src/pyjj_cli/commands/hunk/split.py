@@ -19,11 +19,10 @@ def hunk_split(args) -> int:
             return 2
         spec, message = resolved
         target = _resolve_one(repo, settings, _rev(args, "revision"))
-        overrides = hunk_mod.spec_to_overrides(repo, target, spec, settings)
+        overrides = hunk_mod.spec_to_overrides(repo, target, spec)
         if not overrides:
             print("No changes selected.")
             return 1
-        # Use split_selected_edited with overrides
         first_builder = tx.split_selected_edited(target, overrides)
         first_builder.set_description(complete_newline(message))
         first = first_builder.write(repo)
