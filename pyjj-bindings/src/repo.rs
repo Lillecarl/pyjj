@@ -54,6 +54,7 @@ impl PyReadonlyRepo {
             return Ok(context);
         }
         let expression = crate::revset::parse_revset(
+            self.inner.store(),
             &self.workspace_root,
             &self.workspace_name,
             settings,

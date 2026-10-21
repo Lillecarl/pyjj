@@ -95,7 +95,7 @@ pub fn debug_revset(
 ) -> PyResult<String> {
     let mut out = String::new();
     let expression =
-        crate::revset::parse_revset(&repo.workspace_root, &repo.workspace_name, settings, revision)?;
+        crate::revset::parse_revset(repo.inner.store(), &repo.workspace_root, &repo.workspace_name, settings, revision)?;
     writeln!(out, "-- Parsed:\n{expression:#?}\n").unwrap();
     if no_resolve && no_optimize {
         return Ok(out);

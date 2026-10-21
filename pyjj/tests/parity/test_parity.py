@@ -2725,6 +2725,16 @@ def test_tag_set_then_move(pair: RepoPair) -> None:
 
 
 @pytest.mark.covers("tag set", "--allow-move")
+def test_remote_bookmarks_ignore_the_git_remote(pair: RepoPair) -> None:
+    """A colocated repo exports `main` as `main@git`, and jj leaves the
+    `git` remote out of `remote_bookmarks()`. If one side counted it,
+    the abandon would remove `one` there and not on the other."""
+    chain(pair)
+    pair.op(jj=["git", "export"])
+    pair.op(jj=["abandon", "remote_bookmarks()"])
+    pair.assert_parity()
+
+
 # -- arrange --------------------------------------------------------------
 #
 # The TUI itself cannot run here; these cover what both sides decide

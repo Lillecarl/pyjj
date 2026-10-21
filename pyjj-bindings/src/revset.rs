@@ -121,6 +121,7 @@ pub fn evaluate_revset_mut(
 /// final call, so the context construction lives here once: a new alias
 /// table upstream must not land in one and miss the other.
 fn parse_user_revset(
+    store: &jj_lib::store::Store,
     settings: &PyUserSettings,
     workspace_root: &std::path::Path,
     workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
@@ -143,7 +144,11 @@ fn parse_user_revset(
         local_variables: Default::default(),
         user_email: settings.0.user_email(),
         date_pattern_context: chrono::Local::now().into(),
-        default_ignored_remote: None,
+        // `default_ignored_remote_name` in jj's cli_util.rs: a Git-backed
+        // store hides `@git` from `remote_bookmarks()` and its kin.
+        default_ignored_remote: jj_lib::git::get_git_backend(store)
+            .is_ok()
+            .then_some(jj_lib::git::REMOTE_NAME_FOR_LOCAL_GIT_REPO),
         fileset_aliases_map: &fileset_aliases_map,
         extensions: &extensions,
         workspace: Some(workspace_ctx),
@@ -160,7 +165,8 @@ pub fn resolve_revset(
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<Arc<ResolvedRevsetExpression>> {
-    let expression = parse_user_revset(settings, workspace_root, workspace_name, revision)?;
+    let expression =
+        parse_user_revset(repo.store(), settings, workspace_root, workspace_name, revision)?;
 
     let extensions = RevsetExtensions::new();
     let symbol_resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
@@ -178,10 +184,11 @@ pub fn resolve_revset(
 /// `UserRevsetExpression` and resolves it itself, against whichever repo
 /// it is later populated with.
 pub fn parse_revset(
+    store: &jj_lib::store::Store,
     workspace_root: &std::path::Path,
     workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<Arc<revset::UserRevsetExpression>> {
-    parse_user_revset(settings, workspace_root, workspace_name, revision)
+    parse_user_revset(store, settings, workspace_root, workspace_name, revision)
 }

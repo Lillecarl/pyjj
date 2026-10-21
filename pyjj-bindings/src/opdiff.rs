@@ -196,6 +196,7 @@ pub fn operation_diff(
     // Parsed once, then resolved separately against each repo: a symbol
     // can name different commits, or none at all, on the two sides.
     let user_expr = crate::revset::parse_revset(
+        to_repo.inner.store(),
         &to_repo.workspace_root,
         &to_repo.workspace_name,
         settings,
