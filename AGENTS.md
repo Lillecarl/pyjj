@@ -1154,8 +1154,11 @@ Current state:
   fine -- it holds no repo, only a path). Colocation is CLI-side: `Workspace.is_colocated()` (the
   faithful `open_git_repo_at_workdir` check, not `.git`-exists) plus
   the `git.colocate` setting (default true) decide, and
-  `Workspace.create_git_worktree(settings, dest)` runs jj_lib's own
-  `git::create_worktree` (`git worktree add --orphan`) after the add.
+  `add_workspace(..., colocate=True)` runs jj_lib's own
+  `git::create_worktree` (`git worktree add --orphan`) on the empty
+  destination before the workspace exists, then resets HEAD and exports
+  refs in its transaction. Creating the worktree after the add leaves
+  HEAD unborn and names the worktree after a temporary directory.
 
   Building this required fixing the same class of gap the conflict-resolution
   feature hit: `add_workspace`/`forget_workspaces` both call `jj_lib`

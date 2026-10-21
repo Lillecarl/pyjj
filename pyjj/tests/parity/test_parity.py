@@ -2677,6 +2677,30 @@ def _second_git_file(pair: RepoPair, side: str) -> Path:
     return root.parent / "second" / ".git"
 
 
+def _second_git_state(pair: RepoPair, side: str) -> dict:
+    """What Git itself sees in the second workspace. `assert_parity`
+    reads only jj's view, so an unborn HEAD or an empty index here
+    compares equal without this."""
+    root = _second_git_file(pair, side).parent
+
+    def git(*argv: str) -> str:
+        # No `check`: an unborn HEAD fails `rev-parse` and must read as "".
+        return subprocess.run(["git", "-C", str(root), *argv],
+                              capture_output=True, text=True).stdout.strip()
+
+    return {
+        "head": git("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
+        "worktree": Path(git("rev-parse", "--git-dir")).name,
+        "status": git("status", "--porcelain"),
+    }
+
+
+def _assert_second_git_parity(pair: RepoPair) -> None:
+    cli = _second_git_state(pair, "cli")
+    assert cli["head"] and cli["worktree"] == "second"
+    assert _second_git_state(pair, "py") == cli
+
+
 @pytest.mark.covers("workspace add", "--colocate")
 def test_workspace_add_colocate_creates_a_git_worktree(pair: RepoPair) -> None:
     """`--colocate` puts a Git worktree beside the new workspace, so
@@ -2686,6 +2710,7 @@ def test_workspace_add_colocate_creates_a_git_worktree(pair: RepoPair) -> None:
                 "../second"])
     assert _second_git_file(pair, "cli").is_file()
     assert _second_git_file(pair, "py").is_file()
+    _assert_second_git_parity(pair)
     pair.assert_parity()
 
 
@@ -2706,6 +2731,7 @@ def test_workspace_add_colocates_by_default(pair: RepoPair) -> None:
     pair.op(jj=["workspace", "add", "--name", "second", "../second"])
     assert _second_git_file(pair, "cli").is_file()
     assert _second_git_file(pair, "py").is_file()
+    _assert_second_git_parity(pair)
     pair.assert_parity()
 
 

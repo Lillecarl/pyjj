@@ -66,6 +66,7 @@ impl PyWorkspace {
         revision_ids: Option<Vec<PyCommitId>>,
         description: Option<String>,
         sparse_patterns: Option<Vec<String>>,
+        colocate: bool,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let dest_path = std::path::Path::new(&destination_path);
         let workspace_name = match name {
@@ -102,6 +103,16 @@ impl PyWorkspace {
             return Err(JjError::new_err(
                 "Destination path exists and is not an empty directory",
             ));
+        }
+
+        // Before the workspace exists, as `cli/src/commands/workspace/add.rs`
+        // does: an empty destination gives the worktree the workspace's
+        // own name, and the transaction below can then export HEAD.
+        if colocate {
+            let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
+                .map_err(crate::errors::map_py_err)?;
+            jj_lib::git::create_worktree(repo.store(), options, dest_path)
+                .map_err(|err| JjError::new_err(err.to_string()))?;
         }
 
         let working_copy_factory = default_working_copy_factory();
@@ -153,6 +164,10 @@ impl PyWorkspace {
         // which asserts no pending rewrites remain (same requirement
         // `checkout::snapshot` has).
         pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
+        if colocate {
+            crate::git::reset_head(&mut mut_repo, workspace_name.as_str(), new_ws.workspace_root())?;
+            crate::git::export_refs_only(&mut mut_repo)?;
+        }
 
         let tx = JjTransaction::new(mut_repo, &settings.0);
         let new_repo = pollster::block_on(tx.commit(format!(
@@ -914,8 +929,10 @@ impl PyWorkspace {
     /// `description` becomes the new working-copy commit's message, and
     /// `sparse_patterns` its sparse patterns -- `None` leaves the
     /// workspace unrestricted, which is what a fresh one is.
+    /// `colocate` backs the new workspace with a Git worktree and points
+    /// its HEAD at the new `@`'s first parent.
     #[pyo3(signature = (settings, destination_path, name=None, revision_ids=None,
-                        description=None, sparse_patterns=None))]
+                        description=None, sparse_patterns=None, colocate=false))]
     fn add_workspace(
         &self,
         py: Python<'_>,
@@ -925,11 +942,12 @@ impl PyWorkspace {
         revision_ids: Option<Vec<PyCommitId>>,
         description: Option<String>,
         sparse_patterns: Option<Vec<String>>,
+        colocate: bool,
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let (ws, repo) = py.detach(move || {
             let inner = self.inner.lock().unwrap();
             Self::add_workspace_inner(&inner, settings, destination_path, name, revision_ids,
-                                      description, sparse_patterns)
+                                      description, sparse_patterns, colocate)
         })?;
         Ok((ws, repo))
     }

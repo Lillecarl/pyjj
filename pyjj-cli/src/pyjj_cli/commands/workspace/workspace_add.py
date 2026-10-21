@@ -24,15 +24,13 @@ def workspace_add(args) -> int:
         name = getattr(args, "name", None)
         paragraphs = getattr(args, "messages", None)
         description = join_message_paragraphs(paragraphs) if paragraphs else None
+        colocate = _should_colocate(ws, settings, args)
         new_ws, new_repo = ws.add_workspace(
             settings, dest, name=name, revision_ids=revision_ids,
             description=description,
-            sparse_patterns=_sparse_patterns(ws, args))
-        if _should_colocate(ws, settings, args):
-            # After the workspace exists: the primitive supports a
-            # populated destination (the `colocation enable` shape), and
-            # adding first keeps the empty-destination check intact.
-            new_ws.create_git_worktree(settings, dest)
+            sparse_patterns=_sparse_patterns(ws, args),
+            colocate=colocate)
+        if colocate:
             print("Created Git worktree for the new workspace.")
         print(f"Created workspace in \"{os.path.relpath(dest, os.getcwd())}\"")
         if os.sep not in args.destination:
