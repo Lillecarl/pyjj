@@ -19,8 +19,8 @@ suite answers the second question, and can only ask it about argv
 pyjj-cli parses at all.
 
 Hidden commands are absent by construction: clap leaves them out of
-`markdown-help`, the same way it leaves them out of `--help`. So `bench`
-and `debug` show up as pyjj-only here, and that is not a divergence.
+`markdown-help`, the same way it leaves them out of `--help`. So `debug`
+shows up as pyjj-only here, and that is not a divergence.
 
 One known under-report: `markdown-help` hides some of an option's
 aliases, so `jj rebase -d` (for `--destination`) and `jj rebase

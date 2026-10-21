@@ -3471,7 +3471,7 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 #   arrange       an interactive TUI, so there is no argv to compare
 #   gerrit        needs a Gerrit server
 #   sparse edit   opens the editor on both sides
-#   bench, debug  hidden developer commands
+#   debug         hidden developer command
 #   hunk,         pyjj-cli's own commands; jj has no such subcommand, so
 #   templates     there is nothing to run on the other side
 #   op integrate  needs an operation created concurrently elsewhere, and

@@ -1,6 +1,5 @@
 {
   "extra_commands": [
-    "bench",
     "debug",
     "graph",
     "graph apply",

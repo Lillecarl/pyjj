@@ -22,8 +22,6 @@ def add_parsers(sub) -> None:
     p_help.add_argument("topic", nargs="*", metavar="COMMAND",
                         help="Command to describe")
     p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
-    p_bench = sub.add_parser("bench", help="Benchmarking commands")
-    p_bench.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_bench")
     p_debug = sub.add_parser("debug", help="Low-level commands not intended for users")
     p_debug.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_debug")
 
@@ -61,12 +59,6 @@ def _subparser(parser, name):
         if mapping and name in mapping:
             return mapping[name]
     return None
-
-
-def _stub_bench(args):
-    import sys
-    print("Error: bench is not yet supported", file=sys.stderr)
-    return 2
 
 
 def _stub_debug(args):
