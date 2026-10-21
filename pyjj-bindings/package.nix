@@ -27,6 +27,9 @@ in
       rustPlatform.maturinBuildHook
     ];
 
+    # Ships pyjj_bindings/__init__.pyi, from pyo3's experimental-inspect.
+    maturinBuildFlags = ["--generate-stubs"];
+
     # No tests for now; smoke-test later
     doCheck = false;
     pythonImportsCheck = [];

@@ -33,143 +33,206 @@ mod tag;
 mod tree;
 mod workspace;
 
-use absorb::PyAbsorbStats;
-use annotate::PyAnnotationLine;
-use bisect::{PyBisectStep, PyBisector};
-use evolution::PyEvolutionEntry;
-use bookmark::PyBookmark;
-use commit::{PyCommit, PyReadonlyRepo, PyVerification};
-use converge::{
-    PyConvergeResult, PyConvergeTree, PyConvergedAuthor, PyConvergedDescription,
-    PyConvergedParents, PyDivergentChange, PyTruncatedEvolutionGraph,
-};
-use errors::{
-    BackendError, CheckoutError, GitExportError, GitFetchError, GitImportError, GitPushError,
-    ConfigError, JjError, RepoIndexError, RepoInitError, RepoLoadError, RevsetEvalError, RevsetParseError,
-    TransactionError, WorkingCopyError, WorkspaceInitError, WorkspaceLoadError,
-};
-use fix::{PyFileToFix, PyFixSummary};
-use graph::{PyGraphEdge, PyGraphNode, PyGraphRenderer};
-use hunks::{PyHunk, PyUnifiedHunk, changed_line_ranges, content_hunks, diff_hunks, unified_hunks};
-use ids::{PyChangeId, PyCommitId, PyFileId, PySignature, PyTimestamp, PyTreeId};
-use operation::PyOperation;
-use oplog::PyOpAbandonStats;
-use repo::{PyCommitBuilder, PyTransaction};
-use rewrite::PyMoveCommitsStats;
-use settings::PyUserSettings;
-use settings::PyConfigLayer;
-use tag::PyRemoteTag;
-use tag::PyTag;
-use tree::PyDiffEntry;
-use workspace::PyWorkspace;
-
 /// Python bindings for Jujutsu VCS.
 #[pymodule]
-fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    m.add("VERSION", env!("CARGO_PKG_VERSION"))?;
-
-    // Exception hierarchy
-    m.add_class::<JjError>()?;
-    m.add_class::<RepoInitError>()?;
-    m.add_class::<RepoLoadError>()?;
-    m.add_class::<BackendError>()?;
-    m.add_class::<RepoIndexError>()?;
-    m.add_class::<ConfigError>()?;
-    m.add_class::<TransactionError>()?;
-    m.add_class::<WorkspaceInitError>()?;
-    m.add_class::<WorkspaceLoadError>()?;
-    m.add_class::<WorkingCopyError>()?;
-    m.add_class::<CheckoutError>()?;
-    m.add_class::<RevsetParseError>()?;
-    m.add_class::<RevsetEvalError>()?;
-    m.add_class::<GitImportError>()?;
-    m.add_class::<GitExportError>()?;
-    m.add_class::<GitFetchError>()?;
-    m.add_class::<GitPushError>()?;
-
-    // ID and value types
-    m.add_class::<PyCommitId>()?;
-    m.add_class::<PyChangeId>()?;
-    m.add_class::<PyTreeId>()?;
-    m.add_class::<PyFileId>()?;
-    m.add_class::<PyTimestamp>()?;
-    m.add_class::<PySignature>()?;
-
-    // Core types
-    m.add_class::<PyUserSettings>()?;
-    m.add_class::<PyConfigLayer>()?;
-    m.add_class::<PyBookmark>()?;
-    m.add_class::<crate::bookmark::PyRemoteBookmark>()?;
-    m.add_class::<PyTag>()?;
-    m.add_class::<PyRemoteTag>()?;
-    m.add_class::<PyCommit>()?;
-    m.add_class::<PyVerification>()?;
-    m.add_class::<PyDiffEntry>()?;
-    m.add_class::<crate::tree::PyDiffStat>()?;
-    m.add_class::<PyOperation>()?;
-    m.add_class::<PyReadonlyRepo>()?;
-    m.add_class::<PyTransaction>()?;
-    m.add_class::<PyCommitBuilder>()?;
-    m.add_class::<PyWorkspace>()?;
-    m.add_class::<PyHunk>()?;
-    m.add_class::<PyUnifiedHunk>()?;
-    m.add_class::<crate::tree::PyGitDiffFile>()?;
-    m.add_class::<PyAnnotationLine>()?;
-    m.add_class::<PyAbsorbStats>()?;
-    m.add_class::<PyFileToFix>()?;
-    m.add_class::<PyFixSummary>()?;
-    m.add_class::<PyOpAbandonStats>()?;
-    m.add_class::<PyGraphEdge>()?;
-    m.add_class::<PyGraphNode>()?;
-    m.add_class::<PyGraphRenderer>()?;
-    m.add_class::<PyBisector>()?;
-    m.add_class::<PyBisectStep>()?;
-    m.add_class::<PyDivergentChange>()?;
-    m.add_class::<PyTruncatedEvolutionGraph>()?;
-    m.add_class::<PyConvergeResult>()?;
-    m.add_class::<PyConvergeTree>()?;
-    m.add_class::<PyConvergedAuthor>()?;
-    m.add_class::<PyConvergedDescription>()?;
-    m.add_class::<PyConvergedParents>()?;
-    m.add_class::<PyEvolutionEntry>()?;
-    m.add_class::<PyMoveCommitsStats>()?;
-    m.add_class::<crate::opdiff::PyOperationDiff>()?;
-    m.add_class::<crate::opdiff::PyModifiedChange>()?;
-    m.add_class::<crate::opdiff::PyRefChange>()?;
-    m.add_class::<crate::opdiff::PyRefTargetSummary>()?;
-    m.add_class::<crate::run::PyRunPool>()?;
-    m.add_class::<crate::run::PyRunSlot>()?;
-    m.add_function(wrap_pyfunction!(diff_hunks, m)?)?;
-    m.add_function(wrap_pyfunction!(changed_line_ranges, m)?)?;
-    m.add_function(wrap_pyfunction!(unified_hunks, m)?)?;
-    m.add_function(wrap_pyfunction!(content_hunks, m)?)?;
-    m.add_function(wrap_pyfunction!(crate::secure_config::secure_config_file, m)?)?;
-    m.add_function(wrap_pyfunction!(crate::secure_config::repo_config_repo_path, m)?)?;
-    m.add_function(wrap_pyfunction!(crate::secure_config::remove_repo_config_dir, m)?)?;
-    m.add_function(wrap_pyfunction!(crate::secure_config::repo_configs_root_dir, m)?)?;
-    for function in [
-        wrap_pyfunction!(debug::debug_revset, m)?,
-        wrap_pyfunction!(debug::debug_fileset, m)?,
-        wrap_pyfunction!(debug::debug_tree, m)?,
-        wrap_pyfunction!(debug::debug_copy_detection, m)?,
-        wrap_pyfunction!(debug::debug_object_commit, m)?,
-        wrap_pyfunction!(debug::debug_object_operation, m)?,
-        wrap_pyfunction!(debug::debug_object_view, m)?,
-        wrap_pyfunction!(debug::debug_object_file, m)?,
-        wrap_pyfunction!(debug::debug_object_symlink, m)?,
-        wrap_pyfunction!(debug::debug_object_tree, m)?,
-        wrap_pyfunction!(debug::debug_index, m)?,
-        wrap_pyfunction!(debug::debug_reindex, m)?,
-        wrap_pyfunction!(debug::debug_index_changed_paths, m)?,
-        wrap_pyfunction!(debug::debug_stacked_table, m)?,
-        wrap_pyfunction!(debug::debug_init_simple, m)?,
-        wrap_pyfunction!(debug::debug_working_copy, m)?,
-        wrap_pyfunction!(debug::debug_local_working_copy, m)?,
-        wrap_pyfunction!(debug::debug_watchman, m)?,
-    ] {
-        m.add_function(function)?;
-    }
-
-    Ok(())
+mod pyjj_bindings {
+    #[allow(non_upper_case_globals)]
+    #[pymodule_export]
+    const __version__: &str = env!("CARGO_PKG_VERSION");
+    #[pymodule_export]
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    #[pymodule_export]
+    use crate::errors::JjError;
+    #[pymodule_export]
+    use crate::errors::RepoInitError;
+    #[pymodule_export]
+    use crate::errors::RepoLoadError;
+    #[pymodule_export]
+    use crate::errors::BackendError;
+    #[pymodule_export]
+    use crate::errors::RepoIndexError;
+    #[pymodule_export]
+    use crate::errors::ConfigError;
+    #[pymodule_export]
+    use crate::errors::TransactionError;
+    #[pymodule_export]
+    use crate::errors::WorkspaceInitError;
+    #[pymodule_export]
+    use crate::errors::WorkspaceLoadError;
+    #[pymodule_export]
+    use crate::errors::WorkingCopyError;
+    #[pymodule_export]
+    use crate::errors::CheckoutError;
+    #[pymodule_export]
+    use crate::errors::RevsetParseError;
+    #[pymodule_export]
+    use crate::errors::RevsetEvalError;
+    #[pymodule_export]
+    use crate::errors::GitImportError;
+    #[pymodule_export]
+    use crate::errors::GitExportError;
+    #[pymodule_export]
+    use crate::errors::GitFetchError;
+    #[pymodule_export]
+    use crate::errors::GitPushError;
+    #[pymodule_export]
+    use crate::ids::PyCommitId;
+    #[pymodule_export]
+    use crate::ids::PyChangeId;
+    #[pymodule_export]
+    use crate::ids::PyTreeId;
+    #[pymodule_export]
+    use crate::ids::PyFileId;
+    #[pymodule_export]
+    use crate::ids::PyTimestamp;
+    #[pymodule_export]
+    use crate::ids::PySignature;
+    #[pymodule_export]
+    use crate::settings::PyUserSettings;
+    #[pymodule_export]
+    use crate::settings::PyConfigLayer;
+    #[pymodule_export]
+    use crate::bookmark::PyBookmark;
+    #[pymodule_export]
+    use crate::bookmark::PyRemoteBookmark;
+    #[pymodule_export]
+    use crate::tag::PyTag;
+    #[pymodule_export]
+    use crate::tag::PyRemoteTag;
+    #[pymodule_export]
+    use crate::commit::PyCommit;
+    #[pymodule_export]
+    use crate::commit::PyVerification;
+    #[pymodule_export]
+    use crate::tree::PyDiffEntry;
+    #[pymodule_export]
+    use crate::tree::PyDiffStat;
+    #[pymodule_export]
+    use crate::operation::PyOperation;
+    #[pymodule_export]
+    use crate::commit::PyReadonlyRepo;
+    #[pymodule_export]
+    use crate::repo::PyTransaction;
+    #[pymodule_export]
+    use crate::repo::PyCommitBuilder;
+    #[pymodule_export]
+    use crate::workspace::PyWorkspace;
+    #[pymodule_export]
+    use crate::hunks::PyHunk;
+    #[pymodule_export]
+    use crate::hunks::PyUnifiedHunk;
+    #[pymodule_export]
+    use crate::tree::PyGitDiffFile;
+    #[pymodule_export]
+    use crate::annotate::PyAnnotationLine;
+    #[pymodule_export]
+    use crate::absorb::PyAbsorbStats;
+    #[pymodule_export]
+    use crate::fix::PyFileToFix;
+    #[pymodule_export]
+    use crate::fix::PyFixSummary;
+    #[pymodule_export]
+    use crate::oplog::PyOpAbandonStats;
+    #[pymodule_export]
+    use crate::graph::PyGraphEdge;
+    #[pymodule_export]
+    use crate::graph::PyGraphNode;
+    #[pymodule_export]
+    use crate::graph::PyGraphRenderer;
+    #[pymodule_export]
+    use crate::bisect::PyBisector;
+    #[pymodule_export]
+    use crate::bisect::PyBisectStep;
+    #[pymodule_export]
+    use crate::converge::PyDivergentChange;
+    #[pymodule_export]
+    use crate::converge::PyTruncatedEvolutionGraph;
+    #[pymodule_export]
+    use crate::converge::PyConvergeResult;
+    #[pymodule_export]
+    use crate::converge::PyConvergeTree;
+    #[pymodule_export]
+    use crate::converge::PyConvergedAuthor;
+    #[pymodule_export]
+    use crate::converge::PyConvergedDescription;
+    #[pymodule_export]
+    use crate::converge::PyConvergedParents;
+    #[pymodule_export]
+    use crate::evolution::PyEvolutionEntry;
+    #[pymodule_export]
+    use crate::rewrite::PyMoveCommitsStats;
+    #[pymodule_export]
+    use crate::opdiff::PyOperationDiff;
+    #[pymodule_export]
+    use crate::opdiff::PyModifiedChange;
+    #[pymodule_export]
+    use crate::opdiff::PyRefChange;
+    #[pymodule_export]
+    use crate::opdiff::PyRefTargetSummary;
+    #[pymodule_export]
+    use crate::run::PyRunPool;
+    #[pymodule_export]
+    use crate::run::PyRunSlot;
+    #[pymodule_export]
+    use crate::git::PyGitPushStats;
+    #[pymodule_export]
+    use crate::git::PyGitImportStats;
+    #[pymodule_export]
+    use crate::git::PyGitExportStats;
+    #[pymodule_export]
+    use crate::checkout::PyCheckoutStats;
+    #[pymodule_export]
+    use crate::checkout::SnapshotOutcome;
+    #[pymodule_export]
+    use crate::hunks::diff_hunks;
+    #[pymodule_export]
+    use crate::hunks::changed_line_ranges;
+    #[pymodule_export]
+    use crate::hunks::unified_hunks;
+    #[pymodule_export]
+    use crate::hunks::content_hunks;
+    #[pymodule_export]
+    use crate::secure_config::secure_config_file;
+    #[pymodule_export]
+    use crate::secure_config::repo_config_repo_path;
+    #[pymodule_export]
+    use crate::secure_config::remove_repo_config_dir;
+    #[pymodule_export]
+    use crate::secure_config::repo_configs_root_dir;
+    #[pymodule_export]
+    use crate::debug::debug_revset;
+    #[pymodule_export]
+    use crate::debug::debug_fileset;
+    #[pymodule_export]
+    use crate::debug::debug_tree;
+    #[pymodule_export]
+    use crate::debug::debug_copy_detection;
+    #[pymodule_export]
+    use crate::debug::debug_object_commit;
+    #[pymodule_export]
+    use crate::debug::debug_object_operation;
+    #[pymodule_export]
+    use crate::debug::debug_object_view;
+    #[pymodule_export]
+    use crate::debug::debug_object_file;
+    #[pymodule_export]
+    use crate::debug::debug_object_symlink;
+    #[pymodule_export]
+    use crate::debug::debug_object_tree;
+    #[pymodule_export]
+    use crate::debug::debug_index;
+    #[pymodule_export]
+    use crate::debug::debug_reindex;
+    #[pymodule_export]
+    use crate::debug::debug_index_changed_paths;
+    #[pymodule_export]
+    use crate::debug::debug_stacked_table;
+    #[pymodule_export]
+    use crate::debug::debug_init_simple;
+    #[pymodule_export]
+    use crate::debug::debug_working_copy;
+    #[pymodule_export]
+    use crate::debug::debug_local_working_copy;
+    #[pymodule_export]
+    use crate::debug::debug_watchman;
 }

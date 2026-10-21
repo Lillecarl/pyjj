@@ -223,16 +223,16 @@ impl PyReadonlyRepo {
     /// against its predecessors, and a squash gives a commit more than
     /// one. jj merges their trees before rebasing, exactly as it does
     /// for a merge commit's parents.
-    #[pyo3(signature = (from, to, settings, paths=None))]
+    #[pyo3(signature = (from_, to, settings, paths=None))]
     fn interdiff_files(
         &self,
         py: Python<'_>,
-        from: Vec<PyRef<'_, PyCommit>>,
+        from_: Vec<PyRef<'_, PyCommit>>,
         to: &PyCommit,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
-        let from: Vec<_> = from.iter().map(|c| c.inner.clone()).collect();
+        let from: Vec<_> = from_.iter().map(|c| c.inner.clone()).collect();
         py.detach(|| crate::tree::interdiff_files(self, &from, to, settings, paths))
     }
 
@@ -322,19 +322,19 @@ impl PyReadonlyRepo {
         })
     }
 
-    /// `jj interdiff --from A --to B`: how the changes `from` makes
+    /// `jj interdiff --from A --to B`: how the changes `from_` makes
     /// differ from the changes `to` makes. Unlike a plain diff, this
     /// leaves out whatever changed between the two commits' parents.
-    #[pyo3(signature = (from, to, paths=None))]
+    #[pyo3(signature = (from_, to, paths=None))]
     fn interdiff(
         &self,
         py: Python<'_>,
-        from: &PyCommit,
+        from_: &PyCommit,
         to: &PyCommit,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
         py.detach(|| {
-            crate::tree::interdiff_commits(self, from, to, paths)
+            crate::tree::interdiff_commits(self, from_, to, paths)
         })
     }
 
