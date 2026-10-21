@@ -123,3 +123,18 @@ def test_transaction_repr_reflects_open_and_consumed_state(repo, settings):
     assert repr(tx) == "Transaction(open)"
     tx.commit("done")
     assert repr(tx) == "Transaction(consumed)"
+
+
+def test_commit_with_unrebased_descendants_raises_and_keeps_transaction(repo, settings, wc_commit):
+    tx = repo.start_transaction(settings)
+    child = tx.new_commit(settings, [wc_commit.id]).write(repo)
+    edited = tx.rewrite_commit(settings, wc_commit).set_description("parent edited").write(repo)
+
+    with pytest.raises(pyjj.TransactionError, match="rebase_descendants"):
+        tx.commit("forgot to rebase")
+    assert repr(tx) == "Transaction(open)"
+
+    assert tx.rebase_descendants() == 1
+    repo = tx.commit("rebased")
+    rebased = repo.revset(settings, child.change_id.reverse_hex())
+    assert rebased[0].parent_ids == [edited.id]

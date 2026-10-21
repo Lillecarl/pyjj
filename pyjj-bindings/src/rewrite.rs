@@ -21,7 +21,7 @@ use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err};
 use crate::hunks::apply_hunk_selection;
 use crate::ids::PyCommitId;
-use crate::repo::PyCommitBuilder;
+use jj_lib::commit_builder::DetachedCommitBuilder;
 
 /// Builds a matcher from `paths`: `None` matches everything; `Some(paths)`
 /// matches each named path *and* everything under it if it's a directory
@@ -179,7 +179,7 @@ pub fn squash(
     paths: Option<Vec<String>>,
     hunks: Option<HashMap<String, Vec<usize>>>,
     keep_emptied: bool,
-) -> PyResult<Option<PyCommitBuilder>> {
+) -> PyResult<Option<DetachedCommitBuilder>> {
     let selection = select(mut_repo, &source.inner, paths, hunks)?;
     let result = pollster::block_on(rewrite::squash_commits(
         mut_repo,
@@ -188,7 +188,7 @@ pub fn squash(
         keep_emptied,
     ))
     .map_err(map_backend_err)?;
-    Ok(result.map(|squashed| PyCommitBuilder::from_rust(squashed.commit_builder)))
+    Ok(result.map(|squashed| squashed.commit_builder.detach()))
 }
 
 /// `jj squash --tool`: the same squash, with the moved changes chosen by a
@@ -202,7 +202,7 @@ pub fn squash_edited(
     destination: &PyCommit,
     selections: HashMap<String, Option<Vec<u8>>>,
     keep_emptied: bool,
-) -> PyResult<Option<PyCommitBuilder>> {
+) -> PyResult<Option<DetachedCommitBuilder>> {
     let parent_tree =
         pollster::block_on(source.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let selected_tree = overlay_contents(
@@ -222,7 +222,7 @@ pub fn squash_edited(
         keep_emptied,
     ))
     .map_err(map_backend_err)?;
-    Ok(result.map(|squashed| PyCommitBuilder::from_rust(squashed.commit_builder)))
+    Ok(result.map(|squashed| squashed.commit_builder.detach()))
 }
 
 /// First half of `jj split`: a `CommitBuilder` for the changes matched by
@@ -236,13 +236,13 @@ pub fn split_selected(
     target: &PyCommit,
     paths: Option<Vec<String>>,
     hunks: Option<HashMap<String, Vec<usize>>>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     reject_root(mut_repo, target.inner.id())?;
     let selection = select(mut_repo, &target.inner, paths, hunks)?;
     let builder = mut_repo
         .rewrite_commit(&target.inner)
         .set_tree(selection.selected_tree);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// Overlays per-path content overrides onto `base_tree`: `Some(bytes)`
@@ -303,7 +303,7 @@ pub fn split_selected_edited(
     mut_repo: &mut MutableRepo,
     target: &PyCommit,
     selections: HashMap<String, Option<Vec<u8>>>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     reject_root(mut_repo, target.inner.id())?;
     let parent_tree =
         pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
@@ -311,7 +311,7 @@ pub fn split_selected_edited(
     let builder = mut_repo
         .rewrite_commit(&target.inner)
         .set_tree(edited);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// Rewrites `commit` with per-path content overrides applied on top of its
@@ -321,10 +321,10 @@ pub fn edit_commit_tree(
     mut_repo: &mut MutableRepo,
     commit: &PyCommit,
     selections: HashMap<String, Option<Vec<u8>>>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let edited = overlay_contents(commit.inner.tree(), Some(&commit.inner.tree()), selections)?;
     let builder = mut_repo.rewrite_commit(&commit.inner).set_tree(edited);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// Second half of `jj split`: a `CommitBuilder` for `target`'s remaining
@@ -342,7 +342,7 @@ pub fn split_remainder(
     target: &PyCommit,
     first: &PyCommit,
     new_change_id: bool,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let builder = mut_repo
         .rewrite_commit(&target.inner)
         .set_parents(vec![first.inner.id().clone()])
@@ -352,7 +352,7 @@ pub fn split_remainder(
     } else {
         builder
     };
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// Second half of `jj split --parallel`: the same remaining changes, but
@@ -368,7 +368,7 @@ pub fn split_remainder_parallel(
     mut_repo: &mut MutableRepo,
     target: &PyCommit,
     first: &PyCommit,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let parent_tree = pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let target_tree = target.inner.tree();
     let selected_diff = jj_lib::merge::Diff::new(
@@ -385,7 +385,7 @@ pub fn split_remainder_parallel(
         .set_parents(target.inner.parent_ids().to_vec())
         .set_tree(new_tree)
         .generate_new_change_id();
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// `jj abandon --restore-descendants`: abandon `targets` and move their
@@ -484,7 +484,7 @@ pub fn set_executable(
     commit: &PyCommit,
     path: &str,
     executable: bool,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
     let value = crate::tree::tree_value(&tree, &repo_path)?;
@@ -505,7 +505,7 @@ pub fn set_executable(
     builder.set_or_remove(repo_path, new_value);
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// `jj restore [paths] --from <src> --into <dest>` equivalent: overwrites
@@ -524,7 +524,7 @@ pub fn restore(
     from_commit: Option<&PyCommit>,
     into_commit: &PyCommit,
     paths: Option<Vec<String>>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     // No source is `jj restore`'s own default: restore from the merge of
     // the destination's parents. The first parent alone would report a
     // merge commit as changing everything its other parents contributed.
@@ -564,7 +564,7 @@ pub fn restore(
     let builder = mut_repo
         .rewrite_commit(&into_commit.inner)
         .set_tree(new_tree);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }
 
 /// `jj abandon <rev>` equivalent: removes `commit` from history entirely

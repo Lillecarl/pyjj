@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 use jj_lib::backend::CommitId;
 use jj_lib::commit::Commit;
-use jj_lib::commit_builder::CommitBuilder;
+use jj_lib::commit_builder::DetachedCommitBuilder;
 use jj_lib::object_id::ObjectId as _;
 use jj_lib::op_store::RefTarget;
 use jj_lib::op_store::RemoteRef;
@@ -687,16 +687,23 @@ pub struct PyTransaction {
     workspace_name: jj_lib::ref_name::WorkspaceNameBuf,
 }
 
-// Helper to get a &mut MutableRepo from the RefCell<Option<Transaction>>
+fn transaction_finished() -> PyErr {
+    crate::errors::TransactionError::new_err("Transaction already committed")
+}
+
+fn with_tx<F, R>(tx: &PyTransaction, f: F) -> PyResult<R>
+where
+    F: FnOnce(&mut Transaction) -> PyResult<R>,
+{
+    let mut opt = tx.inner.borrow_mut();
+    f(opt.as_mut().ok_or_else(transaction_finished)?)
+}
+
 fn with_mut_repo<F, R>(tx: &PyTransaction, f: F) -> PyResult<R>
 where
     F: FnOnce(&mut MutableRepo) -> PyResult<R>,
 {
-    let mut opt = tx.inner.borrow_mut();
-    let tx_ref = opt
-        .as_mut()
-        .ok_or_else(|| crate::errors::TransactionError::new_err("Transaction already consumed"))?;
-    f(tx_ref.repo_mut())
+    with_tx(tx, |tx| f(tx.repo_mut()))
 }
 
 impl PyTransaction {
@@ -718,7 +725,7 @@ impl PyTransaction {
     /// conflicted, same as real jj.
     /// Returns a [`CommitBuilder`] for further configuration.
     fn new_commit(
-        &self,
+        slf: &Bound<'_, Self>,
         _settings: &PyUserSettings,
         parent_ids: Vec<PyCommitId>,
     ) -> PyResult<PyCommitBuilder> {
@@ -728,7 +735,7 @@ impl PyTransaction {
                 "new_commit requires at least one parent",
             ));
         }
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             let commits: Vec<Commit> = parents
                 .iter()
                 .map(|id| {
@@ -739,19 +746,19 @@ impl PyTransaction {
             let tree = pollster::block_on(jj_lib::rewrite::merge_commit_trees(mut_repo, &commits))
                 .map_err(map_backend_err)?;
             let builder = mut_repo.new_commit(parents, tree);
-            Ok(PyCommitBuilder::from_rust(builder))
+            Ok(builder.detach())
         })
     }
 
     /// Rewrite an existing commit. Returns a [`CommitBuilder`].
     fn rewrite_commit(
-        &self,
+        slf: &Bound<'_, Self>,
         _settings: &PyUserSettings,
         predecessor: &PyCommit,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             let builder = mut_repo.rewrite_commit(&predecessor.inner);
-            Ok(PyCommitBuilder::from_rust(builder))
+            Ok(builder.detach())
         })
     }
 
@@ -1139,14 +1146,14 @@ impl PyTransaction {
     /// `pyjj_bindings.rewrite.squash` docs.
     #[pyo3(signature = (source, destination, paths=None, hunks=None, keep_emptied=false))]
     fn squash(
-        &self,
+        slf: &Bound<'_, Self>,
         source: &PyCommit,
         destination: &PyCommit,
         paths: Option<Vec<String>>,
         hunks: Option<std::collections::HashMap<String, Vec<usize>>>,
         keep_emptied: bool,
     ) -> PyResult<Option<PyCommitBuilder>> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind_opt(slf, |mut_repo| {
             crate::rewrite::squash(mut_repo, source, destination, paths, hunks, keep_emptied)
         })
     }
@@ -1161,25 +1168,25 @@ impl PyTransaction {
     /// to write that content, `None` to leave the path out.
     #[pyo3(signature = (source, destination, selections, keep_emptied=false))]
     fn squash_edited(
-        &self,
+        slf: &Bound<'_, Self>,
         source: &PyCommit,
         destination: &PyCommit,
         selections: std::collections::HashMap<String, Option<Vec<u8>>>,
         keep_emptied: bool,
     ) -> PyResult<Option<PyCommitBuilder>> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind_opt(slf, |mut_repo| {
             crate::rewrite::squash_edited(mut_repo, source, destination, selections, keep_emptied)
         })
     }
 
     #[pyo3(signature = (target, paths=None, hunks=None))]
     fn split_selected(
-        &self,
+        slf: &Bound<'_, Self>,
         target: &PyCommit,
         paths: Option<Vec<String>>,
         hunks: Option<std::collections::HashMap<String, Vec<usize>>>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::split_selected(mut_repo, target, paths, hunks)
         })
     }
@@ -1188,11 +1195,11 @@ impl PyTransaction {
     /// paths to post-editing content (`None` = dropped). The first half's
     /// tree is the parent tree overlaid with exactly these contents.
     fn split_selected_edited(
-        &self,
+        slf: &Bound<'_, Self>,
         target: &PyCommit,
         selections: std::collections::HashMap<String, Option<Vec<u8>>>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::split_selected_edited(mut_repo, target, selections)
         })
     }
@@ -1200,11 +1207,11 @@ impl PyTransaction {
     /// Rewrite `commit` with per-path content overrides on top of its own
     /// tree (`diffedit`'s model; `None` removes a path).
     fn edit_commit_tree(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         selections: std::collections::HashMap<String, Option<Vec<u8>>>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::edit_commit_tree(mut_repo, commit, selections)
         })
     }
@@ -1218,12 +1225,12 @@ impl PyTransaction {
     /// `pyjj_bindings.rewrite::split_remainder`.
     #[pyo3(signature = (target, first, new_change_id=true))]
     fn split_remainder(
-        &self,
+        slf: &Bound<'_, Self>,
         target: &PyCommit,
         first: &PyCommit,
         new_change_id: bool,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::split_remainder(mut_repo, target, first, new_change_id)
         })
     }
@@ -1231,11 +1238,11 @@ impl PyTransaction {
     /// `jj split --parallel` equivalent, second half: the remaining
     /// changes as a *sibling* of `first` rather than its child.
     fn split_remainder_parallel(
-        &self,
+        slf: &Bound<'_, Self>,
         target: &PyCommit,
         first: &PyCommit,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::split_remainder_parallel(mut_repo, target, first)
         })
     }
@@ -1245,12 +1252,12 @@ impl PyTransaction {
     /// `Commit.materialize_conflict()` and
     /// `pyjj_bindings.conflicts.resolve_conflict` docs.
     fn resolve_conflict(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         path: &str,
         content: &[u8],
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::conflicts::resolve_conflict(mut_repo, commit, path, content)
         })
     }
@@ -1261,11 +1268,11 @@ impl PyTransaction {
     /// merge-tool results to one tree. Raises `JjError` if any path isn't
     /// a resolvable file conflict.
     fn resolve_conflicts(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         selections: std::collections::HashMap<String, Vec<u8>>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::conflicts::resolve_conflicts(mut_repo, commit, selections)
         })
     }
@@ -1275,12 +1282,12 @@ impl PyTransaction {
     /// is kept verbatim. Raises `JjError` unless every path is a
     /// resolvable two-sided plain-file conflict.
     fn pick_conflict_sides(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         paths: Vec<String>,
         side: usize,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::conflicts::pick_conflict_sides(mut_repo, commit, paths, side)
         })
     }
@@ -1291,11 +1298,11 @@ impl PyTransaction {
     /// description and `write()`s it. See `pyjj_bindings.revert.revert_commit`
     /// docs for chaining multiple reverts and for descendant-rebasing notes.
     fn revert_commit(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         new_parent_ids: Vec<PyCommitId>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::revert::revert_commit(mut_repo, commit, new_parent_ids)
         })
     }
@@ -1317,12 +1324,12 @@ impl PyTransaction {
     /// Returns a `CommitBuilder` -- caller `write()`s it and calls
     /// `rebase_descendants()` if `commit` has descendants.
     fn set_executable(
-        &self,
+        slf: &Bound<'_, Self>,
         commit: &PyCommit,
         path: &str,
         executable: bool,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::set_executable(mut_repo, commit, path, executable)
         })
     }
@@ -1335,12 +1342,12 @@ impl PyTransaction {
     /// `rebase_descendants()` if `into_commit` has descendants.
     #[pyo3(signature = (from_commit, into_commit, paths=None))]
     fn restore(
-        &self,
+        slf: &Bound<'_, Self>,
         from_commit: Option<&PyCommit>,
         into_commit: &PyCommit,
         paths: Option<Vec<String>>,
     ) -> PyResult<PyCommitBuilder> {
-        with_mut_repo(self, |mut_repo| {
+        PyCommitBuilder::bind(slf, |mut_repo| {
             crate::rewrite::restore(mut_repo, from_commit, into_commit, paths)
         })
     }
@@ -1693,22 +1700,31 @@ impl PyTransaction {
         })
     }
 
-    /// Commit this transaction and publish the operation.
     /// Record one `key: value` on the operation this transaction will
     /// become. jj uses `args` for the command line that started it.
     fn set_attribute(&self, key: String, value: String) -> PyResult<()> {
-        let mut opt = self.inner.borrow_mut();
-        let tx = opt.as_mut().ok_or_else(|| {
-            crate::errors::TransactionError::new_err("Transaction already committed")
-        })?;
-        tx.set_attribute(key, value);
-        Ok(())
+        with_tx(self, |tx| {
+            tx.set_attribute(key, value);
+            Ok(())
+        })
     }
 
+    /// Commit this transaction and publish the operation.
+    ///
+    /// Raises `TransactionError` and leaves the transaction open when a
+    /// rewrite still has descendants to rebase: jj_lib asserts on that,
+    /// and the panic would lose the transaction.
     fn commit(&self, description: String) -> PyResult<PyReadonlyRepo> {
-        let tx = self.inner.borrow_mut().take().ok_or_else(|| {
-            crate::errors::TransactionError::new_err("Transaction already committed")
+        with_tx(self, |tx| {
+            if tx.repo().has_rewrites() {
+                return Err(crate::errors::TransactionError::new_err(
+                    "Rewritten commits have descendants that are not rebased; \
+                     call rebase_descendants() before commit()",
+                ));
+            }
+            Ok(())
         })?;
+        let tx = self.inner.borrow_mut().take().ok_or_else(transaction_finished)?;
         let repo = pollster::block_on(tx.commit(description)).map_err(map_transaction_err)?;
         Ok(PyReadonlyRepo {
             inner: repo,
@@ -1732,29 +1748,49 @@ impl PyTransaction {
 ///
 /// Obtained from `Transaction.new_commit()` or `Transaction.rewrite_commit()`.
 /// Call `write()` to finalize, or `abandon()` to abandon the old commit.
+///
+/// Holds the transaction it came from, not a borrow of its repo: jj_lib's
+/// `CommitBuilder<'repo>` borrows the `MutableRepo`, which `commit()` frees.
 #[pyclass(name = "CommitBuilder", unsendable)]
 pub struct PyCommitBuilder {
-    inner: Option<CommitBuilder<'static>>,
+    inner: Option<DetachedCommitBuilder>,
+    tx: Py<PyTransaction>,
 }
 
 impl PyCommitBuilder {
-    pub(crate) fn from_rust(builder: CommitBuilder<'_>) -> Self {
-        // SAFETY: The Python GIL and object lifetimes ensure the MutableRepo
-        // (via Transaction) outlives this builder.
-        let static_builder: CommitBuilder<'static> = unsafe { std::mem::transmute(builder) };
-        Self {
-            inner: Some(static_builder),
-        }
+    pub(crate) fn bind<F>(tx: &Bound<'_, PyTransaction>, f: F) -> PyResult<Self>
+    where
+        F: FnOnce(&mut MutableRepo) -> PyResult<DetachedCommitBuilder>,
+    {
+        let builder = with_mut_repo(&tx.borrow(), f)?;
+        Ok(Self {
+            inner: Some(builder),
+            tx: tx.clone().unbind(),
+        })
+    }
+
+    pub(crate) fn bind_opt<F>(tx: &Bound<'_, PyTransaction>, f: F) -> PyResult<Option<Self>>
+    where
+        F: FnOnce(&mut MutableRepo) -> PyResult<Option<DetachedCommitBuilder>>,
+    {
+        let builder = with_mut_repo(&tx.borrow(), f)?;
+        Ok(builder.map(|builder| Self {
+            inner: Some(builder),
+            tx: tx.clone().unbind(),
+        }))
+    }
+
+    fn builder(&self) -> PyResult<&DetachedCommitBuilder> {
+        self.inner.as_ref().ok_or_else(builder_consumed)
+    }
+
+    fn builder_mut(&mut self) -> PyResult<&mut DetachedCommitBuilder> {
+        self.inner.as_mut().ok_or_else(builder_consumed)
     }
 }
 
-/// Takes the inner builder, or a clean [`TransactionError`](crate::errors::TransactionError)
-/// if it was already consumed by a previous `write()`/`abandon()` call —
-/// instead of panicking, which would tear down the whole Python process.
-fn take_inner(inner: &mut Option<CommitBuilder<'static>>) -> PyResult<CommitBuilder<'static>> {
-    inner
-        .take()
-        .ok_or_else(|| crate::errors::TransactionError::new_err("CommitBuilder already consumed"))
+fn builder_consumed() -> PyErr {
+    crate::errors::TransactionError::new_err("CommitBuilder already consumed")
 }
 
 #[pymethods]
@@ -1763,8 +1799,7 @@ impl PyCommitBuilder {
         mut slf: PyRefMut<'_, Self>,
         description: String,
     ) -> PyResult<PyRefMut<'_, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_description(description));
+        slf.builder_mut()?.set_description(description);
         Ok(slf)
     }
 
@@ -1772,8 +1807,7 @@ impl PyCommitBuilder {
         mut slf: PyRefMut<'_, Self>,
         author: PySignature,
     ) -> PyResult<PyRefMut<'_, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_author(author.0));
+        slf.builder_mut()?.set_author(author.0);
         Ok(slf)
     }
 
@@ -1781,8 +1815,7 @@ impl PyCommitBuilder {
         mut slf: PyRefMut<'_, Self>,
         committer: PySignature,
     ) -> PyResult<PyRefMut<'_, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_committer(committer.0));
+        slf.builder_mut()?.set_committer(committer.0);
         Ok(slf)
     }
 
@@ -1791,18 +1824,13 @@ impl PyCommitBuilder {
         parent_ids: Vec<PyCommitId>,
     ) -> PyResult<PyRefMut<'_, Self>> {
         let ids: Vec<CommitId> = parent_ids.into_iter().map(|p| p.0).collect();
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_parents(ids));
+        slf.builder_mut()?.set_parents(ids);
         Ok(slf)
     }
 
     /// The commits this one records as the ones it rewrites.
     fn predecessors(&self) -> PyResult<Vec<PyCommitId>> {
-        let builder = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| crate::errors::TransactionError::new_err("CommitBuilder already consumed"))?;
-        Ok(builder.predecessors().iter().cloned().map(PyCommitId).collect())
+        Ok(self.builder()?.predecessors().iter().cloned().map(PyCommitId).collect())
     }
 
     /// Replace that list outright. `jj squash -A`/`-B`/`-o` uses this to
@@ -1814,8 +1842,7 @@ impl PyCommitBuilder {
         predecessors: Vec<PyCommitId>,
     ) -> PyResult<PyRefMut<'_, Self>> {
         let ids: Vec<CommitId> = predecessors.into_iter().map(|p| p.0).collect();
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_predecessors(ids));
+        slf.builder_mut()?.set_predecessors(ids);
         Ok(slf)
     }
 
@@ -1823,8 +1850,7 @@ impl PyCommitBuilder {
         mut slf: PyRefMut<'a, Self>,
         change_id: &'a PyChangeId,
     ) -> PyResult<PyRefMut<'a, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_change_id(change_id.0.clone()));
+        slf.builder_mut()?.set_change_id(change_id.0.clone());
         Ok(slf)
     }
 
@@ -1832,8 +1858,7 @@ impl PyCommitBuilder {
     /// commit's (only meaningful when this builder came from
     /// `rewrite_commit()`/`split_remainder()`, which otherwise preserve it).
     fn generate_new_change_id(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.generate_new_change_id());
+        slf.builder_mut()?.generate_new_change_id();
         Ok(slf)
     }
 
@@ -1843,8 +1868,7 @@ impl PyCommitBuilder {
     /// bookmarks then follow the wrong one. jj's own note applies: assign
     /// a new change id too, or the result is divergent.
     fn clear_rewrite_source(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.clear_rewrite_source());
+        slf.builder_mut()?.clear_rewrite_source();
         Ok(slf)
     }
 
@@ -1864,12 +1888,13 @@ impl PyCommitBuilder {
                 )));
             }
         };
-        let builder = take_inner(&mut slf.inner)?;
-        slf.inner = Some(builder.set_sign_behavior(behavior));
+        slf.builder_mut()?.set_sign_behavior(behavior);
         Ok(slf)
     }
 
     /// Write this commit to the repository. Returns the new [`Commit`].
+    ///
+    /// `repo` is optional and only recorded on the returned commit.
     ///
     /// A builder with no parents can only be a rewrite of the root
     /// commit, which has none. jj_lib asserts on that and aborts the
@@ -1878,27 +1903,40 @@ impl PyCommitBuilder {
     /// exception Python can catch. `jj` never reaches it because its
     /// CLI refuses to rewrite immutable commits first, and the root
     /// commit is always immutable.
-    fn write(mut slf: PyRefMut<'_, Self>, repo: &PyReadonlyRepo) -> PyResult<PyCommit> {
-        let builder = take_inner(&mut slf.inner)?;
-        if builder.parents().is_empty() {
-            let root = repo.inner.store().root_commit_id();
-            return Err(crate::errors::JjError::new_err(format!(
-                "The root commit {} is immutable",
-                &root.hex()[..12]
-            )));
-        }
-        let commit = pollster::block_on(builder.write()).map_err(map_backend_err)?;
+    #[pyo3(signature = (repo=None))]
+    fn write(
+        mut slf: PyRefMut<'_, Self>,
+        repo: Option<&PyReadonlyRepo>,
+    ) -> PyResult<PyCommit> {
+        let tx = slf.tx.clone_ref(slf.py());
+        let tx = tx.borrow(slf.py());
+        let commit = with_mut_repo(&tx, |mut_repo| {
+            let builder = slf.inner.take().ok_or_else(builder_consumed)?;
+            if builder.parents().is_empty() {
+                let root = mut_repo.store().root_commit_id();
+                return Err(crate::errors::JjError::new_err(format!(
+                    "The root commit {} is immutable",
+                    &root.hex()[..12]
+                )));
+            }
+            pollster::block_on(builder.write(mut_repo)).map_err(map_backend_err)
+        })?;
         Ok(PyCommit {
             inner: commit,
-            _repo: Some(repo.inner.clone()),
+            _repo: repo.map(|repo| repo.inner.clone()),
         })
     }
 
     /// Abandon the source commit instead of writing a new one.
-    fn abandon(mut slf: PyRefMut<'_, Self>) {
-        if let Some(builder) = slf.inner.take() {
-            builder.abandon();
-        }
+    fn abandon(mut slf: PyRefMut<'_, Self>) -> PyResult<()> {
+        let tx = slf.tx.clone_ref(slf.py());
+        let tx = tx.borrow(slf.py());
+        with_mut_repo(&tx, |mut_repo| {
+            if let Some(builder) = slf.inner.take() {
+                builder.abandon(mut_repo);
+            }
+            Ok(())
+        })
     }
 
     fn __repr__(&self) -> String {

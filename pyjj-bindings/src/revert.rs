@@ -10,7 +10,7 @@ use jj_lib::rewrite::merge_commit_trees;
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err};
 use crate::ids::PyCommitId;
-use crate::repo::PyCommitBuilder;
+use jj_lib::commit_builder::DetachedCommitBuilder;
 
 /// `jj revert` equivalent for a single revision: computes the reverse of
 /// `commit`'s own changes (relative to its parents) and applies that
@@ -33,7 +33,7 @@ pub fn revert_commit(
     mut_repo: &mut MutableRepo,
     commit: &PyCommit,
     new_parent_ids: Vec<PyCommitId>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let new_parent_ids: Vec<CommitId> = new_parent_ids.into_iter().map(|p| p.0).collect();
     if new_parent_ids.is_empty() {
         return Err(JjError::new_err(
@@ -73,5 +73,5 @@ pub fn revert_commit(
     .map_err(map_backend_err)?;
 
     let builder = mut_repo.new_commit(new_parent_ids, new_tree);
-    Ok(PyCommitBuilder::from_rust(builder))
+    Ok(builder.detach())
 }

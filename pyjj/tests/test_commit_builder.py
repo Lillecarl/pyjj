@@ -1,5 +1,7 @@
 """Tests for CommitBuilder: chaining, consumption, sign behavior."""
 
+import gc
+
 import pytest
 
 import pyjj
@@ -96,3 +98,17 @@ def test_commit_builder_repr_reflects_consumed_state(repo, settings, wc_commit):
     assert repr(builder) != "CommitBuilder(consumed)"
     builder.write(repo)
     assert repr(builder) == "CommitBuilder(consumed)"
+
+
+def test_write_after_transaction_commit_raises_transaction_error(repo, settings, wc_commit):
+    tx, builder = _builder(repo, settings, wc_commit)
+    tx.commit("finished first")
+    with pytest.raises(pyjj.TransactionError):
+        builder.write(repo)
+
+
+def test_builder_keeps_its_transaction_alive(repo, settings, wc_commit):
+    builder = repo.start_transaction(settings).rewrite_commit(settings, wc_commit)
+    gc.collect()
+    written = builder.set_description("outlived the name").write()
+    assert written.description == "outlived the name"

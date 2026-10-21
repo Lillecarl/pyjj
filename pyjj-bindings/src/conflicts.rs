@@ -13,7 +13,7 @@ use jj_lib::repo_path::RepoPathBuf;
 
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err, map_py_err};
-use crate::repo::PyCommitBuilder;
+use jj_lib::commit_builder::DetachedCommitBuilder;
 use crate::settings::PyUserSettings;
 
 /// Renders the conflict at `path` in `commit`'s tree as conflict-marker
@@ -147,7 +147,7 @@ pub fn resolve_conflict(
     commit: &PyCommit,
     path: &str,
     content: &[u8],
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     let repo_path = crate::tree::repo_path(path)?;
     let tree = commit.inner.tree();
     let value = crate::tree::tree_value(&tree, &repo_path)?;
@@ -162,7 +162,7 @@ pub fn resolve_conflict(
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
 
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
-    Ok(PyCommitBuilder::from_rust(commit_builder))
+    Ok(commit_builder.detach())
 }
 
 /// Multi-path variant of `resolve_conflict`: resolves every path in
@@ -175,13 +175,13 @@ pub fn resolve_conflicts(
     mut_repo: &mut MutableRepo,
     commit: &PyCommit,
     selections: HashMap<String, Vec<u8>>,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     if selections.is_empty() {
         // Still rewrite: real jj rewrites the commit even when the merge
         // tool changed nothing (the committer-timestamp bump records the
         // attempt).
         let builder = mut_repo.rewrite_commit(&commit.inner);
-        return Ok(PyCommitBuilder::from_rust(builder));
+        return Ok(builder.detach());
     }
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
@@ -196,7 +196,7 @@ pub fn resolve_conflicts(
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
-    Ok(PyCommitBuilder::from_rust(commit_builder))
+    Ok(commit_builder.detach())
 }
 
 /// The raw sides of the file conflict at `path`, exactly as an external
@@ -276,7 +276,7 @@ pub fn pick_conflict_sides(
     commit: &PyCommit,
     paths: Vec<String>,
     side: usize,
-) -> PyResult<PyCommitBuilder> {
+) -> PyResult<DetachedCommitBuilder> {
     if side > 1 {
         return Err(JjError::new_err(format!(
             "side index {side} out of range; only 0 (:ours) and 1 (:theirs) are supported"
@@ -284,7 +284,7 @@ pub fn pick_conflict_sides(
     }
     if paths.is_empty() {
         let builder = mut_repo.rewrite_commit(&commit.inner);
-        return Ok(PyCommitBuilder::from_rust(builder));
+        return Ok(builder.detach());
     }
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
@@ -343,7 +343,7 @@ pub fn pick_conflict_sides(
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
-    Ok(PyCommitBuilder::from_rust(commit_builder))
+    Ok(commit_builder.detach())
 }
 
 /// Every conflicted path in `commit`'s tree, with the numbers `jj
