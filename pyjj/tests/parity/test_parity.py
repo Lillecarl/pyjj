@@ -25,6 +25,7 @@ import re
 
 import pytest
 
+import cli_surface
 from parity_harness import DRIVER, PIN_TIME, RepoPair, make_bare_remote
 
 pytestmark = pytest.mark.skipif(
@@ -2999,11 +3000,6 @@ def test_git_export_after_bookmark_delete(pair: RepoPair) -> None:
     assert not any(n.startswith("refs/heads/main") for n in git_refs(pair, "cli"))
 
 
-UNIMPLEMENTED = pytest.mark.xfail(
-    strict=True, reason="pyjj-cli does not implement this jj command yet",
-)
-
-
 @pytest.mark.covers("git colocation enable")
 def test_git_colocation_enable(pair: RepoPair) -> None:
     """Colocation puts a real `.git` beside `.jj`, so git refs must match
@@ -3547,14 +3543,9 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
-# -- commands jj has and pyjj-cli does not yet ---------------------------
+# -- commands this suite leaves out ---------------------------------------
 #
-# Every one of these runs clean through `jj` and fails through pyjj-cli.
-# They are the executable half of the coverage matrix in AGENTS.md: the
-# xfail is strict, so the day a command lands, its scenario stops being
-# an expected failure and the marker has to go.
-#
-# Not listed here, and excluded on purpose:
+# Excluded on purpose:
 #   arrange       an interactive TUI, so there is no argv to compare
 #   gerrit        needs a Gerrit server
 #   debug         hidden developer command
@@ -3567,16 +3558,88 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 #                 `-R`; jj rejects a second one
 
 
-UNIMPLEMENTED_ARGV = [
-    ["util", "config-schema"],
-]
+# -- util generators ----------------------------------------------------
 
 
-@UNIMPLEMENTED
-@pytest.mark.parametrize("argv", UNIMPLEMENTED_ARGV, ids=lambda a: "_".join(a)[:40])
-def test_unimplemented_jj_command(pair: RepoPair, argv) -> None:
+def _stdout(pair: RepoPair, side: str, argv: list[str]) -> bytes:
+    repo = pair.cli_repo if side == "cli" else pair.py_repo
+    cmd = ([pair.jj_bin, "-R", str(repo), "--no-pager", *argv] if side == "cli"
+           else [sys.executable, str(DRIVER), str(repo), *argv])
+    return subprocess.run(cmd, capture_output=True, check=True, cwd=str(repo),
+                          env=pair._env(bump=False)).stdout
+
+
+@pytest.mark.covers("util config-schema")
+def test_util_config_schema_matches_the_pinned_jj(pair: RepoPair) -> None:
+    """pyjj-cli ships a copy of jj's schema. This is what fails when the
+    pin moves and the copy does not."""
     chain(pair)
-    pair.op(jj=argv)
+    argv = ["util", "config-schema"]
+    assert _stdout(pair, "py", argv) == _stdout(pair, "cli", argv)
+    pair.assert_parity()
+
+
+@pytest.mark.covers("util completion")
+@pytest.mark.parametrize("shell", ["bash", "fish", "power-shell", "zsh"])
+def test_util_completion(pair: RepoPair, shell: str) -> None:
+    """The scripts differ by construction: clap's against argcomplete's.
+    Both must exist and name their own program."""
+    chain(pair)
+    pair.op(jj=["util", "completion", shell])
+    assert b"pyjj" in _stdout(pair, "py", ["util", "completion", shell])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("util completion")
+@pytest.mark.xfail(strict=True,
+                   reason="argcomplete cannot generate elvish or nushell")
+@pytest.mark.parametrize("shell", ["elvish", "nushell"])
+def test_util_completion_without_argcomplete_support(pair: RepoPair,
+                                                     shell: str) -> None:
+    chain(pair)
+    pair.op(jj=["util", "completion", shell])
+
+
+@pytest.mark.covers("util markdown-help")
+def test_util_markdown_help_describes_the_parser(pair: RepoPair) -> None:
+    """The page parses, with jj's own reader, back into the visible
+    surface the argparse tree declares. Hidden flags stay off the page,
+    as clap leaves them off jj's."""
+    import argparse
+
+    from pyjj_cli.__main__ import GLOBAL_FLAGS_OUTSIDE_ARGPARSE, build_parser
+
+    declared: dict[str, set[str]] = {}
+    seen: set[int] = set()
+
+    def walk(parser: argparse.ArgumentParser, path: str) -> None:
+        declared[path] = set()
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                helps = {a.dest: a.help for a in action._choices_actions}
+                for name, sub in action.choices.items():
+                    if id(sub) not in seen and helps.get(name) != argparse.SUPPRESS:
+                        seen.add(id(sub))
+                        walk(sub, f"{path} {name}".strip())
+            elif (action.help != argparse.SUPPRESS
+                  and not isinstance(action, argparse._HelpAction)):
+                declared[path] |= set(action.option_strings)
+
+    walk(build_parser(), "")
+    declared[""] |= set(GLOBAL_FLAGS_OUTSIDE_ARGPARSE)
+    chain(pair)
+    page = _stdout(pair, "py", ["util", "markdown-help"]).decode()
+    assert cli_surface.parse_markdown_help(page, "pyjj") == declared
+
+
+@pytest.mark.covers("util install-man-pages")
+def test_util_install_man_pages(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["util", "install-man-pages", "../man"])
+    jj_pages = {p.name for p in (pair.cli_repo.parent / "man" / "man1").iterdir()}
+    py_pages = {p.name for p in (pair.py_repo.parent / "man" / "man1").iterdir()}
+    assert "jj-abandon.1" in jj_pages
+    assert "pyjj-abandon.1" in py_pages and "pyjj.1" in py_pages
     pair.assert_parity()
 
 

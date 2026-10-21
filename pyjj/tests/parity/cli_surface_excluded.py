@@ -43,8 +43,9 @@ EXCLUDED_FLAGS = {
         "--keyword": (
             "Prints a documentation topic compiled into jj's own binary. "
             "pyjj-cli has no copy of jj's manual, and shipping one would "
-            "be a snapshot that silently ages. `util config-schema` is a "
-            "strict xfail in the parity suite for the same reason."
+            "be a snapshot that silently ages. `util config-schema` ships "
+            "a copy, but of one file the pinned jj prints whole, so a "
+            "parity test catches it aging; the manual has no such source."
         ),
     },
 }

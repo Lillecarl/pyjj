@@ -164,19 +164,7 @@
   "util backend": [
     "(command)"
   ],
-  "util completion": [
-    "(command)"
-  ],
-  "util config-schema": [
-    "(command)"
-  ],
   "util exec": [
-    "(command)"
-  ],
-  "util install-man-pages": [
-    "(command)"
-  ],
-  "util markdown-help": [
     "(command)"
   ],
   "version": [

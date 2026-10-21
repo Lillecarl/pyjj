@@ -122,7 +122,13 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
         [jj_bin, "--no-pager", "util", "markdown-help"],
         capture_output=True, text=True, check=True,
     ).stdout
-    tokens = MarkdownIt().parse(out)
+    return parse_markdown_help(out, "jj")
+
+
+def parse_markdown_help(page: str, prog: str) -> dict[str, set[str]]:
+    """`jj_surface`'s reading of one `util markdown-help` page, whose
+    headings name commands as `prog ...`."""
+    tokens = MarkdownIt().parse(page)
 
     surface: dict[str, set[str]] = {}
     current: str | None = None
@@ -147,8 +153,8 @@ def jj_surface(jj_bin: str | None = None) -> dict[str, set[str]]:
             heading_level = None
             section = None
             text = token.content.strip()
-            if text.startswith("`jj") and text.endswith("`"):
-                current = text[1:-1].removeprefix("jj").strip()
+            if text.startswith(f"`{prog}") and text.endswith("`"):
+                current = text[1:-1].removeprefix(prog).strip()
                 surface.setdefault(current, set())
             continue
         if heading_level == "h6":

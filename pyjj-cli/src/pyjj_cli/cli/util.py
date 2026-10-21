@@ -1,10 +1,4 @@
-"""`jj util`: infrequently used commands.
-
-Only `backend name`, `diff`, `exec`, `gc` and `snapshot` are implemented. The
-rest keep the old stub behaviour, so an unimplemented subcommand still
-exits 2 -- and so does an unknown one, which argparse rejects on its
-own.
-"""
+"""`jj util`: infrequently used commands."""
 import argparse
 import sys
 
@@ -12,36 +6,14 @@ from .flags import Flag, add_flags
 
 
 def _util_help(args):
-    print("usage: pyjj util {backend,diff,exec,gc,snapshot}", file=sys.stderr)
+    print("usage: pyjj util {backend,completion,config-schema,diff,exec,gc,"
+          "install-man-pages,markdown-help,snapshot}", file=sys.stderr)
     return 2
-
-
-def _stub(name: str):
-    def _h(args):
-        print(f"Error: util {name} is not yet supported", file=sys.stderr)
-        return 2
-    return _h
 
 
 def _backend_help(args):
     print("usage: pyjj util backend {name}", file=sys.stderr)
     return 2
-
-
-def _stub_completion(args):
-    return _stub("completion")(args)
-
-
-def _stub_config_schema(args):
-    return _stub("config-schema")(args)
-
-
-def _stub_install_man_pages(args):
-    return _stub("install-man-pages")(args)
-
-
-def _stub_markdown_help(args):
-    return _stub("markdown-help")(args)
 
 
 def add_parsers(sub) -> None:
@@ -92,12 +64,29 @@ def add_parsers(sub) -> None:
                             help=argparse.SUPPRESS)
     p_diff.set_defaults(_handler="pyjj_cli.commands.util.diff:util_diff")
 
-    for name, handler in (
-        ("completion", "_stub_completion"),
-        ("config-schema", "_stub_config_schema"),
-        ("install-man-pages", "_stub_install_man_pages"),
-        ("markdown-help", "_stub_markdown_help"),
-    ):
-        p_stub = util_sub.add_parser(name, help=f"jj util {name}")
-        p_stub.add_argument("rest", nargs="*", help="Not yet supported")
-        p_stub.set_defaults(_handler=f"pyjj_cli.cli.util:{handler}")
+    p_completion = util_sub.add_parser(
+        "completion", help="Print a command-line-completion script")
+    p_completion.add_argument(
+        "shell", metavar="SHELL",
+        choices=("bash", "elvish", "fish", "nushell", "power-shell", "zsh"),
+        help="The shell to print the script for")
+    p_completion.set_defaults(
+        _handler="pyjj_cli.commands.util.completion:util_completion")
+
+    p_schema = util_sub.add_parser(
+        "config-schema", help="Print the JSON schema for the jj TOML config format")
+    p_schema.set_defaults(
+        _handler="pyjj_cli.commands.util.config_schema:util_config_schema")
+
+    p_man = util_sub.add_parser(
+        "install-man-pages", help="Install the manpages to the provided path")
+    p_man.add_argument(
+        "path", metavar="PATH",
+        help="Where to install them; `man1` is appended")
+    p_man.set_defaults(
+        _handler="pyjj_cli.commands.util.man_pages:util_install_man_pages")
+
+    p_markdown = util_sub.add_parser(
+        "markdown-help", help="Print the CLI help for all subcommands in Markdown")
+    p_markdown.set_defaults(
+        _handler="pyjj_cli.commands.util.markdown_help:util_markdown_help")
