@@ -145,3 +145,14 @@ def test_description_exact_and_empty_match_jj_semantics(repo, settings, wc_commi
     empty = repo2.revset(settings, 'description(exact:"")')
     assert child not in empty
     assert wc_commit in empty
+
+
+def test_at_operation_reaches_a_newer_operation(repo, settings, wc_commit):
+    tx = repo.start_transaction(settings)
+    builder = tx.new_commit(settings, [wc_commit.id])
+    builder.set_description("later")
+    later = builder.write()
+    newer = tx.commit("add a commit")
+    found = repo.revset(
+        settings, f"at_operation({newer.operation.id}, visible_heads())")
+    assert later.id in [c.id for c in found]

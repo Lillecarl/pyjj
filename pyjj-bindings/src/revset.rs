@@ -8,7 +8,7 @@ use jj_lib::dsl_util::{AliasDeclarationParser, AliasesMap};
 use jj_lib::fileset::FilesetAliasesMap;
 use jj_lib::repo::Repo as _;
 use jj_lib::revset::{
-    self, ResolvedRevsetExpression, RevsetAliasesMap, RevsetDiagnostics, RevsetExtensions,
+    self, ResolvedRevset, ResolvedRevsetExpression, RevsetAliasesMap, RevsetDiagnostics, RevsetExtensions,
     RevsetParseContext, RevsetStreamExt as _, RevsetWorkspaceContext, SymbolResolver,
 };
 use jj_lib::ui_path::RepoPathUiConverter;
@@ -65,15 +65,13 @@ pub fn evaluate_revset(
     revision: &str,
 ) -> PyResult<Vec<PyCommit>> {
     let repo_ref = repo.inner.as_ref();
-    let resolved = resolve_revset(
+    let evaluated = evaluate_user_revset(
         repo_ref,
         &repo.workspace_root,
         &repo.workspace_name,
         settings,
         revision,
     )?;
-
-    let evaluated = resolved.evaluate(repo_ref).map_err(map_revset_eval_err)?;
 
     let store = repo.inner.store();
     let commits: Vec<jj_lib::commit::Commit> =
@@ -100,8 +98,7 @@ pub fn evaluate_revset_mut(
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<Vec<crate::ids::PyCommitId>> {
-    let resolved = resolve_revset(repo, workspace_root, workspace_name, settings, revision)?;
-    let evaluated = resolved.evaluate(repo).map_err(map_revset_eval_err)?;
+    let evaluated = evaluate_user_revset(repo, workspace_root, workspace_name, settings, revision)?;
     let ids: Vec<jj_lib::backend::CommitId> =
         pollster::block_on(evaluated.stream().try_collect()).map_err(map_revset_eval_err)?;
     Ok(ids.into_iter().map(crate::ids::PyCommitId).collect())
@@ -158,6 +155,41 @@ fn parse_user_revset(
     revset::parse(&mut diagnostics, revision, &parse_context).map_err(map_revset_parse_err)
 }
 
+fn resolve_user_revset<'a>(
+    repo: &'a dyn jj_lib::repo::Repo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &PyUserSettings,
+    revision: &str,
+) -> PyResult<ResolvedRevset<'a>> {
+    let expression =
+        parse_user_revset(repo.store(), settings, workspace_root, workspace_name, revision)?;
+    let extensions = RevsetExtensions::new();
+    let symbol_resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
+    expression
+        .resolve_user_expression(repo, &symbol_resolver)
+        .map_err(map_revset_eval_err)
+}
+
+/// Evaluates through `ResolvedRevset::evaluate`, which merges in the index
+/// of every operation an `at_operation()` names. Without it, an operation
+/// that is newer than `repo` or a sibling of it names commits `repo`'s own
+/// index does not hold.
+fn evaluate_user_revset(
+    repo: &dyn jj_lib::repo::Repo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &PyUserSettings,
+    revision: &str,
+) -> PyResult<Box<dyn revset::Revset>> {
+    resolve_user_revset(repo, workspace_root, workspace_name, settings, revision)?
+        .evaluate()
+        .map_err(map_revset_eval_err)
+}
+
+/// The resolved expression alone, for callers that combine it with other
+/// expressions. It is evaluated against `repo`'s index, so an
+/// `at_operation()` here can only name an ancestor operation.
 pub fn resolve_revset(
     repo: &dyn jj_lib::repo::Repo,
     workspace_root: &std::path::Path,
@@ -165,18 +197,9 @@ pub fn resolve_revset(
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<Arc<ResolvedRevsetExpression>> {
-    let expression =
-        parse_user_revset(repo.store(), settings, workspace_root, workspace_name, revision)?;
-
-    let extensions = RevsetExtensions::new();
-    let symbol_resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
-    expression
-        .resolve_user_expression(repo, &symbol_resolver)
-        // .1 is the other repos an `at_operation()` subexpression pulls
-        // in; dropped to preserve the pre-0.46 evaluate behavior (the
-        // fully-correct path would evaluate with a merged index).
-        .map(|resolved| resolved.into_inner().0)
-        .map_err(map_revset_eval_err)
+    Ok(resolve_user_revset(repo, workspace_root, workspace_name, settings, revision)?
+        .into_inner()
+        .0)
 }
 
 /// Parses a revset expression *without* resolving its symbols, which is
