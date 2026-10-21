@@ -33,9 +33,10 @@ mod tag;
 mod tree;
 mod workspace;
 
-/// Python bindings for Jujutsu VCS.
+/// The extension behind `pyjj_bindings`; `python/pyjj_bindings` re-exports
+/// it and adds the `*_async` siblings.
 #[pymodule]
-mod pyjj_bindings {
+mod _native {
     #[allow(non_upper_case_globals)]
     #[pymodule_export]
     const __version__: &str = env!("CARGO_PKG_VERSION");

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pyjj_bindings as _bindings
 from pyjj_bindings import *  # noqa: F403
-from pyjj_bindings import __version__
+from pyjj_bindings import __version__ as __version__
 
-from . import _async  # noqa: F401  (installs the *_async methods)
 from . import hunk
 from .session import Atomic, PyjjError, Repo, open
 
-# The generated stub has no `__all__`; the module has one at runtime.
-__all__ = [
-    *_bindings.__all__,  # type: ignore[attr-defined]
-    "Atomic", "PyjjError", "Repo", "__version__", "hunk", "open",
-]
+# Type checkers take the public names; a computed `__all__` would hide them.
+if not TYPE_CHECKING:
+    __all__ = [*_bindings.__all__, "Atomic", "PyjjError", "Repo", "hunk", "open"]

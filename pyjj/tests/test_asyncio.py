@@ -1,8 +1,8 @@
 """Tests for pyjj's async surface.
 
 `ReadonlyRepo`, `Commit` and `Workspace` get `anyio.to_thread` siblings
-with genuine GIL release (defined in `pyjj._async`); `Transaction`
-intentionally has no async API at all (see `pyjj/pyjj/_async.py`'s
+with genuine GIL release (defined in `pyjj_bindings._async`); `Transaction`
+intentionally has no async API at all (see `pyjj-bindings/python/pyjj_bindings/_async.py`'s
 docstring for why). Tests are plain `async def` -- `anyio_mode = "auto"`
 in `pyproject.toml` runs them via anyio's own pytest plugin, no
 `pytest-asyncio` dependency and no manual `asyncio.run()` per test.

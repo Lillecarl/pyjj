@@ -1733,7 +1733,7 @@ much exists on disk.
 
 ## Async API
 
-One mechanism backs every `_async` method: `pyjj/pyjj/_async.py` wraps
+One mechanism backs every `_async` method: `pyjj-bindings/python/pyjj_bindings/_async.py` wraps
 the sync method in `anyio.to_thread.run_sync`, so it works on asyncio and
 trio alike. The lists there name which methods get one.
 

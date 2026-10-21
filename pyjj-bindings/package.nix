@@ -27,12 +27,22 @@ in
       rustPlatform.maturinBuildHook
     ];
 
-    # Ships pyjj_bindings/__init__.pyi, from pyo3's experimental-inspect.
+    dependencies = [python3Packages.anyio];
+
+    # Ships pyjj_bindings/_native.pyi, from pyo3's experimental-inspect.
     maturinBuildFlags = ["--generate-stubs"];
+
+    # The stub cannot see the `*_async` methods `_async.py` installs at
+    # import time; this adds them, typed like their sync methods.
+    postInstall = ''
+      ${python3Packages.python.interpreter} stub_async.py \
+        python/pyjj_bindings/_async.py \
+        $out/${python3Packages.python.sitePackages}/pyjj_bindings/_native.pyi
+    '';
 
     # No tests for now; smoke-test later
     doCheck = false;
-    pythonImportsCheck = [];
+    pythonImportsCheck = ["pyjj_bindings"];
 
     env = {
       RUST_BACKTRACE = 1;

@@ -8,6 +8,10 @@ so a cancelled call never leaves a working-copy lock half held.
 
 `Transaction` has no async API. jj_lib's `MutableRepo` is not `Send`, so
 `PyTransaction` is `unsendable` and touching it from a worker thread panics.
+
+The tables are keyed by class name, not class, so `stub_async.py` reads
+them without importing the extension. It adds each sibling to the
+generated stub with the sync method's signature.
 """
 
 from __future__ import annotations
@@ -16,13 +20,14 @@ import functools
 from typing import TYPE_CHECKING, Any, Final
 
 import anyio.to_thread
-from pyjj_bindings import Commit, ReadonlyRepo, Workspace
+
+from . import _native
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
-_INSTANCE_METHODS: Final[dict[type, tuple[str, ...]]] = {
-    ReadonlyRepo: (
+INSTANCE_METHODS: Final[dict[str, tuple[str, ...]]] = {
+    "ReadonlyRepo": (
         "get_commit",
         "revset",
         "find_divergent_changes",
@@ -44,7 +49,7 @@ _INSTANCE_METHODS: Final[dict[type, tuple[str, ...]]] = {
         "merge_operations",
         "operation_diff",
     ),
-    Commit: (
+    "Commit": (
         "conflicted_paths",
         "diff_from_parents",
         "is_hidden",
@@ -66,7 +71,7 @@ _INSTANCE_METHODS: Final[dict[type, tuple[str, ...]]] = {
         "materialize_conflict",
         "annotate",
     ),
-    Workspace: (
+    "Workspace": (
         "snapshot",
         "untrack_paths",
         "check_out",
@@ -83,8 +88,8 @@ _INSTANCE_METHODS: Final[dict[type, tuple[str, ...]]] = {
         "unlink_git_worktree",
     ),
 }
-_STATIC_METHODS: Final[dict[type, tuple[str, ...]]] = {
-    Workspace: ("clone_git",),
+STATIC_METHODS: Final[dict[str, tuple[str, ...]]] = {
+    "Workspace": ("clone_git",),
 }
 
 
@@ -102,10 +107,12 @@ def _to_thread(
 
 
 def _install() -> None:
-    for cls, names in _INSTANCE_METHODS.items():
+    for cls_name, names in INSTANCE_METHODS.items():
+        cls = getattr(_native, cls_name)
         for name in names:
             setattr(cls, f"{name}_async", _to_thread(getattr(cls, name), cls, name))
-    for cls, names in _STATIC_METHODS.items():
+    for cls_name, names in STATIC_METHODS.items():
+        cls = getattr(_native, cls_name)
         for name in names:
             setattr(cls, f"{name}_async", staticmethod(_to_thread(getattr(cls, name), cls, name)))
 
