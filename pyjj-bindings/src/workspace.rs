@@ -212,6 +212,24 @@ impl PyWorkspace {
     }
 }
 
+/// `cli/src/git_util.rs::is_colocated_git_workspace`: the store is
+/// git-backed and `ws`'s root opens as that same Git repository.
+pub(crate) fn is_colocated(ws: &Workspace, store: &jj_lib::store::Store) -> PyResult<bool> {
+    let Ok(backend) = jj_lib::git::get_git_backend(store) else {
+        return Ok(false);
+    };
+    match backend.open_git_repo_at_workdir(ws.workspace_root()) {
+        Ok(_) => Ok(true),
+        Err(
+            jj_lib::git_backend::GitRepoAtWorkdirError::NotFound { .. }
+            | jj_lib::git_backend::GitRepoAtWorkdirError::Unrelated { .. },
+        ) => Ok(false),
+        Err(jj_lib::git_backend::GitRepoAtWorkdirError::Other(source)) => {
+            Err(JjError::new_err(source.to_string()))
+        }
+    }
+}
+
 /// The object hash a new Git repository uses: `--object-hash` when
 /// given, else the `git.object-hash` config (jj's own default is
 /// `"sha1"`).
@@ -629,19 +647,7 @@ impl PyWorkspace {
         let inner = self.inner.lock().unwrap();
         let repo =
             pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
-        let Ok(backend) = jj_lib::git::get_git_backend(repo.store()) else {
-            return Ok(false);
-        };
-        match backend.open_git_repo_at_workdir(inner.workspace_root()) {
-            Ok(_) => Ok(true),
-            Err(
-                jj_lib::git_backend::GitRepoAtWorkdirError::NotFound { .. }
-                | jj_lib::git_backend::GitRepoAtWorkdirError::Unrelated { .. },
-            ) => Ok(false),
-            Err(jj_lib::git_backend::GitRepoAtWorkdirError::Other(source)) => {
-                Err(JjError::new_err(source.to_string()))
-            }
-        }
+        is_colocated(&inner, repo.store())
     }
 
     /// The Git HEAD commit's hex hash, when this workspace is colocated

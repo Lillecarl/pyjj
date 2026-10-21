@@ -106,6 +106,8 @@ pub fn snapshot(
         })?;
     let old_commit = pollster::block_on(repo.store().get_commit_async(&wc_commit_id))
         .map_err(map_backend_err)?;
+    let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
+    let workspace_root = workspace.workspace_root().to_path_buf();
 
     let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
         .map_err(map_working_copy_err)?;
@@ -140,7 +142,7 @@ pub fn snapshot(
     let index = repo.readonly_index();
     let view = repo.view();
     let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-    let commit_builder = mut_repo.rewrite_commit(&old_commit).set_tree(new_tree);
+    let commit_builder = mut_repo.rewrite_commit(&old_commit).set_tree(new_tree.clone());
     let new_commit = pollster::block_on(commit_builder.write()).map_err(map_backend_err)?;
     mut_repo
         .set_wc_commit(workspace_name.clone(), new_commit.id().clone())
@@ -150,6 +152,18 @@ pub fn snapshot(
     // which asserts as much (`transaction.rs`, "Descendants have not been
     // rebased after the last rewrites").
     pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
+    // `export_working_copy_changes_to_git` in `cli/src/cli_util.rs`:
+    // without it a new file reads as untracked to `git status`.
+    if colocated {
+        pollster::block_on(jj_lib::git::update_intent_to_add(
+            repo.as_ref(),
+            &workspace_root,
+            &old_commit.tree(),
+            &new_tree,
+        ))
+        .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
+        crate::git::export_refs_only(&mut mut_repo)?;
+    }
 
     // The operation log records who did what, where and with which
     // command line. jj stamps all of it on every transaction, and marks
