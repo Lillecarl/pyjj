@@ -5,8 +5,7 @@ subcommands and flags jj accepts comes straight from the binary under
 test. pyjj-cli's own `argparse` tree gives the other side. The
 difference is checked against a recorded baseline.
 
-The baseline is exact, the way `UNIMPLEMENTED` in the parity suite is
-strict: adding a flag jj has turns this red until the baseline is
+The baseline is exact: adding a flag jj has turns this red until the baseline is
 regenerated, and so does losing one. That is the point -- the file is a
 ledger of what is not covered yet, and it only shrinks on purpose.
 

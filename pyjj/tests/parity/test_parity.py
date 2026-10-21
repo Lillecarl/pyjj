@@ -3589,12 +3589,149 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 # -- util generators ----------------------------------------------------
 
 
-def _stdout(pair: RepoPair, side: str, argv: list[str]) -> bytes:
+def _run_side(pair: RepoPair, side: str,
+              argv: list[str]) -> subprocess.CompletedProcess:
     repo = pair.cli_repo if side == "cli" else pair.py_repo
     cmd = ([pair.jj_bin, "-R", str(repo), "--no-pager", *argv] if side == "cli"
            else [sys.executable, str(DRIVER), str(repo), *argv])
-    return subprocess.run(cmd, capture_output=True, check=True, cwd=str(repo),
-                          env=pair._env(bump=False)).stdout
+    return subprocess.run(cmd, capture_output=True, cwd=str(repo),
+                          env=pair._env(bump=False))
+
+
+def _stdout(pair: RepoPair, side: str, argv: list[str]) -> bytes:
+    proc = _run_side(pair, side, argv)
+    assert proc.returncode == 0, (side, argv, proc.stderr)
+    return proc.stdout
+
+
+def _assert_same_stdout(pair: RepoPair, argv: list[str]) -> None:
+    assert _stdout(pair, "py", argv) == _stdout(pair, "cli", argv)
+
+
+# -- debug ---------------------------------------------------------------
+#
+# jj-lib's Debug output, so the bytes match wherever they name nothing
+# repo-local. Operation ids, index file names and mtimes differ per side
+# by construction; those scenarios compare what is left.
+
+
+@pytest.mark.parametrize("flags", [[], ["--no-resolve"], ["--no-optimize"],
+                                   ["--no-resolve", "--no-optimize"]],
+                         ids=lambda f: "_".join(f) or "full")
+def test_debug_revset(pair: RepoPair, flags: list[str]) -> None:
+    chain(pair)
+    _assert_same_stdout(pair, ["debug", "revset", "::@ ~ root()", *flags])
+    pair.assert_parity()
+
+
+@pytest.mark.parametrize("pattern", ["base.txt", "glob:*.txt ~ one.txt"])
+def test_debug_fileset(pair: RepoPair, pattern: str) -> None:
+    chain(pair)
+    _assert_same_stdout(pair, ["debug", "fileset", pattern])
+
+
+def test_debug_tree(pair: RepoPair) -> None:
+    chain(pair)
+    _assert_same_stdout(pair, ["debug", "tree", "-r", rev("one")])
+    _assert_same_stdout(pair, ["debug", "tree", "base.txt"])
+
+
+def test_debug_tree_by_id(pair: RepoPair) -> None:
+    chain(pair)
+    tree_id = _stdout(pair, "cli", ["log", "--no-graph", "-r", "@", "-T",
+                                    "commit_id"]).decode()
+    commit = _stdout(pair, "cli", ["debug", "object", "commit", tree_id]).decode()
+    root_tree = re.search(r'TreeId\(\s*"([0-9a-f]+)"', commit).group(1)
+    _assert_same_stdout(pair, ["debug", "tree", "--id", root_tree])
+
+
+def test_debug_copy_detection(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(files={"copy.txt": b"base\n"}, jj=["status"])
+    _assert_same_stdout(pair, ["debug", "copy-detection"])
+
+
+def test_debug_object(pair: RepoPair) -> None:
+    chain(pair)
+    commit_id = _stdout(pair, "cli", ["log", "--no-graph", "-r", rev("one"),
+                                      "-T", "commit_id"]).decode()
+    _assert_same_stdout(pair, ["debug", "object", "commit", commit_id])
+    _assert_same_stdout(pair, ["debug", "object", "file", "-r", rev("one"),
+                               "base.txt"])
+    _assert_same_stdout(pair, ["debug", "object", "tree", "-r", rev("one"), ""])
+    _assert_same_stdout(pair, ["debug", "object", "view", "--op", "@"])
+
+
+def test_debug_object_by_id(pair: RepoPair) -> None:
+    """Operation ids are per repository, so each side asks for its own;
+    the commit ids inside the view still agree."""
+    chain(pair)
+    for side in ("cli", "py"):
+        out = _stdout(pair, side, ["debug", "object", "operation",
+                                   pair.op_id(side, 0)])
+        assert out.startswith(b"Operation {")
+        assert _run_side(pair, side, ["debug", "object", "symlink",
+                                      "-r", "@", "base.txt"]).returncode != 0
+
+
+def _without_names(text: bytes) -> list[bytes]:
+    return [line for line in text.splitlines()
+            if not line.strip().startswith(b"Name:")]
+
+
+def test_debug_index(pair: RepoPair) -> None:
+    chain(pair)
+    for argv in (["debug", "reindex"],
+                 ["debug", "index-changed-paths", "-n", "2"]):
+        cli, py = (_run_side(pair, side, argv) for side in ("cli", "py"))
+        assert (py.returncode, py.stderr) == (cli.returncode, cli.stderr)
+    assert (_without_names(_stdout(pair, "py", ["debug", "index"]))
+            == _without_names(_stdout(pair, "cli", ["debug", "index"])))
+    pair.assert_parity()
+
+
+def test_debug_working_copy(pair: RepoPair) -> None:
+    """Both name the operation, which differs per side, and the local
+    form lists mtimes; the tree and the tracked paths agree."""
+    chain(pair)
+    for argv in (["debug", "working-copy"], ["debug", "local-working-copy"]):
+        cli, py = (_stdout(pair, side, argv).splitlines()
+                   for side in ("cli", "py"))
+        drop = (b"Current operation:",)
+        cli = [l for l in cli if not l.startswith(drop)]
+        py = [l for l in py if not l.startswith(drop)]
+        if argv[-1] == "local-working-copy":
+            cli = [l.split()[-1] if l.startswith(b"Normal") else l for l in cli]
+            py = [l.split()[-1] if l.startswith(b"Normal") else l for l in py]
+        assert py == cli
+
+
+def test_debug_init_simple(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["debug", "init-simple", "../simple"])
+    for root in (pair.cli_repo, pair.py_repo):
+        assert (root.parent / "simple" / ".jj" / "repo" / "store").is_dir()
+
+
+def test_debug_stacked_table_without_a_table(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["debug", "stacked-table", "-n", "20", "../no-such-table"],
+            may_fail=True)
+
+
+def test_debug_template(pair: RepoPair) -> None:
+    """jj prints its own template AST and pyjj prints Jinja's, so only
+    success is compared."""
+    chain(pair)
+    pair.op(jj=["debug", "template", "commit_id"])
+
+
+def test_debug_watchman(pair: RepoPair) -> None:
+    chain(pair)
+    for sub in ("status", "query-clock", "query-changed-files", "reset-clock"):
+        cli, py = (_run_side(pair, side, ["debug", "watchman", sub])
+                   for side in ("cli", "py"))
+        assert (py.returncode, py.stdout) == (cli.returncode, cli.stdout), sub
 
 
 @pytest.mark.covers("util config-schema")

@@ -24,8 +24,6 @@ def add_parsers(sub) -> None:
     p_help.add_argument("topic", nargs="*", metavar="COMMAND",
                         help="Command to describe")
     p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
-    p_debug = sub.add_parser("debug", help="Low-level commands not intended for users")
-    p_debug.set_defaults(_handler="pyjj_cli.cli.stubs:_stub_debug")
 
 
 def _stub_gerrit(args):
@@ -55,9 +53,3 @@ def _subparser(parser, name):
         if mapping and name in mapping:
             return mapping[name]
     return None
-
-
-def _stub_debug(args):
-    import sys
-    print("Error: debug is not yet supported", file=sys.stderr)
-    return 2

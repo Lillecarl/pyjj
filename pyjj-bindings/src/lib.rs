@@ -10,6 +10,7 @@ mod commit;
 mod config;
 mod conflicts;
 mod converge;
+mod debug;
 mod errors;
 mod evolution;
 mod file;
@@ -147,6 +148,28 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_config_repo_path, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::remove_repo_config_dir, m)?)?;
     m.add_function(wrap_pyfunction!(crate::secure_config::repo_configs_root_dir, m)?)?;
+    for function in [
+        wrap_pyfunction!(debug::debug_revset, m)?,
+        wrap_pyfunction!(debug::debug_fileset, m)?,
+        wrap_pyfunction!(debug::debug_tree, m)?,
+        wrap_pyfunction!(debug::debug_copy_detection, m)?,
+        wrap_pyfunction!(debug::debug_object_commit, m)?,
+        wrap_pyfunction!(debug::debug_object_operation, m)?,
+        wrap_pyfunction!(debug::debug_object_view, m)?,
+        wrap_pyfunction!(debug::debug_object_file, m)?,
+        wrap_pyfunction!(debug::debug_object_symlink, m)?,
+        wrap_pyfunction!(debug::debug_object_tree, m)?,
+        wrap_pyfunction!(debug::debug_index, m)?,
+        wrap_pyfunction!(debug::debug_reindex, m)?,
+        wrap_pyfunction!(debug::debug_index_changed_paths, m)?,
+        wrap_pyfunction!(debug::debug_stacked_table, m)?,
+        wrap_pyfunction!(debug::debug_init_simple, m)?,
+        wrap_pyfunction!(debug::debug_working_copy, m)?,
+        wrap_pyfunction!(debug::debug_local_working_copy, m)?,
+        wrap_pyfunction!(debug::debug_watchman, m)?,
+    ] {
+        m.add_function(function)?;
+    }
 
     Ok(())
 }

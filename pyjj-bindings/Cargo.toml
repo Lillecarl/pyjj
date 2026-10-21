@@ -15,7 +15,9 @@ name = "pyjj_bindings"
 crate-type = ["cdylib"]
 
 [dependencies]
-jj-lib = { version = "0.46.0", features = ["git"] }
+# `watchman`, as jj's CLI builds it: `debug watchman` and the
+# `fsmonitor.backend = "watchman"` setting need it.
+jj-lib = { version = "0.46.0", features = ["git", "watchman"] }
 # jj's own gix line, feature for feature. Anything narrower resolves to
 # a second gix in the graph, and the copy without `sha1`/`sha256` gives
 # `gix-hash` an enum with no variants, which does not compile.
