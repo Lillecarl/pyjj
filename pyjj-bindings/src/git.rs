@@ -8,7 +8,9 @@ use jj_lib::git::{
     self, GitFetch, GitFetchRefExpression, GitImportOptions, GitProgress, GitPushOptions,
     GitPushRefTargets, GitSidebandLineTerminator, GitSubprocessCallback,
 };
+use jj_lib::config::ConfigGetError;
 use jj_lib::merge::Diff;
+use jj_lib::settings::{RemoteSettings, RemoteSettingsMap};
 use jj_lib::ref_name::{RefName, RefNameBuf, RemoteName};
 use jj_lib::repo::{MutableRepo, Repo as _};
 use jj_lib::str_util::StringExpression;
@@ -48,24 +50,49 @@ impl GitSubprocessCallback for SilentCallback {
     }
 }
 
-/// Matches jj's own built-in defaults (`lib/src/config/misc.toml`):
-/// `git.abandon-unreachable-commits = true`,
-/// `git.record-synthetic-predecessors = true`. No per-remote auto-track
-/// patterns are configured — `jj_lib`'s config-driven equivalent
-/// (`git.auto-local-bookmark` and friends) isn't wired up here yet.
-fn default_import_options() -> GitImportOptions {
-    GitImportOptions {
-        abandon_unreachable_commits: true,
-        record_synthetic_predecessors: true,
-        remote_auto_track_bookmarks: HashMap::new(),
+/// `load_git_import_options` in jj's git_util.rs: `git.*` and
+/// `remotes.<name>.auto-track-bookmarks`. A key `settings` did not load
+/// falls back to jj's default.
+fn import_options(settings: &PyUserSettings) -> PyResult<GitImportOptions> {
+    let flag = |key: &'static str| match settings.0.get_bool(key) {
+        Err(ConfigGetError::NotFound { .. }) => Ok(true),
+        other => other.map_err(map_py_err),
+    };
+    let mut remote_auto_track_bookmarks = HashMap::new();
+    for (name, remote) in remote_settings(settings)? {
+        if let Some(text) = &remote.auto_track_bookmarks {
+            let expr = remote_expression(&name, text, "auto-track-bookmarks")?;
+            remote_auto_track_bookmarks.insert(name, expr.to_matcher());
+        }
     }
+    Ok(GitImportOptions {
+        abandon_unreachable_commits: flag("git.abandon-unreachable-commits")?,
+        record_synthetic_predecessors: flag("git.record-synthetic-predecessors")?,
+        remote_auto_track_bookmarks,
+    })
+}
+
+fn remote_settings(settings: &PyUserSettings) -> PyResult<RemoteSettingsMap> {
+    RemoteSettings::table_from_settings(&settings.0).map_err(map_py_err)
+}
+
+/// `parse_remote_string_expression` in jj's revset_util.rs.
+fn remote_expression(name: &RemoteName, text: &str, field: &str) -> PyResult<StringExpression> {
+    jj_lib::revset::parse_string_expression(&mut jj_lib::revset::RevsetDiagnostics::new(), text)
+        .map_err(|err| {
+            crate::errors::JjError::new_err(format!(
+                "Invalid `remotes.{}.{field}`: {}",
+                name.as_symbol(),
+                err.kind()
+            ))
+        })
 }
 
 /// Reflect changes made in the underlying (colocated) Git repo into the jj
 /// view: new/moved/deleted Git refs become remote bookmarks/tags, reachable
 /// commits become visible. Returns a summary dict.
-pub fn import_refs(mut_repo: &mut MutableRepo) -> PyResult<Py<PyAny>> {
-    let stats = pollster::block_on(git::import_refs(mut_repo, &default_import_options()))
+pub fn import_refs(mut_repo: &mut MutableRepo, settings: &PyUserSettings) -> PyResult<Py<PyAny>> {
+    let stats = pollster::block_on(git::import_refs(mut_repo, &import_options(settings)?))
         .map_err(map_git_import_err)?;
     Python::attach(|py| {
         let dict = PyDict::new(py);
@@ -272,13 +299,11 @@ pub fn untrack_remote_tag(mut_repo: &mut MutableRepo, remote: &str, tag: &str) {
 /// config and asks for every tag. Naming anything asks for exactly what
 /// was named, which is why `-b side` brings no tag with it.
 ///
-/// jj also reads `remotes.<name>.fetch-bookmarks` and `fetch-tags` here.
-/// Those are configuration rather than a flag, so this skips them and
-/// falls straight to the Git refspec (bookmarks) and to "every tag"
-/// (tags, which is what jj itself falls back to when that setting is
-/// absent).
+/// A plain fetch honours `remotes.<name>.fetch-bookmarks` and
+/// `fetch-tags` first, as jj does.
 fn fetch_expressions(
     mut_repo: &MutableRepo,
+    settings: &PyUserSettings,
     remote_name: &RemoteName,
     branches: Option<Vec<String>>,
     tags: Option<Vec<String>>,
@@ -304,10 +329,18 @@ fn fetch_expressions(
     }
 
     let is_specific = branches.is_some() || tags.is_some();
+    let remote = remote_settings(settings)?.remove(remote_name);
+    let configured = |text: Option<&String>, field: &str| {
+        text.map(|text| remote_expression(remote_name, text, field)).transpose()
+    };
     let bookmark = match branches {
         Some(patterns) => bookmark_expression(Some(patterns))?,
         None if is_specific => StringExpression::none(),
-        None => {
+        None => if let Some(expr) =
+            configured(remote.as_ref().and_then(|r| r.fetch_bookmarks.as_ref()), "fetch-bookmarks")?
+        {
+            expr
+        } else {
             let git_repo = git::get_git_backend(mut_repo.store())
                 .map_err(map_py_err)?
                 .git_repo();
@@ -316,14 +349,13 @@ fn fetch_expressions(
             let (_ignored, expr) =
                 git::load_default_fetch_bookmarks(remote_name, &git_repo).map_err(map_py_err)?;
             expr
-        }
+        },
     };
     let tag = match tags {
         Some(patterns) => bookmark_expression(Some(patterns))?,
         None if is_specific => StringExpression::none(),
-        // Unspecified fetches every tag -- what jj falls back to when
-        // `remotes.<name>.fetch-tags` is not configured.
-        None => StringExpression::all(),
+        None => configured(remote.as_ref().and_then(|r| r.fetch_tags.as_ref()), "fetch-tags")?
+            .unwrap_or_else(StringExpression::all),
     };
     Ok((bookmark, tag))
 }
@@ -349,10 +381,10 @@ pub fn fetch(
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
-    let import_options = default_import_options();
+    let import_options = import_options(settings)?;
 
     let (bookmark, tag) =
-        fetch_expressions(mut_repo, remote_name, branches, tags, tracked)?;
+        fetch_expressions(mut_repo, settings, remote_name, branches, tags, tracked)?;
     let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
 
@@ -439,7 +471,7 @@ pub fn fetch_all_inner(
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
-    let import_options = default_import_options();
+    let import_options = import_options(settings)?;
 
     let expr = GitFetchRefExpression { bookmark, tag };
     let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;

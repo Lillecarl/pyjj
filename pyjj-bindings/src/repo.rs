@@ -947,7 +947,8 @@ impl PyTransaction {
     /// `jj git import` equivalent: reflect changes from the underlying
     /// (colocated) Git repo into this transaction's view.
     fn git_import_refs(&self) -> PyResult<Py<PyAny>> {
-        with_mut_repo(self, crate::git::import_refs)
+        let settings = PyUserSettings(self.settings.clone());
+        with_mut_repo(self, |mut_repo| crate::git::import_refs(mut_repo, &settings))
     }
 
     /// `jj git export` equivalent: reflect bookmark/tag changes made in this

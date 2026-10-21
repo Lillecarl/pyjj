@@ -128,8 +128,7 @@ impl PyUserSettings {
         let config = crate::config::load_config_for_repo(
             std::path::Path::new(repo_path),
             std::path::Path::new(workspace_root),
-        )
-        .map_err(crate::errors::map_py_err)?;
+        )?;
         let user_settings =
             UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
                 .map_err(crate::errors::map_config_err)?;

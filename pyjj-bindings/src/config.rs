@@ -32,6 +32,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use etcetera::BaseStrategy as _;
+use pyo3::prelude::*;
 use jj_lib::config::{ConfigLayer, ConfigLoadError, ConfigSource, StackedConfig};
 
 const OP_HOSTNAME: &str = "operation.hostname";
@@ -229,24 +230,24 @@ pub(crate) fn secure_config_root(kind: &str) -> Option<PathBuf> {
 
 /// The config file a scope holds, if it has one already.
 ///
-/// Reading never creates: a repository that has never had scoped
-/// config set gets no directory and no id minted just by being looked
-/// at. jj's own `maybe_load_config` decides, so the metadata check
-/// that keeps the id indirection honest is jj's, not a copy of it.
+/// A repository that has never had scoped config set gets no id minted
+/// by being looked at. jj's own `maybe_load_config` decides, and like jj
+/// it may still write: it migrates a legacy `.jj/repo/config.toml` and
+/// refreshes stale metadata. Its errors propagate, as in jj: dropping
+/// them would load without the repo layer, and `immutable_heads()` set
+/// there would stop applying without a word.
 fn existing_scoped_config(
     workspace_root: &Path,
     repo_path: &Path,
     kind: &str,
-) -> Option<PathBuf> {
+) -> PyResult<Option<PathBuf>> {
     let path = crate::secure_config::secure_config_file(
         &workspace_root.to_string_lossy(),
         &repo_path.to_string_lossy(),
         kind,
         false,
-    )
-    .ok()??;
-    let path = PathBuf::from(path);
-    path.exists().then_some(path)
+    )?;
+    Ok(path.map(PathBuf::from).filter(|path| path.exists()))
 }
 
 /// jj's config as the CLI sees it inside a repository: everything
@@ -254,18 +255,16 @@ fn existing_scoped_config(
 ///
 /// `repo_path` is `.jj/repo` (jj's own `reset_repo_path` takes the
 /// same), and `workspace_root` the directory holding `.jj`.
-pub fn load_config_for_repo(
-    repo_path: &Path,
-    workspace_root: &Path,
-) -> Result<StackedConfig, ConfigLoadError> {
+pub fn load_config_for_repo(repo_path: &Path, workspace_root: &Path) -> PyResult<StackedConfig> {
+    let load_err = crate::errors::map_config_err;
     let mut config = StackedConfig::with_defaults();
     config.add_layer(revsets_default_layer());
     config.add_layer(env_base_layer());
-    load_layers_at(&mut config, ConfigSource::System, &system_config_paths())?;
-    load_layers_at(&mut config, ConfigSource::User, &user_config_paths())?;
-    for kind in ["repo", "workspace"] {
-        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind) {
-            load_layers_at(&mut config, ConfigSource::Repo, &[path])?;
+    load_layers_at(&mut config, ConfigSource::System, &system_config_paths()).map_err(load_err)?;
+    load_layers_at(&mut config, ConfigSource::User, &user_config_paths()).map_err(load_err)?;
+    for (kind, source) in [("repo", ConfigSource::Repo), ("workspace", ConfigSource::Workspace)] {
+        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind)? {
+            load_layers_at(&mut config, source, &[path]).map_err(load_err)?;
         }
     }
     config.add_layer(env_overrides_layer());

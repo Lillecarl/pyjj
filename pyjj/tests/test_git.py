@@ -80,3 +80,28 @@ def test_export_refs_creates_git_ref_for_jj_bookmark(colocated, settings):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("abandon", [True, False])
+def test_import_honours_abandon_unreachable_commits(colocated, abandon):
+    settings = pyjj.UserSettings(load_config=False).with_command_args(
+        [("config", f"git.abandon-unreachable-commits={str(abandon).lower()}")])
+    ws, repo = colocated
+    root = ws.workspace_root
+    _git(root, "checkout", "-b", "feature")
+    Path(root, "from_git.txt").write_text("made outside jj\n")
+    _git(root, "add", "from_git.txt")
+    _git(root, "commit", "-m", "git-side commit")
+    tx = repo.start_transaction(settings)
+    tx.git_import_refs()
+    repo = tx.commit("import")
+    imported = repo.get_bookmark("feature").target_ids[0]
+
+    _git(root, "checkout", "--orphan", "elsewhere")
+    _git(root, "branch", "-D", "feature")
+    tx = repo.start_transaction(settings)
+    stats = tx.git_import_refs()
+    tx.rebase_descendants()
+    repo = tx.commit("import deletion")
+    assert stats["abandoned_commits"] == (1 if abandon else 0)
+    assert bool(repo.revset(settings, f"{imported.hex()} & visible_heads()")) is not abandon
