@@ -347,7 +347,8 @@ def _run_bulk_editor(settings, sections) -> dict:
     return descriptions
 
 
-def _run_editor_raw(settings, content: str) -> str:
+def _run_editor_raw(settings, content: str,
+                    suffix: str = ".jjdescription") -> str:
     """Run $EDITOR over `content` and return the edited text verbatim --
     `_run_editor` without the description cleanup, for callers (like
     `_run_bulk_editor`, or `file edit` on raw file bytes) that handle
@@ -364,7 +365,7 @@ def _run_editor_raw(settings, content: str) -> str:
     argv = shlex.split(editor_cmd)
 
     with tempfile.NamedTemporaryFile(
-        "w", suffix=".jjdescription", encoding="utf-8",
+        "w", suffix=suffix, encoding="utf-8",
         errors="surrogateescape", delete=False
     ) as f:
         f.write(content)

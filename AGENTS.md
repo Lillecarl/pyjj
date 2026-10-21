@@ -616,7 +616,7 @@ Deliberately excluded, with the reason:
 | --- | --- |
 | `arrange` | an interactive TUI; there is no argv to run on both sides |
 | `gerrit` | needs a Gerrit server |
-| `sparse edit`, `config edit` | open the editor on both sides |
+| `config edit` | opens the editor on both sides |
 | `debug` | hidden developer command, not part of the CLI surface |
 | `hunk`, `templates` | pyjj-cli's own commands; `jj` has no such subcommand, so there is no other side to compare against. Covered by unit tests instead |
 | `op integrate` | needs an operation created concurrently elsewhere; the harness runs one operation at a time |

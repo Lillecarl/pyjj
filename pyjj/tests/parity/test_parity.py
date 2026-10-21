@@ -2535,6 +2535,62 @@ def test_sparse_reset_restores_everything(pair: RepoPair) -> None:
     pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
     pair.op(jj=["sparse", "reset"])
     pair.assert_parity()
+    _assert_sparse_parity(pair)
+
+
+def _assert_sparse_parity(pair: RepoPair) -> None:
+    """Sparse patterns are workspace-local, so `assert_parity` cannot
+    see them. Compare the recorded patterns and what is on disk."""
+    def state(root: Path) -> tuple[str, list[str]]:
+        patterns = subprocess.run(
+            [pair.jj_bin, "-R", str(root), "--ignore-working-copy",
+             "sparse", "list"],
+            capture_output=True, text=True, check=True).stdout
+        files = sorted(str(p.relative_to(root)) for p in root.rglob("*")
+                       if p.is_file() and p.relative_to(root).parts[0]
+                       not in (".jj", ".git"))
+        return patterns, files
+    assert state(pair.py_repo) == state(pair.cli_repo)
+
+
+@pytest.mark.covers("sparse set", "--add", "--clear", "--remove")
+def test_sparse_set_sorts_and_removes(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "one.txt",
+                "--add", "base.txt", "--add", "base.txt"])
+    pair.op(jj=["sparse", "set", "--remove", "one.txt"])
+    pair.assert_parity()
+    _assert_sparse_parity(pair)
+
+
+@pytest.mark.covers("sparse edit")
+def test_sparse_edit_narrows_the_working_copy(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["sparse", "edit"],
+            editor_spec={"op": "set",
+                         "value": "one.txt\nJJ: dropped\n\n  base.txt  \n"})
+    pair.assert_parity()
+    _assert_sparse_parity(pair)
+
+
+@pytest.mark.covers("sparse edit")
+def test_sparse_edit_keeps_the_root_pattern(pair: RepoPair) -> None:
+    """The root pattern round-trips through the editor as `.`."""
+    chain(pair)
+    pair.op(jj=["sparse", "set", "--clear", "--add", "base.txt"])
+    pair.op(jj=["sparse", "edit"], editor_spec={"op": "set", "value": ".\n"})
+    pair.assert_parity()
+    _assert_sparse_parity(pair)
+
+
+@pytest.mark.covers("sparse edit")
+def test_sparse_edit_refuses_a_path_outside_the_repo(pair: RepoPair) -> None:
+    chain(pair)
+    pair.op(jj=["sparse", "edit"],
+            editor_spec={"op": "set", "value": "../outside\n"},
+            may_fail=True)
+    pair.assert_parity()
+    _assert_sparse_parity(pair)
 
 
 # -- read-only smoke ----------------------------------------------------
@@ -3470,7 +3526,6 @@ def test_rewriting_below_a_tag_still_works(pair: RepoPair) -> None:
 # Not listed here, and excluded on purpose:
 #   arrange       an interactive TUI, so there is no argv to compare
 #   gerrit        needs a Gerrit server
-#   sparse edit   opens the editor on both sides
 #   debug         hidden developer command
 #   hunk,         pyjj-cli's own commands; jj has no such subcommand, so
 #   templates     there is nothing to run on the other side

@@ -5,31 +5,15 @@ from ..common import (
     command,
     read_repo,
 )
+from .update import update_sparse_patterns
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def sparse_set(args) -> int:
-    with read_repo(args) as (_settings, ws, _repo):
-        # Get current patterns
-        current = ws.sparse_patterns()
-        # Handle --clear
-        if getattr(args, "clear", False):
-            new_patterns: list[str] = []
-        else:
-            new_patterns = list(current)
-        adds = getattr(args, "adds", None) or []
-        removes = getattr(args, "removes", None) or []
-        for pat in adds:
-            if pat not in new_patterns:
-                new_patterns.append(pat)
-        for pat in removes:
-            if pat in new_patterns:
-                new_patterns.remove(pat)
-        # If after clear and no adds, it means empty sparse (no files) — but jj would keep at least?
-        # For reset, we use [""] — for set with --clear and no adds, we set to []
-        if not new_patterns and not getattr(args, "clear", False):
-            # No change, just list
-            for p in current:
-                print(p if p else ".")
-            return 0
-        ws.set_sparse_patterns(new_patterns)
+    with read_repo(args) as (_settings, ws, repo):
+        patterns = set()
+        if not getattr(args, "clear", False):
+            patterns.update(ws.sparse_patterns())
+            patterns.difference_update(getattr(args, "removes", None) or [])
+        patterns.update(getattr(args, "adds", None) or [])
+        update_sparse_patterns(ws, repo, patterns)
         return 0

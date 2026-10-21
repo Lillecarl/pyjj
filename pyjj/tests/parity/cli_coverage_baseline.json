@@ -152,14 +152,8 @@
   "sparse": [
     "(command)"
   ],
-  "sparse edit": [
-    "(command)"
-  ],
   "sparse list": [
     "(command)"
-  ],
-  "sparse set": [
-    "--remove"
   ],
   "tag": [
     "(command)"
