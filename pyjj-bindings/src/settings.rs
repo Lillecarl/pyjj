@@ -81,7 +81,33 @@ fn parse_config_pair(text: &str) -> Result<ConfigLayer, String> {
 
 /// User configuration loaded from jj config files.
 #[pyclass(name = "UserSettings", frozen)]
-pub struct PyUserSettings(pub(crate) UserSettings);
+pub struct PyUserSettings(pub(crate) UserSettings, pub(crate) Vec<String>);
+
+impl PyUserSettings {
+    /// The value at dotted `key`, or `None` where no layer sets it.
+    fn get_opt<T: serde::de::DeserializeOwned>(&self, key: &str) -> PyResult<Option<T>> {
+        let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
+            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
+        })?;
+        match self.0.config().get::<T>(path) {
+            Ok(value) => Ok(Some(value)),
+            Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
+            Err(err) => Err(crate::errors::map_config_err(err)),
+        }
+    }
+
+    /// Settings from `config`, with `warnings` from loading it plus one per
+    /// alias declaration that does not load.
+    pub(crate) fn from_config(
+        config: jj_lib::config::StackedConfig,
+        mut warnings: Vec<String>,
+    ) -> PyResult<Self> {
+        warnings.extend(crate::revset::alias_warnings(&config)?);
+        let settings = UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
+            .map_err(crate::errors::map_config_err)?;
+        Ok(Self(settings, warnings))
+    }
+}
 
 #[pymethods]
 impl PyUserSettings {
@@ -109,10 +135,15 @@ impl PyUserSettings {
         } else {
             jj_lib::config::StackedConfig::with_defaults()
         };
-        let user_settings =
-            UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-                .map_err(crate::errors::map_config_err)?;
-        Ok(Self(user_settings))
+        Self::from_config(config, Vec::new())
+    }
+
+    /// What jj would print as a warning while it loads this config: a
+    /// scoped config it migrated or could not match, and each alias
+    /// declaration it skipped. The settings are usable regardless.
+    #[getter]
+    fn warnings(&self) -> Vec<String> {
+        self.1.clone()
     }
 
     /// The same config the `jj` CLI would see *inside this repository*:
@@ -125,14 +156,11 @@ impl PyUserSettings {
     /// effect, and a rewrite real jj refuses goes through.
     #[staticmethod]
     fn for_repo(repo_path: &str, workspace_root: &str) -> PyResult<Self> {
-        let config = crate::config::load_config_for_repo(
+        let (config, warnings) = crate::config::load_config_for_repo(
             std::path::Path::new(repo_path),
             std::path::Path::new(workspace_root),
         )?;
-        let user_settings =
-            UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-                .map_err(crate::errors::map_config_err)?;
-        Ok(Self(user_settings))
+        Self::from_config(config, warnings)
     }
 
     /// Returns these settings with `--config NAME=VALUE` /
@@ -153,7 +181,7 @@ impl PyUserSettings {
     /// it -- `UserSettings::from_config_and_home_dir` seeds a fresh RNG).
     fn with_command_args(&self, args: Vec<(String, String)>) -> PyResult<Self> {
         if args.is_empty() {
-            return Ok(Self(self.0.clone()));
+            return Ok(Self(self.0.clone(), self.1.clone()));
         }
         let mut config = self.0.config().clone();
         for (kind, text) in &args {
@@ -193,9 +221,8 @@ impl PyUserSettings {
                 }
             }
         }
-        let settings = UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-            .map_err(|err| crate::errors::ConfigError::new_err(crate::errors::error_chain_body(&err)))?;
-        Ok(Self(settings))
+        let warnings = self.1.clone();
+        Self::from_config(config, warnings)
     }
 
     #[getter]

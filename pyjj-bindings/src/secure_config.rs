@@ -62,9 +62,22 @@ pub fn secure_config_file(
     kind: &str,
     create: bool,
 ) -> PyResult<Option<String>> {
+    let loaded = load_scoped(Path::new(workspace_root), Path::new(repo_path), kind, create)?;
+    Ok(loaded
+        .config_file
+        .map(|path| path.to_string_lossy().into_owned()))
+}
+
+/// `secure_config_file`'s load, with the warnings jj prints for it.
+pub(crate) fn load_scoped(
+    workspace_root: &Path,
+    repo_path: &Path,
+    kind: &str,
+    create: bool,
+) -> PyResult<jj_lib::secure_config::LoadedSecureConfig> {
     use rand_chacha::rand_core::SeedableRng as _;
 
-    let (config, root) = scoped(Path::new(workspace_root), Path::new(repo_path), kind)?;
+    let (config, root) = scoped(workspace_root, repo_path, kind)?;
     // Seeded exactly as jj's own `ConfigEnv::new` seeds it, down to
     // the env var: a test that pins the seed gets the same config id
     // from either tool.
@@ -75,15 +88,12 @@ pub fn secure_config_file(
         Some(seed) => rand_chacha::ChaCha20Rng::seed_from_u64(seed),
         None => rand::make_rng(),
     };
-    let loaded = if create {
+    if create {
         config.load_config(&mut rng, &root)
     } else {
         config.maybe_load_config(&mut rng, &root)
     }
-    .map_err(map_py_err)?;
-    Ok(loaded
-        .config_file
-        .map(|path| path.to_string_lossy().into_owned()))
+    .map_err(map_py_err)
 }
 
 /// The repository a per-repo config directory belongs to.

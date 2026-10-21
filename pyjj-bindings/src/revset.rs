@@ -19,21 +19,52 @@ use crate::settings::PyUserSettings;
 
 /// Reads a `[<table_name>]` config table (e.g. `revset-aliases`,
 /// `fileset-aliases`) from every layer of `config`, in ascending
-/// precedence order, and builds an `AliasesMap` from it -- the same thing
-/// `jj`'s `load_aliases_map` (in the `cli` crate) does, reimplemented here
-/// without the `Ui`-based warning printing (entries that fail to parse are
-/// just skipped: a headless library has nowhere good to print a warning,
-/// and a bad alias definition will surface as a normal parse error at the
-/// point it's actually used, same as any other unresolvable symbol).
+/// precedence order, and builds an `AliasesMap` from it, as `jj`'s
+/// `load_aliases_map` (in the `cli` crate) does. A declaration that does
+/// not load is skipped; `UserSettings.warnings` reports it, with jj's
+/// wording, because `alias_warnings` runs when the settings are built.
 pub(crate) fn load_aliases_map<P>(config: &StackedConfig, table_name: &str) -> AliasesMap<P, String>
 where
     P: AliasDeclarationParser + Default,
+    P::Error: std::fmt::Display,
 {
-    let table_name = ConfigNamePathBuf::from_iter([table_name]);
+    build_aliases_map(config, table_name, &mut Vec::new()).unwrap_or_else(|_| AliasesMap::new())
+}
+
+/// The declarations in `config`'s alias tables that do not load, as jj
+/// words its warning for each. A table key that is not a table raises,
+/// as it does in jj.
+pub(crate) fn alias_warnings(config: &StackedConfig) -> PyResult<Vec<String>> {
+    let config_err = crate::errors::ConfigError::new_err;
+    let mut warnings = Vec::new();
+    let _: RevsetAliasesMap =
+        build_aliases_map(config, "revset-aliases", &mut warnings).map_err(config_err)?;
+    let _: FilesetAliasesMap =
+        build_aliases_map(config, "fileset-aliases", &mut warnings).map_err(config_err)?;
+    Ok(warnings)
+}
+
+fn build_aliases_map<P>(
+    config: &StackedConfig,
+    table_name: &str,
+    warnings: &mut Vec<String>,
+) -> Result<AliasesMap<P, String>, String>
+where
+    P: AliasDeclarationParser + Default,
+    P::Error: std::fmt::Display,
+{
+    let table_path = ConfigNamePathBuf::from_iter([table_name]);
     let mut aliases_map = AliasesMap::new();
     for layer in config.layers() {
-        let Ok(Some(table)) = layer.look_up_table(&table_name) else {
-            continue;
+        let table = match layer.look_up_table(&table_path) {
+            Ok(Some(table)) => table,
+            Ok(None) => continue,
+            Err(item) => {
+                return Err(format!(
+                    "Invalid type or value for {table_name}: Expected a table, but is {}",
+                    item.type_name()
+                ));
+            }
         };
         for (decl, item) in table.iter() {
             let definition = if let Some(t) = item.as_table_like() {
@@ -41,12 +72,20 @@ where
             } else {
                 item.as_str()
             };
-            if let Some(definition) = definition {
-                let _ = aliases_map.insert(decl, definition, None);
+            let loaded = definition
+                .ok_or_else(|| {
+                    format!(
+                        "Expected a string or a table with a `definition` string key, but is {}",
+                        item.type_name()
+                    )
+                })
+                .and_then(|v| aliases_map.insert(decl, v, None).map_err(|e: P::Error| e.to_string()));
+            if let Err(error) = loaded {
+                warnings.push(format!("Failed to load `{table_name}.{decl}`: {error}"));
             }
         }
     }
-    aliases_map
+    Ok(aliases_map)
 }
 
 /// Parses and evaluates a jj revset expression (e.g. `"@"`, `"main"`,

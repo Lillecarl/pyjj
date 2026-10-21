@@ -113,14 +113,22 @@ def apply_config_args(settings):
     raises `ConfigArgsError`, which `main()` turns into exit 1 before
     the command reads or writes anything.
     """
-    if not _CONFIG_ARGS:
-        return settings
-    try:
-        return settings.with_command_args(_CONFIG_ARGS)
-    except pyjj.JjError as e:
-        print(f"Config error: {getattr(e, 'message', str(e))}\n{_CONFIG_HELP_FOOTER}",
-              file=sys.stderr)
-        raise ConfigArgsError from e
+    if _CONFIG_ARGS:
+        try:
+            settings = settings.with_command_args(_CONFIG_ARGS)
+        except pyjj.JjError as e:
+            print(f"Config error: {getattr(e, 'message', str(e))}\n{_CONFIG_HELP_FOOTER}",
+                  file=sys.stderr)
+            raise ConfigArgsError from e
+    for warning in settings.warnings:
+        # Settings are built twice per command (see `_load`); warn once.
+        if warning not in _CONFIG_WARNED:
+            _CONFIG_WARNED.add(warning)
+            print(f"Warning: {warning}", file=sys.stderr)
+    return settings
+
+
+_CONFIG_WARNED: set[str] = set()
 
 
 def select_fields(selection, default, catalogue) -> list[str]:

@@ -240,14 +240,11 @@ fn existing_scoped_config(
     workspace_root: &Path,
     repo_path: &Path,
     kind: &str,
+    warnings: &mut Vec<String>,
 ) -> PyResult<Option<PathBuf>> {
-    let path = crate::secure_config::secure_config_file(
-        &workspace_root.to_string_lossy(),
-        &repo_path.to_string_lossy(),
-        kind,
-        false,
-    )?;
-    Ok(path.map(PathBuf::from).filter(|path| path.exists()))
+    let loaded = crate::secure_config::load_scoped(workspace_root, repo_path, kind, false)?;
+    warnings.extend(loaded.warnings);
+    Ok(loaded.config_file.filter(|path| path.exists()))
 }
 
 /// jj's config as the CLI sees it inside a repository: everything
@@ -255,7 +252,11 @@ fn existing_scoped_config(
 ///
 /// `repo_path` is `.jj/repo` (jj's own `reset_repo_path` takes the
 /// same), and `workspace_root` the directory holding `.jj`.
-pub fn load_config_for_repo(repo_path: &Path, workspace_root: &Path) -> PyResult<StackedConfig> {
+/// Also returns the warnings jj prints while it loads the scoped layers.
+pub fn load_config_for_repo(
+    repo_path: &Path,
+    workspace_root: &Path,
+) -> PyResult<(StackedConfig, Vec<String>)> {
     let load_err = crate::errors::map_config_err;
     let mut config = StackedConfig::with_defaults();
     config.add_layer(revsets_default_layer());
@@ -263,10 +264,10 @@ pub fn load_config_for_repo(repo_path: &Path, workspace_root: &Path) -> PyResult
     load_layers_at(&mut config, ConfigSource::System, &system_config_paths()).map_err(load_err)?;
     load_layers_at(&mut config, ConfigSource::User, &user_config_paths()).map_err(load_err)?;
     for (kind, source) in [("repo", ConfigSource::Repo), ("workspace", ConfigSource::Workspace)] {
-        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind)? {
+        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind, &mut warnings)? {
             load_layers_at(&mut config, source, &[path]).map_err(load_err)?;
         }
     }
     config.add_layer(env_overrides_layer());
-    Ok(config)
+    Ok((config, warnings))
 }
