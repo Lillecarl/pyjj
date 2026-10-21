@@ -1261,6 +1261,21 @@ def _next_prev(args, direction: str, *, walk_dir: str,
         return _move_to(args, settings, ws, repo, tx, targets, edit,
                         direction)
 
+def maybe_add_gitignore(ws) -> int:
+    """Keep a colocated Git worktree from tracking jj's own files, as
+    `cli/src/commands/git/mod.rs::maybe_add_gitignore` does. Returns
+    the exit code."""
+    if not ws.is_colocated():
+        return 0
+    try:
+        Path(ws.workspace_root, ".jj", ".gitignore").write_text("/*\n")
+    except OSError as e:
+        print("Error: Failed to write .jj/.gitignore file", file=sys.stderr)
+        print(f"Caused by: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _export_git_refs(tx, ws) -> None:
     """Write the transaction's bookmarks and tags out to the git repo.
 

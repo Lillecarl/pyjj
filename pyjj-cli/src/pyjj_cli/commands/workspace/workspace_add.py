@@ -8,6 +8,7 @@ from ..common import (
     _resolve_all,
     join_message_paragraphs,
     command,
+    maybe_add_gitignore,
     read_repo,
 )
 
@@ -39,16 +40,7 @@ def workspace_add(args) -> int:
                   f"\"{args.destination}\" directory and run "
                   f"`jj workspace forget {new_ws.workspace_name}` to "
                   f"remove it.", file=sys.stderr)
-        # Keep a colocated Git worktree from tracking jj's own files.
-        if new_ws.is_colocated():
-            try:
-                Path(dest, ".jj", ".gitignore").write_text("/*\n")
-            except OSError as e:
-                print("Error: Failed to write .jj/.gitignore file",
-                      file=sys.stderr)
-                print(f"Caused by: {e}", file=sys.stderr)
-                return 1
-        return 0
+        return maybe_add_gitignore(new_ws)
 
 
 def _should_colocate(ws, settings, args) -> bool:

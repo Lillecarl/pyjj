@@ -5,6 +5,7 @@ from pathlib import Path
 import pyjj
 from ..common import (
     apply_config_args,
+    maybe_add_gitignore,
 )
 
 def git_clone(args) -> int:
@@ -48,6 +49,8 @@ def git_clone(args) -> int:
             object_hash=getattr(args, "object_hash", None))
     except (pyjj.WorkspaceInitError, pyjj.JjError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
+        return 1
+    if maybe_add_gitignore(ws):
         return 1
     print(f"Fetched repo from {source} into {ws.workspace_root}")
     for ws_name, commit_id in repo.view().items():

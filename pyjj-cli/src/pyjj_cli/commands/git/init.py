@@ -7,6 +7,7 @@ import pyjj
 from ..common import (
     _start_transaction,
     apply_config_args,
+    maybe_add_gitignore,
 )
 
 def git_init(args) -> int:
@@ -62,6 +63,8 @@ def git_init(args) -> int:
                             getattr(args, "object_hash", None))
     except pyjj.WorkspaceInitError as e:
         print(f"Error: {e.message}", file=sys.stderr)
+        return 1
+    if maybe_add_gitignore(ws):
         return 1
 
     print(f"Initialized repo in {ws.workspace_root}")
