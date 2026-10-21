@@ -881,7 +881,7 @@ def _sort_value(repo, ref, key):
     if not ids:
         return (0, ())
     commit = repo.get_commit(ids[0])
-    signature = commit.author() if key.startswith("author") else commit.committer()
+    signature = commit.author if key.startswith("author") else commit.committer
     if key.endswith("-name"):
         return (1, (signature.name,))
     if key.endswith("-email"):

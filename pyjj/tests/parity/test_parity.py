@@ -4506,6 +4506,14 @@ def test_bookmark_list_output_matches(pair: RepoPair) -> None:
 
 
 @pytest.mark.covers("bookmark list")
+@pytest.mark.parametrize("key", ["author-name", "committer-date-"])
+def test_bookmark_list_sorts_by_a_signature_key(pair: RepoPair, key: str) -> None:
+    chain(pair)
+    pair.op(jj=["bookmark", "create", "side", "-r", rev("two")])
+    pair.assert_output(["bookmark", "list", "--sort", key])
+
+
+@pytest.mark.covers("bookmark list")
 @pytest.mark.covers("bookmark delete")
 def test_bookmark_list_drops_a_deleted_bookmark(pair: RepoPair) -> None:
     """Deleting `main` leaves `side` behind, so the listing still has a
