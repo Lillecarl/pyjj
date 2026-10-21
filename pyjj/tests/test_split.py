@@ -116,3 +116,15 @@ def test_split_with_no_hunk_selected_moves_nothing(repo, settings, wc_commit):
     tx, child = _three_changes(repo, settings, wc_commit)
     first = tx.split_selected(child, None, {"c.txt": []}).write()
     assert first.list_files() == ["a.txt", "b.txt"]
+
+
+def test_an_edited_split_keeps_the_executable_bit(workspace, settings):
+    root = Path(workspace.workspace_root)
+    script = root / "run.sh"
+    script.write_text("one\ntwo\n")
+    script.chmod(0o755)
+    repo, _ = workspace.snapshot(settings)
+    target = repo.resolve_single(settings, "@")
+    tx = repo.start_transaction(settings)
+    first = tx.split_selected_edited(target, {"run.sh": b"one\n"}).write()
+    assert first.is_executable("run.sh") is True

@@ -106,22 +106,33 @@ fn apply_hunks(
         } else if new_content == after {
             commit_value
         } else {
-            let (executable, copy_id) = [&commit_value, &parent_value]
-                .into_iter()
-                .find_map(|value| match value.as_resolved() {
-                    Some(Some(TreeValue::File { executable, copy_id, .. })) => {
-                        Some((*executable, copy_id.clone()))
-                    }
-                    _ => None,
-                })
-                .unwrap_or((false, jj_lib::backend::CopyId::placeholder()));
-            let id = pollster::block_on(store.write_file(&repo_path, &mut new_content.as_slice()))
-                .map_err(map_backend_err)?;
-            Merge::normal(TreeValue::File { id, executable, copy_id })
+            file_value(&store, &repo_path, &new_content, [&commit_value, &parent_value])?
         };
         builder.set_or_remove(repo_path, value);
     }
     pollster::block_on(builder.write_tree()).map_err(map_backend_err)
+}
+
+/// A file holding `content`, with the executable bit and copy id of the
+/// first of `sides` that holds a file at `path`. Every edit path (hunks,
+/// diff-editor contents) builds file values here, so they agree on both.
+fn file_value<'a>(
+    store: &std::sync::Arc<jj_lib::store::Store>,
+    path: &jj_lib::repo_path::RepoPath,
+    content: &[u8],
+    sides: impl IntoIterator<Item = &'a jj_lib::backend::MergedTreeValue>,
+) -> PyResult<jj_lib::backend::MergedTreeValue> {
+    let (executable, copy_id) = sides
+        .into_iter()
+        .find_map(|value| match value.as_resolved() {
+            Some(Some(TreeValue::File { executable, copy_id, .. })) => {
+                Some((*executable, copy_id.clone()))
+            }
+            _ => None,
+        })
+        .unwrap_or((false, jj_lib::backend::CopyId::placeholder()));
+    let id = pollster::block_on(store.write_file(path, &mut &*content)).map_err(map_backend_err)?;
+    Ok(Merge::normal(TreeValue::File { id, executable, copy_id }))
 }
 
 /// Builds the `selected_tree`/`parent_tree` pair `jj_lib::rewrite` needs for
@@ -181,7 +192,7 @@ fn select(
 ///
 /// `hunks`, if given, maps path -> selected hunk indices (from
 /// `hunks::diff_hunks(before, after)`, diffing that path's content in
-/// `destination` against `source`) for line-level squashing of that path,
+/// `source`'s parents against `source`) for line-level squashing of that path,
 /// on top of whatever `paths` already selects whole.
 pub fn squash(
     mut_repo: &mut MutableRepo,
@@ -271,7 +282,7 @@ pub(crate) fn overlay_contents(
         return Ok(base_tree);
     }
     let store = base_tree.store().clone();
-    let mut builder = MergedTreeBuilder::new(base_tree);
+    let mut builder = MergedTreeBuilder::new(base_tree.clone());
     for (path_str, content) in selections {
         let repo_path = crate::tree::repo_file_path(&path_str)?;
         match content {
@@ -279,25 +290,17 @@ pub(crate) fn overlay_contents(
                 builder.set_or_remove(repo_path, Merge::absent());
             }
             Some(bytes) => {
-                let executable = commit_tree
-                    .and_then(|tree| {
-                        pollster::block_on(tree.path_value(&repo_path))
-                            .ok()
-                            .and_then(|v| v.into_resolved().ok().flatten())
-                    })
-                    .and_then(|tv| match tv {
-                        TreeValue::File { executable, .. } => Some(executable),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let file_id =
-                    pollster::block_on(store.write_file(&repo_path, &mut bytes.as_slice()))
-                        .map_err(map_backend_err)?;
-        let value: jj_lib::backend::MergedTreeValue = Merge::normal(TreeValue::File {
-                    id: file_id,
-                    executable,
-                    copy_id: jj_lib::backend::CopyId::placeholder(),
-                });
+                let mut sides = Vec::with_capacity(2);
+                if let Some(tree) = commit_tree {
+                    sides.push(
+                        pollster::block_on(tree.path_value(&repo_path)).map_err(map_backend_err)?,
+                    );
+                }
+                sides.push(
+                    pollster::block_on(base_tree.path_value(&repo_path))
+                        .map_err(map_backend_err)?,
+                );
+                let value = file_value(&store, &repo_path, &bytes, &sides)?;
                 builder.set_or_remove(repo_path, value);
             }
         }
