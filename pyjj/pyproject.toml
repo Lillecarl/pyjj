@@ -5,13 +5,33 @@ build-backend = "hatchling.build"
 [project]
 name = "pyjj"
 description = "Pythonic API for Jujutsu VCS, built on pyjj-bindings"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 version = "0.46.0"  # tracks the jj release; pyjj-cli/pyjjui version independently
 license = { text = "Apache-2.0" }
-dependencies = ["pyjj-bindings", "anyio", "pydantic>=2", "pyyaml", "pygraphviz"]
+dependencies = ["pyjj-bindings", "anyio>=4", "pydantic>=2", "pyyaml>=6"]
 
 [project.optional-dependencies]
+# pyjj.graph_dot only; pygraphviz needs the graphviz C library.
+dot = ["pygraphviz>=1.11"]
 test = ["pytest"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "RUF", "FA", "BLE", "PLC0415", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"asyncio".msg = "Use anyio."
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLC0415", "TID251"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["pyjj"]
+warn_unused_ignores = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

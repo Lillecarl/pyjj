@@ -113,7 +113,7 @@ def layout(nodes: list[GraphNode]) -> list[GraphRow]:
     ]
     return [
         GraphRow(node=node, column=row.column, edges=row.edges, width=row.width)
-        for node, row in zip(nodes, layout_keyed(items))
+        for node, row in zip(nodes, layout_keyed(items), strict=True)
     ]
 
 
