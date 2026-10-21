@@ -68,7 +68,10 @@ def debug_reindex(args) -> int:
 def debug_index_changed_paths(args) -> int:
     with read_repo(args) as (_settings, ws, repo):
         indexed = pyjj_bindings.debug_index_changed_paths(ws, repo, args.limit)
-    print(f"Finished indexing {indexed} commits.", file=sys.stderr)
+    if indexed is None:
+        print("No commits indexed.", file=sys.stderr)
+    else:
+        print(f"Finished indexing {indexed} commits.", file=sys.stderr)
     return 0
 
 

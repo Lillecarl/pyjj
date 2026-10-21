@@ -406,7 +406,7 @@ pub fn debug_index_changed_paths(
     workspace: &PyWorkspace,
     repo: &PyReadonlyRepo,
     limit: u32,
-) -> PyResult<String> {
+) -> PyResult<Option<String>> {
     let ws = workspace.lock();
     let store = default_index_store(ws.repo_loader())?;
     let index = pollster::block_on(store.build_changed_path_index_at_operation(
@@ -416,7 +416,8 @@ pub fn debug_index_changed_paths(
         |_| {},
     ))
     .map_err(err)?;
-    Ok(format!("{:?}", index.stats().changed_path_commits_range.unwrap()))
+    // jj unwraps here; a library returns `None` when nothing is indexed.
+    Ok(index.stats().changed_path_commits_range.map(|range| format!("{range:?}")))
 }
 
 /// `jj debug stacked-table`.

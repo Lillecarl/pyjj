@@ -1,5 +1,6 @@
 use futures::StreamExt as _;
 use futures::TryStreamExt as _;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use jj_lib::backend::{FileId, MergedTreeValue, TreeValue};
@@ -8,15 +9,36 @@ use jj_lib::merged_tree::{MergedTree, TreeDiffEntry};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::{JjError, map_backend_err};
+use crate::errors::map_backend_err;
 
-/// Parse one internal-syntax path string.
-///
-/// Every file/annotate/conflict/rewrite entry point spells the same
-/// `from_internal_string` + `JjError::new_err` mapping by hand; the
-/// wording lives here once so a new call site cannot invent its own.
+/// A path prefix in internal syntax: a file, a directory, or `""` for the
+/// root. Raises `ValueError` for a malformed path, and for `.` or `..`
+/// components, which no tree jj builds contains.
 pub(crate) fn repo_path(path: &str) -> PyResult<RepoPathBuf> {
-    RepoPathBuf::from_internal_string(path).map_err(|err| JjError::new_err(err.to_string()))
+    let invalid = |why: &str| PyValueError::new_err(format!("invalid repository path {path:?}: {why}"));
+    let parsed = RepoPathBuf::from_internal_string(path).map_err(|err| invalid(&err.to_string()))?;
+    if parsed.components().any(|c| matches!(c.as_internal_str(), "." | "..")) {
+        return Err(invalid("`.` and `..` are not path components"));
+    }
+    Ok(parsed)
+}
+
+/// A path a tree edit writes: `repo_path()`, and neither the root nor
+/// anything under `.git` or `.jj`, which jj never tracks. Reads take
+/// `repo_path()`: asking whether `.git` exists is a fair question. jj_lib asserts on a
+/// root path when it writes a tree, and the assertion would surface as a
+/// `PanicException`.
+pub(crate) fn repo_file_path(path: &str) -> PyResult<RepoPathBuf> {
+    let parsed = repo_path(path)?;
+    if parsed.is_root() {
+        return Err(PyValueError::new_err("empty repository path"));
+    }
+    if parsed.components().any(|c| matches!(c.as_internal_str(), ".git" | ".jj")) {
+        return Err(PyValueError::new_err(format!(
+            "invalid repository path {path:?}: `.git` and `.jj` are reserved"
+        )));
+    }
+    Ok(parsed)
 }
 
 /// Look a path up in a merged tree, mapping backend errors the one way

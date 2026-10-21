@@ -92,7 +92,7 @@ fn apply_hunks(
     let store = base_tree.store().clone();
     let mut builder = MergedTreeBuilder::new(base_tree);
     for (path_str, indices) in hunks {
-        let repo_path = crate::tree::repo_path(&path_str)?;
+        let repo_path = crate::tree::repo_file_path(&path_str)?;
         let before = read_tree_file_bytes(parent_tree, &repo_path)?;
         let after = read_tree_file_bytes(commit_tree, &repo_path)?;
         let selected: HashSet<usize> = indices.into_iter().collect();
@@ -273,7 +273,7 @@ pub(crate) fn overlay_contents(
     let store = base_tree.store().clone();
     let mut builder = MergedTreeBuilder::new(base_tree);
     for (path_str, content) in selections {
-        let repo_path = crate::tree::repo_path(&path_str)?;
+        let repo_path = crate::tree::repo_file_path(&path_str)?;
         match content {
             None => {
                 builder.set_or_remove(repo_path, Merge::absent());
@@ -496,7 +496,7 @@ pub fn set_executable(
     path: &str,
     executable: bool,
 ) -> PyResult<DetachedCommitBuilder> {
-    let repo_path = crate::tree::repo_path(path)?;
+    let repo_path = crate::tree::repo_file_path(path)?;
     let tree = commit.inner.tree();
     let value = crate::tree::tree_value(&tree, &repo_path)?;
     let (id, copy_id) = match value.as_resolved() {
@@ -552,7 +552,7 @@ pub fn restore(
         // and say nothing. An unresolved conflict counts as present --
         // restoring may be exactly what resolves it.
         for path in paths {
-            let repo_path = crate::tree::repo_path(path)?;
+            let repo_path = crate::tree::repo_file_path(path)?;
             let absent = |tree: &MergedTree| -> PyResult<bool> {
     let value = crate::tree::tree_value(&tree, &repo_path)?;
                 Ok(matches!(value.as_resolved(), Some(None)))

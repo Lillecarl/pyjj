@@ -53,3 +53,10 @@ def test_symlink_read_file_returns_target_as_bytes(workspace, settings):
     assert commit.file_exists("link")
     assert commit.read_file("link") == b"target.txt"
     assert commit.is_executable("link") is None
+
+
+@pytest.mark.parametrize("path", ["", "..", "a/../b", "./a", ".git/hooks/post-checkout", ".jj/repo/x"])
+def test_tree_edits_reject_paths_jj_never_tracks(repo, settings, wc_commit, path):
+    tx = repo.start_transaction(settings)
+    with pytest.raises(ValueError):
+        tx.edit_commit_tree(wc_commit, {path: b"x"})

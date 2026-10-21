@@ -148,7 +148,7 @@ pub fn resolve_conflict(
     path: &str,
     content: &[u8],
 ) -> PyResult<DetachedCommitBuilder> {
-    let repo_path = crate::tree::repo_path(path)?;
+    let repo_path = crate::tree::repo_file_path(path)?;
     let tree = commit.inner.tree();
     let value = crate::tree::tree_value(&tree, &repo_path)?;
     if value.as_resolved().is_some() {
@@ -186,7 +186,7 @@ pub fn resolve_conflicts(
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
     for (path_str, content) in selections {
-        let repo_path = crate::tree::repo_path(&path_str)?;
+        let repo_path = crate::tree::repo_file_path(&path_str)?;
         let value = crate::tree::tree_value(&tree, &repo_path)?;
         if value.as_resolved().is_some() {
             return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));
@@ -289,7 +289,7 @@ pub fn pick_conflict_sides(
     let tree = commit.inner.tree();
     let mut builder = MergedTreeBuilder::new(tree.clone());
     for path_str in paths {
-        let repo_path = crate::tree::repo_path(&path_str)?;
+        let repo_path = crate::tree::repo_file_path(&path_str)?;
         let value = crate::tree::tree_value(&tree, &repo_path)?;
         if value.as_resolved().is_some() {
             return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));

@@ -379,7 +379,7 @@ pub fn untrack_paths(
     let repo = load_head(workspace)?;
     let repo_paths = paths
         .iter()
-        .map(|path| crate::tree::repo_path(path))
+        .map(|path| crate::tree::repo_file_path(path))
         .collect::<PyResult<Vec<_>>>()?;
     let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
     let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
