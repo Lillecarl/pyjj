@@ -1733,35 +1733,20 @@ much exists on disk.
 
 ## Async API
 
-Every sync method keeps working unchanged; `_async` methods are added
-alongside as `await`-able siblings. Which mechanism backs a given `_async`
-method depends on whether its underlying jj_lib type can safely cross an
-OS thread boundary — this is a hard Rust `Send`/`Sync` constraint, not a
-design choice:
+One mechanism backs every `_async` method: `pyjj/pyjj/_async.py` wraps
+the sync method in `anyio.to_thread.run_sync`, so it works on asyncio and
+trio alike. The lists there name which methods get one.
 
-- **`ReadonlyRepo`/`Commit`** (`Arc<ReadonlyRepo>`/`Commit` — both
-  `Send + Sync`): native `pyo3-async-runtimes`/tokio integration
-  (`pyjj-bindings/src/aio.rs`'s `spawn_blocking_py`). `revset_async`,
-  `resolve_single_async`, `get_commit_async`, `operation_log_async`,
-  `load_operation_async`, `load_at_operation_async` on `ReadonlyRepo`;
-  `is_empty_async`, `is_discardable_async`, `diff_async`,
-  `diff_with_copies_async`, `read_file_async`, `file_exists_async`,
-  `materialize_conflict_async` on `Commit`. Each runs on tokio's blocking
-  thread-pool (jj_lib's own internals are synchronous I/O under the hood,
-  not real non-blocking I/O — see `aio.rs`'s doc comment) and genuinely
-  frees the event loop for the duration.
-- **`Workspace`** (holds `Box<dyn WorkingCopy>` — `Send` but not `Sync`):
-  the pyclass wraps it in `std::sync::Mutex<Workspace>` (supplies the
-  missing `Sync`; also matches reality, since a workspace's on-disk state
-  is exclusive-access by nature) and each I/O-doing method wraps its locked
-  section in `Python::detach` (GIL release). On the Python side
-  (`pyjj/pyjj/_async.py`), `snapshot_async`, `check_out_async`,
-  `update_stale_async`, `set_sparse_patterns_async`, `add_workspace_async`,
-  `forget_workspaces_async`, `rename_workspace_async`, `load_at_head_async`,
-  `clone_git_async` wrap the sync methods in `anyio.to_thread.run_sync` —
-  genuinely non-blocking, confirmed via a heartbeat-concurrency test
-  (`pyjj/tests/test_asyncio.py`), since the GIL really is released while
-  the worker thread runs.
+- The sync method must release the GIL (`py.detach`) for the whole of its
+  jj_lib work, or the worker thread frees nothing. `ReadonlyRepo` and
+  `Commit` methods detach directly; their state is `Send + Sync`.
+- **`Workspace`** holds `Box<dyn WorkingCopy>` (`Send`, not `Sync`) in a
+  `Mutex`. `PyWorkspace::with_ws` takes the mutex with the GIL released.
+  Nothing may attach to Python while holding the mutex: a holder that
+  waits for the GIL deadlocks against a GIL holder that waits for the
+  mutex. Return Rust values from the locked section and convert after.
+- A heartbeat test (`pyjj/tests/test_asyncio.py`) proves the event loop
+  keeps running.
 - **`Transaction`/`CommitBuilder` have no async API, on purpose.**
   `PyTransaction` is `#[pyclass(unsendable)]` because jj_lib's
   `MutableRepo`/`Transaction` isn't even `Send` (holds a `Box<dyn
@@ -1825,8 +1810,6 @@ design choice:
   version-consistency audit that flags the split as drift is wrong.
 - If `pyjj-bindings`'s public API shape changes, update `pyjj/pyjj/__init__.py`
   (the re-export surface) to match.
-- `pyjj-bindings` depends on `pyo3-async-runtimes` (tokio-runtime feature) and
-  `tokio` (rt-multi-thread) for the native async surface above.
 - `shells.default`'s `shellHook` unsets `PYTHONPATH`: nixpkgs' `python3` wrapper
   sets it to its own site-packages, and if that leaks into a project venv
   built against a *different* python minor version, the venv's `sysconfig`

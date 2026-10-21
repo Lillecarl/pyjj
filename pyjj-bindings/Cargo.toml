@@ -30,8 +30,6 @@ gix = { version = "0.88.0", default-features = false, features = [
     "sha256",
 ] }
 pyo3 = { version = "0.29", features = ["extension-module"] }
-pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
 pollster = "1.0.1"
 # jj's `toml_edit` line (0.25.x), so `ConfigLayer.data` is the same
 # `toml_edit::DocumentMut` type on both sides of the call.

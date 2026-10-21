@@ -1,8 +1,7 @@
 """Tests for pyjj's async surface.
 
-`ReadonlyRepo`/`Commit` get real `pyo3-async-runtimes`/tokio integration
-(native, defined in `pyjj_bindings`); `Workspace` gets `anyio.to_thread`
-wrapping with genuine GIL release (defined in `pyjj._async`); `Transaction`
+`ReadonlyRepo`, `Commit` and `Workspace` get `anyio.to_thread` siblings
+with genuine GIL release (defined in `pyjj._async`); `Transaction`
 intentionally has no async API at all (see `pyjj/pyjj/_async.py`'s
 docstring for why). Tests are plain `async def` -- `anyio_mode = "auto"`
 in `pyproject.toml` runs them via anyio's own pytest plugin, no
@@ -204,3 +203,20 @@ async def test_workspace_async_concurrency_frees_event_loop(workspace, settings)
         tg.start_soon(workspace.snapshot_async, settings)
     gaps = [b - a for a, b in zip(heartbeats, heartbeats[1:])]
     assert max(gaps) < 0.2, f"event loop was blocked: {max(gaps)}"
+
+
+async def test_reading_the_workspace_during_a_snapshot_does_not_deadlock(workspace, settings):
+    """A snapshot holds the workspace lock; a getter on the event loop
+    thread holds the GIL. Neither may wait for the other."""
+    Path(workspace.workspace_root, "f.txt").write_text("f\n")
+    with anyio.fail_after(30):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(workspace.snapshot_async, settings)
+            for _ in range(200):
+                assert workspace.workspace_root
+                await anyio.sleep(0)
+
+
+def test_async_siblings_carry_their_own_names():
+    assert pyjj.ReadonlyRepo.revset_async.__name__ == "revset_async"
+    assert pyjj.Workspace.snapshot_async.__qualname__ == "Workspace.snapshot_async"

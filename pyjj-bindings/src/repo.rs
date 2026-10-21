@@ -118,30 +118,13 @@ impl PyReadonlyRepo {
     }
 
     /// Look up a commit by its [`CommitId`].
-    fn get_commit(&self, commit_id: &PyCommitId) -> PyResult<PyCommit> {
-        let commit = pollster::block_on(self.inner.store().get_commit_async(&commit_id.0))
-            .map_err(map_backend_err)?;
-        Ok(PyCommit {
-            inner: commit,
-            _repo: Some(self.inner.clone()),
-        })
-    }
-
-    /// Async sibling of `get_commit()`. Runs on tokio's blocking thread
-    /// pool (see `aio` module docs) rather than on the calling thread, so
-    /// the event loop isn't blocked for the duration of the backend read.
-    fn get_commit_async<'py>(
-        &self,
-        py: Python<'py>,
-        commit_id: PyCommitId,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.inner.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            let commit = pollster::block_on(repo.store().get_commit_async(&commit_id.0))
+    fn get_commit(&self, py: Python<'_>, commit_id: &PyCommitId) -> PyResult<PyCommit> {
+        py.detach(|| {
+            let commit = pollster::block_on(self.inner.store().get_commit_async(&commit_id.0))
                 .map_err(map_backend_err)?;
             Ok(PyCommit {
                 inner: commit,
-                _repo: Some(repo),
+                _repo: Some(self.inner.clone()),
             })
         })
     }
@@ -149,8 +132,10 @@ impl PyReadonlyRepo {
     /// Parse and evaluate a revset expression (e.g. `"@"`, `"main"`,
     /// `"ancestors(@, 5)"`), returning matching commits in topological
     /// (children-before-parents) order.
-    fn revset(&self, settings: &PyUserSettings, revision: &str) -> PyResult<Vec<PyCommit>> {
-        crate::revset::evaluate_revset(self, settings, revision)
+    fn revset(&self, py: Python<'_>, settings: &PyUserSettings, revision: &str) -> PyResult<Vec<PyCommit>> {
+        py.detach(|| {
+            crate::revset::evaluate_revset(self, settings, revision)
+        })
     }
 
     /// `jj converge`'s search half: evaluate `revset` and return the
@@ -159,24 +144,12 @@ impl PyReadonlyRepo {
     /// divergence in the search space.
     fn find_divergent_changes(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         revset: &str,
     ) -> PyResult<Vec<crate::converge::PyDivergentChange>> {
-        crate::converge::divergent_changes_for(self, settings, revset)
-    }
-
-    /// Async sibling of `revset()`. See `get_commit_async()`'s docs for why
-    /// this runs on tokio's blocking thread pool rather than directly.
-    fn revset_async<'py>(
-        &self,
-        py: Python<'py>,
-        settings: &PyUserSettings,
-        revision: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.clone();
-        let settings = PyUserSettings(settings.0.clone());
-        crate::aio::spawn_blocking_py(py, move || {
-            crate::revset::evaluate_revset(&repo, &settings, &revision)
+        py.detach(|| {
+            crate::converge::divergent_changes_for(self, settings, revset)
         })
     }
 
@@ -188,11 +161,14 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (settings, revision, limit=None))]
     fn log_graph(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         revision: &str,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::graph::PyGraphNode>> {
-        crate::graph::log_graph(self, settings, revision, limit)
+        py.detach(|| {
+            crate::graph::log_graph(self, settings, revision, limit)
+        })
     }
 
     /// The same graph over a set of commits named outright. `jj op diff`
@@ -201,9 +177,12 @@ impl PyReadonlyRepo {
     /// `pyjj_bindings.graph::commits_graph`.
     fn commits_graph(
         &self,
+        py: Python<'_>,
         commit_ids: Vec<crate::ids::PyCommitId>,
     ) -> PyResult<Vec<crate::graph::PyGraphNode>> {
-        crate::graph::commits_graph(self, commit_ids)
+        py.detach(|| {
+            crate::graph::commits_graph(self, commit_ids)
+        })
     }
 
     /// How the given commits evolved: every earlier version of each
@@ -212,10 +191,13 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (start_commits, limit=None))]
     fn evolution_log(
         &self,
+        py: Python<'_>,
         start_commits: Vec<PyCommitId>,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
-        crate::evolution::evolution_log(self, start_commits, limit)
+        py.detach(|| {
+            crate::evolution::evolution_log(self, start_commits, limit)
+        })
     }
 
     /// The same walk, topologically grouped and carrying graph edges --
@@ -224,26 +206,12 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (start_commits, limit=None))]
     fn evolution_graph(
         &self,
+        py: Python<'_>,
         start_commits: Vec<PyCommitId>,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
-        crate::evolution::evolution_graph(self, start_commits, limit)
-    }
-
-    /// Async sibling of `log_graph()`. See `get_commit_async()`'s docs for
-    /// why this runs on tokio's blocking thread pool rather than directly.
-    #[pyo3(signature = (settings, revision, limit=None))]
-    fn log_graph_async<'py>(
-        &self,
-        py: Python<'py>,
-        settings: &PyUserSettings,
-        revision: String,
-        limit: Option<usize>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.clone();
-        let settings = PyUserSettings(settings.0.clone());
-        crate::aio::spawn_blocking_py(py, move || {
-            crate::graph::log_graph(&repo, &settings, &revision, limit)
+        py.detach(|| {
+            crate::evolution::evolution_graph(self, start_commits, limit)
         })
     }
 
@@ -268,13 +236,14 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (from, to, settings, paths=None))]
     fn interdiff_files(
         &self,
+        py: Python<'_>,
         from: Vec<PyRef<'_, PyCommit>>,
         to: &PyCommit,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
         let from: Vec<_> = from.iter().map(|c| c.inner.clone()).collect();
-        crate::tree::interdiff_files(self, &from, to, settings, paths)
+        py.detach(|| crate::tree::interdiff_files(self, &from, to, settings, paths))
     }
 
     /// jj's `materialize_merge_result_to_bytes`: what a reader sees of
@@ -287,31 +256,34 @@ impl PyReadonlyRepo {
     /// starts from is the conflict, markers and all.
     fn materialize_merge(
         &self,
+        py: Python<'_>,
         removes: Vec<Vec<u8>>,
         adds: Vec<Vec<u8>>,
         settings: &crate::settings::PyUserSettings,
     ) -> PyResult<std::borrow::Cow<'_, [u8]>> {
-        use jj_lib::conflict_labels::ConflictLabels;
-        use jj_lib::conflicts::{
-            ConflictMarkerStyle, ConflictMaterializeOptions,
-            materialize_merge_result_to_bytes,
-        };
-        let marker_style: ConflictMarkerStyle = settings
-            .0
-            .get("ui.conflict-marker-style")
-            .map_err(crate::errors::map_py_err)?;
-        let options = ConflictMaterializeOptions {
-            marker_style,
-            marker_len: None,
-            merge: self.inner.store().merge_options().clone(),
-        };
-        let merge = jj_lib::merge::Merge::from_removes_adds(removes, adds);
-        let out = materialize_merge_result_to_bytes(
-            &merge,
-            &ConflictLabels::unlabeled(),
-            &options,
-        );
-        Ok(std::borrow::Cow::Owned(out.into()))
+        py.detach(|| {
+            use jj_lib::conflict_labels::ConflictLabels;
+            use jj_lib::conflicts::{
+                ConflictMarkerStyle, ConflictMaterializeOptions,
+                materialize_merge_result_to_bytes,
+            };
+            let marker_style: ConflictMarkerStyle = settings
+                .0
+                .get("ui.conflict-marker-style")
+                .map_err(crate::errors::map_py_err)?;
+            let options = ConflictMaterializeOptions {
+                marker_style,
+                marker_len: None,
+                merge: self.inner.store().merge_options().clone(),
+            };
+            let merge = jj_lib::merge::Merge::from_removes_adds(removes, adds);
+            let out = materialize_merge_result_to_bytes(
+                &merge,
+                &ConflictLabels::unlabeled(),
+                &options,
+            );
+            Ok(std::borrow::Cow::Owned(out.into()))
+        })
     }
 
     /// All remote-tracking bookmarks, in lexicographical order.
@@ -345,16 +317,19 @@ impl PyReadonlyRepo {
     /// otherwise.
     fn walk_revs_count(
         &self,
+        py: Python<'_>,
         wanted: Vec<PyCommitId>,
         unwanted: Vec<PyCommitId>,
     ) -> PyResult<(usize, Option<usize>)> {
-        let wanted: Vec<CommitId> = wanted.into_iter().map(|id| id.0).collect();
-        let unwanted: Vec<CommitId> = unwanted.into_iter().map(|id| id.0).collect();
-        let revset = jj_lib::revset::walk_revs(self.inner.as_ref(), &wanted, &unwanted)
-            .map_err(crate::errors::map_revset_eval_err)?;
-        revset
-            .count_estimate()
-            .map_err(crate::errors::map_revset_eval_err)
+        py.detach(|| {
+            let wanted: Vec<CommitId> = wanted.into_iter().map(|id| id.0).collect();
+            let unwanted: Vec<CommitId> = unwanted.into_iter().map(|id| id.0).collect();
+            let revset = jj_lib::revset::walk_revs(self.inner.as_ref(), &wanted, &unwanted)
+                .map_err(crate::errors::map_revset_eval_err)?;
+            revset
+                .count_estimate()
+                .map_err(crate::errors::map_revset_eval_err)
+        })
     }
 
     /// `jj interdiff --from A --to B`: how the changes `from` makes
@@ -363,11 +338,14 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (from, to, paths=None))]
     fn interdiff(
         &self,
+        py: Python<'_>,
         from: &PyCommit,
         to: &PyCommit,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        crate::tree::interdiff_commits(self, from, to, paths)
+        py.detach(|| {
+            crate::tree::interdiff_commits(self, from, to, paths)
+        })
     }
 
     /// All local tags, in lexicographical order. Tags are typically
@@ -436,32 +414,9 @@ impl PyReadonlyRepo {
     /// Convenience for revsets expected to resolve to exactly one commit.
     /// Raises `RevsetEvalError` if the revset matched zero or more than one
     /// commit.
-    fn resolve_single(&self, settings: &PyUserSettings, revision: &str) -> PyResult<PyCommit> {
-        let mut commits = crate::revset::evaluate_revset(self, settings, revision)?;
-        match commits.len() {
-            1 => Ok(commits.pop().unwrap()),
-            0 => Err(crate::errors::RevsetEvalError::new_err(format!(
-                "revset `{revision}` didn't resolve to any revisions"
-            ))),
-            n => Err(crate::errors::RevsetEvalError::new_err(format!(
-                "revset `{revision}` resolved to {n} revisions, expected exactly one"
-            ))),
-        }
-    }
-
-    /// Async sibling of `resolve_single()`. See `get_commit_async()`'s docs
-    /// for why this runs on tokio's blocking thread pool rather than
-    /// directly.
-    fn resolve_single_async<'py>(
-        &self,
-        py: Python<'py>,
-        settings: &PyUserSettings,
-        revision: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.clone();
-        let settings = PyUserSettings(settings.0.clone());
-        crate::aio::spawn_blocking_py(py, move || {
-            let mut commits = crate::revset::evaluate_revset(&repo, &settings, &revision)?;
+    fn resolve_single(&self, py: Python<'_>, settings: &PyUserSettings, revision: &str) -> PyResult<PyCommit> {
+        py.detach(|| {
+            let mut commits = crate::revset::evaluate_revset(self, settings, revision)?;
             match commits.len() {
                 1 => Ok(commits.pop().unwrap()),
                 0 => Err(crate::errors::RevsetEvalError::new_err(format!(
@@ -498,14 +453,17 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (commit_id, settings=None))]
     fn shortest_commit_id_prefix_len(
         &self,
+        py: Python<'_>,
         commit_id: &PyCommitId,
         settings: Option<&PyUserSettings>,
     ) -> PyResult<usize> {
-        let context = self.id_prefix_context(settings)?;
-        let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
-        index
-            .shortest_commit_prefix_len(self.inner.as_ref(), &commit_id.0)
-            .map_err(map_index_err)
+        py.detach(|| {
+            let context = self.id_prefix_context(settings)?;
+            let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
+            index
+                .shortest_commit_prefix_len(self.inner.as_ref(), &commit_id.0)
+                .map_err(map_index_err)
+        })
     }
 
     /// Change-id equivalent of `shortest_commit_id_prefix_len()` -- pass
@@ -515,46 +473,31 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (change_id, settings=None))]
     fn shortest_change_id_prefix_len(
         &self,
+        py: Python<'_>,
         change_id: &PyChangeId,
         settings: Option<&PyUserSettings>,
     ) -> PyResult<usize> {
-        let context = self.id_prefix_context(settings)?;
-        let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
-        pollster::block_on(index.shortest_change_prefix_len(self.inner.as_ref(), &change_id.0))
-            .map_err(map_index_err)
+        py.detach(|| {
+            let context = self.id_prefix_context(settings)?;
+            let index = context.populate(self.inner.as_ref()).map_err(map_py_err)?;
+            pollster::block_on(index.shortest_change_prefix_len(self.inner.as_ref(), &change_id.0))
+                .map_err(map_index_err)
+        })
     }
 
     /// The full operation log, walked backward from `self.operation`,
     /// newest first -- same order as `jj op log`.
-    fn operation_log(&self) -> PyResult<Vec<crate::operation::PyOperation>> {
-        crate::oplog::operation_log(self.inner.as_ref())
-    }
-
-    /// Async sibling of `operation_log()`. See `get_commit_async()`'s docs
-    /// for why this runs on tokio's blocking thread pool rather than
-    /// directly.
-    fn operation_log_async<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.inner.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::oplog::operation_log(repo.as_ref()))
+    fn operation_log(&self, py: Python<'_>) -> PyResult<Vec<crate::operation::PyOperation>> {
+        py.detach(|| {
+            crate::oplog::operation_log(self.inner.as_ref())
+        })
     }
 
     /// Loads an arbitrary past operation by its full hex id (see
     /// `Operation.id` / `operation_log()`).
-    fn load_operation(&self, op_id: &str) -> PyResult<crate::operation::PyOperation> {
-        crate::oplog::load_operation(self.inner.as_ref(), op_id)
-    }
-
-    /// Async sibling of `load_operation()`. See `get_commit_async()`'s docs
-    /// for why this runs on tokio's blocking thread pool rather than
-    /// directly.
-    fn load_operation_async<'py>(
-        &self,
-        py: Python<'py>,
-        op_id: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.inner.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            crate::oplog::load_operation(repo.as_ref(), &op_id)
+    fn load_operation(&self, py: Python<'_>, op_id: &str) -> PyResult<crate::operation::PyOperation> {
+        py.detach(|| {
+            crate::oplog::load_operation(self.inner.as_ref(), op_id)
         })
     }
 
@@ -564,32 +507,14 @@ impl PyReadonlyRepo {
     /// doesn't touch the working copy or move any workspace's current
     /// operation; use `Transaction.restore_operation()` (and commit it) if
     /// you actually want to move the repo backward.
-    fn load_at_operation(&self, op: &crate::operation::PyOperation) -> PyResult<PyReadonlyRepo> {
-        let repo =
-            pollster::block_on(self.inner.loader().load_at(&op.0)).map_err(map_repo_load_err)?;
-        Ok(PyReadonlyRepo {
-            inner: repo,
-            workspace_root: self.workspace_root.clone(),
-            workspace_name: self.workspace_name.clone(),
-        })
-    }
-
-    /// Async sibling of `load_at_operation()`. See `get_commit_async()`'s
-    /// docs for why this runs on tokio's blocking thread pool rather than
-    /// directly.
-    fn load_at_operation_async<'py>(
-        &self,
-        py: Python<'py>,
-        op: crate::operation::PyOperation,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let repo = self.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            let loaded = pollster::block_on(repo.inner.loader().load_at(&op.0))
-                .map_err(map_repo_load_err)?;
+    fn load_at_operation(&self, py: Python<'_>, op: &crate::operation::PyOperation) -> PyResult<PyReadonlyRepo> {
+        py.detach(|| {
+            let repo =
+                pollster::block_on(self.inner.loader().load_at(&op.0)).map_err(map_repo_load_err)?;
             Ok(PyReadonlyRepo {
-                inner: loaded,
-                workspace_root: repo.workspace_root.clone(),
-                workspace_name: repo.workspace_name.clone(),
+                inner: repo,
+                workspace_root: self.workspace_root.clone(),
+                workspace_name: self.workspace_name.clone(),
             })
         })
     }
@@ -630,9 +555,12 @@ impl PyReadonlyRepo {
     /// the two sides can be compared.
     fn merge_operations(
         &self,
+        py: Python<'_>,
         operations: Vec<crate::operation::PyOperation>,
     ) -> PyResult<crate::operation::PyOperation> {
-        crate::opdiff::merge_operations(self, operations)
+        py.detach(|| {
+            crate::opdiff::merge_operations(self, operations)
+        })
     }
 
     /// `jj op diff`: what changed in the repository between the
@@ -648,11 +576,14 @@ impl PyReadonlyRepo {
     #[pyo3(signature = (other, settings, changes_in=None))]
     fn operation_diff(
         &self,
+        py: Python<'_>,
         other: &PyReadonlyRepo,
         settings: &PyUserSettings,
         changes_in: Option<&str>,
     ) -> PyResult<crate::opdiff::PyOperationDiff> {
-        crate::opdiff::operation_diff(other, self, settings, changes_in)
+        py.detach(|| {
+            crate::opdiff::operation_diff(other, self, settings, changes_in)
+        })
     }
 
     /// Hex id of the operation this repo view was loaded at.

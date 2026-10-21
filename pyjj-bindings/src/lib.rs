@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 
 mod absorb;
-mod aio;
 mod annotate;
 mod bisect;
 mod bookmark;

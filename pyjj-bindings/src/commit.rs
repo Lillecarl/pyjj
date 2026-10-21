@@ -106,8 +106,10 @@ impl PyCommit {
 
     /// Every conflicted path in this commit's tree, as `(path, sides,
     /// adds, objects)`. See `conflicts::conflicted_paths`.
-    fn conflicted_paths(&self) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
-        crate::conflicts::conflicted_paths(self)
+    fn conflicted_paths(&self, py: Python<'_>) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
+        py.detach(|| {
+            crate::conflicts::conflicted_paths(self)
+        })
     }
 
     /// This commit's changes against its parents *merged*, which is what
@@ -120,10 +122,13 @@ impl PyCommit {
     #[pyo3(signature = (repo, paths=None))]
     fn diff_from_parents(
         &self,
+        py: Python<'_>,
         repo: &PyReadonlyRepo,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        crate::tree::diff_from_parents(self, repo, paths)
+        py.detach(|| {
+            crate::tree::diff_from_parents(self, repo, paths)
+        })
     }
 
     /// Whether this commit is no longer reachable from any visible head.
@@ -131,9 +136,11 @@ impl PyCommit {
     /// A rewrite leaves its earlier versions hidden rather than deleting
     /// them, which is what `jj evolog` walks. jj marks such a commit
     /// `(hidden)` wherever it prints one.
-    fn is_hidden(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
-        pollster::block_on(self.inner.is_hidden(repo.inner.as_ref()))
-            .map_err(crate::errors::map_py_err)
+    fn is_hidden(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        py.detach(|| {
+            pollster::block_on(self.inner.is_hidden(repo.inner.as_ref()))
+                .map_err(crate::errors::map_py_err)
+        })
     }
 
     /// Whether more than one visible commit shares this commit's change
@@ -142,12 +149,14 @@ impl PyCommit {
     /// A rewrite that lands twice, or a `duplicate` that keeps the
     /// change id, leaves the change addressing several commits at once.
     /// jj marks every one of them `(divergent)`.
-    fn is_divergent(&self, repo: &PyReadonlyRepo) -> PyResult<bool> {
-        use jj_lib::repo::Repo as _;
+    fn is_divergent(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        py.detach(|| {
+            use jj_lib::repo::Repo as _;
 
-        let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
-            .map_err(crate::errors::map_py_err)?;
-        Ok(targets.is_some_and(|targets| targets.is_divergent()))
+            let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
+                .map_err(crate::errors::map_py_err)?;
+            Ok(targets.is_some_and(|targets| targets.is_divergent()))
+        })
     }
 
     /// This commit's position among the commits sharing its change id,
@@ -157,48 +166,27 @@ impl PyCommit {
     /// that spelling is a revset: it is how a reader addresses an
     /// earlier version of a change. Position 0 is the visible one, and
     /// jj prints no offset for it.
-    fn change_offset(&self, repo: &PyReadonlyRepo) -> PyResult<Option<usize>> {
-        use jj_lib::repo::Repo as _;
+    fn change_offset(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<Option<usize>> {
+        py.detach(|| {
+            use jj_lib::repo::Repo as _;
 
-        let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
-            .map_err(crate::errors::map_py_err)?;
-        Ok(targets.and_then(|targets| targets.find_offset(self.inner.id())))
+            let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
+                .map_err(crate::errors::map_py_err)?;
+            Ok(targets.and_then(|targets| targets.find_offset(self.inner.id())))
+        })
     }
 
-    /// Whether this commit has no changes compared to its parent(s). Returns
-    /// `false` if there are no parent commits to compare against (the root).
-    fn is_empty(&self, repo: &PyReadonlyRepo) -> bool {
-        pollster::block_on(self.inner.is_empty(repo.inner.as_ref())).unwrap_or(false)
-    }
-
-    /// Async sibling of `is_empty()`. Runs on tokio's blocking thread pool
-    /// (see the `aio` module docs) rather than on the calling thread.
-    fn is_empty_async<'py>(
-        &self,
-        py: Python<'py>,
-        repo: PyReadonlyRepo,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.inner.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            Ok(pollster::block_on(commit.is_empty(repo.inner.as_ref())).unwrap_or(false))
+    /// Whether this commit has no changes compared to its parent(s).
+    fn is_empty(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        py.detach(|| {
+            pollster::block_on(self.inner.is_empty(repo.inner.as_ref())).map_err(map_py_err)
         })
     }
 
     /// Whether this commit is discardable (empty + no description).
-    fn is_discardable(&self, repo: &PyReadonlyRepo) -> bool {
-        pollster::block_on(self.inner.is_discardable(repo.inner.as_ref())).unwrap_or(false)
-    }
-
-    /// Async sibling of `is_discardable()`. Runs on tokio's blocking thread
-    /// pool (see the `aio` module docs) rather than on the calling thread.
-    fn is_discardable_async<'py>(
-        &self,
-        py: Python<'py>,
-        repo: PyReadonlyRepo,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.inner.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            Ok(pollster::block_on(commit.is_discardable(repo.inner.as_ref())).unwrap_or(false))
+    fn is_discardable(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
+        py.detach(|| {
+            pollster::block_on(self.inner.is_discardable(repo.inner.as_ref())).map_err(map_py_err)
         })
     }
 
@@ -211,10 +199,13 @@ impl PyCommit {
     #[pyo3(signature = (other, paths=None))]
     fn diff(
         &self,
+        py: Python<'_>,
         other: &Self,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        crate::tree::diff_commits(self, other, paths)
+        py.detach(|| {
+            crate::tree::diff_commits(self, other, paths)
+        })
     }
 
     /// `jj diff --stat`'s numbers: lines added and removed at each
@@ -230,12 +221,15 @@ impl PyCommit {
     #[pyo3(signature = (other, settings, paths=None, compare="exact"))]
     fn diff_stats(
         &self,
+        py: Python<'_>,
         other: &Self,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
         compare: &str,
     ) -> PyResult<Vec<crate::tree::PyDiffStat>> {
-        crate::tree::diff_stats(self, other, settings, paths, compare)
+        py.detach(|| {
+            crate::tree::diff_stats(self, other, settings, paths, compare)
+        })
     }
 
     /// The per-file halves of `jj diff --git`: mode, abbreviated hash and
@@ -247,25 +241,15 @@ impl PyCommit {
     #[pyo3(signature = (other, settings, paths=None, copies=true))]
     fn git_diff(
         &self,
+        py: Python<'_>,
         other: &Self,
         settings: &crate::settings::PyUserSettings,
         paths: Option<Vec<String>>,
         copies: bool,
     ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
-        crate::tree::git_diff_files(self, other, settings, paths, copies)
-    }
-
-    /// Async sibling of `diff()`. Runs on tokio's blocking thread pool (see
-    /// the `aio` module docs) rather than on the calling thread.
-    #[pyo3(signature = (other, paths=None))]
-    fn diff_async<'py>(
-        &self,
-        py: Python<'py>,
-        other: Self,
-        paths: Option<Vec<String>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let from = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::tree::diff_commits(&from, &other, paths))
+        py.detach(|| {
+            crate::tree::git_diff_files(self, other, settings, paths, copies)
+        })
     }
 
     /// Like `diff()`, but detects copies and renames (backend-dependent —
@@ -274,39 +258,21 @@ impl PyCommit {
     #[pyo3(signature = (other, paths=None))]
     fn diff_with_copies(
         &self,
+        py: Python<'_>,
         other: &Self,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        crate::tree::diff_commits_with_copies(self, other, paths)
-    }
-
-    /// Async sibling of `diff_with_copies()`. Runs on tokio's blocking
-    /// thread pool (see the `aio` module docs) rather than on the calling
-    /// thread.
-    #[pyo3(signature = (other, paths=None))]
-    fn diff_with_copies_async<'py>(
-        &self,
-        py: Python<'py>,
-        other: Self,
-        paths: Option<Vec<String>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let from = self.clone();
-        crate::aio::spawn_blocking_py(py, move || {
-            crate::tree::diff_commits_with_copies(&from, &other, paths)
+        py.detach(|| {
+            crate::tree::diff_commits_with_copies(self, other, paths)
         })
     }
 
     /// The content of the file (or symlink target) at `path` in this
     /// commit's tree, as `bytes`.
-    fn read_file(&self, path: &str) -> PyResult<Vec<u8>> {
-        crate::file::read_file(self, path)
-    }
-
-    /// Async sibling of `read_file()`. Runs on tokio's blocking thread pool
-    /// (see the `aio` module docs) rather than on the calling thread.
-    fn read_file_async<'py>(&self, py: Python<'py>, path: String) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::file::read_file(&commit, &path))
+    fn read_file(&self, py: Python<'_>, path: &str) -> PyResult<Vec<u8>> {
+        py.detach(|| {
+            crate::file::read_file(self, path)
+        })
     }
 
     /// The bytes at each of `paths` in this commit's *merged parent*
@@ -315,70 +281,51 @@ impl PyCommit {
     /// paths.
     fn parent_contents(
         &self,
+        py: Python<'_>,
         repo: &PyReadonlyRepo,
         paths: Vec<String>,
     ) -> PyResult<std::collections::HashMap<String, Option<Vec<u8>>>> {
-        crate::file::parent_contents(self, repo, paths)
+        py.detach(|| {
+            crate::file::parent_contents(self, repo, paths)
+        })
     }
 
     /// Whether `path` names a regular/executable file or symlink in this
     /// commit's tree (`False` for directories, submodules, absent paths,
     /// and unresolved conflicts).
-    fn file_exists(&self, path: &str) -> PyResult<bool> {
-        crate::file::file_exists(self, path)
-    }
-
-    /// Async sibling of `file_exists()`. Runs on tokio's blocking thread
-    /// pool (see the `aio` module docs) rather than on the calling thread.
-    fn file_exists_async<'py>(&self, py: Python<'py>, path: String) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::file::file_exists(&commit, &path))
+    fn file_exists(&self, py: Python<'_>, path: &str) -> PyResult<bool> {
+        py.detach(|| {
+            crate::file::file_exists(self, path)
+        })
     }
 
     /// `jj file list [paths]` equivalent — every path in this commit's tree,
     /// optionally restricted to `paths` (see `pyjj_bindings.file.list_files`
     /// for the path-or-subtree matching rules).
     #[pyo3(signature = (paths=None))]
-    fn list_files(&self, paths: Option<Vec<String>>) -> PyResult<Vec<String>> {
-        crate::file::list_files(self, paths)
-    }
-
-    /// Async sibling of `list_files()`. Runs on tokio's blocking thread
-    /// pool (see the `aio` module docs) rather than on the calling thread.
-    #[pyo3(signature = (paths=None))]
-    fn list_files_async<'py>(
-        &self,
-        py: Python<'py>,
-        paths: Option<Vec<String>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::file::list_files(&commit, paths))
+    fn list_files(&self, py: Python<'_>, paths: Option<Vec<String>>) -> PyResult<Vec<String>> {
+        py.detach(|| {
+            crate::file::list_files(self, paths)
+        })
     }
 
     /// Whether `path` is a regular file with the executable bit set.
     /// `None` if `path` isn't a resolvable regular file (symlink,
     /// directory, submodule, absent, or conflicted) — see
     /// `pyjj_bindings.file.is_executable` for details.
-    fn is_executable(&self, path: &str) -> PyResult<Option<bool>> {
-        crate::file::is_executable(self, path)
-    }
-
-    /// Async sibling of `is_executable()`. Runs on tokio's blocking thread
-    /// pool (see the `aio` module docs) rather than on the calling thread.
-    fn is_executable_async<'py>(
-        &self,
-        py: Python<'py>,
-        path: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::file::is_executable(&commit, &path))
+    fn is_executable(&self, py: Python<'_>, path: &str) -> PyResult<Option<bool>> {
+        py.detach(|| {
+            crate::file::is_executable(self, path)
+        })
     }
 
     /// The kind of tree entry at `path` — `"file"`, `"symlink"`, `"dir"`,
     /// `"submodule"`, `"absent"`, `"file-conflict"`, or
     /// `"other-conflict"` (see `pyjj_bindings.file.file_kind`).
-    fn file_kind(&self, path: &str) -> PyResult<String> {
-        crate::file::file_kind(self, path)
+    fn file_kind(&self, py: Python<'_>, path: &str) -> PyResult<String> {
+        py.detach(|| {
+            crate::file::file_kind(self, path)
+        })
     }
 
     /// `jj`'s fileset matching against this commit's tree: `(matched,
@@ -386,11 +333,14 @@ impl PyCommit {
     /// `pyjj_bindings.file.match_filesets`).
     fn match_filesets(
         &self,
+        py: Python<'_>,
         settings: &crate::settings::PyUserSettings,
         workspace_root: &str,
         patterns: Vec<String>,
     ) -> PyResult<(Vec<String>, Vec<String>)> {
-        crate::file::match_filesets(self, settings, workspace_root, patterns)
+        py.detach(|| {
+            crate::file::match_filesets(self, settings, workspace_root, patterns)
+        })
     }
 
     /// Renders the conflict at `path` as conflict-marker text, the same
@@ -398,25 +348,12 @@ impl PyCommit {
     /// `path` isn't conflicted.
     fn materialize_conflict(
         &self,
+        py: Python<'_>,
         settings: &crate::settings::PyUserSettings,
         path: &str,
     ) -> PyResult<Vec<u8>> {
-        crate::conflicts::materialize_conflict(self, settings, path)
-    }
-
-    /// Async sibling of `materialize_conflict()`. Runs on tokio's blocking
-    /// thread pool (see the `aio` module docs) rather than on the calling
-    /// thread.
-    fn materialize_conflict_async<'py>(
-        &self,
-        py: Python<'py>,
-        settings: &crate::settings::PyUserSettings,
-        path: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        let settings = crate::settings::PyUserSettings(settings.0.clone());
-        crate::aio::spawn_blocking_py(py, move || {
-            crate::conflicts::materialize_conflict(&commit, &settings, &path)
+        py.detach(|| {
+            crate::conflicts::materialize_conflict(self, settings, path)
         })
     }
 
@@ -446,22 +383,13 @@ impl PyCommit {
     /// each line of `path` as it appears in this commit.
     fn annotate(
         &self,
+        py: Python<'_>,
         repo: &PyReadonlyRepo,
         path: &str,
     ) -> PyResult<Vec<crate::annotate::PyAnnotationLine>> {
-        crate::annotate::annotate(self, repo, path)
-    }
-
-    /// Async sibling of `annotate()`. Runs on tokio's blocking thread pool
-    /// (see the `aio` module docs) rather than on the calling thread.
-    fn annotate_async<'py>(
-        &self,
-        py: Python<'py>,
-        repo: PyReadonlyRepo,
-        path: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let commit = self.clone();
-        crate::aio::spawn_blocking_py(py, move || crate::annotate::annotate(&commit, &repo, &path))
+        py.detach(|| {
+            crate::annotate::annotate(self, repo, path)
+        })
     }
 
     fn __repr__(&self) -> String {
