@@ -9,13 +9,18 @@ Walk nodes in the topological order `log_graph()` already provides
 (descendants before ancestors), tracking one "lane" per in-flight edge.
 """
 
+from __future__ import annotations
+
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import pyjj_bindings as _bindings  # avoid circular `import pyjj` at module load
+if TYPE_CHECKING:
+    from pyjj_bindings import GraphNode
 
-# Re-export types for typing without importing pyjj at runtime
-GraphNode = _bindings.GraphNode
-CommitId = _bindings.CommitId
+# A lane waits to reach `(key, edge_type)`, or is idle.
+Lane = tuple[Hashable, str] | None
+Items = Sequence[tuple[Hashable, Sequence[tuple[Hashable, str]]]]
 
 
 @dataclass(frozen=True)
@@ -51,7 +56,7 @@ class LaneRow:
     width: int
 
 
-def layout_keyed(items) -> list[LaneRow]:
+def layout_keyed(items: Items) -> list[LaneRow]:
     """Lane layout for any DAG, not only a commit graph.
 
     `items` is a sequence of `(key, [(parent_key, edge_type), ...])` in
@@ -64,7 +69,7 @@ def layout_keyed(items) -> list[LaneRow]:
     # lets a second/third child converging on the same ancestor draw its
     # own correctly-typed merge line into that ancestor's row, instead
     # of the type getting lost the moment the lane was first opened.
-    lanes: list[tuple[object, str] | None] = []
+    lanes: list[Lane] = []
     rows: list[LaneRow] = []
 
     for key, parents in items:
@@ -117,7 +122,7 @@ def layout(nodes: list[GraphNode]) -> list[GraphRow]:
     ]
 
 
-def reverse_graph(items):
+def reverse_graph(items: Items) -> list[tuple[Hashable, list[tuple[Hashable, str]]]]:
     """The same DAG walked the other way.
 
     Each node's parents become its children and the order flips, which
@@ -125,14 +130,14 @@ def reverse_graph(items):
     Reversing the drawn rows instead would leave a merge's fork
     pointing the wrong way.
     """
-    children: dict = {}
+    children: dict[Hashable, list[tuple[Hashable, str]]] = {}
     for key, parents in items:
         for target, edge_type in parents:
             children.setdefault(target, []).append((key, edge_type))
     return [(key, children.get(key, [])) for key, _ in reversed(items)]
 
 
-def _allocate_lane(lanes: list[tuple[CommitId, str] | None]) -> int:
+def _allocate_lane(lanes: list[Lane]) -> int:
     for i, lane in enumerate(lanes):
         if lane is None:
             return i
@@ -140,10 +145,8 @@ def _allocate_lane(lanes: list[tuple[CommitId, str] | None]) -> int:
     return len(lanes) - 1
 
 
-def _find_or_allocate(
-    lanes: list[tuple[CommitId, str] | None], commit_id: CommitId
-) -> int:
+def _find_or_allocate(lanes: list[Lane], key: Hashable) -> int:
     for i, lane in enumerate(lanes):
-        if lane is not None and lane[0] == commit_id:
+        if lane is not None and lane[0] == key:
             return i
     return _allocate_lane(lanes)

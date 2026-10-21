@@ -10,4 +10,8 @@ from . import _async  # noqa: F401  (installs the *_async methods)
 from . import hunk
 from .session import Atomic, PyjjError, Repo, open
 
-__all__ = [*_bindings.__all__, "Atomic", "PyjjError", "Repo", "__version__", "hunk", "open"]
+# The generated stub has no `__all__`; the module has one at runtime.
+__all__ = [
+    *_bindings.__all__,  # type: ignore[attr-defined]
+    "Atomic", "PyjjError", "Repo", "__version__", "hunk", "open",
+]

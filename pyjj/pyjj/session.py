@@ -42,6 +42,18 @@ import pyjj_bindings as _bindings
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
+    from pyjj_bindings import (
+        AbsorbStats,
+        Commit,
+        GraphNode,
+        Transaction,
+        UserSettings,
+        Workspace,
+    )
+
+    Revisions = str | Sequence[str]
+    Hunks = dict[str, Sequence[int]]
+
 
 class PyjjError(Exception):
     """Something this API refused, worded for the caller.
@@ -76,7 +88,7 @@ def open(path: str | None = None) -> Repo:
 class Repo:
     """A loaded repository, and the things worth asking it directly."""
 
-    def __init__(self, workspace, settings) -> None:
+    def __init__(self, workspace: Workspace, settings: UserSettings) -> None:
         self._workspace = workspace
         self._settings = settings
         self._repo = workspace.load_at_head()
@@ -84,7 +96,7 @@ class Repo:
     def __enter__(self) -> Repo:
         return self
 
-    def __exit__(self, *_exc) -> None:
+    def __exit__(self, *_exc: object) -> None:
         return None
 
     def __repr__(self) -> str:
@@ -95,13 +107,13 @@ class Repo:
         return self._workspace.workspace_root
 
     @property
-    def settings(self):
+    def settings(self) -> UserSettings:
         """The `UserSettings` behind this repository, for the parts of
         `pyjj` this wrapper does not cover."""
         return self._settings
 
     @property
-    def workspace(self):
+    def workspace(self) -> Workspace:
         """The `Workspace`, likewise."""
         return self._workspace
 
@@ -116,7 +128,7 @@ class Repo:
         self._repo, _stats = self._workspace.snapshot(self._settings)
         return self
 
-    def resolve(self, revision: str):
+    def resolve(self, revision: str) -> Commit:
         """One commit, by any revset that names exactly one.
 
         A revset naming none or several is the caller's mistake, and
@@ -129,7 +141,7 @@ class Repo:
             e.add_note(f"revision {revision!r}")
             raise
 
-    def revset(self, revision: str) -> list:
+    def revset(self, revision: str) -> list[Commit]:
         """Every commit a revset names, in jj's order."""
         try:
             return self._repo.revset(self._settings, revision)
@@ -137,12 +149,12 @@ class Repo:
             e.add_note(f"revset {revision!r}")
             raise
 
-    def log(self, revision: str = "::@", limit: int | None = None) -> list:
+    def log(self, revision: str = "::@", limit: int | None = None) -> list[GraphNode]:
         """`jj log`'s rows: each commit with its edges to the ancestors
         the revset keeps."""
         return self._repo.log_graph(self._settings, revision, limit=limit)
 
-    def conflicts(self) -> list:
+    def conflicts(self) -> list[Commit]:
         """Every commit currently carrying a conflict."""
         return self.revset("conflicts()")
 
@@ -221,7 +233,7 @@ class Repo:
             fresh_repo,
             fresh_repo.get_commit(_bindings.CommitId(new_wc_hex)))
 
-    def _export_git_refs(self, transaction) -> None:
+    def _export_git_refs(self, transaction: Transaction) -> None:
         """What the CLI's transaction-finish does: a colocated repo
         exports bookmarks/tags and resets HEAD on every transaction.
 
@@ -243,11 +255,11 @@ class Atomic:
     reads as `jj squash --from @ --into @-` does.
     """
 
-    def __init__(self, repo: Repo, transaction, *, allow_immutable: bool) -> None:
+    def __init__(self, repo: Repo, transaction: Transaction, *, allow_immutable: bool) -> None:
         self._repo = repo
         self._tx = transaction
         self._allow_immutable = allow_immutable
-        self._touched: list = []
+        self._touched: list[Commit] = []
         self._discarded = False
         # What was already conflicted, so the block is judged on what
         # it introduced rather than on what it inherited.
@@ -261,12 +273,12 @@ class Atomic:
         return self._discarded
 
     @property
-    def transaction(self):
+    def transaction(self) -> Transaction:
         """The `Transaction`, for the parts of `pyjj` this does not
         cover. Anything done through it joins the same block."""
         return self._tx
 
-    def _commit(self, revision):
+    def _commit(self, revision: str | Commit) -> Commit:
         """A revision argument, as a commit. Accepts a commit already.
 
         **Resolved against the transaction, not against the repository
@@ -289,22 +301,22 @@ class Atomic:
                 "an operation needs exactly one")
         return self._repo._repo.get_commit(found[0])
 
-    def _commits(self, revisions) -> list:
+    def _commits(self, revisions: Revisions) -> list[Commit]:
         if isinstance(revisions, str):
             revisions = [revisions]
         return [self._commit(revision) for revision in revisions]
 
-    def _guard(self, commits) -> None:
+    def _guard(self, commits: Sequence[Commit]) -> None:
         """jj's own refusal to rewrite shared history."""
         if self._allow_immutable:
             return
         self._tx.check_rewritable(self._repo.settings,
                                   [commit.id for commit in commits])
 
-    def _record(self, *commits) -> None:
+    def _record(self, *commits: Commit | None) -> None:
         self._touched.extend(commit for commit in commits if commit is not None)
 
-    def _finish(self, *commits) -> None:
+    def _finish(self, *commits: Commit) -> None:
         """Rebase the block's descendants and record what a verb wrote.
 
         Every verb ends this way, so a later verb in the block sees
@@ -319,7 +331,7 @@ class Atomic:
 
     # ---- the operations -------------------------------------------------
 
-    def describe(self, revision: str = "@", *, message: str):
+    def describe(self, revision: str = "@", *, message: str) -> Commit:
         """`jj describe`: set a commit's description."""
         target = self._commit(revision)
         self._guard([target])
@@ -329,8 +341,8 @@ class Atomic:
         self._finish(written)
         return written
 
-    def new(self, parents: str | Sequence[str] = "@", *,
-            message: str | None = None, edit: bool = True):
+    def new(self, parents: Revisions = "@", *,
+            message: str | None = None, edit: bool = True) -> Commit:
         """`jj new`: a commit on top of `parents`.
 
         `edit` moves the working copy onto it, which is what `jj new`
@@ -349,7 +361,7 @@ class Atomic:
         self._finish(written)
         return written
 
-    def commit(self, *, message: str, revision: str = "@"):
+    def commit(self, *, message: str, revision: str = "@") -> Commit:
         """`jj commit`: describe the working-copy commit and start a
         new one on top, which is where the next edits land."""
         described = self.describe(revision, message=message)
@@ -357,7 +369,7 @@ class Atomic:
 
     def squash(self, revision: str = "@", *, into: str | None = None,
                paths: Sequence[str] | None = None,
-               hunks: dict | None = None, keep_emptied: bool = False):
+               hunks: Hunks | None = None, keep_emptied: bool = False) -> Commit:
         """`jj squash`: move a commit's changes into another.
 
         `into` defaults to the parent, as `jj squash` does. `paths`
@@ -388,9 +400,9 @@ class Atomic:
 
     def split(self, revision: str = "@", *,
               paths: Sequence[str] | None = None,
-              hunks: dict | None = None,
+              hunks: Hunks | None = None,
               message: str | None = None,
-              parallel: bool = False):
+              parallel: bool = False) -> tuple[Commit, Commit]:
         """`jj split`: cut a commit in two.
 
         The named `paths`/`hunks` become the first commit and the rest
@@ -417,11 +429,11 @@ class Atomic:
         self._finish(first, second)
         return first, second
 
-    def rebase(self, revisions: str | Sequence[str], *,
-               destination: str | Sequence[str] | None = None,
-               after: str | Sequence[str] | None = None,
-               before: str | Sequence[str] | None = None,
-               whole_branch: bool = False):
+    def rebase(self, revisions: Revisions, *,
+               destination: Revisions | None = None,
+               after: Revisions | None = None,
+               before: Revisions | None = None,
+               whole_branch: bool = False) -> list[Commit]:
         """`jj rebase`: move commits onto new parents.
 
         `destination` sets the parents outright; `after`/`before`
@@ -453,7 +465,7 @@ class Atomic:
                     self._repo.settings,
                     " | ".join(f"{c.id.hex()}+" for c in anchors))
                 if child not in moving]
-        else:
+        elif before is not None:
             anchors = self._commits(before)
             children = [c.id for c in anchors]
             parents = list(dict.fromkeys(
@@ -465,8 +477,8 @@ class Atomic:
         self._finish(*targets)
         return targets
 
-    def abandon(self, revisions: str | Sequence[str], *,
-                restore_descendants: bool = False):
+    def abandon(self, revisions: Revisions, *,
+                restore_descendants: bool = False) -> list[Commit]:
         """`jj abandon`: drop commits, rebasing what sat on them.
 
         `restore_descendants` keeps the descendants' own trees rather
@@ -483,7 +495,7 @@ class Atomic:
             self._tx.rebase_descendants(False)
         return targets
 
-    def duplicate(self, revisions: str | Sequence[str]):
+    def duplicate(self, revisions: Revisions) -> list[Commit]:
         """`jj duplicate`: copy commits, leaving the originals."""
         copies = self._tx.duplicate(self._commits(revisions))
         self._record(*copies)
@@ -491,7 +503,7 @@ class Atomic:
 
     def absorb(self, revision: str = "@", *,
                into: str | None = None,
-               paths: Sequence[str] | None = None):
+               paths: Sequence[str] | None = None) -> AbsorbStats:
         """`jj absorb`: push each change back into the ancestor that
         last touched those lines.
 
@@ -506,7 +518,7 @@ class Atomic:
         return stats
 
     def restore(self, paths: Sequence[str] | None = None, *,
-                into: str = "@", from_revision: str | None = None):
+                into: str = "@", from_revision: str | None = None) -> Commit:
         """`jj restore`: take paths from one revision into another.
 
         `from_revision` defaults to the parent of `into`, as `jj
@@ -523,8 +535,8 @@ class Atomic:
         self._finish(written)
         return written
 
-    def revert(self, revisions: str | Sequence[str], *,
-               destination: str = "@"):
+    def revert(self, revisions: Revisions, *,
+               destination: str = "@") -> list[Commit]:
         """`jj revert`: apply the reverse of commits as new commit(s).
 
         Each target becomes a chained child starting at `destination`,
@@ -546,7 +558,7 @@ class Atomic:
         self._finish(*out)
         return out
 
-    def bookmark(self, name: str, revision: str = "@"):
+    def bookmark(self, name: str, revision: str = "@") -> Commit:
         """`jj bookmark set`: point a bookmark at a commit."""
         target = self._commit(revision)
         self._tx.set_bookmark(name, target.id)
