@@ -22,6 +22,32 @@ use crate::settings::PyUserSettings;
 
 // ── ReadonlyRepo ────────────────────────────────────────────────────────────
 
+/// The local bookmarks and tags of a view, shared by `ReadonlyRepo` and
+/// `Transaction`, which differ only in where the view comes from.
+fn local_bookmarks(view: &jj_lib::view::View) -> Vec<PyBookmark> {
+    view.local_bookmarks()
+        .map(|(name, target)| PyBookmark::from_target(name, target))
+        .collect()
+}
+
+fn local_bookmark(view: &jj_lib::view::View, name: &str) -> Option<PyBookmark> {
+    let name = RefName::new(name);
+    let target = view.get_local_bookmark(name);
+    (!target.is_absent()).then(|| PyBookmark::from_target(name, target))
+}
+
+fn local_tags(view: &jj_lib::view::View) -> Vec<crate::tag::PyTag> {
+    view.local_tags()
+        .map(|(name, target)| crate::tag::PyTag::from_target(name, target))
+        .collect()
+}
+
+fn local_tag(view: &jj_lib::view::View, name: &str) -> Option<crate::tag::PyTag> {
+    let name = RefName::new(name);
+    let target = view.get_local_tag(name);
+    (!target.is_absent()).then(|| crate::tag::PyTag::from_target(name, target))
+}
+
 impl PyReadonlyRepo {
     /// Build the disambiguation context `shortest_*_prefix_len` shortens
     /// within, following `jj`'s own rule: `revsets.short-prefixes` if
@@ -207,11 +233,7 @@ impl PyReadonlyRepo {
 
     /// All local bookmarks, in lexicographical order.
     fn bookmarks(&self) -> Vec<PyBookmark> {
-        self.inner
-            .view()
-            .local_bookmarks()
-            .map(|(name, target)| PyBookmark::from_target(name, target))
-            .collect()
+        local_bookmarks(self.inner.view())
     }
 
     /// The interdiff of some commits against one, per file, in the same
@@ -342,11 +364,7 @@ impl PyReadonlyRepo {
     /// populated by `git_import_refs()` from real Git tags, though nothing
     /// prevents setting them by hand via `Transaction.set_tag()`.
     fn tags(&self) -> Vec<crate::tag::PyTag> {
-        self.inner
-            .view()
-            .local_tags()
-            .map(|(name, target)| crate::tag::PyTag::from_target(name, target))
-            .collect()
+        local_tags(self.inner.view())
     }
 
     /// Every remote tag, as `name@remote`.
@@ -371,13 +389,7 @@ impl PyReadonlyRepo {
 
     /// The named local tag, or `None` if it doesn't exist.
     fn get_tag(&self, name: &str) -> Option<crate::tag::PyTag> {
-        let ref_name = RefName::new(name);
-        let target = self.inner.view().get_local_tag(ref_name);
-        if target.is_absent() {
-            None
-        } else {
-            Some(crate::tag::PyTag::from_target(ref_name, target))
-        }
+        local_tag(self.inner.view(), name)
     }
 
     /// Names of all configured Git remotes.
@@ -392,13 +404,7 @@ impl PyReadonlyRepo {
 
     /// The named local bookmark, or `None` if it doesn't exist.
     fn get_bookmark(&self, name: &str) -> Option<PyBookmark> {
-        let ref_name = RefName::new(name);
-        let target = self.inner.view().get_local_bookmark(ref_name);
-        if target.is_absent() {
-            None
-        } else {
-            Some(PyBookmark::from_target(ref_name, target))
-        }
+        local_bookmark(self.inner.view(), name)
     }
 
     /// Convenience for revsets expected to resolve to exactly one commit.
@@ -805,26 +811,12 @@ impl PyTransaction {
     /// The named local bookmark as currently seen within this transaction,
     /// or `None` if it doesn't exist.
     fn get_bookmark(&self, name: &str) -> PyResult<Option<PyBookmark>> {
-        with_mut_repo(self, |mut_repo| {
-            let ref_name = RefName::new(name);
-            let target = mut_repo.get_local_bookmark(ref_name);
-            Ok(if target.is_absent() {
-                None
-            } else {
-                Some(PyBookmark::from_target(ref_name, &target))
-            })
-        })
+        with_mut_repo(self, |mut_repo| Ok(local_bookmark(mut_repo.view(), name)))
     }
 
     /// All local bookmarks as currently seen within this transaction.
     fn bookmarks(&self) -> PyResult<Vec<PyBookmark>> {
-        with_mut_repo(self, |mut_repo| {
-            Ok(mut_repo
-                .view()
-                .local_bookmarks()
-                .map(|(name, target)| PyBookmark::from_target(name, target))
-                .collect())
-        })
+        with_mut_repo(self, |mut_repo| Ok(local_bookmarks(mut_repo.view())))
     }
 
     /// Point a local tag at a commit, creating it if it didn't exist.
@@ -848,26 +840,12 @@ impl PyTransaction {
     /// The named local tag as currently seen within this transaction, or
     /// `None` if it doesn't exist.
     fn get_tag(&self, name: &str) -> PyResult<Option<crate::tag::PyTag>> {
-        with_mut_repo(self, |mut_repo| {
-            let ref_name = RefName::new(name);
-            let target = mut_repo.get_local_tag(ref_name);
-            Ok(if target.is_absent() {
-                None
-            } else {
-                Some(crate::tag::PyTag::from_target(ref_name, &target))
-            })
-        })
+        with_mut_repo(self, |mut_repo| Ok(local_tag(mut_repo.view(), name)))
     }
 
     /// All local tags as currently seen within this transaction.
     fn tags(&self) -> PyResult<Vec<crate::tag::PyTag>> {
-        with_mut_repo(self, |mut_repo| {
-            Ok(mut_repo
-                .view()
-                .local_tags()
-                .map(|(name, target)| crate::tag::PyTag::from_target(name, target))
-                .collect())
-        })
+        with_mut_repo(self, |mut_repo| Ok(local_tags(mut_repo.view())))
     }
 
     /// Rebase descendants after rewrites. Call this before `commit()`.
