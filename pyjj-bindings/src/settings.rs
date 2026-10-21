@@ -50,34 +50,6 @@ fn flatten_layer(
     }
 }
 
-/// Formats a config failure the way the `jj` CLI prints it, minus the
-/// `Config error: ` prefix and help footer (the CLI owns those): the top
-/// message, then the source chain -- inline when it is one link,
-/// numbered when it is several.
-fn error_chain_body(top: &dyn std::error::Error) -> String {
-    let mut body = top.to_string();
-    let mut chain: Vec<String> = Vec::new();
-    let mut source = top.source();
-    while let Some(error) = source {
-        chain.push(error.to_string());
-        source = error.source();
-    }
-    match chain.len() {
-        0 => {}
-        1 => {
-            body.push_str("\nCaused by: ");
-            body.push_str(&chain[0]);
-        }
-        _ => {
-            body.push_str("\nCaused by:");
-            for (index, link) in chain.iter().enumerate() {
-                body.push_str(&format!("\n{}: {link}", index + 1));
-            }
-        }
-    }
-    body
-}
-
 /// One `--config NAME=VALUE` as a `CommandArg` layer.
 ///
 /// Splits on the first `=`, so values may contain more of them. The
@@ -103,7 +75,7 @@ fn parse_config_pair(text: &str) -> Result<ConfigLayer, String> {
     let mut layer = ConfigLayer::empty(ConfigSource::CommandArg);
     layer
         .set_value(name, toml_value)
-        .map_err(|err| error_chain_body(&err))?;
+        .map_err(|err| crate::errors::error_chain_body(&err))?;
     Ok(layer)
 }
 
@@ -133,13 +105,13 @@ impl PyUserSettings {
     #[pyo3(signature = (load_config=true))]
     fn new(load_config: bool) -> PyResult<Self> {
         let config = if load_config {
-            crate::config::load_default_config().map_err(crate::errors::map_py_err)?
+            crate::config::load_default_config().map_err(crate::errors::map_config_err)?
         } else {
             jj_lib::config::StackedConfig::with_defaults()
         };
         let user_settings =
             UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-                .map_err(crate::errors::map_py_err)?;
+                .map_err(crate::errors::map_config_err)?;
         Ok(Self(user_settings))
     }
 
@@ -160,7 +132,7 @@ impl PyUserSettings {
         .map_err(crate::errors::map_py_err)?;
         let user_settings =
             UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-                .map_err(crate::errors::map_py_err)?;
+                .map_err(crate::errors::map_config_err)?;
         Ok(Self(user_settings))
     }
 
@@ -188,13 +160,13 @@ impl PyUserSettings {
         for (kind, text) in &args {
             match kind.as_str() {
                 "config" => {
-                    let layer = parse_config_pair(text).map_err(crate::errors::JjError::new_err)?;
+                    let layer = parse_config_pair(text).map_err(crate::errors::ConfigError::new_err)?;
                     config.add_layer(layer);
                 }
                 "config-file" => {
                     let path = std::path::PathBuf::from(text);
                     let content = std::fs::read_to_string(&path).map_err(|err| {
-                        crate::errors::JjError::new_err(format!(
+                        crate::errors::ConfigError::new_err(format!(
                             "Failed to read configuration file\n\
                              Caused by:\n\
                              1: Cannot access {}\n\
@@ -204,7 +176,7 @@ impl PyUserSettings {
                     })?;
                     let document: toml_edit::DocumentMut =
                         content.parse().map_err(|err: toml_edit::TomlError| {
-                            crate::errors::JjError::new_err(format!(
+                            crate::errors::ConfigError::new_err(format!(
                                 "Configuration cannot be parsed as TOML document\n\
                                  Caused by: {err}\n\
                                  Hint: Check the config file: {}",
@@ -216,14 +188,14 @@ impl PyUserSettings {
                     config.add_layer(layer);
                 }
                 _ => {
-                    return Err(crate::errors::JjError::new_err(format!(
+                    return Err(crate::errors::ConfigError::new_err(format!(
                         "unknown config argument kind `{kind}`"
                     )));
                 }
             }
         }
         let settings = UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
-            .map_err(|err| crate::errors::JjError::new_err(error_chain_body(&err)))?;
+            .map_err(|err| crate::errors::ConfigError::new_err(crate::errors::error_chain_body(&err)))?;
         Ok(Self(settings))
     }
 
@@ -262,12 +234,12 @@ impl PyUserSettings {
     /// itself reads arbitrary config via `StackedConfig::get`.
     fn get_string(&self, key: &str) -> PyResult<Option<String>> {
         let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
         })?;
         match self.0.config().get::<String>(path) {
             Ok(value) => Ok(Some(value)),
             Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_py_err(err)),
+            Err(err) => Err(crate::errors::map_config_err(err)),
         }
     }
 
@@ -276,12 +248,12 @@ impl PyUserSettings {
     /// raises `JjError` if present but not a string list.
     fn get_string_list(&self, key: &str) -> PyResult<Option<Vec<String>>> {
         let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
         })?;
         match self.0.config().get::<Vec<String>>(path) {
             Ok(value) => Ok(Some(value)),
             Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_py_err(err)),
+            Err(err) => Err(crate::errors::map_config_err(err)),
         }
     }
 
@@ -291,12 +263,12 @@ impl PyUserSettings {
     /// bool.
     fn get_bool(&self, key: &str) -> PyResult<Option<bool>> {
         let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
         })?;
         match self.0.config().get::<bool>(path) {
             Ok(value) => Ok(Some(value)),
             Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_py_err(err)),
+            Err(err) => Err(crate::errors::map_config_err(err)),
         }
     }
 
@@ -305,12 +277,12 @@ impl PyUserSettings {
     /// present but not an integer.
     fn get_int(&self, key: &str) -> PyResult<Option<i64>> {
         let path: jj_lib::config::ConfigNamePathBuf = key.parse().map_err(|err| {
-            crate::errors::JjError::new_err(format!("invalid config key `{key}`: {err}"))
+            crate::errors::ConfigError::new_err(format!("invalid config key `{key}`: {err}"))
         })?;
         match self.0.config().get::<i64>(path) {
             Ok(value) => Ok(Some(value)),
             Err(jj_lib::config::ConfigGetError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(crate::errors::map_py_err(err)),
+            Err(err) => Err(crate::errors::map_config_err(err)),
         }
     }
 
@@ -323,7 +295,7 @@ impl PyUserSettings {
         match self.0.config().get_table("fix.tools") {
             Ok(table) => Ok(table.iter().map(|(k, _)| k.to_string()).collect()),
             Err(ConfigGetError::NotFound { .. }) => Ok(vec![]),
-            Err(err) => Err(crate::errors::map_py_err(err)),
+            Err(err) => Err(crate::errors::map_config_err(err)),
         }
     }
 

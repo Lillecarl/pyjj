@@ -4,8 +4,8 @@ use jj_lib::backend::{ChangeId, CommitId, FileId, Signature, Timestamp, TreeId};
 use jj_lib::object_id::ObjectId as _;
 
 /// A commit's content hash — changes when the commit is rewritten.
-#[pyclass(name = "CommitId", frozen, from_py_object)]
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[pyclass(name = "CommitId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyCommitId(pub(crate) CommitId);
 
 #[pymethods]
@@ -21,9 +21,12 @@ impl PyCommitId {
         self.0.hex()
     }
 
-    /// First `n` hex characters of the full hex ID.
+    /// First `n` hex characters of the full hex ID, or all of it when `n`
+    /// is longer.
     fn short(&self, n: usize) -> String {
-        self.0.hex()[..n].to_string()
+        let mut hex = self.0.hex();
+        hex.truncate(n);
+        hex
     }
 
     fn __repr__(&self) -> String {
@@ -34,16 +37,7 @@ impl PyCommitId {
         self.0.hex()
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
 
-    fn __hash__(&self) -> u64 {
-        use std::hash::Hasher;
-        let mut h = std::hash::DefaultHasher::new();
-        std::hash::Hash::hash(&self.0, &mut h);
-        h.finish()
-    }
 }
 
 impl From<CommitId> for PyCommitId {
@@ -59,15 +53,18 @@ impl From<&CommitId> for PyCommitId {
 }
 
 /// A commit's stable identity — follows the commit across rewrites.
-#[pyclass(name = "ChangeId", frozen, from_py_object)]
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[pyclass(name = "ChangeId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyChangeId(pub(crate) ChangeId);
 
 #[pymethods]
 impl PyChangeId {
+    /// Accepts the forward hex and the reverse hex `str()` prints. The
+    /// alphabets (`0-9a-f` and `k-z`) do not overlap.
     #[new]
     fn new(hex: &str) -> PyResult<Self> {
         ChangeId::try_from_hex(hex)
+            .or_else(|| ChangeId::try_from_reverse_hex(hex))
             .map(Self)
             .ok_or_else(|| super::errors::JjError::new_err(format!("invalid ChangeId: {hex}")))
     }
@@ -90,16 +87,7 @@ impl PyChangeId {
         self.0.reverse_hex()
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
 
-    fn __hash__(&self) -> u64 {
-        use std::hash::Hasher;
-        let mut h = std::hash::DefaultHasher::new();
-        std::hash::Hash::hash(&self.0, &mut h);
-        h.finish()
-    }
 }
 
 impl From<ChangeId> for PyChangeId {
@@ -109,8 +97,8 @@ impl From<ChangeId> for PyChangeId {
 }
 
 /// A tree object identifier.
-#[pyclass(name = "TreeId", frozen, from_py_object)]
-#[derive(Clone)]
+#[pyclass(name = "TreeId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyTreeId(pub(crate) TreeId);
 
 #[pymethods]
@@ -130,14 +118,11 @@ impl PyTreeId {
         format!("TreeId({})", self.0.hex())
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
 }
 
 /// A file content identifier.
-#[pyclass(name = "FileId", frozen, from_py_object)]
-#[derive(Clone)]
+#[pyclass(name = "FileId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyFileId(pub(crate) FileId);
 
 #[pymethods]
@@ -157,14 +142,11 @@ impl PyFileId {
         format!("FileId({})", self.0.hex())
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
 }
 
 /// A timestamp with millisecond precision and a timezone offset.
-#[pyclass(name = "Timestamp", frozen, from_py_object)]
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[pyclass(name = "Timestamp", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyTimestamp(pub(crate) Timestamp);
 
 #[pymethods]
@@ -192,20 +174,11 @@ impl PyTimestamp {
         format!("Timestamp({}, {}min)", self.0.timestamp.0, self.0.tz_offset)
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
-    }
 
-    fn __hash__(&self) -> u64 {
-        use std::hash::Hasher;
-        let mut h = std::hash::DefaultHasher::new();
-        std::hash::Hash::hash(self, &mut h);
-        h.finish()
-    }
 }
 
 /// The name, email, and timestamp for a commit author or committer.
-#[pyclass(name = "Signature", frozen, from_py_object)]
+#[pyclass(name = "Signature", module = "pyjj_bindings", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PySignature(pub(crate) Signature);
 
@@ -239,16 +212,7 @@ impl PySignature {
         format!("Signature({} <{}>)", self.0.name, self.0.email)
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
-    }
 
-    fn __hash__(&self) -> u64 {
-        use std::hash::Hasher;
-        let mut h = std::hash::DefaultHasher::new();
-        std::hash::Hash::hash(self, &mut h);
-        h.finish()
-    }
 }
 
 impl From<Signature> for PySignature {

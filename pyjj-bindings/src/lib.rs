@@ -45,7 +45,7 @@ use converge::{
 };
 use errors::{
     BackendError, CheckoutError, GitExportError, GitFetchError, GitImportError, GitPushError,
-    IndexError, JjError, RepoInitError, RepoLoadError, RevsetEvalError, RevsetParseError,
+    ConfigError, JjError, RepoIndexError, RepoInitError, RepoLoadError, RevsetEvalError, RevsetParseError,
     TransactionError, WorkingCopyError, WorkspaceInitError, WorkspaceLoadError,
 };
 use fix::{PyFileToFix, PyFixSummary};
@@ -74,7 +74,8 @@ fn pyjj_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RepoInitError>()?;
     m.add_class::<RepoLoadError>()?;
     m.add_class::<BackendError>()?;
-    m.add_class::<IndexError>()?;
+    m.add_class::<RepoIndexError>()?;
+    m.add_class::<ConfigError>()?;
     m.add_class::<TransactionError>()?;
     m.add_class::<WorkspaceInitError>()?;
     m.add_class::<WorkspaceLoadError>()?;

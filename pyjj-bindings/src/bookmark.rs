@@ -9,8 +9,8 @@ use crate::ids::PyCommitId;
 ///
 /// More than one target id means the bookmark is conflicted (e.g. moved
 /// differently by concurrent operations) — check `has_conflict`.
-#[pyclass(name = "Bookmark", frozen, from_py_object)]
-#[derive(Clone)]
+#[pyclass(name = "Bookmark", module = "pyjj_bindings", frozen, eq, hash, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyBookmark {
     #[pyo3(get)]
     pub name: String,
@@ -44,12 +44,6 @@ impl PyBookmark {
     fn __repr__(&self) -> String {
         let conflict = if self.has_conflict { "True" } else { "False" };
         format!("Bookmark({}, conflict={conflict})", self.name)
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.has_conflict == other.has_conflict
-            && self.target_ids == other.target_ids
     }
 }
 

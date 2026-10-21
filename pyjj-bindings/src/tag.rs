@@ -14,8 +14,8 @@ use crate::ids::PyCommitId;
 /// than moved by hand, though nothing here prevents setting them directly.
 /// More than one target id means the tag is conflicted (e.g. moved
 /// differently by concurrent operations) — check `has_conflict`.
-#[pyclass(name = "Tag", frozen, from_py_object)]
-#[derive(Clone)]
+#[pyclass(name = "Tag", module = "pyjj_bindings", frozen, eq, hash, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyTag {
     #[pyo3(get)]
     pub name: String,
@@ -47,12 +47,6 @@ impl PyTag {
     fn __repr__(&self) -> String {
         let conflict = if self.has_conflict { "True" } else { "False" };
         format!("Tag({}, conflict={conflict})", self.name)
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.has_conflict == other.has_conflict
-            && self.target_ids == other.target_ids
     }
 }
 

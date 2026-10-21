@@ -11,7 +11,7 @@ use pyo3::pyclass_init::PyClassInitializer;
 /// masking the real error.
 macro_rules! py_error {
     ($name:ident, $base:ident) => {
-        #[pyclass(extends = $base)]
+        #[pyclass(extends = $base, module = "pyjj_bindings")]
         pub struct $name {
             #[pyo3(get)]
             pub message: String,
@@ -38,7 +38,7 @@ macro_rules! py_error {
 }
 
 // Base exception for all jj errors — must allow subclassing
-#[pyclass(subclass, extends = PyException)]
+#[pyclass(subclass, extends = PyException, module = "pyjj_bindings")]
 pub struct JjError {
     #[pyo3(get)]
     pub message: String,
@@ -62,7 +62,8 @@ impl JjError {
 py_error!(RepoInitError, JjError);
 py_error!(RepoLoadError, JjError);
 py_error!(BackendError, JjError);
-py_error!(IndexError, JjError);
+py_error!(RepoIndexError, JjError);
+py_error!(ConfigError, JjError);
 
 // Transaction errors
 py_error!(TransactionError, JjError);
@@ -91,20 +92,49 @@ py_error!(GitPushError, JjError);
 /// specific categories below (e.g. malformed ID strings, bad enum-ish string
 /// arguments).
 pub fn map_py_err(err: impl std::error::Error) -> PyErr {
-    JjError::new_err(err.to_string())
+    JjError::new_err(error_chain_body(&err))
+}
+
+/// The message and its source chain, as jj prints an error: inline when
+/// the chain has one link, numbered when it has several. jj_lib keeps the
+/// reason in `#[source]`, so the top message alone often says only what
+/// failed, not why.
+pub fn error_chain_body(top: &dyn std::error::Error) -> String {
+    let mut body = top.to_string();
+    let mut chain: Vec<String> = Vec::new();
+    let mut source = top.source();
+    while let Some(error) = source {
+        chain.push(error.to_string());
+        source = error.source();
+    }
+    match chain.len() {
+        0 => {}
+        1 => {
+            body.push_str("\nCaused by: ");
+            body.push_str(&chain[0]);
+        }
+        _ => {
+            body.push_str("\nCaused by:");
+            for (index, link) in chain.iter().enumerate() {
+                body.push_str(&format!("\n{}: {link}", index + 1));
+            }
+        }
+    }
+    body
 }
 
 /// Generates a `map_*_err(err) -> PyErr` helper for a specific error subclass.
 macro_rules! map_err_as {
     ($fn_name:ident, $error:ident) => {
         pub fn $fn_name(err: impl std::error::Error) -> PyErr {
-            $error::new_err(err.to_string())
+            $error::new_err(error_chain_body(&err))
         }
     };
 }
 
 map_err_as!(map_backend_err, BackendError);
-map_err_as!(map_index_err, IndexError);
+map_err_as!(map_index_err, RepoIndexError);
+map_err_as!(map_config_err, ConfigError);
 map_err_as!(map_transaction_err, TransactionError);
 map_err_as!(map_workspace_init_err, WorkspaceInitError);
 map_err_as!(map_workspace_load_err, WorkspaceLoadError);
