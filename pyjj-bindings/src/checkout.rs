@@ -14,11 +14,10 @@ use jj_lib::merged_tree_builder::MergedTreeBuilder;
 use jj_lib::op_store::OpStoreError;
 use jj_lib::object_id::ObjectId as _;
 use jj_lib::ref_name::WorkspaceName;
-use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
+use jj_lib::repo::{ReadonlyRepo, Repo as _};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 use jj_lib::settings::HumanByteSize;
 use jj_lib::store::Store;
-use jj_lib::transaction::Transaction;
 use jj_lib::ui_path::RepoPathUiConverter;
 use jj_lib::working_copy::{
     CheckoutStats, LockedWorkingCopy, SnapshotOptions, UntrackedReason, WorkingCopyFreshness,
@@ -307,15 +306,8 @@ pub fn snapshot(
         return Ok((wrap_repo(workspace, repo), outcome));
     }
 
-    let mut tx = Transaction::new(
-        MutableRepo::new(repo.clone(), repo.readonly_index(), repo.view()),
-        &settings.0,
-    );
-    tx.set_workspace_name(&workspace_name);
+    let mut tx = crate::repo::open_tx(&repo, &settings.0, &workspace_name, args);
     tx.set_is_snapshot(true);
-    if let Some(args) = args {
-        tx.set_attribute("args".to_string(), args);
-    }
     outcome.wc_immutable = crate::rewrite::is_immutable(
         tx.repo(),
         &workspace_root,
@@ -408,9 +400,8 @@ pub fn untrack_paths(
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
 
-    let index = repo.readonly_index();
-    let view = repo.view();
-    let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+    let mut tx = crate::repo::open_tx(&repo, &settings.0, &workspace_name, None);
+    let mut_repo = tx.repo_mut();
     let commit_builder = mut_repo.rewrite_commit(&old_commit).set_tree(new_tree);
     let new_commit = pollster::block_on(commit_builder.write()).map_err(map_backend_err)?;
     mut_repo
@@ -441,10 +432,9 @@ pub fn untrack_paths(
 
     // `finish_transaction`: a moved `@` resets Git HEAD and the index.
     if colocated {
-        crate::git::reset_head(&mut mut_repo, workspace_name.as_str(), &workspace_root)?;
-        crate::git::export_refs_only(&mut mut_repo)?;
+        crate::git::reset_head(mut_repo, workspace_name.as_str(), &workspace_root)?;
+        crate::git::export_refs_only(mut_repo)?;
     }
-    let tx = Transaction::new(mut_repo, &settings.0);
     let new_repo = pollster::block_on(tx.commit("untrack paths")).map_err(map_transaction_err)?;
     pollster::block_on(locked_ws.finish(new_repo.operation().id().clone()))
         .map_err(map_working_copy_err)?;

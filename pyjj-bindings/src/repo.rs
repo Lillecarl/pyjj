@@ -69,22 +69,13 @@ impl PyReadonlyRepo {
 impl PyReadonlyRepo {
     /// Start a new transaction to make changes to the repo.
     #[pyo3(signature = (settings, args=None))]
+    ///
+    /// Operation metadata (user, host) follows `settings`. Commits follow
+    /// the settings the repo was loaded with, as in jj_lib.
     fn start_transaction(&self, settings: &PyUserSettings, args: Option<String>) -> PyTransaction {
-        let base = self.inner.clone();
-        let index = base.readonly_index();
-        let view = base.view();
-        let mut_repo = MutableRepo::new(base.clone(), index, view);
-        let mut tx = Transaction::new(mut_repo, &settings.0);
-        // jj stamps the workspace on every transaction it starts, and
-        // the command line that started it. Without those the operation
-        // log records what happened but not where or how.
-        tx.set_workspace_name(&self.workspace_name);
-        if let Some(args) = args {
-            tx.set_attribute("args".to_string(), args);
-        }
         PyTransaction {
-            inner: RefCell::new(Some(tx)),
-            base_repo: base,
+            inner: RefCell::new(Some(open_tx(&self.inner, &settings.0, &self.workspace_name, args))),
+            settings: settings.0.clone(),
             workspace_root: self.workspace_root.clone(),
             workspace_name: self.workspace_name.clone(),
         }
@@ -613,10 +604,27 @@ pub struct PyTransaction {
     /// Using RefCell so we can take ownership for commit() while still
     /// allowing &mut access to the inner MutableRepo for builder methods.
     inner: RefCell<Option<Transaction>>,
-    #[allow(dead_code)]
-    base_repo: Arc<ReadonlyRepo>,
+    settings: jj_lib::settings::UserSettings,
     workspace_root: std::path::PathBuf,
     workspace_name: jj_lib::ref_name::WorkspaceNameBuf,
+}
+
+/// A transaction stamped the way jj stamps every one it starts: the
+/// workspace, and the command line when there is one. Open it before the
+/// work, so the operation records when the work started.
+pub(crate) fn open_tx(
+    repo: &Arc<ReadonlyRepo>,
+    settings: &jj_lib::settings::UserSettings,
+    workspace_name: &jj_lib::ref_name::WorkspaceName,
+    args: Option<String>,
+) -> Transaction {
+    let mut_repo = MutableRepo::new(repo.clone(), repo.readonly_index(), repo.view());
+    let mut tx = Transaction::new(mut_repo, settings);
+    tx.set_workspace_name(workspace_name);
+    if let Some(args) = args {
+        tx.set_attribute("args".to_string(), args);
+    }
+    tx
 }
 
 fn transaction_finished() -> PyErr {
@@ -867,9 +875,21 @@ impl PyTransaction {
     /// `true` deletes them -- matching the real CLI's `jj abandon`
     /// default (`--retain-bookmarks` opts back into moving). Rewritten
     /// (non-abandoned) commits always track their successors regardless.
+    ///
+    /// Commits in `immutable()` stay as they are, and so do their
+    /// descendants, as in jj: a fetch can move an immutable commit, and
+    /// its immutable descendants must not follow.
     #[pyo3(signature = (delete_abandoned_bookmarks=false))]
     fn rebase_descendants(&self, delete_abandoned_bookmarks: bool) -> PyResult<usize> {
-        with_mut_repo(self, |mut_repo| {
+        let settings = PyUserSettings(self.settings.clone());
+        with_tx(self, |tx| {
+            let immutable = crate::rewrite::immutable_or_none(
+                tx.base_repo().as_ref(),
+                &self.workspace_root,
+                &self.workspace_name,
+                &settings,
+            )?;
+            let mut_repo = tx.repo_mut();
             let options = jj_lib::rewrite::RebaseOptions {
                 rewrite_refs: jj_lib::rewrite::RewriteRefsOptions {
                     delete_abandoned_bookmarks,
@@ -878,7 +898,7 @@ impl PyTransaction {
             };
             let num_rebased = std::cell::Cell::new(0usize);
             pollster::block_on(mut_repo.rebase_descendants_with_options(
-                &jj_lib::revset::RevsetExpression::none(),
+                &immutable,
                 &options,
                 |_, _| num_rebased.set(num_rebased.get() + 1),
             ))
@@ -1567,8 +1587,7 @@ impl PyTransaction {
     ///
     /// Since jj 0.46 undoing an operation performed in another
     /// workspace is refused unless `allow_cross_workspace` is given;
-    /// pass the workspace the command runs in as `workspace_name`
-    /// (`None` skips the check, preserving the old behavior).
+    /// `workspace_name` defaults to this transaction's workspace.
     #[pyo3(signature = (workspace_name=None, allow_cross_workspace=false))]
     fn undo(
         &self,
@@ -1580,7 +1599,8 @@ impl PyTransaction {
         String,
     )> {
         with_mut_repo(self, |mut_repo| {
-            crate::oplog::undo(mut_repo, workspace_name.as_deref(), allow_cross_workspace)
+            let workspace_name = workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
+            crate::oplog::undo(mut_repo, Some(workspace_name.as_str()), allow_cross_workspace)
         })
     }
 
@@ -1598,7 +1618,8 @@ impl PyTransaction {
         String,
     )> {
         with_mut_repo(self, |mut_repo| {
-            crate::oplog::redo(mut_repo, workspace_name.as_deref(), allow_cross_workspace)
+            let workspace_name = workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
+            crate::oplog::redo(mut_repo, Some(workspace_name.as_str()), allow_cross_workspace)
         })
     }
 

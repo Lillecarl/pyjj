@@ -114,3 +114,23 @@ def test_clone_git_nonempty_destination_raises(bare_remote, settings, tmp_path):
     (dest / "existing.txt").write_text("already here\n")
     with pytest.raises(pyjj.JjError):
         pyjj.Workspace.clone_git(settings, str(bare_remote), str(dest))
+
+
+def test_failed_clone_removes_the_directory_it_created(settings, tmp_path):
+    dest = tmp_path / "dest"
+    with pytest.raises(pyjj.JjError):
+        pyjj.Workspace.clone_git(settings, str(tmp_path / "no-such-remote"), str(dest))
+    assert not dest.exists()
+
+
+def test_failed_clone_into_an_existing_directory_leaves_it_empty(settings, tmp_path):
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    with pytest.raises(pyjj.JjError):
+        pyjj.Workspace.clone_git(settings, str(tmp_path / "no-such-remote"), str(dest))
+    assert list(dest.iterdir()) == []
+
+
+def test_clone_operations_record_the_workspace(bare_remote, settings, tmp_path):
+    _ws, repo = pyjj.Workspace.clone_git(settings, str(bare_remote), str(tmp_path / "dest"))
+    assert repo.operation.workspace_name == "default"

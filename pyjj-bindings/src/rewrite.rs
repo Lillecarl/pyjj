@@ -648,6 +648,20 @@ pub fn is_immutable(
     Ok(first_in(repo, &immutable, vec![id.clone()])?.is_some())
 }
 
+/// `immutable()`, or the empty set without the alias
+/// (`UserSettings(load_config=False)`).
+pub fn immutable_or_none(
+    repo: &dyn jj_lib::repo::Repo,
+    workspace_root: &std::path::Path,
+    workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
+    settings: &crate::settings::PyUserSettings,
+) -> PyResult<std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression>> {
+    if settings.0.get_value(["revset-aliases", "immutable()"]).is_err() {
+        return Ok(jj_lib::revset::ResolvedRevsetExpression::none());
+    }
+    immutable_set(repo, workspace_root, workspace_name, settings)
+}
+
 fn immutable_set(
     repo: &dyn jj_lib::repo::Repo,
     workspace_root: &std::path::Path,

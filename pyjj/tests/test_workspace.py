@@ -49,3 +49,8 @@ def test_load_nonexistent_workspace_raises(tmp_path, settings):
 
 def test_workspace_repr_contains_root(workspace):
     assert workspace.workspace_root in repr(workspace)
+
+
+def test_add_workspace_records_the_new_workspace_on_its_operation(workspace, settings, tmp_path):
+    _ws, repo = workspace.add_workspace(settings, str(tmp_path / "second"))
+    assert repo.operation.workspace_name == "second"

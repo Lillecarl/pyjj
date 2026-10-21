@@ -8,11 +8,11 @@ use jj_lib::default_backend_factories::{
     default_backend_factories, default_working_copy_factories, default_working_copy_factory,
 };
 use jj_lib::file_util;
+use jj_lib::object_id::ObjectId as _;
 use jj_lib::ref_name::{RemoteName, WorkspaceNameBuf};
-use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo as _};
+use jj_lib::repo::{ReadonlyRepo, Repo as _};
 use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
-use jj_lib::transaction::Transaction as JjTransaction;
 use jj_lib::workspace::Workspace;
 use jj_lib::simple_workspace_store::SimpleWorkspaceStore;
 // The store *trait* moved to `jj-core` in 0.46 and is re-exported as
@@ -26,6 +26,7 @@ use crate::errors::{
     map_working_copy_err, map_workspace_init_err, map_workspace_load_err,
 };
 use crate::ids::PyCommitId;
+use crate::repo::open_tx;
 use crate::settings::PyUserSettings;
 
 /// The top-level entry point: a jj workspace (repo + working copy).
@@ -156,9 +157,8 @@ impl PyWorkspace {
         ))
         .map_err(map_workspace_init_err)?;
 
-        let index = repo.readonly_index();
-        let view = repo.view();
-        let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+        let mut tx = open_tx(&repo, &settings.0, &workspace_name, None);
+        let mut_repo = tx.repo_mut();
 
         let parents: Vec<Commit> = match revision_ids {
             Some(ids) if !ids.is_empty() => ids
@@ -178,7 +178,7 @@ impl PyWorkspace {
             },
         };
         let tree =
-            pollster::block_on(merge_commit_trees(&mut_repo, &parents)).map_err(map_backend_err)?;
+            pollster::block_on(merge_commit_trees(mut_repo, &parents)).map_err(map_backend_err)?;
         let parent_ids = parents.iter().map(|c| c.id().clone()).collect();
         let mut builder = mut_repo.new_commit(parent_ids, tree);
         if let Some(text) = &description {
@@ -195,11 +195,10 @@ impl PyWorkspace {
         // `checkout::snapshot` has).
         pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
         if colocate {
-            crate::git::reset_head(&mut mut_repo, workspace_name.as_str(), new_ws.workspace_root())?;
-            crate::git::export_refs_only(&mut mut_repo)?;
+            crate::git::reset_head(mut_repo, workspace_name.as_str(), new_ws.workspace_root())?;
+            crate::git::export_refs_only(mut_repo)?;
         }
 
-        let tx = JjTransaction::new(mut_repo, &settings.0);
         let new_repo = pollster::block_on(tx.commit(format!(
             "create initial working-copy commit in workspace {}",
             workspace_name.as_str()
@@ -233,6 +232,18 @@ impl PyWorkspace {
         };
         crate::checkout::check_out(&mut new_ws, &py_repo, &fresh_commit)?;
         Ok((Self::new(new_ws), py_repo))
+    }
+}
+
+/// What `jj git clone` removes when the clone fails, so a retry finds the
+/// destination as it was: the directory if the clone created it, else
+/// `.jj` and `.git` inside it.
+fn remove_failed_clone(path: &std::path::Path, created: bool) {
+    if created {
+        let _ = std::fs::remove_dir_all(path);
+    } else {
+        let _ = std::fs::remove_dir_all(path.join(".jj"));
+        let _ = std::fs::remove_dir_all(path.join(".git"));
     }
 }
 
@@ -397,7 +408,8 @@ impl PyWorkspace {
         py.detach(move || {
             let remote_name = remote_name.unwrap_or_else(|| "origin".to_string());
             let path = std::path::Path::new(&destination_path);
-            if !path.exists() {
+            let created = !path.exists();
+            if created {
                 std::fs::create_dir_all(path)
                     .map_err(|err| JjError::new_err(format!("{destination_path}: {err}")))?;
             } else if !file_util::is_empty_dir(path).map_err(map_backend_err)? {
@@ -405,9 +417,9 @@ impl PyWorkspace {
                     "destination path exists and is not an empty directory",
                 ));
             }
-
+            let result = (|| {
             let kind = resolve_object_hash(settings, object_hash)?;
-            let (_initial_ws, repo) = if colocate {
+            let (initial_ws, repo) = if colocate {
                 pollster::block_on(Workspace::init_colocated_git(
                     &settings.0,
                     path,
@@ -423,11 +435,8 @@ impl PyWorkspace {
             .map_err(map_workspace_init_err)?;
 
             // Add the remote.
-            let index = repo.readonly_index();
-            let view = repo.view();
-            let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
-            crate::git::add_remote(&mut mut_repo, &remote_name, &url, None)?;
-            let tx = JjTransaction::new(mut_repo, &settings.0);
+            let mut tx = open_tx(&repo, &settings.0, initial_ws.workspace_name(), None);
+            crate::git::add_remote(tx.repo_mut(), &remote_name, &url, None)?;
             let repo = pollster::block_on(tx.commit(format!("add git remote {remote_name}")))
                 .map_err(map_transaction_err)?;
 
@@ -448,9 +457,8 @@ impl PyWorkspace {
                 pollster::block_on(new_ws.repo_loader().load_at(&op)).map_err(map_repo_load_err)?;
 
             // Fetch everything, and see if the remote told us a default branch.
-            let index = repo.readonly_index();
-            let view = repo.view();
-            let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+            let mut tx = open_tx(&repo, &settings.0, new_ws.workspace_name(), None);
+            let mut_repo = tx.repo_mut();
             // Naming branches or tags narrows the whole clone, the
             // way `-b`/`--tag` do: unnamed bookmarks are not asked
             // for at all.
@@ -477,7 +485,7 @@ impl PyWorkspace {
                 None => jj_lib::str_util::StringExpression::all(),
             };
             let fetch_result = crate::git::fetch_all_inner(
-                &mut mut_repo,
+                mut_repo,
                 settings,
                 &remote_name,
                 bookmark,
@@ -513,19 +521,18 @@ impl PyWorkspace {
             }
             // jj creates the local bookmark only when the working branch
             // is the remote's own default, the way git clone does.
-            let default_branch_commit: Option<Commit> = match &working {
-                Some(name) => match present(name) {
+            let checkout: Option<(String, Commit)> = match working {
+                Some(name) => match present(&name) {
                     Some(commit_id) => {
-                        if Some(name) == default_name.as_ref() {
+                        if Some(&name) == default_name.as_ref() {
                             let symbol = jj_lib::ref_name::RefName::new(name.as_str())
                                 .to_remote_symbol(RemoteName::new(&remote_name));
                             pollster::block_on(mut_repo.track_remote_bookmark(symbol))
                                 .map_err(|err| JjError::new_err(err.to_string()))?;
                         }
-                        Some(
-                            pollster::block_on(mut_repo.store().get_commit_async(&commit_id))
-                                .map_err(map_backend_err)?,
-                        )
+                        let commit = pollster::block_on(mut_repo.store().get_commit_async(&commit_id))
+                            .map_err(map_backend_err)?;
+                        Some((name, commit))
                     }
                     None => None,
                 },
@@ -535,13 +542,12 @@ impl PyWorkspace {
             // way jj's own transaction finish does: the tracked bookmarks
             // it just created must exist as git refs too.
             if colocate {
-                crate::git::export_refs_only(&mut mut_repo)?;
+                crate::git::export_refs_only(mut_repo)?;
             }
-            let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit("fetch from git remote into empty repo"))
                 .map_err(map_transaction_err)?;
 
-            let Some(commit) = default_branch_commit else {
+            let Some((branch, commit)) = checkout else {
                 let py_repo = wrap_repo(&new_ws, repo);
                 return Ok((
                     Self::new(new_ws),
@@ -549,9 +555,8 @@ impl PyWorkspace {
                 ));
             };
 
-            let index = repo.readonly_index();
-            let view = repo.view();
-            let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+            let mut tx = open_tx(&repo, &settings.0, new_ws.workspace_name(), None);
+            let mut_repo = tx.repo_mut();
             // `check_out` (not `edit`) -- creates a fresh, empty child commit
             // on top of the branch and moves the working copy there, same as
             // `jj new <branch>` / real `jj git clone`'s own `tx.check_out()`.
@@ -563,13 +568,11 @@ impl PyWorkspace {
             pollster::block_on(mut_repo.rebase_descendants()).map_err(map_transaction_err)?;
             if colocate {
                 let name = new_ws.workspace_name().to_owned();
-                crate::git::reset_head(&mut mut_repo, name.as_str(), path)?;
-                crate::git::export_refs_only(&mut mut_repo)?;
+                crate::git::reset_head(mut_repo, name.as_str(), path)?;
+                crate::git::export_refs_only(mut_repo)?;
             }
-            let tx = JjTransaction::new(mut_repo, &settings.0);
             let repo = pollster::block_on(tx.commit(format!(
-                "check out git remote's branch: {}",
-                fetch_result.default_branch.as_ref().unwrap().as_str()
+                "check out git remote's branch: {branch}"
             )))
             .map_err(map_transaction_err)?;
 
@@ -582,6 +585,11 @@ impl PyWorkspace {
                 Self::new(new_ws),
                 py_repo,
             ))
+            })();
+            if result.is_err() {
+                remove_failed_clone(path, created);
+            }
+            result
         })
     }
 
@@ -647,11 +655,9 @@ impl PyWorkspace {
     /// mere presence of a `.git` entry (an unrelated repo's file
     /// there would lie).
     fn is_colocated(&self, py: Python<'_>) -> PyResult<bool> {
-        self.with_ws(py, |inner| {
-            let repo = pollster::block_on(inner.repo_loader().load_at_head())
-                .map_err(map_repo_load_err)?;
-            is_colocated(inner, repo.store())
-        })
+        // The store alone answers it; loading at head can write an
+        // operation that reconciles divergent heads.
+        self.with_ws(py, |inner| is_colocated(inner, inner.repo_loader().store()))
     }
 
     /// Create the Git worktree backing an existing secondary workspace at
@@ -666,12 +672,10 @@ impl PyWorkspace {
         destination_path: String,
     ) -> PyResult<()> {
         self.with_ws(py, move |inner| {
-        let repo =
-            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
             .map_err(crate::errors::map_py_err)?;
         jj_lib::git::create_worktree(
-            repo.store(),
+            inner.repo_loader().store(),
             options,
             std::path::Path::new(&destination_path),
         )
@@ -694,12 +698,10 @@ impl PyWorkspace {
         workspace_path: String,
     ) -> PyResult<bool> {
         self.with_ws(py, move |inner| {
-        let repo =
-            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
         let options = jj_lib::git::GitSubprocessOptions::from_settings(&settings.0)
             .map_err(crate::errors::map_py_err)?;
         jj_lib::git::unlink_worktree(
-            repo.store(),
+            inner.repo_loader().store(),
             options,
             std::path::Path::new(&workspace_path),
         )
@@ -833,7 +835,19 @@ impl PyWorkspace {
                     drop(locked_ws);
                     Ok(None)
                 }
-                WorkingCopyFreshness::WorkingCopyStale | WorkingCopyFreshness::SiblingOperation => {
+                // jj refuses here too: checking out would discard the state
+                // of an operation the log does not hold.
+                WorkingCopyFreshness::SiblingOperation => {
+                    Err(crate::errors::WorkingCopyError::new_err(format!(
+                        "The repo was loaded at operation {}, which seems to be a sibling \
+                         of the working copy's operation {}. Run `jj op integrate {}` to \
+                         add the working copy's operation to the operation log.",
+                        &repo.inner.op_id().hex()[..12],
+                        &locked_ws.locked_wc().old_operation_id().hex()[..12],
+                        &locked_ws.locked_wc().old_operation_id().hex()[..12],
+                    )))
+                }
+                WorkingCopyFreshness::WorkingCopyStale => {
                     let stats =
                         pollster::block_on(locked_ws.locked_wc().check_out(&desired_commit))
                             .map_err(map_checkout_err)?;
@@ -975,9 +989,8 @@ impl PyWorkspace {
             // `SimpleWorkspaceStore::load(repo_path)` anymore).
             let workspace_store = repo.loader().workspace_store();
 
-            let index = repo.readonly_index();
-            let view = repo.view();
-            let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+            let mut tx = open_tx(&repo, &settings.0, inner.workspace_name(), None);
+            let mut_repo = tx.repo_mut();
             for name in &names {
                 pollster::block_on(mut_repo.remove_workspace(name.as_ref()))
                     .map_err(|err| JjError::new_err(err.to_string()))?;
@@ -1008,7 +1021,6 @@ impl PyWorkspace {
                     )
                 }
             });
-            let tx = JjTransaction::new(mut_repo, &settings.0);
             let new_repo =
                 pollster::block_on(tx.commit(description)).map_err(map_transaction_err)?;
             Ok(wrap_repo(&inner, new_repo))
@@ -1047,9 +1059,12 @@ impl PyWorkspace {
             // Same correctly-located store as in `forget_workspaces`.
             let workspace_store = repo.loader().workspace_store();
 
-            let index = repo.readonly_index();
-            let view = repo.view();
-            let mut mut_repo = MutableRepo::new(repo.clone(), index, view);
+            // The working-copy lock first, as jj takes it: a failure to lock
+            // must leave the store and the view alone.
+            let mut locked_ws = pollster::block_on(inner.start_working_copy_mutation())
+                .map_err(map_working_copy_err)?;
+            let mut tx = open_tx(&repo, &settings.0, &old_name, None);
+            let mut_repo = tx.repo_mut();
             mut_repo
                 .rename_workspace(&old_name, new_name.clone())
                 .map_err(|err| JjError::new_err(err.to_string()))?;
@@ -1057,8 +1072,6 @@ impl PyWorkspace {
                 .rename(&old_name, &new_name)
                 .map_err(|err| JjError::new_err(err.to_string()))?;
 
-            let mut locked_ws = pollster::block_on(inner.start_working_copy_mutation())
-                .map_err(map_working_copy_err)?;
             locked_ws.locked_wc().rename_workspace(new_name.clone());
 
             let description = format!(
@@ -1066,7 +1079,6 @@ impl PyWorkspace {
                 old_name.as_str(),
                 new_name.as_str()
             );
-            let tx = JjTransaction::new(mut_repo, &settings.0);
             let new_repo =
                 pollster::block_on(tx.commit(description)).map_err(map_transaction_err)?;
 

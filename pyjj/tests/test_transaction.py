@@ -138,3 +138,26 @@ def test_commit_with_unrebased_descendants_raises_and_keeps_transaction(repo, se
     repo = tx.commit("rebased")
     rebased = repo.revset(settings, child.change_id.reverse_hex())
     assert rebased[0].parent_ids == [edited.id]
+
+
+def test_rebase_descendants_leaves_immutable_descendants_alone(repo, settings, wc_commit):
+    tx = repo.start_transaction(settings)
+    child = tx.new_commit(settings, [wc_commit.id]).set_description("child").write()
+    tx.rebase_descendants()
+    repo = tx.commit("add child")
+
+    pinned = pyjj.UserSettings(load_config=False).with_command_args(
+        [("config", f'revset-aliases."immutable()"="{child.id.hex()}"')])
+    tx = repo.start_transaction(pinned)
+    tx.rewrite_commit(pinned, wc_commit).set_description("parent edited").write()
+    assert tx.rebase_descendants() == 0
+    repo = tx.commit("edit parent")
+    assert repo.get_commit(child.id).id == child.id
+
+
+def test_undo_defaults_to_the_transactions_own_workspace(workspace, repo, settings, tmp_path):
+    _other_ws, _ = workspace.add_workspace(settings, str(tmp_path / "other"))
+    repo = workspace.load_at_head()
+    tx = repo.start_transaction(settings)
+    with pytest.raises(pyjj.JjError, match="(?i)workspace"):
+        tx.undo()
