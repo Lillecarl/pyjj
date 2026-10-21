@@ -436,11 +436,10 @@ def test_resolve_verbatim_output_is_taken_as_is(pair: RepoPair) -> None:
 
 
 @pytest.mark.covers("resolve", "--tool")
-def test_resolve_unchanged_output_still_commits(pair: RepoPair) -> None:
+def test_resolve_unchanged_output_fails_without_writing(pair: RepoPair) -> None:
+    """Upstream's EmptyOrUnchanged on the first file: the command fails
+    and records no operation."""
     conflict_pair(pair)
-    # Upstream's EmptyOrUnchanged path: nothing resolved, but the commit
-    # is rewritten (committer-timestamp bump) and the operation recorded --
-    # then the command fails.
     pair.op(
         jj=["resolve", "--tool", "parity-merge"],
         merge_spec={"op": "unchanged"},
@@ -465,6 +464,28 @@ def test_resolve_specific_file_only(pair: RepoPair) -> None:
     pair.op(jj=["resolve", "--tool", "parity-write", "g.txt"],
             merge_spec={"op": "pick_right"})
     # f.txt stays conflicted; only g.txt resolved.
+    pair.assert_parity()
+
+
+@pytest.mark.covers("resolve", "--tool")
+def test_resolve_keeps_files_resolved_before_an_unchanged_one(
+        pair: RepoPair) -> None:
+    """EmptyOrUnchanged after the first file: the files resolved so far
+    are committed, then the command fails."""
+    pair.init()
+    pair.op(files={"f.txt": b"f0\n", "g.txt": b"g0\n"},
+            jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "one"])
+    pair.op(files={"f.txt": b"F1\n", "g.txt": b"G1\n"}, jj=["status"])
+    pair.op(jj=["new", rev("base"), "-m", "two"])
+    pair.op(files={"f.txt": b"F2\n", "g.txt": b"G2\n"}, jj=["status"])
+    pair.op(jj=["new", rev("one"), rev("two"), "-m", "merge"])
+    pair.op(jj=["resolve", "--tool", "parity-merge"],
+            merge_spec={"op": "by_path", "paths": {
+                "f.txt": {"op": "pick_left"},
+                "g.txt": {"op": "unchanged"},
+            }},
+            may_fail=True)
     pair.assert_parity()
 
 

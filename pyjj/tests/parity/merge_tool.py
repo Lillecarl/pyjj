@@ -15,6 +15,9 @@ What gets written to $output is driven by PARITY_MERGE_SPEC (JSON):
                                  the current $output content with `text`
   {"op": "unchanged"}            touch nothing (upstream EmptyOrUnchanged)
   {"op": "abort"}                exit 1 (upstream ToolAborted)
+  {"op": "by_path",
+   "paths": {PATH: spec, ..}}    apply the spec named for PATH; needs
+                                 --marker mode, the one that passes $path
 
 Launched without PARITY_MERGE_SPEC it exits 9 loudly, so a scenario can
 never silently pass by forgetting to arm the tool.
@@ -60,6 +63,9 @@ def main() -> int:
     output_path = sys.argv[5]
 
     op = spec["op"]
+    if op == "by_path":
+        spec = spec["paths"][sys.argv[6]]
+        op = spec["op"]
     if op == "abort":
         return 1
     if op == "unchanged":

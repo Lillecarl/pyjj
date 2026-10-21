@@ -1,7 +1,12 @@
 """resolve subcommand: resolve."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _check_rewritable,
     _finish,
@@ -11,14 +16,22 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+_EMPTY_OR_UNCHANGED = (
+    "The output file is either unchanged or empty after the editor quit "
+    "(run with --debug to see the exact invocation).")
+
+
 @command
-def resolve(args) -> int:
+def resolve(args: argparse.Namespace) -> int:
     """`jj resolve [-r REV] [--tool NAME] [FILESETS]`: run a 3-way merge
     tool per conflicted file. Mirrors upstream ordering: conflict listing
     and tool runs happen before any mutation (an aborted tool leaves no
-    operation), the commit is rewritten even when nothing resolved, and
-    leftover conflicts are reported as an error AFTER the operation
-    commits."""
+    operation). A file the tool leaves empty or unchanged stops the run:
+    the first file aborts it with nothing written, a later one keeps the
+    files resolved so far and fails after the operation commits."""
     with write_tx(args) as (settings, ws, repo, tx):
         commit = _resolve_one(repo, settings, args.revision)
 
@@ -67,6 +80,7 @@ def resolve(args) -> int:
             )
 
             resolutions: dict[str, bytes] = {}
+            stopped = False
             for p in conflicts:
                 sides = dict(commit.conflict_sides(p))
                 materialized = commit.materialize_conflict(settings, p)
@@ -74,23 +88,24 @@ def resolve(args) -> int:
                                       edits_markers, bytes(materialized))
                 initial = bytes(materialized) if edits_markers else b""
                 if not out or out == initial:
-                    # Upstream's EmptyOrUnchanged: leave this path conflicted
-                    # and keep going with the remaining files.
-                    continue
+                    if not resolutions:
+                        print(f"Error: {_EMPTY_OR_UNCHANGED}", file=sys.stderr)
+                        return 1
+                    stopped = True
+                    break
                 resolutions[p] = out
 
             _check_rewritable(tx, settings, [commit])
-            if resolutions:
-                builder = tx.resolve_conflicts(commit, resolutions)
-            else:
-                # Nothing changed, but real jj still rewrites the commit
-                # (committer-timestamp bump) and records the operation.
-                builder = tx.rewrite_commit(commit)
-            new_commit = builder.write(repo)
+            new_commit = tx.resolve_conflicts(commit, resolutions).write(repo)
             if commit.id.hex() == repo.view().get(ws.workspace_name):
                 tx.set_wc_commit(ws.workspace_name, new_commit.id)
             _finish(tx, f"Resolve conflicts in commit {commit.id.hex()}",
                     settings, ws, repo)
+            if stopped:
+                print(f"Error: Stopped due to error after resolving "
+                      f"{len(resolutions)} conflicts", file=sys.stderr)
+                print(f"Caused by: {_EMPTY_OR_UNCHANGED}", file=sys.stderr)
+                return 1
 
         unresolved = []
         for p in conflicts:
