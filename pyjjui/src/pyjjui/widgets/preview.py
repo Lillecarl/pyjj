@@ -7,6 +7,7 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.message import Message
 from textual.widgets import Static
+from typing_extensions import override
 
 import pyjj
 
@@ -35,6 +36,7 @@ class Preview(VerticalScroll):
         super().__init__(**kwargs)
         self._body = Static()
 
+    @override
     def compose(self):
         yield self._body
 

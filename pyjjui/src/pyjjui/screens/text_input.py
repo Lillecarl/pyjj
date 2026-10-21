@@ -6,6 +6,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label
+from typing_extensions import override
 
 
 class TextInputScreen(ModalScreen[str | None]):
@@ -31,6 +32,7 @@ class TextInputScreen(ModalScreen[str | None]):
         self._prompt = prompt
         self._initial_value = initial_value
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(self._prompt)

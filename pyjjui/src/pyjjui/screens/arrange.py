@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Label
+from typing_extensions import override
 
 import pyjj
 from pyjjui.arrange_plan import ArrangeState, PlanEntry
@@ -61,6 +62,7 @@ class ArrangeScreen(ModalScreen[list[PlanEntry] | None]):
         self._commits = commits
         self._rows: list[str] = []
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("Arrange -- swaps reorder, abandon drops on confirm")

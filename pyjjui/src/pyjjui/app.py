@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
+from typing_extensions import override
 
 import pyjj
 
@@ -78,6 +79,7 @@ class PyjjuiApp(App[None]):
         repo = workspace.load_at_head()
         self.state = AppState(workspace=workspace, settings=settings, repo=repo, revset=revset)
 
+    @override
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():

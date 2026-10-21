@@ -10,11 +10,12 @@ from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import DataTable
 from textual.widgets.data_table import RowKey
+from typing_extensions import override
 
 import pyjj
 
 
-class LogView(DataTable):
+class LogView(DataTable[Text]):
     """Shows the current revset's commits as a graph, one row per commit."""
 
     # `j`/`k` alongside the DataTable's own up/down: jjui convention, adapted
@@ -59,6 +60,7 @@ class LogView(DataTable):
         self._wc_commit_id: pyjj.CommitId | None = None
         self._bookmarks_by_commit: dict[pyjj.CommitId, list[str]] = {}
 
+    @override
     def on_mount(self) -> None:
         self.add_column("graph", key="graph")
         self.add_column("commit", key="commit")

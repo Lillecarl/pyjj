@@ -8,9 +8,10 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, SelectionList
+from typing_extensions import override
 
 
-class _PathList(SelectionList):
+class _PathList(SelectionList[str]):
     """`j`/`k` alongside `SelectionList`'s own up/down -- `space` (already
     bound by `SelectionList` itself) toggles a path.
     """
@@ -53,6 +54,7 @@ class SplitScreen(ModalScreen[list[str] | None]):
         super().__init__()
         self._paths = paths
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("Select paths for the first commit -- space to toggle")

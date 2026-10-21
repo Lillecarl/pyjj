@@ -10,6 +10,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Label, Static
+from typing_extensions import override
 
 
 @dataclass
@@ -70,6 +71,7 @@ class ConfirmScreen(ModalScreen[ConfirmResult]):
         self._remember_key = remember_key
         self._detail = detail
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(self._message)

@@ -132,12 +132,15 @@ def rebase(
     tx = repo.start_transaction(settings)
 
     if include_descendants:
-        target_commit_ids, target_root_ids = [], [sources[0].id]
+        target_commit_ids: list[pyjj.CommitId] = []
+        target_root_ids = [sources[0].id]
     else:
-        target_commit_ids, target_root_ids = [c.id for c in sources], []
+        target_commit_ids = [c.id for c in sources]
+        target_root_ids: list[pyjj.CommitId] = []
 
     if mode == "onto":
-        new_parent_ids, new_child_ids = [destination.id], []
+        new_parent_ids = [destination.id]
+        new_child_ids: list[pyjj.CommitId] = []
     elif mode == "after":
         children = repo.revset(settings, f"children({destination.id.hex()})")
         new_parent_ids, new_child_ids = [destination.id], [c.id for c in children]

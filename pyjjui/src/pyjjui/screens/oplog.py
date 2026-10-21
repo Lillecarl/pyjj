@@ -21,6 +21,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Label, Static
 from textual.widgets.data_table import RowKey
+from typing_extensions import override
 
 import pyjj
 
@@ -28,7 +29,7 @@ from ..render.diff import render_commit_diff
 from .files import FilesScreen
 
 
-class _OpTable(DataTable):
+class _OpTable(DataTable[str]):
     """`j`/`k` alongside DataTable's own up/down, `l` to move focus into
     the diff pane -- same hjkl convention as `LogView`/`Preview`.
     """
@@ -58,6 +59,7 @@ class DiffPane(VerticalScroll):
         super().__init__(**kwargs)
         self._body = Static()
 
+    @override
     def compose(self) -> ComposeResult:
         yield self._body
 
@@ -118,6 +120,7 @@ class OpLogScreen(ModalScreen[pyjj.Operation | None]):
         self._marked_index: int | None = None
         self._row_keys: list[RowKey] = []
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(

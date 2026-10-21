@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Label
+from typing_extensions import override
 
 import pyjj
 
@@ -51,6 +52,7 @@ class RebaseScreen(ModalScreen[RebasePlan | None]):
         self._sources = sources
         self._destination = destination
 
+    @override
     def compose(self) -> ComposeResult:
         source_desc = ", ".join(c.change_id.hex()[:8] for c in self._sources)
         dest_desc = self._destination.change_id.hex()[:8]

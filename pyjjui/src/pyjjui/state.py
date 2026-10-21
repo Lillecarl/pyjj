@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import anyio.to_thread
+
 import pyjj
 
 from . import config as pyjjui_config

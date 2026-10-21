@@ -8,7 +8,7 @@ version = "0.1.0"  # independent; pyjj/pyjj-bindings track the jj release
 description = "Textual TUI for Jujutsu VCS, built on pyjj"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = ["pyjj", "textual", "anyio"]
+dependencies = ["pyjj", "textual", "anyio", "typing-extensions"]
 
 [project.scripts]
 pyjjui = "pyjjui.__main__:main"
@@ -17,6 +17,6 @@ pyjjui = "pyjjui.__main__:main"
 anyio_mode = "auto"
 
 [tool.pyrefly]
-preset = "default"
+preset = "strict"
 project-includes = ["src"]
 python-version = "3.11"

@@ -18,6 +18,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Label, Static
+from typing_extensions import override
 
 import pyjj
 
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 _MAX_PREVIEW_BYTES = 512 * 1024
 
 
-class _FileTable(DataTable):
+class _FileTable(DataTable[str]):
     """`j`/`k` alongside `DataTable`'s own up/down, `l` to move focus into
     the content pane -- same hjkl convention as `LogView`/`Preview` and
     `OpLogScreen`'s `_OpTable`/`DiffPane`.
@@ -63,6 +64,7 @@ class ContentPane(VerticalScroll):
         super().__init__(**kwargs)
         self._body = Static()
 
+    @override
     def compose(self) -> ComposeResult:
         yield self._body
 
@@ -122,6 +124,7 @@ class FilesScreen(ModalScreen[None]):
         self._current_index = 0
         self._marked: set[str] = set()
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(f"Files in {self._commit.change_id.hex()[:8]}")
