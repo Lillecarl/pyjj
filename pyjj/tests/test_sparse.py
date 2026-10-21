@@ -30,7 +30,7 @@ def test_narrowing_sparse_patterns_removes_unmatched_files_on_disk(workspace, se
     assert workspace.sparse_patterns() == ["dir"]
     assert not (root / "a.txt").exists()
     assert (root / "dir" / "b.txt").exists()
-    assert stats["removed_files"] >= 1
+    assert stats.removed_files >= 1
 
 
 def test_widening_sparse_patterns_restores_files_on_disk(workspace, settings):
@@ -44,7 +44,7 @@ def test_widening_sparse_patterns_restores_files_on_disk(workspace, settings):
     assert workspace.sparse_patterns() == [""]
     assert (root / "a.txt").exists()
     assert (root / "dir" / "b.txt").exists()
-    assert stats["added_files"] >= 1
+    assert stats.added_files >= 1
 
 
 def test_sparse_patterns_dont_affect_the_committed_tree(workspace, settings):
@@ -91,3 +91,16 @@ def test_sparse_pattern_changes_dont_create_a_new_operation(workspace, repo, set
 
     reloaded = workspace.load_at_head()
     assert reloaded.operation.id == op_before
+
+
+def test_a_new_workspace_copies_the_sparse_patterns(workspace, settings, tmp_path):
+    Path(workspace.workspace_root, "dir").mkdir()
+    Path(workspace.workspace_root, "dir", "b.txt").write_text("b\n")
+    Path(workspace.workspace_root, "top.txt").write_text("t\n")
+    workspace.snapshot(settings)
+    workspace.set_sparse_patterns(["dir"])
+    second = tmp_path.parent / (tmp_path.name + "-sparse-copy")
+    second.mkdir()
+    new_ws, _repo = workspace.add_workspace(settings, str(second))
+    assert new_ws.sparse_patterns() == ["dir"]
+    assert not (second / "top.txt").exists()

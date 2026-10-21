@@ -207,12 +207,19 @@ impl PyWorkspace {
 
         let py_repo = wrap_repo(&new_ws, new_repo);
         let mut new_ws = new_ws;
-        if let Some(patterns) = sparse_patterns {
-            // Narrow first when the caller asked for less than everything.
-            let patterns = patterns
+        // `jj workspace add` defaults to `--sparse-patterns=copy`.
+        let patterns: Vec<RepoPathBuf> = match sparse_patterns {
+            Some(patterns) => patterns
                 .iter()
                 .map(|p| crate::tree::repo_path(p))
-                .collect::<PyResult<_>>()?;
+                .collect::<PyResult<_>>()?,
+            None => inner
+                .working_copy()
+                .sparse_patterns()
+                .map_err(map_working_copy_err)?
+                .to_vec(),
+        };
+        if patterns != [RepoPathBuf::root()] {
             crate::checkout::set_sparse_patterns(&mut new_ws, patterns)?;
         }
         // Materialize the new working-copy commit's tree, the way `jj
@@ -915,8 +922,9 @@ impl PyWorkspace {
     /// object is unaffected by this call (call `load_at_head()` again on it
     /// to see the new workspace show up in `view()`).
     /// `description` becomes the new working-copy commit's message, and
-    /// `sparse_patterns` its sparse patterns -- `None` leaves the
-    /// workspace unrestricted, which is what a fresh one is.
+    /// `sparse_patterns` its sparse patterns. `None` copies this
+    /// workspace's patterns, as `jj workspace add` does; `[""]` is the
+    /// whole repo and `[]` is nothing.
     /// `colocate` backs the new workspace with a Git worktree and points
     /// its HEAD at the new `@`'s first parent.
     #[pyo3(signature = (settings, destination_path, name=None, revision_ids=None,

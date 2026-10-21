@@ -60,18 +60,11 @@ def _should_colocate(ws, settings, args) -> bool:
 
 
 def _sparse_patterns(ws, args):
-    """What the new workspace's sparse patterns start as.
-
-    A fresh workspace is unrestricted, so `full` -- and the `copy` of an
-    unrestricted workspace -- has nothing to set, which is what `None`
-    says. `empty` starts with no path at all.
-    """
+    """What the new workspace's sparse patterns start as. `None` is
+    `copy`, the binding's default as it is jj's; `[""]` is everything."""
     choice = getattr(args, "sparse_patterns", "copy")
     if choice == "empty":
         return []
     if choice == "full":
-        return None
-    patterns = ws.sparse_patterns()
-    # `[""]` is jj's spelling of "everything", which is where a fresh
-    # workspace already starts.
-    return None if not patterns or patterns == [""] else patterns
+        return [""]
+    return None
