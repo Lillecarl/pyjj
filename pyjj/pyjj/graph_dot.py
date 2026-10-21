@@ -276,11 +276,13 @@ def resolve_abandons(
     for key in nodes:
         if key in abandoned:
             continue
-        parents: list[tuple[str, str]] = []
+        # Two edges can resolve to one commit (a merge of A and B, with
+        # A abandoned onto B); jj-lib keeps the first, so this does too.
+        parents: dict[str, str] = {}
         for target, kind in edges.get(key, []):
-            parents.extend((resolved_target, kind)
-                           for resolved_target in resolve_target(target, frozenset()))
-        resolved[key] = parents
+            for resolved_target in resolve_target(target, frozenset()):
+                parents.setdefault(resolved_target, kind)
+        resolved[key] = list(parents.items())
     kept = [key for key in nodes if key not in abandoned]
     ordered = [key for key in nodes if key in abandoned]
     return kept, resolved, ordered

@@ -252,17 +252,15 @@ def test_abandonment_resolves_recursively():
     assert resolve_plan(kept, resolved, current) == [("d", ["a"])]
 
 
-def test_abandonment_that_meets_again_is_a_repeated_parent():
-    """`y` points at `x` and `w`, both abandoned onto `p`: the
-    resolved graph names `p` twice, which `resolve_plan` refuses
-    like any hand-written duplicate."""
+def test_abandonment_that_meets_again_names_the_parent_once():
+    """`y` points at `x` and `w`, both abandoned onto `p`: `y` lands on
+    `p` once, as jj-lib's rewrite does."""
     nodes = ["y", "x", "w", "p"]
     edges = _edges(y=["x", "w"], x=["p"], w=["p"], p=["base"])
     current = {"y": ["x", "w"], "x": ["p"], "w": ["p"], "p": ["base"]}
     kept, resolved, _abandons = resolve_abandons(
         nodes, edges, current, {"x", "w"})
-    with pytest.raises(PlanError, match="twice"):
-        resolve_plan(kept, resolved, current)
+    assert resolve_plan(kept, resolved, current) == [("y", ["p"])]
 
 
 def test_abandoned_nodes_pointing_at_each_other_resolve_forever():
@@ -300,3 +298,14 @@ def test_an_abandoned_nodes_own_edges_are_ignored():
     assert kept == ["a"]
     assert abandons == ["b"]
     assert resolve_plan(kept, resolved, current) == []
+
+
+def test_an_abandon_folding_two_parents_into_one_keeps_one_edge():
+    """`m` merges `a` and `b`, and `a` sits on `b`: abandoning `a` leaves
+    `m` on `b` once, as jj-lib does, not on `b` twice."""
+    nodes = ["m", "a", "b"]
+    edges = _edges(m=["a", "b"], a=["b"], b=["base"])
+    current = {"m": ["a", "b"], "a": ["b"], "b": ["base"]}
+    kept, resolved, _abandons = resolve_abandons(nodes, edges, current, {"a"})
+    assert resolved["m"] == [("b", "direct")]
+    assert resolve_plan(kept, resolved, current) == [("m", ["b"])]
