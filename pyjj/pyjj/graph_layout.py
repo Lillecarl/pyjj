@@ -5,6 +5,8 @@ Moved here from pyjjui so both pyjjui and pyjj-cli can reuse it
 without depending on each other. Pure Python, no Textual, no
 argcomplete — only `pyjj.GraphNode`/`pyjj.CommitId`.
 
+pyjj keeps this layout by choice, beside jj's renderdag in `GraphRenderer`.
+
 Walk nodes in the topological order `log_graph()` already provides
 (descendants before ancestors), tracking one "lane" per in-flight edge.
 """

@@ -122,7 +122,8 @@ basedpyright:
 - What: jj-lib's `rewritten_ids_with` (repo.rs:1197-1234) skips visited ids. Here, M = merge(A, B), A on B, abandon A gives M parents `[B, B]`, and `resolve_plan` raises "names parent B twice" (`dotprobe.log`).
 - Fix: dedupe in `resolve_target`'s caller, keeping first occurrence order.
 
-### [medium] Graph layout: Rust should own it (extends 04)
+### [medium] Graph layout: Rust should own it (extends 04) -- declined
+- Outcome: declined. pyjj keeps graph_layout.py and its Jinja templates by choice, where jj's Rust could serve.
 - Where: graph_layout.py:54-149 vs graph.rs:146-218.
 - Decision: Rust. renderdag is jj's own layout and pyjj's parity suite compares against jj. renderdag's `GraphRowRenderer` already yields structured rows (node column, per-column `LinkLine` flags) keyed by any `Hash + Eq` type, so `String` keys serve log, op log and evolog. Expose that as a `GraphRow` pyclass, and reduce graph_layout.py to a glyph adapter for pyjjui. Keep `reverse_graph`, `resolve_plan` and `resolve_abandons` in Python: they are pure, small and have no jj counterpart to drift from.
 

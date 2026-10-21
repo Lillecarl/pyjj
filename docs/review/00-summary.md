@@ -76,6 +76,6 @@ Fixes that share a root cause are grouped. Do each group as one change set.
 7. **Inputs and panics.** Validate repo paths (04). Fix `CommitId.short` and the `clone_git` unwrap (01), the debug unwrap (04) and lock poisoning (02). Then decide one panic policy. Add `clone_git` cleanup (03).
 8. **Error taxonomy.** A `JjErrorClass` trait with the source chain, a `ConfigError`, and a renamed `IndexError` (02). `PyjjError` keeps the jj class (05). Return data, not CLI text (04).
 9. **Types and packaging.** Use the declarative module, `experimental-inspect` and rename `from` (01). Ship `py.typed`. Build `pyjj.__all__` from the stub. Set `requires-python >=3.11` and move pygraphviz to an extra. Gate CI on ruff and `mypy --strict` (05).
-10. **Shape and DRY.** Add the macros (01). Use keyword-only arguments, enums and `PathBuf` (03). Expose renderdag rows to Python and make graph_layout.py a glyph adapter (04, 05).
+10. **Shape and DRY.** Add the macros (01). Use keyword-only arguments, enums and `PathBuf` (03). Declined: moving the graph layout to renderdag (04, 05). pyjj keeps its Python layout and its Jinja templates by choice.
 
 Groups 1 and 2 stop crashes and data loss. Group 3 has the largest reach: one pattern closes the deadlock, the GIL audit, the async split and most of the typing gap.
