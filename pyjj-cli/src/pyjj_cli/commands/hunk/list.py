@@ -1,16 +1,22 @@
 """hunk subcommand: hunk_list."""
+
+from __future__ import annotations
+
 import json
 import sys
-from typing import Any
-
-import yaml
+from typing import TYPE_CHECKING, Any
 
 import pyjj.hunk as hunk_mod
+import yaml
+
 from ..common import (
     _resolve_one,
     command,
     read_repo,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 
 def _status(before: bytes | None, after: bytes | None) -> str:
@@ -22,7 +28,7 @@ def _status(before: bytes | None, after: bytes | None) -> str:
 
 
 @command(catch=(ValueError,))
-def hunk_list(args) -> int:
+def hunk_list(args: argparse.Namespace) -> int:
     """`pyjj hunk list [-r REV] [--format json|yaml|text]` — list hunks like jj-hunk."""
     with read_repo(args) as (settings, ws, repo):
         target = _resolve_one(repo, settings, args.revision)

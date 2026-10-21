@@ -1,9 +1,16 @@
 """hunk subcommand: _load_spec."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj.hunk as hunk_mod
 
-def _load_spec(args) -> hunk_mod.Spec:
+if TYPE_CHECKING:
+    import argparse
+
+def _load_spec(args: argparse.Namespace) -> hunk_mod.Spec:
     """Load spec from args.spec / args.spec_file / stdin, handling '-'."""
     spec_str = getattr(args, "spec", None)
     spec_file = getattr(args, "spec_file", None)
@@ -23,7 +30,7 @@ def _resolve_message_arg(msg: str | None, use_stdin: bool) -> str | None:
         return text
     return msg
 
-def _hunk_spec(args, cmd: str, *, require_message: bool) -> tuple[hunk_mod.Spec, str | None] | None:
+def _hunk_spec(args: argparse.Namespace, cmd: str, *, require_message: bool) -> tuple[hunk_mod.Spec, str | None] | None:
     """Normalize `--spec`/`--spec-file`/positional `<spec>` (+ message) into a loaded Spec.
 
     `cmd` is the command name used in refusal text (e.g. `"hunk split"`).

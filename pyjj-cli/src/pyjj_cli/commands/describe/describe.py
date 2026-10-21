@@ -1,20 +1,28 @@
 """describe subcommand: describe."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _check_rewritable,
     _finish,
     _resolve_all,
     _resolve_one,
-    join_message_paragraphs,
     _run_editor,
-    write_tx,
     command,
+    join_message_paragraphs,
+    write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def describe(args) -> int:
+def describe(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         revsets = list(args.revisions_pos or [])
         if args.revisions_opt:

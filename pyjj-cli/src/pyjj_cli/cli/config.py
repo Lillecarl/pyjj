@@ -1,14 +1,20 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .flags import add_config_file_flag, add_config_scope_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def _config_help(args):
+
+def _config_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj config {get,list,set,unset}", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_config = sub.add_parser("config", help="Manage config options")
     p_config.set_defaults(_handler="pyjj_cli.cli.config:_config_help")
     config_sub = p_config.add_subparsers(dest="config_command")

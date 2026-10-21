@@ -1,16 +1,24 @@
 """git subcommand: git_init."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _start_transaction,
     apply_config_args,
     maybe_add_gitignore,
 )
 
-def git_init(args) -> int:
+if TYPE_CHECKING:
+    import argparse
+
+def git_init(args: argparse.Namespace) -> int:
     """`jj git init` — create a new jj repo backed by Git.
 
     jj puts the git repo at the workspace root by default, so git tools
@@ -73,8 +81,8 @@ def git_init(args) -> int:
     return 0
 
 
-def _check_out_git_head(settings, workspace_name: str, destination: Path,
-                          git_dir: Path, repo):
+def _check_out_git_head(settings: pyjj.UserSettings, workspace_name: str, destination: Path,
+                          git_dir: Path, repo: pyjj.ReadonlyRepo):
     """Move a fresh external init onto a child of the git HEAD commit,
     returning the repo to print.
 

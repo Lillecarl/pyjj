@@ -1,14 +1,20 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .flags import Flag, add_flags, add_revision_flag
 
+if TYPE_CHECKING:
+    import argparse
 
-def _file_help(args):
+
+def _file_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj file {list,show,annotate}", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_file = sub.add_parser("file", help="File operations")
     p_file.set_defaults(_handler="pyjj_cli.cli.file:_file_help")
     file_sub = p_file.add_subparsers(dest="file_command")

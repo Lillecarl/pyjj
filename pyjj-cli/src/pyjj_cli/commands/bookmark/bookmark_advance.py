@@ -1,5 +1,9 @@
 """bookmark subcommand: bookmark_advance."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _finish,
     _resolve_one,
@@ -7,8 +11,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def bookmark_advance(args) -> int:
+def bookmark_advance(args: argparse.Namespace) -> int:
     """`jj bookmark advance [NAMES] --to <rev>`: move bookmarks forward.
 
     Only a named bookmark that already sits on an ancestor of the target

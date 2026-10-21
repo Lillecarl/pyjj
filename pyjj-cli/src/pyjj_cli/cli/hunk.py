@@ -1,14 +1,20 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .flags import Flag, add_flags, add_revision_flag
 
+if TYPE_CHECKING:
+    import argparse
 
-def _hunk_help(args):
+
+def _hunk_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj hunk {list,split,commit,squash,schema}", file=sys.stderr)
     return 2
 
 
-def _hunk_root(args):
+def _hunk_root(args: argparse.Namespace):
     if getattr(args, "json_schema", False):
         # lazy load heavy handler
         from pyjj_cli.commands.hunk.schema import hunk_schema
@@ -17,7 +23,7 @@ def _hunk_root(args):
     return _hunk_help(args)
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_hunk = sub.add_parser("hunk", help="Hunk-level selection for AI agents (like jj-hunk)")
     add_flags(p_hunk, [Flag.JSON_SCHEMA])
     p_hunk.set_defaults(_handler="pyjj_cli.cli.hunk:_hunk_root")

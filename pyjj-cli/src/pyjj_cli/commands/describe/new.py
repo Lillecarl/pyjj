@@ -1,20 +1,28 @@
 """describe subcommand: new."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyjj
+
 from ..common import (
     _check_rewritable,
     _commit_location,
-    _insert_between,
     _finish,
+    _insert_between,
     _resolve_in_arg_order,
     _wc_commit,
+    command,
     complete_newline,
     write_tx,
-    command,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def new(args) -> int:
+def new(args: argparse.Namespace) -> int:
     """`jj new [REVSETS]`: create an empty change.
 
     `-A`/`-B` insert the change into the graph rather than appending it:

@@ -4,17 +4,24 @@ Prints jj commands and runs none of them. The plan is the artifact: an
 agent reads it, and a wrong graph shows up as a wrong command instead
 of as a rewritten repository.
 """
+
+from __future__ import annotations
+
 import json
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
-from ..common import CommandError, read_repo, command
+from ..common import CommandError, command, read_repo
 from .resolve import read_graph, resolve
+
+if TYPE_CHECKING:
+    import argparse
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def plan(args) -> int:
+def plan(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
         try:
             steps, abandons, commits = resolve(repo, settings,

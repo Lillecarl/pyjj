@@ -6,11 +6,20 @@ that result. Conflicts are an outcome of the reshape, never an input,
 and a node with no commit behind it is an error rather than a commit to
 invent.
 """
+
+from __future__ import annotations
+
 import sys
 
+from pyjj.graph_dot import (
+    DotError,
+    PlanError,
+    parse_dot_graph,
+    resolve_abandons,
+    resolve_plan,
+)
+
 import pyjj
-from pyjj.graph_dot import (DotError, PlanError, parse_dot_graph, resolve_abandons,
-                            resolve_plan)
 
 from ..common import CommandError
 
@@ -25,7 +34,7 @@ def read_graph(path: str) -> str:
         raise CommandError(f"cannot read {path}: {e.strerror}") from e
 
 
-def resolve_one(repo, settings, key: str):
+def resolve_one(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, key: str):
     """The commit a node names, by change id or commit id.
 
     A divergent change names several commits and jj refuses to resolve
@@ -39,7 +48,7 @@ def resolve_one(repo, settings, key: str):
             f"node {key!r}: {getattr(e, 'message', e)}") from e
 
 
-def resolve(repo, settings, text: str):
+def resolve(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, text: str):
     """`(steps, abandons, commits)` -- the reshape, and every commit it
     names.
 

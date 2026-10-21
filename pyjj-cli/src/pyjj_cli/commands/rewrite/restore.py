@@ -1,23 +1,32 @@
 """pyjj-cli rewrite command: restore."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
+    _changed_files,
     _check_rewritable,
-    command,
     _finish,
     _resolve_one,
     _rev,
-    _changed_files,
-    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
+    _split_changed,
+    command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 
 @command
-def restore(args) -> int:
+def restore(args: argparse.Namespace) -> int:
     try:
         with write_tx(args) as (settings, ws, repo, tx):
             changes_in = getattr(args, "changes_in", None)
@@ -68,7 +77,7 @@ def restore(args) -> int:
     return 0
 
 
-def _selected(repo, settings, tool, dst, src):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, dst, src):
     """What the diff editor chose the destination should hold.
 
     jj puts the destination's current content on the left and the

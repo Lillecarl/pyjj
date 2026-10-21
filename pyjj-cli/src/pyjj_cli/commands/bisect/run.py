@@ -6,13 +6,20 @@ operations matters: each candidate is checked out in its own
 transaction described `Updated to revision <hex> for bisection`, the
 same shape `jj` writes, so the operation log comes out the same.
 """
+
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ..common import CommandError, _finish, _load, _reload, _start_transaction
+
+if TYPE_CHECKING:
+    import argparse
 
 # The exit-status protocol `jj bisect run` documents.
 _SKIP_STATUS = 125
@@ -29,13 +36,13 @@ def _evaluation_for(status: int) -> str:
     return "bad"
 
 
-def _summary(commit) -> str:
+def _summary(commit: pyjj.Commit) -> str:
     """A one-line commit summary, in the shape `pyjj log` uses."""
     description = commit.description.splitlines()[0] if commit.description else "(no description set)"
     return f"{commit.change_id.reverse_hex()[:8]} {commit.id.hex()[:8]} {description}"
 
 
-def bisect_run(args) -> int:
+def bisect_run(args: argparse.Namespace) -> int:
     if not getattr(args, "cmd", None):
         print("Error: Command argument is required", file=sys.stderr)
         return 2
@@ -61,7 +68,7 @@ def bisect_run(args) -> int:
         extra = extra[1:]
     argv = [args.cmd] + extra
 
-    def _check_out(commit) -> int | None:
+    def _check_out(commit: pyjj.Commit) -> int | None:
         """Check out `commit` for one evaluation, like `evaluate_commit`
         in `cli/src/commands/bisect/run.rs` does. Returns None, or an
         exit code when the checkout itself failed."""
@@ -78,7 +85,7 @@ def bisect_run(args) -> int:
             return 1
         return None
 
-    def _evaluate(commit):
+    def _evaluate(commit: pyjj.Commit):
         """Run the command against `commit`; returns (evaluation, status)."""
         env = os.environ.copy()
         # jj also sets JJ_EXECUTABLE_PATH (its own binary); there is no

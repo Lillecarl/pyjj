@@ -1,12 +1,28 @@
 """command: parallelize — make a chain of revisions siblings."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
+from ..common import (
+    _check_rewritable,
+    _finish,
+    _reload,
+    _resolve_all,
+    _start_transaction,
+    command,
+    write_tx,
+)
 
-from ..common import _check_rewritable, _finish, _reload, _resolve_all, _start_transaction, command, write_tx
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
 
 
 @command
-def parallelize(args) -> int:
+def parallelize(args: argparse.Namespace) -> int:
     """`jj parallelize [REVSETS]`: turn a chain into siblings.
 
     Every target ends up on the parents the chain itself hung from, and
@@ -59,7 +75,7 @@ def parallelize(args) -> int:
         return 0
 
 
-def _reconnect(args, settings, target_changes, follower_changes):
+def _reconnect(args: argparse.Namespace, settings: pyjj.UserSettings, target_changes, follower_changes):
     """Put every follower on all of the now-parallel targets."""
     ws, repo = _reload(settings, args)
     # Not write_tx: the repo here comes from _reload, and a fresh _load
@@ -74,7 +90,7 @@ def _reconnect(args, settings, target_changes, follower_changes):
     _finish(tx, "parallelize: reconnect descendants", settings, ws, repo)
 
 
-def _by_change_id(repo, settings, change_hexes):
+def _by_change_id(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_hexes):
     commits = []
     for change_hex in change_hexes:
         commits.extend(repo.revset(settings, change_hex))

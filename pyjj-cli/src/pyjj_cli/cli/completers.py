@@ -21,7 +21,15 @@ and this module is imported with it. `pyjj` and the settings come in
 inside the functions, which run only when the shell asks.
 """
 
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
 
 # jj's own revset symbols, the ones worth offering before any name.
 # `@` is the working copy and `root()` the commit every history starts
@@ -58,7 +66,7 @@ _BUILTIN_TEMPLATES = (
 )
 
 
-def _repo(parsed_args):
+def _repo(parsed_args: argparse.Namespace):
     """The workspace this completion is about, as `(settings, ws, repo)`.
 
     `None` when there is no workspace, which is what standing outside
@@ -79,7 +87,7 @@ def _answering(function):
     The shell is drawing a command line, and there is nowhere in it for
     an error to go.
     """
-    def answer(prefix="", parsed_args=None, **_kwargs):
+    def answer(prefix="", parsed_args: argparse.Namespace | None = None, **_kwargs):
         try:
             candidates = function(prefix, parsed_args)
         except Exception:
@@ -91,7 +99,7 @@ def _answering(function):
     return answer
 
 
-def _bookmark_names(repo):
+def _bookmark_names(repo: pyjj.ReadonlyRepo):
     """Local bookmark names, and remote ones as `name@remote`."""
     names = [bookmark.name for bookmark in repo.bookmarks()]
     names += [f"{bookmark.name}@{bookmark.remote}"
@@ -100,7 +108,7 @@ def _bookmark_names(repo):
 
 
 @_answering
-def revsets(prefix, parsed_args):
+def revsets(prefix, parsed_args: argparse.Namespace):
     """A revset: a name that resolves to commits, or the start of one.
 
     jj offers ids beside the names, and so does this. An id is offered
@@ -133,14 +141,14 @@ def revsets(prefix, parsed_args):
 
 
 @_answering
-def bookmarks(prefix, parsed_args):
+def bookmarks(prefix, parsed_args: argparse.Namespace):
     """A bookmark, local or remote."""
     loaded = _repo(parsed_args)
     return [] if loaded is None else _bookmark_names(loaded[2])
 
 
 @_answering
-def local_bookmarks(prefix, parsed_args):
+def local_bookmarks(prefix, parsed_args: argparse.Namespace):
     """A bookmark this repository holds itself.
 
     `jj bookmark rename` and `jj bookmark delete` name one of these and
@@ -151,14 +159,14 @@ def local_bookmarks(prefix, parsed_args):
 
 
 @_answering
-def tags(prefix, parsed_args):
+def tags(prefix, parsed_args: argparse.Namespace):
     """A tag name."""
     loaded = _repo(parsed_args)
     return [] if loaded is None else [tag.name for tag in loaded[2].tags()]
 
 
 @_answering
-def remotes(prefix, parsed_args):
+def remotes(prefix, parsed_args: argparse.Namespace):
     """A remote this repository knows."""
     loaded = _repo(parsed_args)
     if loaded is None:
@@ -167,7 +175,7 @@ def remotes(prefix, parsed_args):
 
 
 @_answering
-def operations(prefix, parsed_args):
+def operations(prefix, parsed_args: argparse.Namespace):
     """An operation: `@`, a step back from it, or an id.
 
     An id is offered at the length `jj op log` prints, since that is
@@ -186,7 +194,7 @@ def operations(prefix, parsed_args):
 
 
 @_answering
-def templates(prefix, parsed_args):
+def templates(prefix, parsed_args: argparse.Namespace):
     """A template name: one of jj's builtins, or one this user saved.
 
     A saved one lives under `pyjj.templates.<name>` in the config, and
@@ -197,7 +205,7 @@ def templates(prefix, parsed_args):
     return list(_BUILTIN_TEMPLATES) + _saved_template_names(parsed_args)
 
 
-def _saved_template_names(parsed_args):
+def _saved_template_names(parsed_args: argparse.Namespace):
     """The names under `pyjj.templates.` this repository can see."""
     import subprocess
 
@@ -221,7 +229,7 @@ def _saved_template_names(parsed_args):
 
 
 @_answering
-def filesets(prefix, parsed_args):
+def filesets(prefix, parsed_args: argparse.Namespace):
     """A path in the working copy, as a fileset names one.
 
     A fileset is a language, but the shape a reader types most is a
@@ -239,7 +247,7 @@ def filesets(prefix, parsed_args):
 
 
 @_answering
-def workspaces(prefix, parsed_args):
+def workspaces(prefix, parsed_args: argparse.Namespace):
     """A workspace name this repository holds."""
     loaded = _repo(parsed_args)
     return [] if loaded is None else list(loaded[2].view())
@@ -247,7 +255,7 @@ def workspaces(prefix, parsed_args):
 
 
 @_answering
-def saved_templates(prefix, parsed_args):
+def saved_templates(prefix, parsed_args: argparse.Namespace):
     """A template this user saved, which is what `pyjj templates` names."""
     return _saved_template_names(parsed_args)
 
@@ -320,7 +328,7 @@ def _for(action, words):
     return _NAMES_BY_COMMAND.get(words[1]) if len(words) > 1 else None
 
 
-def attach(parser) -> None:
+def attach(parser: argparse.ArgumentParser) -> None:
     """Give every argument of `parser` the completer for its kind.
 
     Walks the subcommands too, since that is where nearly every
@@ -339,4 +347,5 @@ def attach(parser) -> None:
             continue
         completer = _for(action, words)
         if completer is not None:
-            action.completer = completer
+            # argcomplete reads this attribute; argparse does not declare it.
+            setattr(action, "completer", completer)

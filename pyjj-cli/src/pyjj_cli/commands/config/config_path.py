@@ -1,5 +1,9 @@
 """config subcommand: config_path."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -7,8 +11,11 @@ from ..common import CommandError
 from .config_set import _scope, _workspace_root
 from .paths import config_path
 
+if TYPE_CHECKING:
+    import argparse
 
-def config_path_command(args) -> int:
+
+def config_path_command(args: argparse.Namespace) -> int:
     """`jj config path --repo|--user|--workspace`."""
     scope = _scope(args)
     if scope is None:

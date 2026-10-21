@@ -1,4 +1,10 @@
-def register(git_sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("colocation", help="Manage Jujutsu repository colocation with Git")
     p.set_defaults(_handler="pyjj_cli.commands.git.colocation:git_colocation")
 

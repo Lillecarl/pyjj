@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("revert", help="Apply the reverse of given revisions")
     p.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
                    metavar="REVSETS", required=True,

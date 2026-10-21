@@ -1,8 +1,13 @@
 """util subcommand: diff."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
     _color_words_rows,
@@ -14,7 +19,10 @@ from ..common import (
     use_color,
 )
 
-def util_diff(args) -> int:
+if TYPE_CHECKING:
+    import argparse
+
+def util_diff(args: argparse.Namespace) -> int:
     """`jj util diff` -- compare two files on disk.
 
     The two paths render like one modified file: `--git` prints the

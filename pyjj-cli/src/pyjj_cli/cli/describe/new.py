@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import argparse
 
 from ..flags import Flag, add_flags
 
 
-def register(sub) -> None:
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("new", help="Create a new empty change on top of REVSETS")
     p.add_argument("parents_pos", nargs="*", metavar="REVSETS",
                    help="Parent revisions (default: @)")

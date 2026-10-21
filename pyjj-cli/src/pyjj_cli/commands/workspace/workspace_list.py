@@ -1,20 +1,28 @@
 """workspace subcommand: workspace_list."""
+
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ...formatter import render_block
 from ..common import (
     _bookmarks_by_commit,
     _commit_context,
     _commit_summary_spans,
     _resolve_template,
-    use_color,
     command,
     read_repo,
+    use_color,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def workspace_list(args) -> int:
+def workspace_list(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
         view = repo.view()
         bookmarks = _bookmarks_by_commit(repo)

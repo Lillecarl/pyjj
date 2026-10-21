@@ -5,16 +5,23 @@ It does not snapshot the working copy: jj reaches for the workspace
 *loader*, not the command helper, so running this leaves the repository
 exactly as it was. And it exits with the child's own status.
 """
+
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ...commands.common import _workspace_path, apply_config_args
 
+if TYPE_CHECKING:
+    import argparse
 
-def util_exec(args) -> int:
+
+def util_exec(args: argparse.Namespace) -> int:
     if not getattr(args, "command_name", None):
         print("Error: Command argument is required", file=sys.stderr)
         return 2

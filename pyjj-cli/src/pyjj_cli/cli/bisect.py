@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import argparse
 
 
-def _bisect_help(args):
+def _bisect_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj bisect run --range REVSETS [COMMAND [ARGS...]]", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_bisect = sub.add_parser("bisect", help="Find a bad revision by bisection")
     p_bisect.set_defaults(_handler="pyjj_cli.cli.bisect:_bisect_help")
     bisect_sub = p_bisect.add_subparsers(dest="bisect_command")

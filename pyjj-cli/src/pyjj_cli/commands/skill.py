@@ -8,8 +8,15 @@ Python env does not merge `share/`, and a source checkout has no
 back to its own `skills/` tree. Anything else is "not installed here",
 said plainly rather than as a missing file.
 """
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 
 def _installed_dir():
@@ -47,7 +54,7 @@ def locate(name: str) -> Path | None:
     return None
 
 
-def skill_path(args) -> int:
+def skill_path(args: argparse.Namespace) -> int:
     name = getattr(args, "name", None) or "pyjj"
     found = locate(name)
     if found is None:

@@ -1,12 +1,19 @@
 """operation subcommand: next_commit."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _next_prev,
     command,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def next_commit(args) -> int:
+def next_commit(args: argparse.Namespace) -> int:
     """`jj next [OFFSET]`: move the working copy forward.
 
     Without `--edit` the new working copy is a *child* of the commit

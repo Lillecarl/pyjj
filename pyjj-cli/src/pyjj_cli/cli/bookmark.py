@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import argparse
 
 from .flags import Flag, add_flags, add_list_filter_flags, add_revision_flag
 
 
-def _bm_help(args):
+def _bm_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj bookmark {create,set,delete,forget,list,move,rename}", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_bm = sub.add_parser("bookmark", aliases=["b"], help="Manage bookmarks")
     p_bm.set_defaults(_handler="pyjj_cli.cli.bookmark:_bm_help")
     bm_sub = p_bm.add_subparsers(dest="bookmark_command")

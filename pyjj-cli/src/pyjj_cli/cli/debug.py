@@ -1,24 +1,27 @@
 """`jj debug`: low-level commands not intended for users."""
+
+from __future__ import annotations
+
 import argparse
 import sys
 
 _H = "pyjj_cli.commands.debug"
 
 
-def _debug_help(args):
+def _debug_help(args: argparse.Namespace):
     print("usage: pyjj debug {copy-detection,fileset,index,index-changed-paths,"
           "init-simple,local-working-copy,object,reindex,revset,stacked-table,"
           "template,tree,watchman,working-copy}", file=sys.stderr)
     return 2
 
 
-def _object_help(args):
+def _object_help(args: argparse.Namespace):
     print("usage: pyjj debug object {commit,file,operation,symlink,tree,view}",
           file=sys.stderr)
     return 2
 
 
-def _watchman_help(args):
+def _watchman_help(args: argparse.Namespace):
     print("usage: pyjj debug watchman "
           "{status,query-clock,query-changed-files,reset-clock}", file=sys.stderr)
     return 2
@@ -30,7 +33,7 @@ def _object_target(p, name: str, metavar: str) -> None:
     p.add_argument("-r", "--revision", metavar="REVSET")
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     # Hidden, as clap hides it in jj: off `--help` and `markdown-help`.
     p = sub.add_parser("debug", help=argparse.SUPPRESS,
                        description="Low-level commands not intended for users")

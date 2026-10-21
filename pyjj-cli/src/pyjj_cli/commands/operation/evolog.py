@@ -1,9 +1,14 @@
 """operation subcommand: evolog — how a change evolved across rewrites."""
-import sys
 
-import pyjj
+from __future__ import annotations
+
+import sys
+from typing import TYPE_CHECKING
+
 from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
+
+import pyjj
 
 from ...formatter import Line, render_block, separate
 from ..common import (
@@ -16,19 +21,22 @@ from ..common import (
     _description_diff_bytes,
     _diff_files_bytes,
     _diff_formats_for_log,
+    _dot_preamble,
     _format_timestamp,
     _immutable_ids,
     _is_empty,
     _pyjj_template,
+    _render_or_error,
     _resolve_all,
     _resolve_template,
-    _dot_preamble,
-    _render_or_error,
     _short_id,
     dot_attribute,
-    use_color,
     read_repo,
+    use_color,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 # Same list as `log`'s: a flag that shapes a row or its order has
 # nothing to act on in a DOT graph.
@@ -66,7 +74,7 @@ def _operation_spans(operation):
     ])
 
 
-def evolog(args) -> int:
+def evolog(args: argparse.Namespace) -> int:
     pre = _dot_preamble(args, _DOT_CONFLICTS, _DOT_DEFAULT, _DOT_CATALOGUE)
     if pre is None:
         return 2
@@ -230,7 +238,7 @@ def _write(text: str) -> None:
     sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
 
 
-def _patch_bytes(args, ws, settings, repo, entry, formats) -> bytes:
+def _patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo, entry, formats) -> bytes:
     """What `jj evolog --patch` prints under one version.
 
     jj compares the version with the ones it was rewritten from, and
@@ -263,7 +271,7 @@ def _patch_bytes(args, ws, settings, repo, entry, formats) -> bytes:
             + _diff_files_bytes(args, ws, files, settings, formats))
 
 
-def _context(repo, settings, commit, operation) -> dict:
+def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, operation) -> dict:
     """What a user's own Jinja template can name."""
     change = _short_id(
         commit.change_id.reverse_hex(),

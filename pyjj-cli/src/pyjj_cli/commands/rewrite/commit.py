@@ -1,21 +1,30 @@
 """pyjj-cli rewrite command: commit."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
-    command,
-    _finish,
-    _wc_commit,
-    complete_newline,
-    _run_editor,
     _changed_files,
-    _split_changed,
+    _finish,
     _run_diff_tool,
+    _run_editor,
+    _split_changed,
+    _wc_commit,
+    command,
+    complete_newline,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 @command
-def commit(args) -> int:
+def commit(args: argparse.Namespace) -> int:
     """`jj commit`: describe @, then put the selected paths (or all of @'s
     change) into it and create a new working-copy child on top."""
     try:
@@ -71,13 +80,13 @@ def commit(args) -> int:
     return 0
 
 
-def _remainder(tx, repo, wc, kept):
+def _remainder(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, wc, kept):
     """The new working copy. `jj commit` gives it no description --
     unlike `jj split`, which asks for one for each half."""
     return tx.split_remainder(wc, kept).set_description("").write(repo)
 
 
-def _description(args, settings, wc) -> str:
+def _description(args: argparse.Namespace, settings: pyjj.UserSettings, wc) -> str:
     """`-m` alone means no editor. `--editor` opens one anyway, seeded
     with whatever `-m` gave, and no `-m` at all opens one seeded with
     the commit's own description."""
@@ -89,7 +98,7 @@ def _description(args, settings, wc) -> str:
     return text
 
 
-def _selected(repo, settings, tool, wc):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, wc):
     """What the diff editor chose to keep in the commit, per path."""
     parent = repo.get_commit(wc.parent_ids[0])
     before, after = _split_changed(_changed_files(repo, settings, parent, wc))

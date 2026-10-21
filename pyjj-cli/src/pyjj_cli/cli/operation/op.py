@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags, add_no_graph_flag, add_template_flag
+
+if TYPE_CHECKING:
+    import argparse
 
 
 # Every op subcommand that prints an operation's diff takes the whole
@@ -9,7 +16,7 @@ _DIFF_FLAGS = [Flag.PATCH, Flag.SUMMARY, Flag.STAT, Flag.NAME_ONLY,
                Flag.DIFF_TOOL]
 
 
-def register(sub) -> None:
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     # `op` — short form
     p_op = sub.add_parser("op", help="Operation log commands")
     p_op.set_defaults(_handler="pyjj_cli.cli.operation:_op_help")

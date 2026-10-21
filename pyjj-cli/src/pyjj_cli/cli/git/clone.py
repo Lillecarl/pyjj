@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(git_sub) -> None:
+
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("clone", help="Create a new repo backed by a clone of a Git repo")
     p.add_argument("source", help="URL or path of the Git repo to clone")
     p.add_argument("destination", nargs="?", help="Target directory for the clone")

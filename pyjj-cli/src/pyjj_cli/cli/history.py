@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import argparse
 
 from .flags import Flag, add_flags
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_status = sub.add_parser("status", aliases=["st"],
                               help="Show working copy status")
     p_status.set_defaults(_handler="pyjj_cli.commands.history.status:status")

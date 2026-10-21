@@ -1,17 +1,24 @@
 """pyjj-cli rewrite command: revert."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
-    _prepare_insertion,
-    _insert_between,
     _finish,
+    _insert_between,
+    _prepare_insertion,
     _resolve_all,
     command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def revert(args) -> int:
+def revert(args: argparse.Namespace) -> int:
     """`jj revert -r REV --onto REV` — apply reverse of revisions."""
     with write_tx(args) as (settings, ws, repo, tx):
         # Resolve revisions to revert (union of all -r)

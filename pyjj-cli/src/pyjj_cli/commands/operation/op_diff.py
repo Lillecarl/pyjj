@@ -9,7 +9,11 @@ The changed commits are drawn on their own graph, which is why
 revset expression reaches those. The `--patch` diff bodies are not
 drawn yet.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -27,13 +31,16 @@ from ..common import (
     _resolve_operation,
     _restore_view_command,
     _write_lines,
-    use_color,
     read_repo,
+    use_color,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def _op_summary_spans(op, prefix: str):
+
+def _op_summary_spans(op: pyjj.Operation, prefix: str):
     """jj's `templates.op_summary`, in labelled pieces.
 
     The id, when the operation ended, and what it did. The root
@@ -53,7 +60,7 @@ def _op_summary_spans(op, prefix: str):
     )
 
 
-def _restore_command(args, which: str) -> int:
+def _restore_command(args: argparse.Namespace, which: str) -> int:
     """Shared `jj undo`/`jj redo` body.
 
     `which` is `"undo"`/`"redo"` (the `Transaction` method). Undo prints
@@ -91,7 +98,7 @@ def _restore_command(args, which: str) -> int:
         return 0
 
 
-def _summary_spans(repo, settings, commit, wc_id, prefix: str):
+def _summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, wc_id, prefix: str):
     """A commit as `op diff` prints it, bookmarks and all.
 
     jj renders these with its `commit_summary` template, which names the
@@ -113,7 +120,7 @@ def _summary_spans(repo, settings, commit, wc_id, prefix: str):
             in _commit_summary_spans(repo, settings, commit, bookmarks)]
 
 
-def _target_lines(repo, settings, summary, added: bool, wc_id, prefix: str):
+def _target_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, summary, added: bool, wc_id, prefix: str):
     """One side of a changed ref, `+` for the new state, `-` for the old.
 
     The sign is labelled `diff added` or `diff removed` on its own,
@@ -141,7 +148,7 @@ def _target_lines(repo, settings, summary, added: bool, wc_id, prefix: str):
             for commit in summary.commits]
 
 
-def _ref_section(fmt, repo, settings, heading: str, changes, wc_id,
+def _ref_section(fmt, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, heading: str, changes, wc_id,
                  prefix: str) -> None:
     if not changes:
         return
@@ -168,7 +175,7 @@ def _change_key(change):
     return commits[0].id
 
 
-def _change_patch_bytes(args, ws, settings, repo, change, formats) -> bytes:
+def _change_patch_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, repo: pyjj.ReadonlyRepo, change, formats) -> bytes:
     """What `--patch` prints under one changed commit.
 
     A change that still exists is compared with the version it was
@@ -194,8 +201,8 @@ def _change_patch_bytes(args, ws, settings, repo, change, formats) -> bytes:
             + _diff_files_bytes(args, ws, files, settings, formats))
 
 
-def _changed_commits(fmt, out, repo, settings, changes, no_graph: bool, wc_id,
-                     prefix: str, coloured: bool, args=None, ws=None,
+def _changed_commits(fmt, out, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, changes, no_graph: bool, wc_id,
+                     prefix: str, coloured: bool, args: argparse.Namespace | None = None, ws: pyjj.Workspace | None = None,
                      formats=(None, None)) -> None:
     """The `Changed commits:` block, with or without its graph."""
     def summary_lines(change):
@@ -211,7 +218,7 @@ def _changed_commits(fmt, out, repo, settings, changes, no_graph: bool, wc_id,
         )
 
     def patch(change) -> str:
-        if formats == (None, None):
+        if formats == (None, None) or args is None or ws is None:
             return ""
         return _change_patch_bytes(args, ws, settings, repo, change,
                                    formats).decode("utf-8", "surrogateescape")
@@ -252,7 +259,7 @@ def _elided_count(estimate) -> str | None:
     return f"{lower}+"
 
 
-def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
+def print_operation_diff(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, from_ops, to_op,
                          *, heading: bool = True,
                          prefix: str = "op_diff", out=None) -> int:
     """What changed between `from_ops` and `to_op`.
@@ -340,7 +347,7 @@ def print_operation_diff(args, settings, ws, repo, from_ops, to_op,
     return 0
 
 
-def op_diff(args) -> int:
+def op_diff(args: argparse.Namespace) -> int:
     try:
         with read_repo(args) as (settings, ws, repo):
 

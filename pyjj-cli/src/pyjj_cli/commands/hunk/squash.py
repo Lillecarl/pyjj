@@ -1,7 +1,12 @@
 """hunk subcommand: hunk_squash."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj.hunk as hunk_mod
+
 from ..common import (
     _finish,
     _resolve_one,
@@ -11,9 +16,12 @@ from ..common import (
 )
 from .helpers import _hunk_spec
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command(catch=(ValueError,))
-def hunk_squash(args) -> int:
+def hunk_squash(args: argparse.Namespace) -> int:
     """`pyjj hunk squash [-r REV] <spec>` — squash selected hunks into parent."""
     with write_tx(args) as (settings, ws, repo, tx):
         resolved = _hunk_spec(args, "hunk squash", require_message=False)

@@ -6,15 +6,22 @@ the graph, and then prints the operation's own diff below it -- so this
 is `op log`'s header plus `op diff`'s body, and both come from there.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyjj
 
-from ..common import _resolve_operation, use_color, command, read_repo
+from ..common import _resolve_operation, command, read_repo, use_color
 from .op_diff import print_operation_diff
 from .op_log import _shape, render_operation
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def op_show(args) -> int:
+def op_show(args: argparse.Namespace) -> int:
     """`jj op show` — an operation's header, then what it changed."""
     with read_repo(args) as (settings, ws, repo):
         op = _resolve_operation(repo, getattr(args, "operation", None))

@@ -1,17 +1,26 @@
 """hunk subcommand: hunk_split."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyjj.hunk as hunk_mod
+
 from ..common import (
     _finish,
     _resolve_one,
     _rev,
-    complete_newline,
     command,
+    complete_newline,
     write_tx,
 )
 from .helpers import _hunk_spec
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(ValueError,))
-def hunk_split(args) -> int:
+def hunk_split(args: argparse.Namespace) -> int:
     """`pyjj hunk split [-r REV] <spec> <message>` — split with hunk/line spec."""
     with write_tx(args) as (settings, ws, repo, tx):
         resolved = _hunk_spec(args, "hunk split", require_message=True)

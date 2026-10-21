@@ -1,15 +1,23 @@
 """file subcommand: file_search."""
+
+from __future__ import annotations
+
 import fnmatch
 import re
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
     _resolve_one,
     command,
     read_repo,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 # What `--pattern` means when it names no kind. jj reads the pattern as
 # `kind:pattern`, and a bare pattern as a regular expression.
@@ -20,7 +28,7 @@ _GLOB_CHARS = "*?["
 
 
 @command
-def file_search(args) -> int:
+def file_search(args: argparse.Namespace) -> int:
     """`jj file search` — the lines whose content matches a pattern.
 
     jj matches a line at a time, so an anchored pattern can name a whole
@@ -45,7 +53,8 @@ def file_search(args) -> int:
         return 0
 
 
-def _searchable_contents(repo, commit, path):
+def _searchable_contents(
+        repo: pyjj.ReadonlyRepo, commit: pyjj.Commit, path: str) -> list[bytes]:
     """The blobs `jj file search` looks through at `path`.
 
     A plain file reads directly. A file conflict searches each added
@@ -61,7 +70,8 @@ def _searchable_contents(repo, commit, path):
         sides = commit.conflict_sides(path)
     except pyjj.JjError:
         return []
-    return [sides["left"], sides["right"]]
+    return [side for side in (sides["left"], sides["right"])
+            if isinstance(side, bytes)]
 
 
 def _print_matches(path, content, matches, line_number):

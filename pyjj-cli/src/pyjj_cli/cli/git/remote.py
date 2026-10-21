@@ -1,4 +1,10 @@
-def register(git_sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("remote", help="Manage Git remotes")
     p.set_defaults(_handler="pyjj_cli.cli.git:_git_remote_help")
     remote_sub = p.add_subparsers(dest="remote_command")

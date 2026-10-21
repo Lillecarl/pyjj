@@ -1,8 +1,12 @@
 """pyjj-cli rewrite command: duplicate."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
-    _check_rewritable,
     CommandError,
+    _check_rewritable,
     _finish,
     _resolve_all,
     _resolve_in_arg_order,
@@ -10,8 +14,13 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 @command
-def duplicate(args) -> int:
+def duplicate(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         revsets = (list(args.revisions_pos)
                    + list(getattr(args, "revisions_opt", None) or [])) or ["@"]
@@ -31,7 +40,7 @@ def duplicate(args) -> int:
         return 0
 
 
-def _placement(repo, settings, args):
+def _placement(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace):
     """New parents and new children for the duplicates, from -o/-A/-B."""
     ontos = getattr(args, "ontos", None) or []
     afters = getattr(args, "insert_afters", None) or []

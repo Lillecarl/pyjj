@@ -1,7 +1,11 @@
 """file subcommand: edit."""
+
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
     _check_rewritable,
@@ -12,8 +16,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def file_edit(args) -> int:
+def file_edit(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         rev = getattr(args, "revision", "@")
         commit = _resolve_one(repo, settings, rev)

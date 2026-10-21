@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import argparse
 import sys
 
 
 def _stub(message: str):
-    def _h(args):
+    def _h(args: argparse.Namespace):
         print(f"Error: {message} is not yet supported", file=sys.stderr)
         return 2
     return _h
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_arrange = sub.add_parser("arrange", help="Interactively arrange the commit graph")
     p_arrange.add_argument("revisions", nargs="*", metavar="REVSETS",
                            help="The revisions to arrange (default: the "
@@ -26,13 +28,13 @@ def add_parsers(sub) -> None:
     p_help.set_defaults(_handler="pyjj_cli.cli.stubs:help_command")
 
 
-def _stub_gerrit(args):
+def _stub_gerrit(args: argparse.Namespace):
     import sys
     print("Error: gerrit is not yet supported", file=sys.stderr)
     return 2
 
 
-def help_command(args):
+def help_command(args: argparse.Namespace):
     """`jj help [COMMAND]`: print the top-level help, or one command's."""
     from pyjj_cli.__main__ import build_parser
 
@@ -47,7 +49,7 @@ def help_command(args):
     return 0
 
 
-def _subparser(parser, name):
+def _subparser(parser: argparse.ArgumentParser, name):
     for action in parser._actions:
         mapping = getattr(action, "_name_parser_map", None)
         if mapping and name in mapping:

@@ -4,14 +4,21 @@ Mirrors `cli/src/commands/util/backend/name.rs`. Like `util exec`, jj
 reaches for the no-snapshot helper here, so this leaves the working copy
 alone.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ...commands.common import CommandError, _workspace_path, apply_config_args
 
+if TYPE_CHECKING:
+    import argparse
 
-def util_backend_name(args) -> int:
+
+def util_backend_name(args: argparse.Namespace) -> int:
     try:
         settings = apply_config_args(pyjj.UserSettings())
         ws = pyjj.Workspace.load(settings, _workspace_path(args))

@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags, add_from_flag, add_into_flag
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("restore", help="Restore paths from another revision")
     # Neither side has a default here. jj reads them together: naming
     # one defaults the other to `@`, and naming neither restores `@`

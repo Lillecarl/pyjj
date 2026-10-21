@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("rebase", help="Move revisions to a different parent")
     # jj gives rebase's `-r` a hidden `--revisions` alias, and no other
     # command that takes `-r` has one, so it is spelled out here.

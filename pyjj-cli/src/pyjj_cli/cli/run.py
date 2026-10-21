@@ -4,10 +4,13 @@ Mirrors `RunArgs` in `cli/src/commands/run.rs`. `ARGS` is
 `argparse.REMAINDER` so `pyjj run -- cargo build --release` passes the
 command's own flags through instead of trying to parse them.
 """
+
+from __future__ import annotations
+
 import argparse
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("run", help="Run a command across a set of revisions")
     p.add_argument("command", metavar="COMMAND",
                    help="Command to run across all selected revisions")

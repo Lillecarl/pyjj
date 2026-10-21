@@ -1,15 +1,23 @@
 """git subcommand: git_remote."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _finish,
     command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def git_remote(args) -> int:
+def git_remote(args: argparse.Namespace) -> int:
     """`jj git remote` — manage Git remotes."""
     with write_tx(args) as (settings, ws, repo, tx):
         cmd = getattr(args, "remote_command", None)

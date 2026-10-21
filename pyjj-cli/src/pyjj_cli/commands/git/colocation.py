@@ -1,11 +1,16 @@
 """git subcommand: git_colocation."""
+
+from __future__ import annotations
+
 import errno
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _finish,
     _start_transaction,
@@ -15,9 +20,12 @@ from ..common import (
 )
 from ..workspace.workspace_forget import _unlink_worktree
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def git_colocation(args) -> int:
+def git_colocation(args: argparse.Namespace) -> int:
     """`jj git colocation` — manage colocation status."""
     sub = getattr(args, "colocation_command", None)
     handler = {"status": _status, "enable": _enable,
@@ -30,7 +38,7 @@ def git_colocation(args) -> int:
         return handler(settings, ws, repo)
 
 
-def _status(settings, ws, repo) -> int:
+def _status(settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> int:
     # The faithful detector, not the mere presence of a `.git` entry (an
     # unrelated repo's file there would lie).
     is_colocated = ws.is_colocated()
@@ -52,7 +60,7 @@ def _status(settings, ws, repo) -> int:
     return 0
 
 
-def _enable(settings, ws, repo) -> int:
+def _enable(settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> int:
     if ws.is_colocated():
         print("Workspace is already colocated with Git.", file=sys.stderr)
         return 0
@@ -93,7 +101,7 @@ def _enable(settings, ws, repo) -> int:
     return 0
 
 
-def _disable(settings, ws, repo) -> int:
+def _disable(settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> int:
     if not ws.is_colocated():
         print("Workspace is already not colocated with Git.", file=sys.stderr)
         return 0
@@ -120,7 +128,7 @@ def _disable(settings, ws, repo) -> int:
     return 0
 
 
-def _is_child_workspace(ws) -> bool:
+def _is_child_workspace(ws: pyjj.Workspace) -> bool:
     """A secondary workspace: its `.jj/repo` is a file naming the main
     repo, not the repo itself."""
     return Path(ws.workspace_root, ".jj", "repo").is_file()
@@ -131,7 +139,7 @@ def _set_bare(git_dir: Path, bare: bool) -> None:
                     "core.bare", "true" if bare else "false"], check=True)
 
 
-def _reload(settings, root: Path):
+def _reload(settings: pyjj.UserSettings, root: Path):
     """The workspace again, so it sees the Git repository at its new
     place."""
     ws = pyjj.Workspace.load(settings, str(root))

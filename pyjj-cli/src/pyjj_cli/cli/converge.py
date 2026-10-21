@@ -6,10 +6,13 @@ Mirrors `ConvergeArgs` in `cli/src/commands/converge.rs`: repeatable
 (paired against `--no-interactive`); it is accepted and ignored here,
 where the auto-solve path runs either way.
 """
+
+from __future__ import annotations
+
 import argparse
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("converge", help="Converge divergent changes")
     p.add_argument("-r", "--revision", "--revisions", dest="revisions",
                    action="append", default=None, metavar="REVSETS",

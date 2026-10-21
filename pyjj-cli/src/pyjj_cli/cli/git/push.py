@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(git_sub) -> None:
+
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("push", help="Push to a Git remote")
     add_flags(p, [Flag.REMOTE, Flag.BOOKMARK, Flag.TAG, Flag.ALL, Flag.TRACKED, Flag.DELETED, Flag.ALLOW_EMPTY, Flag.ALLOW_PRIVATE, Flag.ALLOW_CONFLICTS, Flag.DRY_RUN, Flag.CHANGE, Flag.NAMED])
     # jj spells push's `-r` in the plural and takes it more than once.

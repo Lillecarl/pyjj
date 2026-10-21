@@ -1,9 +1,16 @@
 """templates subcommand: unset."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 
-def templates_unset(args) -> int:
+def templates_unset(args: argparse.Namespace) -> int:
     name = getattr(args, "name")
     is_repo = getattr(args, "repo", False)
     key = f"pyjj.templates.{name}"

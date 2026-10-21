@@ -4,7 +4,14 @@ pyjj completes through argcomplete, not clap, so the script registers
 `pyjj` with argcomplete's protocol. It is the same text `package.nix`
 installs.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 # jj's shell names, mapped to argcomplete's. argcomplete has no elvish
 # or nushell support.
@@ -12,7 +19,7 @@ _SHELLS = {"bash": "bash", "zsh": "zsh", "fish": "fish",
            "power-shell": "powershell"}
 
 
-def util_completion(args) -> int:
+def util_completion(args: argparse.Namespace) -> int:
     import argcomplete
 
     shell = args.shell

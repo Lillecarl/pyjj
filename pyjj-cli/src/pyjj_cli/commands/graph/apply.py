@@ -17,8 +17,12 @@ default:
 - a conflict the reshape introduced rolls the whole thing back, since
   a graph describes topology and cannot have asked for one.
 """
+
+from __future__ import annotations
+
 import json
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -31,8 +35,11 @@ from ..common import (
 )
 from .resolve import read_graph, resolve
 
+if TYPE_CHECKING:
+    import argparse
 
-def _conflicted(repo, settings, keys) -> list[str]:
+
+def _conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, keys) -> list[str]:
     """Which of `keys` name a commit carrying a conflict now."""
     out = []
     for key in keys:
@@ -46,7 +53,7 @@ def _conflicted(repo, settings, keys) -> list[str]:
     return out
 
 
-def _current_id(tx, settings, change_key: str):
+def _current_id(tx: pyjj.Transaction, settings: pyjj.UserSettings, change_key: str):
     """The commit a change id names in the transaction's own view.
 
     Change ids survive rewrites, so this tracks a commit through the
@@ -61,7 +68,7 @@ def _current_id(tx, settings, change_key: str):
     return matches[0]
 
 
-def apply(args) -> int:
+def apply(args: argparse.Namespace) -> int:
     try:
         settings, ws, repo = _load(args)
     except (pyjj.WorkspaceLoadError, pyjj.RepoLoadError) as e:
@@ -158,7 +165,7 @@ def apply(args) -> int:
     return 0
 
 
-def _rollback(ws, settings, operation_id: str, why: str, applied: int,
+def _rollback(ws: pyjj.Workspace, settings: pyjj.UserSettings, operation_id: str, why: str, applied: int,
               hint: str | None = None) -> None:
     """Put the repository back where it started, and say so.
 

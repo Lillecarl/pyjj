@@ -1,11 +1,17 @@
 """operation subcommand: op_revert."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from ..common import _finish, _restore_what, command, write_tx
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command
-def op_revert(args) -> int:
+def op_revert(args: argparse.Namespace) -> int:
     """`jj op revert [OPERATION]`: undo one operation, keep the rest.
 
     Not the same as `op restore`, which makes the view *be* a past view

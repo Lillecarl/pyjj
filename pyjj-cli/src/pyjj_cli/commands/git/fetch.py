@@ -1,7 +1,12 @@
 """git subcommand: git_fetch."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
     _finish,
@@ -10,12 +15,15 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 # The remote a fetch reads when nothing names one and the repository
 # holds more than one.
 _DEFAULT_REMOTE = "origin"
 
 
-def _configured_remotes(settings):
+def _configured_remotes(settings: pyjj.UserSettings):
     """The remotes `git.fetch` names, or `None` when it names none.
 
     jj accepts either a list or a single name there, so both are read.
@@ -27,7 +35,7 @@ def _configured_remotes(settings):
     return [name] if name else None
 
 
-def _remotes(repo, settings, args) -> list[str]:
+def _remotes(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace) -> list[str]:
     """The remotes this fetch reads, in the order the repository holds them.
 
     `--all-remotes` takes every one. `--remote` takes patterns, so one
@@ -67,7 +75,7 @@ def _no_remotes():
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def git_fetch(args) -> int:
+def git_fetch(args: argparse.Namespace) -> int:
     """`jj git fetch` — fetch from a Git remote."""
     branches = getattr(args, "branches", None)
     tags = getattr(args, "tags", None)

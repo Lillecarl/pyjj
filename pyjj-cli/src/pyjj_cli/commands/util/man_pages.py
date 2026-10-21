@@ -4,8 +4,12 @@
 subcommand with clap_mangen. This writes the same layout from pyjj-cli's
 argparse tree.
 """
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .markdown_help import (
     _children,
@@ -16,8 +20,11 @@ from .markdown_help import (
     _walk,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def util_install_man_pages(args) -> int:
+
+def util_install_man_pages(args: argparse.Namespace) -> int:
     from pyjj_cli.__main__ import GLOBAL_FLAGS_OUTSIDE_ARGPARSE, build_parser
 
     parser = build_parser()
@@ -47,7 +54,7 @@ def _bold(flag: str) -> str:
     return f"\\fB{_esc(flag)}\\fR"
 
 
-def _page(name, path, parser, about, global_flags) -> str:
+def _page(name, path, parser: argparse.ArgumentParser, about, global_flags) -> str:
     positionals = [a for a in parser._actions
                    if not a.option_strings and _visible(a)]
     options = [a for a in parser._actions if a.option_strings and _visible(a)]

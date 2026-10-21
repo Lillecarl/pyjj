@@ -11,21 +11,34 @@ invocations, but nothing here runs in parallel yet. The repository result
 does not depend on it: every command's tree lands in one map, and one
 rewrite pass applies them all.
 """
+
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
 
-from .common import (CommandError, _check_rewritable, _finish, _load,
-                     _resolve_all, _start_transaction)
+from .common import (
+    CommandError,
+    _check_rewritable,
+    _finish,
+    _load,
+    _resolve_all,
+    _start_transaction,
+)
+
+if TYPE_CHECKING:
+    import argparse
 
 # `revsets.run` in `cli/src/config/revsets.toml`.
 _DEFAULT_REVSET = "reachable(@, mutable())"
 
 
-def _resolve_jobs(settings, jobs) -> int:
+def _resolve_jobs(settings: pyjj.UserSettings, jobs) -> int:
     """Precedence: `--jobs`, the `run.jobs` config key, 1."""
     if jobs is not None:
         if jobs < 1:
@@ -59,7 +72,7 @@ def _subdir(workspace_root: str, use_root: bool) -> str | None:
         return ""
 
 
-def _sparsity(ws, args):
+def _sparsity(ws: pyjj.Workspace, args: argparse.Namespace):
     """What each slot checks out, for `--sparse-patterns`.
 
     `full` (the binding default, `None`) materializes the whole tree;
@@ -83,7 +96,7 @@ def _status_text(returncode: int) -> str:
     return f"exit status: {returncode}"
 
 
-def run(args) -> int:
+def run(args: argparse.Namespace) -> int:
     """`jj run [-r REVSETS] [-j JOBS] COMMAND [ARGS...]`."""
     try:
         settings, ws, repo = _load(args)

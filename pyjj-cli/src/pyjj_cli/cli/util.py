@@ -1,22 +1,25 @@
 """`jj util`: infrequently used commands."""
+
+from __future__ import annotations
+
 import argparse
 import sys
 
 from .flags import Flag, add_flags
 
 
-def _util_help(args):
+def _util_help(args: argparse.Namespace):
     print("usage: pyjj util {backend,completion,config-schema,diff,exec,gc,"
           "install-man-pages,markdown-help,snapshot}", file=sys.stderr)
     return 2
 
 
-def _backend_help(args):
+def _backend_help(args: argparse.Namespace):
     print("usage: pyjj util backend {name}", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser(
         "util",
         help="Infrequently used commands such as for generating shell completions",

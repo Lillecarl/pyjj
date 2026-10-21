@@ -1,14 +1,22 @@
 """git subcommand: git_push."""
+
+from __future__ import annotations
+
 import fnmatch
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
     _finish,
     command,
     write_tx,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 #: The remote jj falls back to when nothing else names one.
 _DEFAULT_REMOTE = "origin"
@@ -35,7 +43,7 @@ class _Refused(Exception):
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def git_push(args) -> int:
+def git_push(args: argparse.Namespace) -> int:
     """`jj git push` -- push bookmarks to a Git remote."""
     with write_tx(args) as (settings, ws, repo, tx):
         remote = _remote(args, repo, settings)
@@ -74,7 +82,7 @@ def git_push(args) -> int:
         return 0
 
 
-def _remote(args, repo, settings) -> str:
+def _remote(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings) -> str:
     """`--remote`, else `git.push`, else the only remote, else origin."""
     named = getattr(args, "remote", None)
     if named:
@@ -88,7 +96,7 @@ def _remote(args, repo, settings) -> str:
     return _DEFAULT_REMOTE
 
 
-def _remote_names(repo) -> list:
+def _remote_names(repo: pyjj.ReadonlyRepo) -> list:
     """Every remote the repository knows, whatever shape it reports."""
     try:
         remotes = repo.git_remotes()
@@ -105,7 +113,7 @@ def _update_term(before, after) -> str:
     return "Move forward"
 
 
-def _updates(args, repo, settings, remote):
+def _updates(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote):
     """What to push, as `[(name, before, after)]`, and the bookmarks
     `--change` and `--named` have to create first.
 
@@ -114,7 +122,7 @@ def _updates(args, repo, settings, remote):
     selection, which differs per flag in two ways: which names it looks
     at, and whether creating or deleting a remote ref is allowed.
     """
-    local = {b.name: b for b in repo.bookmarks()}
+    local: dict[str, pyjj.Bookmark | _Created] = {b.name: b for b in repo.bookmarks()}
     remotes = {b.name: b for b in repo.remote_bookmarks() if b.remote == remote}
     names = sorted(set(local) | set(remotes))
     deleted = getattr(args, "deleted", False)
@@ -193,7 +201,7 @@ class _Created:
         self.target_ids = [target]
 
 
-def _by_revisions(args, repo, settings, remote, local):
+def _by_revisions(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote, local):
     """The bookmarks jj adds from `-r`, or from its default revset.
 
     The default is `remote_bookmarks(remote=<remote>)..@`, narrowed to
@@ -222,7 +230,7 @@ def _by_revisions(args, repo, settings, remote, local):
             if any(i.hex() in targets for i in bookmark.target_ids)]
 
 
-def _create_bookmarks(args, repo, settings, local, remotes):
+def _create_bookmarks(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, local, remotes):
     """The bookmarks `--change` and `--named` create, name to target.
 
     Neither moves a bookmark that already exists: jj refuses rather
@@ -257,7 +265,7 @@ def _ensure_new(name, target, local, remotes, reuse: bool) -> None:
             f"Tracked remote bookmarks exist for deleted bookmark: {name}")
 
 
-def _parse_named(spec, repo, settings):
+def _parse_named(spec, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings):
     """`--named NAME=REVISION`, split at the first `=`."""
     name, sep, revision = spec.partition("=")
     if not sep or not name or not revision:
@@ -290,7 +298,7 @@ def _unquote(text: str) -> str:
     return text
 
 
-def _has_tracked_remote(repo, name) -> bool:
+def _has_tracked_remote(repo: pyjj.ReadonlyRepo, name) -> bool:
     """Whether a real remote tracks this bookmark. jj uses it to decide
     that a `-b` the reader typed may create a remote ref.
 
@@ -347,7 +355,7 @@ class _Validator:
     not walk the same commits again.
     """
 
-    def __init__(self, args, repo, settings, remote):
+    def __init__(self, args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, remote):
         self.repo = repo
         self.settings = settings
         self.allow_empty = getattr(args, "allow_empty", False)

@@ -1,18 +1,26 @@
 """tag subcommand: tag_list."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyjj
+
 from ..common import (
-    _ref_list_items,
-    _sort_ref_items,
     _formatter,
     _print_ref,
+    _ref_list_items,
     _resolve_template,
+    _sort_ref_items,
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def tag_list(args) -> int:
+def tag_list(args: argparse.Namespace) -> int:
     """`jj tag list` — the bookmark listing, over tags.
 
     jj builds both from the same `collect_items`, so this reads the

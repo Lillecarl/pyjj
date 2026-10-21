@@ -10,6 +10,8 @@ actual handler via `importlib` only after parsing, so `--help` and
 `<TAB>` completion stay fast.
 """
 
+from __future__ import annotations
+
 import argparse
 import importlib
 import os
@@ -32,7 +34,30 @@ def build_parser() -> argparse.ArgumentParser:
     # Imported here (not at top-level) so `import pyjj_cli.__main__` doesn't
     # pull them until `build_parser()` is actually called — and none of them
     # import `pyjj`/`pyjj.hunk`/`pydantic` themselves.
-    from pyjj_cli.cli import bisect, bookmark, config, converge, debug, describe, file, git, graph, history, hunk, operation, python_cli, rewrite, run, sparse, skill, stubs, tag, templates, util, workspace
+    from pyjj_cli.cli import (
+        bisect,
+        bookmark,
+        config,
+        converge,
+        debug,
+        describe,
+        file,
+        git,
+        graph,
+        history,
+        hunk,
+        operation,
+        python_cli,
+        rewrite,
+        run,
+        skill,
+        sparse,
+        stubs,
+        tag,
+        templates,
+        util,
+        workspace,
+    )
 
     git.add_parsers(sub)
     history.add_parsers(sub)
@@ -195,7 +220,7 @@ def _load_handler(dotted: str):
 _NOT_OFFERED = ("-h", "--help")
 
 
-def _complete(parser) -> None:
+def _complete(parser: argparse.ArgumentParser) -> None:
     """Answer a shell completion, when this start is one, and exit.
 
     **argcomplete is imported here and not at the top of the module.**

@@ -1,25 +1,34 @@
 """pyjj-cli rewrite command: split."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
+    _changed_files,
     _check_rewritable,
-    _prepare_insertion,
-    command,
     _finish,
+    _prepare_insertion,
     _resolve_one,
     _rev,
-    complete_newline,
     _run_bulk_editor,
-    _changed_files,
-    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
+    _split_changed,
+    command,
+    complete_newline,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 @command
-def split(args) -> int:
+def split(args: argparse.Namespace) -> int:
     try:
         with write_tx(args) as (settings, ws, repo, tx):
             parallel = getattr(args, "parallel", False)
@@ -159,13 +168,13 @@ def split(args) -> int:
     return 0
 
 
-def _change_ids(repo, commit_ids):
+def _change_ids(repo: pyjj.ReadonlyRepo, commit_ids):
     """The change id behind each commit id, in order."""
     return [repo.get_commit(commit_id).change_id.reverse_hex()
             for commit_id in commit_ids]
 
 
-def _by_change_ids(tx, settings, change_hexes):
+def _by_change_ids(tx: pyjj.Transaction, settings: pyjj.UserSettings, change_hexes):
     """Back to commit ids, after a rebase may have moved them. The query
     runs against the transaction, which is the only place the rebased
     commits exist yet."""

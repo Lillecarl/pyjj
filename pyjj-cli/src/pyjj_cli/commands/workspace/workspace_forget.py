@@ -1,14 +1,22 @@
 """workspace subcommand: workspace_forget."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def workspace_forget(args) -> int:
+def workspace_forget(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
         view = repo.view()
         names = getattr(args, "names", [])
@@ -32,7 +40,7 @@ def workspace_forget(args) -> int:
         return 0
 
 
-def _unlink_worktree(settings, ws, name) -> None:
+def _unlink_worktree(settings: pyjj.UserSettings, ws: pyjj.Workspace, name) -> None:
     """Drop the Git worktree backing a forgotten workspace, if any.
 
     A leftover gitlink or stale metadata is not worth failing over,

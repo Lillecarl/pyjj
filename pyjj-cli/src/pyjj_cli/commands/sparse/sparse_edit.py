@@ -1,7 +1,12 @@
 """sparse subcommand: sparse_edit."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _run_editor_raw,
     command,
@@ -9,9 +14,12 @@ from ..common import (
 )
 from .update import update_sparse_patterns
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def sparse_edit(args) -> int:
+def sparse_edit(args: argparse.Namespace) -> int:
     """`jj sparse edit`: the patterns one per line in the editor, the
     root as `.`."""
     with read_repo(args) as (settings, ws, repo):

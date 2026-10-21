@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags, add_from_flag, add_to_flag
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("diffedit",
                        help="Edit the diff between two revisions in a diff editor")
     # `-r` edits a revision against the merge of its parents; `--from`

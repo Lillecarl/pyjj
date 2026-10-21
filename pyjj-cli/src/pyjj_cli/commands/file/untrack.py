@@ -1,10 +1,18 @@
 """file subcommand: file_untrack."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import CommandError, read_repo
 
-def file_untrack(args) -> int:
+if TYPE_CHECKING:
+    import argparse
+
+def file_untrack(args: argparse.Namespace) -> int:
     """`jj file untrack <paths>`: stop tracking paths in the working copy.
 
     The files stay on disk. A path that is not ignored is added straight

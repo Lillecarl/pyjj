@@ -15,7 +15,11 @@ a CLI cannot prompt, so there is no interactive half to fall back to.
 `--no-interactive` therefore behaves exactly like jj's; without it,
 the auto-solvable cases behave exactly like jj's too.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -23,12 +27,15 @@ from .common import (
     CommandError,
     _check_rewritable,
     _finish,
-    write_tx,
     command,
+    write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def _short_change(repo, settings, change_id) -> str:
+
+def _short_change(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, change_id) -> str:
     n = repo.shortest_change_id_prefix_len(change_id, settings)
     return change_id.hex()[:n]
 
@@ -51,7 +58,7 @@ def _report(found) -> None:
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def converge(args) -> int:
+def converge(args: argparse.Namespace) -> int:
     """`jj converge [-r REVSETS] [--no-interactive]`."""
     with write_tx(args) as (settings, ws, repo, tx):
         try:
@@ -117,9 +124,13 @@ def converge(args) -> int:
                     print("Error: Failed to converge tree", file=sys.stderr)
                     return 1
 
+            author = result.author.value
+            description = result.description.value
+            parents = result.parents.value
+            if author is None or description is None or parents is None:
+                raise CommandError("converge solved a field without a value")
             solution, num_rebased = tx.apply_converge_solution(
-                result.author.value, result.description.value,
-                result.parents.value, tree, change.change_id,
+                author, description, parents, tree, change.change_id,
                 [c.id for c in change.commits])
             print(f"Successfully converged change: created commit "
                   f"{solution.id.hex()[:12]}.", file=sys.stderr)

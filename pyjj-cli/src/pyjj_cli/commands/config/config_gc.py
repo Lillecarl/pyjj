@@ -8,10 +8,17 @@ The metadata that records which repo a directory belongs to is a
 protobuf, so reading it goes through the binding rather than being
 decoded here -- see `pyjj-bindings/src/secure_config.rs`.
 """
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
+if TYPE_CHECKING:
+    import argparse
 
 
 def _missing_repo_configs(root: Path):
@@ -43,7 +50,7 @@ def _missing_repo_configs(root: Path):
     return missing
 
 
-def config_gc(args) -> int:
+def config_gc(args: argparse.Namespace) -> int:
     root = pyjj.repo_configs_root_dir()
     if root is None:
         print("Error: No config directory found", file=sys.stderr)

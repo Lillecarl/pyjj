@@ -1,20 +1,26 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 # cli/git package — one module per subcommand, mirroring commands/git/.
 
 
-def _git_help(args):
+def _git_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj git {init,clone,fetch,push,import,export,remote,root}", file=sys.stderr)
     return 2
 
 
-def _git_remote_help(args):
+def _git_remote_help(args: argparse.Namespace):
     import sys
     print("usage: pyjj git remote {add,list,remove,rename,set-url}", file=sys.stderr)
     return 2
 
 
-def add_parsers(sub) -> None:
-    from . import clone, colocation, export, fetch, git_import, push, remote, root, init
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    from . import clone, colocation, export, fetch, git_import, init, push, remote, root
 
     p_git = sub.add_parser("git", help="Git interop commands")
     p_git.set_defaults(_handler="pyjj_cli.cli.git:_git_help")

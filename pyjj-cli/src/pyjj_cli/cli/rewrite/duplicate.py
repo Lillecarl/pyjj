@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import argparse
 
 from ..flags import Flag, add_flags
 
 
-def register(sub) -> None:
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("duplicate", help="Duplicate revisions onto their parents")
     p.add_argument("revisions_pos", nargs="*", metavar="REVISIONS",
                    help="Revisions to duplicate (default: @)")

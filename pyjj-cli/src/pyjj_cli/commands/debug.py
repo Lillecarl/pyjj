@@ -5,12 +5,17 @@ jj loads some of these without snapshotting (`index`, `reindex`,
 `object`, `working-copy`), so a broken working copy or index can still
 be inspected; those use `_no_snapshot` here as well.
 """
+
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pyjj_bindings
 
 import pyjj
-import pyjj_bindings
 
 from . import common
 from .common import (
@@ -22,8 +27,11 @@ from .common import (
     settings_for,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def _no_snapshot(args):
+
+def _no_snapshot(args: argparse.Namespace):
     settings = settings_for(args)
     return settings, pyjj.Workspace.load(settings, _workspace_path(args))
 
@@ -34,7 +42,7 @@ def _usage(message: str) -> int:
 
 
 @command
-def debug_copy_detection(args) -> int:
+def debug_copy_detection(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, _ws, repo):
         commit = _resolve_one(repo, settings, args.revision)
         sys.stdout.write(pyjj_bindings.debug_copy_detection(repo, commit))
@@ -42,7 +50,7 @@ def debug_copy_detection(args) -> int:
 
 
 @command
-def debug_fileset(args) -> int:
+def debug_fileset(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, _repo):
         sys.stdout.write(pyjj_bindings.debug_fileset(
             settings, ws.workspace_root, os.getcwd(), args.path))
@@ -50,14 +58,14 @@ def debug_fileset(args) -> int:
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_index(args) -> int:
+def debug_index(args: argparse.Namespace) -> int:
     _settings, ws = _no_snapshot(args)
     sys.stdout.write(pyjj_bindings.debug_index(ws))
     return 0
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_reindex(args) -> int:
+def debug_reindex(args: argparse.Namespace) -> int:
     _settings, ws = _no_snapshot(args)
     count = pyjj_bindings.debug_reindex(ws)
     print(f"Finished indexing {count} commits.", file=sys.stderr)
@@ -65,7 +73,7 @@ def debug_reindex(args) -> int:
 
 
 @command
-def debug_index_changed_paths(args) -> int:
+def debug_index_changed_paths(args: argparse.Namespace) -> int:
     with read_repo(args) as (_settings, ws, repo):
         indexed = pyjj_bindings.debug_index_changed_paths(ws, repo, args.limit)
     if indexed is None:
@@ -76,7 +84,7 @@ def debug_index_changed_paths(args) -> int:
 
 
 @command(catch=(pyjj.WorkspaceInitError,))
-def debug_init_simple(args) -> int:
+def debug_init_simple(args: argparse.Namespace) -> int:
     if common._IGNORE_WORKING_COPY:
         return _usage("--ignore-working-copy is not respected")
     if getattr(args, "at_operation", None):
@@ -96,34 +104,34 @@ def debug_init_simple(args) -> int:
 
 
 @command
-def debug_local_working_copy(args) -> int:
+def debug_local_working_copy(args: argparse.Namespace) -> int:
     with read_repo(args) as (_settings, ws, _repo):
         sys.stdout.write(pyjj_bindings.debug_local_working_copy(ws))
     return 0
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_working_copy(args) -> int:
+def debug_working_copy(args: argparse.Namespace) -> int:
     _settings, ws = _no_snapshot(args)
     sys.stdout.write(pyjj_bindings.debug_working_copy(ws))
     return 0
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_object_commit(args) -> int:
+def debug_object_commit(args: argparse.Namespace) -> int:
     _settings, ws = _no_snapshot(args)
     sys.stdout.write(pyjj_bindings.debug_object_commit(ws, args.id))
     return 0
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_object_operation(args) -> int:
+def debug_object_operation(args: argparse.Namespace) -> int:
     _settings, ws = _no_snapshot(args)
     sys.stdout.write(pyjj_bindings.debug_object_operation(ws, args.id))
     return 0
 
 
-def _object_target(args, required: bool):
+def _object_target(args: argparse.Namespace, required: bool):
     """`(ws, id, commit)` for `object file/symlink/tree`: an id, or the
     commit `--revision` names. jj's clap group allows one of the two."""
     if args.id is not None and args.revision is not None:
@@ -145,7 +153,7 @@ class _UsageError(Exception):
 
 def _object(fn, required: bool, name: str, write):
     @command(catch=(pyjj.WorkspaceLoadError,))
-    def run(args) -> int:
+    def run(args: argparse.Namespace) -> int:
         try:
             ws, id_, commit = _object_target(args, required)
         except _UsageError as e:
@@ -164,7 +172,7 @@ debug_object_tree = _object(pyjj_bindings.debug_object_tree, True, "dir",
 
 
 @command(catch=(pyjj.WorkspaceLoadError,))
-def debug_object_view(args) -> int:
+def debug_object_view(args: argparse.Namespace) -> int:
     if args.id is not None and args.op is not None:
         return _usage("the argument '[ID]' cannot be used with '--op <OP>'")
     if args.id is None and args.op is None:
@@ -178,7 +186,7 @@ def debug_object_view(args) -> int:
 
 
 @command
-def debug_revset(args) -> int:
+def debug_revset(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, _ws, repo):
         sys.stdout.write(pyjj_bindings.debug_revset(
             repo, settings, args.revision, no_resolve=args.no_resolve,
@@ -187,7 +195,7 @@ def debug_revset(args) -> int:
 
 
 @command
-def debug_snapshot(args) -> int:
+def debug_snapshot(args: argparse.Namespace) -> int:
     print("Warning: `jj debug snapshot` is deprecated; use `jj util snapshot` "
           "instead.", file=sys.stderr)
     with read_repo(args):
@@ -196,12 +204,12 @@ def debug_snapshot(args) -> int:
 
 
 @command
-def debug_stacked_table(args) -> int:
+def debug_stacked_table(args: argparse.Namespace) -> int:
     sys.stdout.write(pyjj_bindings.debug_stacked_table(args.dir, args.key_size))
     return 0
 
 
-def debug_template(args) -> int:
+def debug_template(args: argparse.Namespace) -> int:
     """pyjj's templates are Jinja, so this prints the Jinja parse tree in
     the layout jj's `{:#?}` gives its own template AST."""
     from jinja2 import TemplateSyntaxError
@@ -238,7 +246,7 @@ def _pretty(value, indent: int = 0) -> str:
 
 
 @command
-def debug_tree(args) -> int:
+def debug_tree(args: argparse.Namespace) -> int:
     if args.id is not None and args.revision is not None:
         return _usage("the argument '--id <ID>' cannot be used with "
                       "'--revision <REVSET>'")
@@ -256,7 +264,7 @@ def debug_tree(args) -> int:
 
 def _watchman(subcommand: str):
     @command
-    def run(args) -> int:
+    def run(args: argparse.Namespace) -> int:
         with read_repo(args) as (settings, ws, _repo):
             out, status, error = pyjj_bindings.debug_watchman(
                 ws, settings, subcommand)

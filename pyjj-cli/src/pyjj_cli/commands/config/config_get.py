@@ -1,13 +1,20 @@
 """config subcommand: config_get."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
-    settings_for,
     command,
+    settings_for,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def config_get(args) -> int:
+def config_get(args: argparse.Namespace) -> int:
     settings = settings_for(args)
     val = settings.get_string(args.name)
     if val is None:

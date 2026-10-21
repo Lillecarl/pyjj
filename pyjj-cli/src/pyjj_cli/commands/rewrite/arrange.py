@@ -1,24 +1,33 @@
 """pyjj-cli rewrite command: arrange."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
+    CommandError,
     _check_rewritable,
     _finish,
     command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command
-def arrange(args) -> int:
+def arrange(args: argparse.Namespace) -> int:
     """`jj arrange [REVSETS]` — reorder and abandon commits in a TUI.
 
     The TUI is pyjjui's port of jj's, so this needs pyjjui installed.
     """
     try:
-        from pyjjui import mutations
         from pyjjui.screens.arrange import ArrangeScreen
         from textual.app import App
+
+        from pyjjui import mutations
     except ImportError:
         print("Error: pyjj arrange needs pyjjui installed "
               "(pip install 'pyjj-cli[tui]')", file=sys.stderr)
@@ -27,6 +36,8 @@ def arrange(args) -> int:
         revs = [*(args.revisions or []), *(args.revision_flags or [])]
         revset = ("|".join(f"({r})" for r in revs) if revs
                   else settings.get_string("revsets.arrange"))
+        if revset is None:
+            raise CommandError("revsets.arrange is not set")
         _check_rewritable(tx, settings, repo.revset(settings, revset))
         try:
             prepared = mutations.arrange_targets(repo, settings, revset)

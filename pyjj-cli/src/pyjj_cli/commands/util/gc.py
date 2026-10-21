@@ -3,18 +3,25 @@
 Mirrors `cli/src/commands/util/gc.rs`. The whole sweep lives in
 `ReadonlyRepo.gc()`; this module only turns `--expire` into a cutoff.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ...commands.common import CommandError, read_repo
+
+if TYPE_CHECKING:
+    import argparse
 
 # jj's default: keep anything written in the last two weeks, reachable or
 # not, because a concurrent process may not have referenced it yet.
 _DEFAULT_MAX_AGE = 14 * 86400
 
 
-def util_gc(args) -> int:
+def util_gc(args: argparse.Namespace) -> int:
     expire = getattr(args, "expire", None)
     if expire is None:
         max_age = _DEFAULT_MAX_AGE

@@ -1,5 +1,9 @@
 """history subcommand: show."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ...formatter import render_block, separate
 from ..common import (
     _bookmarks_by_commit,
@@ -8,18 +12,23 @@ from ..common import (
     _diff_base,
     _indent,
     _print_diff,
-    _resolve_template,
     _render_or_error,
-    _tags_by_commit,
     _resolve_all,
+    _resolve_template,
     _signature_spans,
-    use_color,
+    _tags_by_commit,
     command,
     read_repo,
+    use_color,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 @command
-def show(args) -> int:
+def show(args: argparse.Namespace) -> int:
     """`jj show` — a commit's metadata and its diff."""
     with read_repo(args) as (settings, ws, repo):
         # jj accepts a revision positionally or after `-r`, and takes
@@ -84,7 +93,7 @@ def show(args) -> int:
         return 0
 
 
-def _detailed_lines(repo, settings, commit, names, remote_names, tags):
+def _detailed_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names, remote_names, tags):
     """jj's `builtin_log_detailed`: the block `show` prints above a diff.
 
     Every label sits under `show commit`, which is what jj labels the

@@ -1,24 +1,32 @@
 """bookmark subcommand: bookmark."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
-    _name_matches,
-    _ref_list_items,
-    _sort_ref_items,
-    _formatter,
-    _print_ref,
-    _resolve_template,
     CommandError,
     _finish,
+    _formatter,
+    _name_matches,
+    _print_ref,
+    _ref_list_items,
     _resolve_all,
     _resolve_one,
-    write_tx,
+    _resolve_template,
+    _sort_ref_items,
     read_repo,
+    write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def bookmark(args) -> int:
+
+def bookmark(args: argparse.Namespace) -> int:
     """`jj bookmark` dispatch — create/set/delete/forget/list/move/rename."""
     cmd = getattr(args, "bookmark_command", None)
     # list is read-only, no snapshot needed beyond _load
@@ -215,7 +223,7 @@ def bookmark(args) -> int:
     return 2
 
 
-def _is_fast_forward(repo, settings, old_ids, new_id) -> bool:
+def _is_fast_forward(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, old_ids, new_id) -> bool:
     """Whether moving a bookmark from `old_ids` to `new_id` only goes
     forward.
 

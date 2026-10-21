@@ -1,9 +1,16 @@
 """templates subcommand: list."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 
-def templates_list(args) -> int:
+def templates_list(args: argparse.Namespace) -> int:
     # `jj config list` walks every layer, repo config included, so it needs
     # no help from UserSettings (which does not load repo config -- see
     # AGENTS.md's Config section).

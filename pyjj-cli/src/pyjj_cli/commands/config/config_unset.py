@@ -1,5 +1,9 @@
 """config subcommand: config_unset."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -7,8 +11,11 @@ from ..common import CommandError
 from .config_set import _scope, _target_path, _workspace_root
 from .paths import config_path, read_config, unset_key, write_config
 
+if TYPE_CHECKING:
+    import argparse
 
-def config_unset(args) -> int:
+
+def config_unset(args: argparse.Namespace) -> int:
     """`jj config unset --repo|--user|--workspace <name>`."""
     scope = _scope(args)
     if scope is None and getattr(args, "file", None) is None:

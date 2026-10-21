@@ -1,14 +1,22 @@
 """git subcommand: git_root."""
+
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def git_root(args) -> int:
+def git_root(args: argparse.Namespace) -> int:
     """`jj git root` — show the underlying Git directory."""
     with read_repo(args) as (_settings, ws, _repo):
         # Try to find .git directory

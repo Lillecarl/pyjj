@@ -4,16 +4,27 @@ Mirrors `cli/src/commands/util/snapshot.rs`. Every workspace command
 already snapshots on load, so this only reports whether that snapshot
 found anything.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
-from ...commands.common import (CommandError, _operation_args,
-                                _workspace_path, report_refused,
-                                settings_for)
+from ...commands.common import (
+    CommandError,
+    _operation_args,
+    _workspace_path,
+    report_refused,
+    settings_for,
+)
+
+if TYPE_CHECKING:
+    import argparse
 
 
-def util_snapshot(args) -> int:
+def util_snapshot(args: argparse.Namespace) -> int:
     try:
         # Not `UserSettings()`: the snapshot honours settings the repo
         # layer can carry, `snapshot.max-new-file-size` among them, and

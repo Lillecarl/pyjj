@@ -1,9 +1,12 @@
 """config subcommand: config_edit."""
+
+from __future__ import annotations
+
 import os
 import shlex
 import subprocess
 import sys
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import pyjj
 
@@ -11,8 +14,11 @@ from ..common import CommandError, apply_config_args
 from .config_set import _workspace_root
 from .paths import Scope, config_path, write_config
 
+if TYPE_CHECKING:
+    import argparse
 
-def _editor_cmd(settings):
+
+def _editor_cmd(settings: pyjj.UserSettings):
     """Which editor to open, same precedence `describe` uses."""
     return (
         settings.get_string("ui.editor")
@@ -23,7 +29,7 @@ def _editor_cmd(settings):
     )
 
 
-def config_edit(args) -> int:
+def config_edit(args: argparse.Namespace) -> int:
     """`jj config edit --user|--repo|--workspace`: open the scoped file.
 
     Exactly one scope is required, the way jj's own parser requires it.
@@ -72,5 +78,5 @@ def config_edit(args) -> int:
     return proc.returncode
 
 
-def _editor_argv(settings) -> list:
+def _editor_argv(settings: pyjj.UserSettings) -> list:
     return shlex.split(_editor_cmd(settings))

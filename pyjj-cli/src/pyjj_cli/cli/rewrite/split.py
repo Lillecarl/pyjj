@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("split", help="Split a revision in two")
     p.add_argument("-r", "--revision", default=None, metavar="REVSETS",
                    help="Revision to split (default: @)")

@@ -1,23 +1,32 @@
 """pyjj-cli rewrite command: squash."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
-    _changed_files,
-    _split_changed,
-    _check_rewritable,
-    _prepare_insertion,
     CommandError,
-    command,
+    _changed_files,
+    _check_rewritable,
     _finish,
+    _prepare_insertion,
     _resolve_all,
     _resolve_one,
     _rev,
     _run_diff_tool,
-    complete_newline,
     _run_editor,
+    _split_changed,
+    command,
+    complete_newline,
     write_tx,
 )
+
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
 
 # What jj's clap refuses outright, as `(flag, dest, incompatible with)`.
 # `-r` names one commit and its parent, so nothing that names a
@@ -39,7 +48,7 @@ _CONFLICTS = (
 )
 
 
-def _conflicting_flag(args) -> str | None:
+def _conflicting_flag(args: argparse.Namespace) -> str | None:
     """The first pair of flags jj would refuse together, if any."""
     for name, dest, (other_name, other_dest) in _CONFLICTS:
         if getattr(args, dest, None) and getattr(args, other_dest, None):
@@ -48,7 +57,7 @@ def _conflicting_flag(args) -> str | None:
 
 
 @command
-def squash(args) -> int:
+def squash(args: argparse.Namespace) -> int:
     refusal = _conflicting_flag(args)
     if refusal is not None:
         print(f"Error: {refusal}", file=sys.stderr)
@@ -124,7 +133,7 @@ def squash(args) -> int:
     return 0
 
 
-def _selected(repo, settings, tool, source):
+def _selected(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, tool, source):
     """What a diff editor chose to move, per path.
 
     The tool edits the source's own diff: left is the source's parent,
@@ -136,7 +145,7 @@ def _selected(repo, settings, tool, source):
     return _run_diff_tool(settings, tool, before, after)
 
 
-def _sources_and_destination(args, repo, settings, inserting):
+def _sources_and_destination(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, inserting):
     """The commits to squash from, and the one to squash into.
 
     The destination is `None` when a placement flag asks for a commit
@@ -166,7 +175,7 @@ def _oldest_first(sources):
     return list(reversed(sources))
 
 
-def _description(args, settings, source, dest) -> str:
+def _description(args: argparse.Namespace, settings: pyjj.UserSettings, source, dest) -> str:
     """The description the squashed commit ends up with.
 
     `-m` gives it outright and `-u` keeps the destination's. With
@@ -198,7 +207,7 @@ def _description(args, settings, source, dest) -> str:
     return text
 
 
-def _place_new_commit(tx, repo, settings, source, ontos, afters, befores):
+def _place_new_commit(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, source, ontos, afters, befores):
     """The empty commit `-o`/`-A`/`-B` squash into, and the source as it
     stands once that commit is in the graph.
 

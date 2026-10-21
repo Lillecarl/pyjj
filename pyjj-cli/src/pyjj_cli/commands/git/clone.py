@@ -1,14 +1,22 @@
 """git subcommand: git_clone."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     apply_config_args,
     maybe_add_gitignore,
 )
 
-def git_clone(args) -> int:
+if TYPE_CHECKING:
+    import argparse
+
+def git_clone(args: argparse.Namespace) -> int:
     """`jj git clone <source> [destination]` — clone a Git repo."""
     settings = apply_config_args(pyjj.UserSettings())
     source = args.source

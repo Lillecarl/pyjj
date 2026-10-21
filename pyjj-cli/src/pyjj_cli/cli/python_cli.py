@@ -1,4 +1,10 @@
-def add_parsers(sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser(
         "python", help="Run a Python script with pyjj importable")
     p.add_argument("file", nargs="?", metavar="FILE",

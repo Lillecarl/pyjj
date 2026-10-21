@@ -1,5 +1,9 @@
 """command: interdiff — compare two revisions' diffs, not their contents."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -9,12 +13,15 @@ from ..common import (
     _print_diff_files,
     _resolve_one,
     _rev,
-    use_color,
     read_repo,
+    use_color,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def interdiff(args) -> int:
+
+def interdiff(args: argparse.Namespace) -> int:
     """`jj interdiff --from A --to B`.
 
     Answers "how do the changes A makes differ from the changes B

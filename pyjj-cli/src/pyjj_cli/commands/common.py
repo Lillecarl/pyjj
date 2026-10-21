@@ -1,4 +1,7 @@
 """Shared helpers for CLI commands."""
+
+from __future__ import annotations
+
 """CLI command implementations exercising pyjj bindings."""
 import contextlib
 import functools
@@ -9,11 +12,15 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Literal, overload
 
 import pyjj
 
 from ..formatter import Formatter, Line, render_block, separate
+
+if TYPE_CHECKING:
+    import argparse
 
 #: How two lines compare: exactly, or across whitespace (`-w`, `-b`).
 CompareMode = Literal["exact", "ignore-all-space", "ignore-space-change"]
@@ -34,7 +41,7 @@ def join_message_paragraphs(paragraphs) -> str:
     one blank line."""
     return "\n".join(complete_newline(p) for p in paragraphs)
 
-def conflicting_flags(args, names) -> list[str]:
+def conflicting_flags(args: argparse.Namespace, names) -> list[str]:
     """Which of `names` the invocation also carries.
 
     clap says a flag is exclusive in one attribute. argparse cannot, so
@@ -45,13 +52,25 @@ def conflicting_flags(args, names) -> list[str]:
             not in (None, False)]
 
 
+#: What `command` wraps: a parsed command line in, an exit status out.
+Handler = Callable[["argparse.Namespace"], int]
+
+
 class CommandError(Exception):
     def __init__(self, message):
         super().__init__(message)
         self.message = message
 
 
-def command(fn=None, *, catch=()):
+@overload
+def command(fn: Handler, *, catch: tuple[type[BaseException], ...] = ()) -> Handler: ...
+@overload
+def command(
+    fn: None = None, *, catch: tuple[type[BaseException], ...] = (),
+) -> Callable[[Handler], Handler]: ...
+def command(
+    fn: Handler | None = None, *, catch: tuple[type[BaseException], ...] = (),
+) -> Handler | Callable[[Handler], Handler]:
     """Run a command body, mapping known errors to `Error:` + exit 1.
 
     Every command used to retype the same `try/except` tail: catch the
@@ -67,9 +86,9 @@ def command(fn=None, *, catch=()):
     `KeyboardInterrupt` -- propagates exactly as if the body ran
     unwrapped.
     """
-    def decorate(fn):
+    def decorate(fn: Handler) -> Handler:
         @functools.wraps(fn)
-        def run(args) -> int:
+        def run(args: argparse.Namespace) -> int:
             try:
                 return fn(args)
             except (pyjj.JjError, CommandError, *catch) as e:
@@ -106,7 +125,7 @@ def set_config_args(config_args) -> None:
     _CONFIG_ARGS = list(config_args)
 
 
-def apply_config_args(settings):
+def apply_config_args(settings: pyjj.UserSettings):
     """Settings with this run's `--config`/`--config-file` layers on top.
 
     Every command builds settings through here (via `settings_for` or
@@ -169,7 +188,7 @@ def select_fields(selection, default, catalogue) -> list[str]:
     return [name for name in catalogue if name in chosen]
 
 
-def _dot_preamble(args, conflicts, default, catalogue):
+def _dot_preamble(args: argparse.Namespace, conflicts, default, catalogue):
     """Shared `--dot` gating: conflict refusal, field selection, and the
     `--dot-fields requires --dot` guard.
 
@@ -199,7 +218,7 @@ def _dot_preamble(args, conflicts, default, catalogue):
     return False, []
 
 
-def remote_state(repo, kind: str = "bookmark") -> dict:
+def remote_state(repo: pyjj.ReadonlyRepo, kind: str = "bookmark") -> dict:
     """Each local bookmark's remotes: `{name: [{remote, ...}, ...]}`.
 
     Whether a bookmark still needs pushing is *not* a revset question.
@@ -266,7 +285,7 @@ def dot_attribute(value) -> str:
     return "" if value is None else str(value)
 
 
-def _run_editor(settings, content: str) -> str:
+def _run_editor(settings: pyjj.UserSettings, content: str) -> str:
     """Run $EDITOR (or ui.editor) over `content`, then clean it up exactly
     like the real CLI's description_util::edit_description: strip "JJ:"
     comment lines (stopping at "JJ: ignore-rest"), trim blank edges, and
@@ -282,7 +301,7 @@ def _run_editor(settings, content: str) -> str:
     return _clean_description_lines(edited.splitlines())
 
 
-def _run_bulk_editor(settings, sections) -> dict:
+def _run_bulk_editor(settings: pyjj.UserSettings, sections) -> dict:
     """One editor session for several commit descriptions, like jj 0.46's
     `edit_multiple_descriptions` (which `jj split` uses for both halves
     since 0.46 opened a single session instead of one per half).
@@ -359,7 +378,7 @@ def _run_bulk_editor(settings, sections) -> dict:
     return descriptions
 
 
-def _run_editor_raw(settings, content: str,
+def _run_editor_raw(settings: pyjj.UserSettings, content: str,
                     suffix: str = ".jjdescription") -> str:
     """Run $EDITOR over `content` and return the edited text verbatim --
     `_run_editor` without the description cleanup, for callers (like
@@ -435,7 +454,7 @@ def _ignore_immutable() -> bool:
     return _IGNORE_IMMUTABLE
 
 
-def _workspace_path(args) -> str:
+def _workspace_path(args: argparse.Namespace) -> str:
     """The workspace directory this command should load.
 
     `-R` names it outright. Without `-R`, jj walks up from the current
@@ -454,7 +473,7 @@ def _workspace_path(args) -> str:
     return str(cwd)
 
 
-def _open(settings, args):
+def _open(settings: pyjj.UserSettings, args: argparse.Namespace):
     """The repo this command should act on.
 
     Normally that is the head, snapshotted first like every real jj
@@ -500,7 +519,7 @@ def set_color_choice(choice: str | None) -> None:
     _COLOR_CHOICE = choice
 
 
-def use_color(settings=None) -> bool:
+def use_color(settings: pyjj.UserSettings | None = None) -> bool:
     """Whether to write escape sequences, by jj's rule.
 
     `--color` wins, then `ui.color`, then `auto`, which means stdout is
@@ -545,7 +564,7 @@ def _operation_args() -> str:
     return " ".join(parts)
 
 
-def _start_transaction(repo, settings):
+def _start_transaction(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings):
     """Open a transaction with this run's command line recorded on it.
 
     Every write goes through here rather than through
@@ -556,7 +575,7 @@ def _start_transaction(repo, settings):
 
 
 @contextlib.contextmanager
-def write_tx(args):
+def write_tx(args: argparse.Namespace):
     """Load the workspace and open its transaction in one step.
 
     The caller still commits explicitly with `_finish`: the operation
@@ -579,7 +598,7 @@ def write_tx(args):
 
 
 @contextlib.contextmanager
-def read_repo(args):
+def read_repo(args: argparse.Namespace):
     """Load the workspace for a command that writes nothing.
 
     Same `_load` (including its working-copy snapshot) without the
@@ -606,7 +625,7 @@ def report_refused(stats) -> None:
         print(f"  {path}: {reason}", file=sys.stderr)
 
 
-def settings_for(args):
+def settings_for(args: argparse.Namespace):
     """Settings carrying the repo and workspace layers when there is a
     repository to take them from, and the user layers alone when there
     is not.
@@ -626,7 +645,7 @@ def settings_for(args):
     )
 
 
-def _load(args):
+def _load(args: argparse.Namespace):
     """Load settings + workspace at the -R path, snapshotting the working
     copy first like every real jj workspace command does.
 
@@ -650,7 +669,7 @@ def _load(args):
     ws, repo = _open(settings, args)
     return settings, ws, repo
 
-def _reload(settings, args):
+def _reload(settings: pyjj.UserSettings, args: argparse.Namespace):
     """Re-open the workspace at its current head, reusing `settings`.
 
     Not `_load()`: that builds a fresh `UserSettings`, and jj_lib seeds a
@@ -662,7 +681,7 @@ def _reload(settings, args):
     difference between matching `jj` and not."""
     return _open(settings, args)
 
-def _resolve_all(repo, settings, expressions):
+def _resolve_all(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions):
     """Resolve positional REVSETS the way the real CLI does for target
     SETS (describe/abandon/duplicate/...): as ONE union expression, so
     evaluation order -- which drives seeded change-id draws -- matches
@@ -674,7 +693,7 @@ def _resolve_all(repo, settings, expressions):
     union = " | ".join(f"({expr})" for expr in expressions)
     return repo.revset(settings, union)
 
-def _resolve_in_arg_order(repo, settings, expressions):
+def _resolve_in_arg_order(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expressions):
     """Resolve expressions where the ARGUMENT ORDER is semantic (parents
     of a new commit, rebases' -d destinations): evaluate each positional
     separately and concatenate, like the real CLI's parent-list handling."""
@@ -683,16 +702,16 @@ def _resolve_in_arg_order(repo, settings, expressions):
         commits.extend(repo.revset(settings, expr))
     return commits
 
-def _resolve_one(repo, settings, expression):
+def _resolve_one(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, expression):
     matches = repo.revset(settings, expression)
     if len(matches) != 1:
         raise CommandError(f"revset `{expression}` resolved to {len(matches)} revisions")
     return matches[0]
 
-def _wc_commit(repo, ws):
+def _wc_commit(repo: pyjj.ReadonlyRepo, ws: pyjj.Workspace):
     return repo.get_commit(pyjj.CommitId(repo.view()[ws.workspace_name]))
 
-def _checkout_if_moved(settings, ws, old_wc_hex) -> None:
+def _checkout_if_moved(settings: pyjj.UserSettings, ws: pyjj.Workspace, old_wc_hex) -> None:
     """Mirror the real CLI's transaction-finish behavior: when the current
     view's working-copy commit differs from `old_wc_hex`, update the
     on-disk working copy to match."""
@@ -722,7 +741,7 @@ class _DeletedRef:
         self.name = name
 
 
-def _ref_list_items(repo, settings, args, kind: str = "bookmark"):
+def _ref_list_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, kind: str = "bookmark"):
     """The items `jj bookmark list` and `jj tag list` print, in jj's order.
 
     This is `collect_items` from jj's `cli/src/commit_ref_list.rs`,
@@ -819,7 +838,7 @@ def _ref_list_items(repo, settings, args, kind: str = "bookmark"):
     return items
 
 
-def _ref_list_targets(repo, settings, args):
+def _ref_list_targets(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace):
     """The commits `-r` names, as a set of hex ids, or `None`.
 
     `None` says the listing asked for no revisions, which is what tells
@@ -841,7 +860,7 @@ _SORT_KEYS = (
 )
 
 
-def _sort_ref_items(repo, settings, items, args, kind: str = "bookmark"):
+def _sort_ref_items(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, items, args: argparse.Namespace, kind: str = "bookmark"):
     """Sort listing items by `--sort`, or by the setting that defaults it.
 
     jj sorts one key at a time from the least significant, which its
@@ -866,7 +885,7 @@ def _sort_ref_items(repo, settings, items, args, kind: str = "bookmark"):
     return items
 
 
-def _sort_value(repo, ref, key):
+def _sort_value(repo: pyjj.ReadonlyRepo, ref, key):
     """One item's value under one sort key.
 
     A ref with no target has no commit to read, and jj sorts it before
@@ -940,7 +959,7 @@ def _resolve_remote_refs(names, default_remote, *, kind, fan_out=None):
     return pairs
 
 
-def _track_remote(args, kind: str, verb: str) -> int:
+def _track_remote(args: argparse.Namespace, kind: str, verb: str) -> int:
     """Shared `track`/`untrack` body for bookmarks and tags.
 
     `kind` is `"bookmark"`/`"tag"`, `verb` `"track"`/`"untrack"`. Tags fan
@@ -960,7 +979,7 @@ def _track_remote(args, kind: str, verb: str) -> int:
                 settings, ws, repo)
         return 0
 
-def _require_signing_backend(settings) -> int | None:
+def _require_signing_backend(settings: pyjj.UserSettings) -> int | None:
     """Refuse when no signing backend is configured.
 
     Signing without a backend would rewrite every commit and attach
@@ -980,8 +999,11 @@ def _require_signing_backend(settings) -> int | None:
     return None
 
 
-def _rewrite_signatures(args, verb: str, behavior: str, *,
-                        signed_only: bool, pre_check=None) -> int:
+def _rewrite_signatures(
+        args: argparse.Namespace, verb: str,
+        behavior: Literal["drop", "force", "keep", "own"], *, signed_only: bool,
+        pre_check: Callable[[pyjj.UserSettings], int | None] | None = None,
+) -> int:
     """Shared `sign`/`unsign` body.
 
     Resolves `revisions or ["@"]`, checks the whole target set rewritable
@@ -1014,13 +1036,13 @@ def _rewrite_signatures(args, verb: str, behavior: str, *,
         _finish(tx, f"{verb} {len(targets)} commits", settings, ws, repo)
         return 0
 
-def _wants_edit(args) -> bool:
+def _wants_edit(args: argparse.Namespace) -> bool:
     """`--edit`/`--no-edit` for `jj next`/`jj prev`. The last flag wins in
     jj's parser, and argparse's default store_true/store_false pair gives
     the same result."""
     return bool(getattr(args, "edit", False))
 
-def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
+def _walk(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes, direction, steps, exclude=()):
     """Walk `steps` graph edges from `start_hexes`, forward or backward.
 
     Returns the hex ids reached, or `[]` when the walk runs out of edges.
@@ -1042,7 +1064,7 @@ def _walk(repo, settings, start_hexes, direction, steps, exclude=()):
         current = reached
     return current
 
-def _nearest_conflicted(repo, settings, start_hexes, direction, exclude=()):
+def _nearest_conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, start_hexes, direction, exclude=()):
     """The nearest conflicted commit(s) walking `direction` from `start_hexes`.
 
     `jj next/prev --conflict` jumps to the first conflicted descendant or
@@ -1069,7 +1091,10 @@ def _nearest_conflicted(repo, settings, start_hexes, direction, exclude=()):
         current = [c.id.hex() for c in reached]
     return []
 
-def _commit_location(repo, settings, ontos, afters, befores):
+def _commit_location(
+        repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ontos: Sequence[str],
+        afters: Sequence[str], befores: Sequence[str],
+) -> tuple[list[pyjj.CommitId], list[pyjj.CommitId]]:
     """jj's `compute_commit_location`: the new parents and new children a
     placement flag asks for.
 
@@ -1093,14 +1118,17 @@ def _commit_location(repo, settings, ontos, afters, befores):
     # `-B` alone. jj resolves the parents from the commits themselves
     # rather than through a `parents()` revset, to keep their order.
     children = _resolve_in_arg_order(repo, settings, befores)
-    seen: dict[str, object] = {}
+    seen: dict[str, pyjj.CommitId] = {}
     for child in children:
         for parent_id in child.parent_ids:
             seen.setdefault(parent_id.hex(), parent_id)
     return list(seen.values()), [c.id for c in children]
 
 
-def _prepare_insertion(tx, repo, settings, ontos, afters, befores):
+def _prepare_insertion(
+        tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
+        ontos: Sequence[str], afters: Sequence[str], befores: Sequence[str],
+) -> tuple[list[pyjj.CommitId], list[pyjj.CommitId]]:
     """Locate an insertion point and guard what it moves.
 
     `_commit_location` resolves the parents and children the placement
@@ -1116,7 +1144,10 @@ def _prepare_insertion(tx, repo, settings, ontos, afters, befores):
     return parents, children
 
 
-def _insert_between(tx, repo, new_parent_ids, new_child_ids, head_id):
+def _insert_between(
+        tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, new_parent_ids: Sequence[pyjj.CommitId],
+        new_child_ids: Sequence[pyjj.CommitId], head_id: pyjj.CommitId,
+) -> None:
     """Hook the named children onto a commit inserted above them.
 
     jj's rule, shared by `new` and `revert`: a child parent that is one of
@@ -1131,8 +1162,8 @@ def _insert_between(tx, repo, new_parent_ids, new_child_ids, head_id):
     parent_hexes = {parent.hex() for parent in new_parent_ids}
     for child_id in new_child_ids:
         child = repo.get_commit(child_id)
-        parents = []
-        seen = set()
+        parents: list[pyjj.CommitId] = []
+        seen: set[str] = set()
         for old_parent in child.parent_ids:
             chosen = head_id if old_parent.hex() in parent_hexes else old_parent
             if chosen.hex() not in seen:
@@ -1143,7 +1174,7 @@ def _insert_between(tx, repo, new_parent_ids, new_child_ids, head_id):
         tx.rebase(child, parents)
 
 
-def _check_rewritable(tx, settings, commits) -> None:
+def _check_rewritable(tx: pyjj.Transaction, settings: pyjj.UserSettings, commits) -> None:
     """`jj`'s guard against rewriting shared history: refuse when any of
     `commits` falls inside `immutable()`.
 
@@ -1164,7 +1195,7 @@ def _check_rewritable(tx, settings, commits) -> None:
     tx.check_rewritable(settings, ids)
 
 
-def _move_to(args, settings, ws, repo, tx, targets, edit: bool, name: str) -> int:
+def _move_to(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, tx: pyjj.Transaction, targets, edit: bool, name: str) -> int:
     """Land `jj next`/`jj prev` on `targets`: edit the target itself, or
     create a new empty commit on top of it.
 
@@ -1185,7 +1216,7 @@ def _move_to(args, settings, ws, repo, tx, targets, edit: bool, name: str) -> in
         _finish(tx, "new empty commit", settings, ws, repo)
     return 0
 
-def _next_prev(args, direction: str, *, walk_dir: str,
+def _next_prev(args: argparse.Namespace, direction: str, *, walk_dir: str,
                conflict_edit_rel: str, conflict_noedit_rel: str,
                plain_edit_tpl: str, plain_noedit_tpl: str,
                noedit_from_parents: bool) -> int:
@@ -1274,7 +1305,7 @@ def _next_prev(args, direction: str, *, walk_dir: str,
         return _move_to(args, settings, ws, repo, tx, targets, edit,
                         direction)
 
-def maybe_add_gitignore(ws) -> int:
+def maybe_add_gitignore(ws: pyjj.Workspace) -> int:
     """Keep a colocated Git worktree from tracking jj's own files, as
     `cli/src/commands/git/mod.rs::maybe_add_gitignore` does. Returns
     the exit code."""
@@ -1289,7 +1320,7 @@ def maybe_add_gitignore(ws) -> int:
     return 0
 
 
-def _export_git_refs(tx, ws) -> None:
+def _export_git_refs(tx: pyjj.Transaction, ws: pyjj.Workspace) -> None:
     """Write the transaction's bookmarks and tags out to the git repo.
 
     jj does this on every transaction it finishes, but only when the
@@ -1310,7 +1341,7 @@ def _export_git_refs(tx, ws) -> None:
     tx.git_export_refs()
 
 
-def _advance_if_immutable(tx, settings, ws, repo) -> None:
+def _advance_if_immutable(tx: pyjj.Transaction, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> None:
     """Create a new mutable working-copy commit when `@` turned immutable.
 
     Tagging (or otherwise locking) the commit the workspace sits on
@@ -1333,7 +1364,7 @@ def _advance_if_immutable(tx, settings, ws, repo) -> None:
           "has been created on top of it.", file=sys.stderr)
 
 
-def _finish(tx, description, settings, ws, base_repo, *,
+def _finish(tx: pyjj.Transaction, description, settings: pyjj.UserSettings, ws: pyjj.Workspace, base_repo, *,
             delete_abandoned_bookmarks=False, restore_descendants=False,
             rebase=True):
     """Commit the transaction, then mirror the real CLI's
@@ -1360,7 +1391,7 @@ def _finish(tx, description, settings, ws, base_repo, *,
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
 
-def _restore_view_command(tx, description, settings, ws, repo):
+def _restore_view_command(tx: pyjj.Transaction, description, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo):
     """Shared tail for view-restoring operations (undo/redo/op restore):
     they produce no rewrites to rebase and take their operation description
     verbatim from the binding -- for undo/redo it encodes the target op so
@@ -1370,7 +1401,7 @@ def _restore_view_command(tx, description, settings, ws, repo):
 
 # -- commands --------------------------------------------------------------
 
-def _changed_files(repo, settings, from_commit, to_commit):
+def _changed_files(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, from_commit, to_commit):
     """{path: (before_bytes_or_absent, after_bytes_or_absent)} for the diff
     between two commits, using the same sentinel-absence convention the
     diff-editor protocol needs."""
@@ -1378,7 +1409,7 @@ def _changed_files(repo, settings, from_commit, to_commit):
     for entry in from_commit.diff(to_commit):
         path = entry.path
 
-        def read(commit, p=path):
+        def read(commit: pyjj.Commit, p=path):
             return commit.read_file(p) if commit.file_exists(p) else None
 
         changed[path] = (read(from_commit), read(to_commit))
@@ -1410,7 +1441,7 @@ def _render_or_error(template, context):
         print(f"Error: template render failed: {e}", file=sys.stderr)
         return None
 
-def _rev(args, attr: str, default: str = "@") -> str:
+def _rev(args: argparse.Namespace, attr: str, default: str = "@") -> str:
     """A revision argument with jj's default.
 
     `args.X or "@"` is spelled at ~25 call sites with occasional
@@ -1421,7 +1452,7 @@ def _rev(args, attr: str, default: str = "@") -> str:
     value = getattr(args, attr, None)
     return value if value else default
 
-def _run_diff_tool(settings, tool: str, before: dict, after: dict) -> dict:
+def _run_diff_tool(settings: pyjj.UserSettings, tool: str, before: dict, after: dict) -> dict:
     """The merge-tools edit protocol: materialize $left/$right temp dirs
     holding exactly the changed paths (left = before, read-only in spirit;
     right = editable), invoke merge-tools.<tool>.edit-args with the
@@ -1482,7 +1513,7 @@ def _merge_marker_len(materialized: bytes) -> int:
             longest = max(longest, len(line) - len(line.lstrip(b"<")))
     return longest
 
-def _run_merge_tool(settings, tool: str, sides: dict, path: str,
+def _run_merge_tool(settings: pyjj.UserSettings, tool: str, sides: dict, path: str,
                     edits_markers: bool, materialized: bytes) -> bytes:
     """The 3-way merge-tool protocol for one conflicted file: materialize
     $base/$left/$right (read-only) plus $output into a temp dir named like
@@ -1593,7 +1624,7 @@ def _jj_config_get(key: str, cwd=None) -> str | None:
         value = value[:-1]
     return value or None
 
-def _pyjj_template(settings, name: str, cwd=None) -> str | None:
+def _pyjj_template(settings: pyjj.UserSettings, name: str, cwd=None) -> str | None:
     """Look up `pyjj.templates.<name>`: user config first, then repo config."""
     key = f"pyjj.templates.{name}"
     try:
@@ -1605,7 +1636,7 @@ def _pyjj_template(settings, name: str, cwd=None) -> str | None:
     return _jj_config_get(key, cwd)
 
 
-def _tracking_distance_spans(repo, remote_ids, local_ids):
+def _tracking_distance_spans(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
     """How far a tracked remote sits from its local ref, in the pieces
     jj labels it in.
 
@@ -1628,7 +1659,7 @@ def _tracking_distance_spans(repo, remote_ids, local_ids):
     return out
 
 
-def _tracking_counts(repo, remote_ids, local_ids):
+def _tracking_counts(repo: pyjj.ReadonlyRepo, remote_ids, local_ids):
     """How far a tracked remote ref sits from the local ref, jj's way.
 
     Ahead counts the commits the remote ref reaches and the local one
@@ -1654,12 +1685,12 @@ def _tracking_counts(repo, remote_ids, local_ids):
     return out
 
 
-def _formatter(settings=None) -> Formatter:
+def _formatter(settings: pyjj.UserSettings | None = None) -> Formatter:
     """This command's stdout, with jj's label stack over it."""
     return Formatter(sys.stdout, use_color(settings))
 
 
-def _print_ref(repo, settings, ref, template=None, tracked=(), *,
+def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref, template=None, tracked=(), *,
                kind: str = "bookmark", fmt=None) -> None:
     """One listing item: a ref, then the remote refs that follow it.
 
@@ -1772,7 +1803,7 @@ def _write_lines(fmt, lines, base: str = "") -> None:
         fmt.write("\n")
 
 
-def _conflict_spans(commit, to_ui_path):
+def _conflict_spans(commit: pyjj.Commit, to_ui_path):
     """The paths jj lists under its unresolved-conflicts warning.
 
     Each reads `<path> <n>-sided conflict`, and names anything in the
@@ -1818,13 +1849,13 @@ def _conflict_spans(commit, to_ui_path):
     return lines
 
 
-def _conflict_lines(commit, to_ui_path) -> list[str]:
+def _conflict_lines(commit: pyjj.Commit, to_ui_path) -> list[str]:
     """`_conflict_spans` as plain text."""
     return ["".join(text for text, _labels in line)
             for line in _conflict_spans(commit, to_ui_path)]
 
 
-def _commit_context(repo, settings, commit, bookmarks=None) -> dict:
+def _commit_context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None) -> dict:
     """The variables a listing's Jinja template can use for one commit.
 
     Every listing offers the same names, so a template written for one
@@ -1879,7 +1910,7 @@ def _compile_template(template_str: str):
     return env.from_string(template_str)
 
 
-def _resolve_template(settings, ws, args, name: str, builtins=None):
+def _resolve_template(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: argparse.Namespace, name: str, builtins=None):
     """The template a listing should render, or `None` for its default.
 
     jj drives each listing from a named entry under `[templates]`, and
@@ -1909,7 +1940,7 @@ def _resolve_template(settings, ws, args, name: str, builtins=None):
     return _compile_template(template_str)
 
 
-def _resolve_operation(repo, name: str | None):
+def _resolve_operation(repo: pyjj.ReadonlyRepo, name: str | None):
     """Resolve an operation the way `jj` names them on the command line.
 
     `@` means the operation the repo is loaded at, and `None` means `@`
@@ -1960,7 +1991,9 @@ def _resolve_operation(repo, name: str | None):
     return operation
 
 
-def _restore_what(args) -> list[str] | None:
+def _restore_what(
+        args: argparse.Namespace,
+) -> list[Literal["repo", "remote_tracking"]] | None:
     """`--what` for `op restore`/`op revert`, in the binding's spelling.
 
     jj takes `repo` and `remote-tracking` (can be repeated, default
@@ -1972,7 +2005,7 @@ def _restore_what(args) -> list[str] | None:
     values = getattr(args, "what", None)
     if not values:
         return None
-    translated = []
+    translated: list[Literal["repo", "remote_tracking"]] = []
     for value in values:
         if value == "repo":
             translated.append("repo")
@@ -1986,7 +2019,7 @@ def _restore_what(args) -> list[str] | None:
     return translated
 
 
-def _resolve_operation_prefix(repo, symbol: str, load_error):
+def _resolve_operation_prefix(repo: pyjj.ReadonlyRepo, symbol: str, load_error):
     """The one reachable operation whose id starts with `symbol`.
 
     Called with the error a direct `load_operation(symbol)` raised, so
@@ -2050,7 +2083,7 @@ def _summary_lines(entries, to_ui_path=None) -> list[str]:
             for line in _summary_spans(entries, to_ui_path)]
 
 
-def _print_summary(entries, to_ui_path=None, settings=None) -> None:
+def _print_summary(entries, to_ui_path=None, settings: pyjj.UserSettings | None = None) -> None:
     """The summary listing, coloured the way jj colours it."""
     lines = _summary_spans(entries, to_ui_path)
     if lines:
@@ -2070,7 +2103,7 @@ def _types_spans(entries, to_ui_path=None):
               "modified")] for e in entries]
 
 
-def _print_types(entries, to_ui_path=None, settings=None) -> None:
+def _print_types(entries, to_ui_path=None, settings: pyjj.UserSettings | None = None) -> None:
     """The types listing, coloured the way jj colours it."""
     lines = _types_spans(entries, to_ui_path)
     if lines:
@@ -2095,7 +2128,7 @@ def _relative_path(from_dir: Path, to: Path) -> str:
     return str(to)
 
 
-def _ui_path_formatter(ws):
+def _ui_path_formatter(ws: pyjj.Workspace):
     """How this invocation spells a repo-relative path back to the user.
 
     jj prints paths relative to the current directory, not to the
@@ -2109,7 +2142,7 @@ def _ui_path_formatter(ws):
     return lambda path: _relative_path(cwd, root / path)
 
 
-def _bookmarks_by_commit(repo, remotes: bool = False) -> dict[str, list[str]]:
+def _bookmarks_by_commit(repo: pyjj.ReadonlyRepo, remotes: bool = False) -> dict[str, list[str]]:
     """Bookmark names per commit, keyed by hex commit id.
 
     `remotes` adds the remote-tracking bookmarks as `name@remote`, which
@@ -2148,7 +2181,7 @@ def _short_id_spans(hex_str: str, shortest_len: int, kind: str):
     return spans
 
 
-def _is_empty(repo, commit) -> bool:
+def _is_empty(repo: pyjj.ReadonlyRepo, commit: pyjj.Commit) -> bool:
     """Whether a commit changes nothing, the way jj's `empty()` decides.
 
     `Commit.is_empty()` answers `False` for a parentless commit, since
@@ -2296,7 +2329,7 @@ def _indent(text: str, prefix: str = "    ") -> str:
     return "\n".join(prefix + line if line else line for line in text.split("\n"))
 
 
-def _immutable_ids(repo, settings, commits) -> set[str]:
+def _immutable_ids(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commits) -> set[str]:
     """Which of `commits` jj refuses to rewrite.
 
     jj asks this once per row, to decide whether the row reads
@@ -2319,7 +2352,7 @@ def _immutable_ids(repo, settings, commits) -> set[str]:
         return set()
 
 
-def _commit_kind(repo, commit, wc_ids=(), immutable_ids=()) -> str:
+def _commit_kind(repo: pyjj.ReadonlyRepo, commit: pyjj.Commit, wc_ids=(), immutable_ids=()) -> str:
     """jj's outer label on a log row: what kind of commit this is.
 
     `builtin_log_compact` wraps a whole row in these, and the palette
@@ -2349,7 +2382,7 @@ def _commit_glyph(kind: str) -> str:
     return "○"
 
 
-def _commit_header_spans(repo, settings, commit, *, kw: str = "",
+def _commit_header_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = "",
                          bookmarks=(), tags=(), working_copies=(),
                          author=None, timestamp=None):
     """jj's `format_short_commit_header`: the first line of a log row.
@@ -2424,7 +2457,7 @@ def _commit_header_spans(repo, settings, commit, *, kw: str = "",
     ])
 
 
-def _commit_root_spans(repo, settings, commit, *, kw: str = ""):
+def _commit_root_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = ""):
     """jj's `format_root_commit`: the row the root commit gets.
 
     It has no author and no timestamp worth printing -- the epoch reads
@@ -2448,7 +2481,7 @@ def _commit_root_spans(repo, settings, commit, *, kw: str = ""):
     ])
 
 
-def _commit_body_spans(repo, settings, commit, *, kw: str = ""):
+def _commit_body_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, *, kw: str = ""):
     """jj's second line of `builtin_log_compact`: empty, then the text."""
     empty = _is_empty(repo, commit)
     parts = [[("(empty)", "empty")]] if empty else []
@@ -2464,7 +2497,7 @@ def _commit_body_spans(repo, settings, commit, *, kw: str = ""):
     return separate(parts)
 
 
-def _commit_summary_spans(repo, settings, commit, bookmarks=None):
+def _commit_summary_spans(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None):
     """One commit as jj's `commit_summary` template renders it, in the
     labelled pieces jj colours it in.
 
@@ -2548,7 +2581,7 @@ def _commit_summary_spans(repo, settings, commit, bookmarks=None):
     return spans
 
 
-def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
+def _commit_summary(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, bookmarks=None) -> str:
     """`_commit_summary_spans` as plain text."""
     return "".join(
         text for text, _ in
@@ -2671,7 +2704,7 @@ def _render_diff(lines, coloured: bool, base: str = "diff git") -> bytes:
     return rendered.encode("utf-8", "surrogateescape") + b"\n"
 
 
-def _tags_by_commit(repo) -> dict[str, list[str]]:
+def _tags_by_commit(repo: pyjj.ReadonlyRepo) -> dict[str, list[str]]:
     """Tag names per commit, keyed by hex commit id."""
     by_commit: dict[str, list[str]] = {}
     for tag in repo.tags():
@@ -3066,7 +3099,7 @@ def _color_words_bytes(files, to_ui_path, context: int = 3,
         coloured, "diff color_words")
 
 
-def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
+def _print_color_words_diff(from_commit, to_commit, settings: pyjj.UserSettings, ws: pyjj.Workspace, paths=None,
                             context=3, compare: CompareMode = "exact") -> None:
     """Writes `jj diff`'s default output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
@@ -3081,7 +3114,7 @@ def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
 _DIFF_SIGILS = {"context": " ", "removed": "-", "added": "+"}
 
 
-def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3,
+def _print_git_diff(from_commit, to_commit, settings: pyjj.UserSettings, paths=None, context=3,
                     compare: CompareMode = "exact") -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
@@ -3141,13 +3174,13 @@ def _diff_stats_lines(stats):
     return lines
 
 
-def _print_diff_stats(stats, settings=None) -> None:
+def _print_diff_stats(stats, settings: pyjj.UserSettings | None = None) -> None:
     """The histogram, coloured the way jj colours it."""
     print(render_block(_diff_stats_lines(stats), "diff stat",
                        use_color(settings)))
 
 
-def _diff_base(repo, settings, commit):
+def _diff_base(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit):
     """What a one-revision diff compares against: the first parent, or
     the root commit when there is none.
 
@@ -3165,7 +3198,7 @@ def _diff_base(repo, settings, commit):
 _DESCRIPTION_PATH = "JJ-COMMIT-DESCRIPTION"
 
 
-def _description_diff_bytes(args, before: str, after: str,
+def _description_diff_bytes(args: argparse.Namespace, before: str, after: str,
                             coloured: bool = False, formats=None) -> bytes:
     """What jj prints when two commits' descriptions differ.
 
@@ -3255,7 +3288,7 @@ def _format_flag(name: str) -> str:
     return "--" + name.replace("_", "-")
 
 
-def _diff_formats_from_args(args) -> tuple[str | None, str | None]:
+def _diff_formats_from_args(args: argparse.Namespace) -> tuple[str | None, str | None]:
     """The formats these flags name, before any default applies.
 
     jj sorts the flags into a *short* format, which lists the files,
@@ -3296,7 +3329,7 @@ def _diff_formats_from_args(args) -> tuple[str | None, str | None]:
     raise CommandError(f"invalid builtin diff format: {tool}")
 
 
-def _diff_formats(args) -> tuple[str | None, str | None]:
+def _diff_formats(args: argparse.Namespace) -> tuple[str | None, str | None]:
     """The formats `jj diff` prints, in the order it prints them.
 
     A diff command always prints something, so the long color-words
@@ -3309,7 +3342,7 @@ def _diff_formats(args) -> tuple[str | None, str | None]:
     return short, long
 
 
-def _diff_formats_for_log(args, patch: bool) -> tuple[str | None, str | None]:
+def _diff_formats_for_log(args: argparse.Namespace, patch: bool) -> tuple[str | None, str | None]:
     """The formats a log-like command prints, which may be none at all.
 
     `jj log` prints a row and nothing else unless a flag asks for a
@@ -3326,7 +3359,7 @@ def _diff_formats_for_log(args, patch: bool) -> tuple[str | None, str | None]:
     return short, long
 
 
-def _compare_mode(args) -> CompareMode:
+def _compare_mode(args: argparse.Namespace) -> CompareMode:
     """How `-w` and `-b` ask for two lines to be compared.
 
     This decides which lines a diff calls the same, so it reaches
@@ -3339,7 +3372,7 @@ def _compare_mode(args) -> CompareMode:
     return "exact"
 
 
-def _diff_tool_bytes(settings, tool: str, files) -> bytes:
+def _diff_tool_bytes(settings: pyjj.UserSettings, tool: str, files) -> bytes:
     """What an external program prints for a diff.
 
     jj writes the two sides of every changed path into a `left` and a
@@ -3385,7 +3418,7 @@ def _diff_tool_bytes(settings, tool: str, files) -> bytes:
         return done.stdout
 
 
-def _diff_files_bytes(args, ws, files, settings=None, formats=None) -> bytes:
+def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files, settings: pyjj.UserSettings, formats=None) -> bytes:
     """The same format choice as `_diff_bytes`, from file content alone.
 
     `jj interdiff` diffs a rebased tree that has no commit id, so the
@@ -3429,14 +3462,14 @@ def _diff_files_bytes(args, ws, files, settings=None, formats=None) -> bytes:
                                     compare)
 
 
-def _print_diff_files(args, ws, files, settings=None) -> None:
+def _print_diff_files(args: argparse.Namespace, ws: pyjj.Workspace, files, settings: pyjj.UserSettings) -> None:
     """`_diff_files_bytes`, written to stdout."""
     sys.stdout.flush()
     sys.stdout.buffer.write(_diff_files_bytes(args, ws, files, settings))
     sys.stdout.buffer.flush()
 
 
-def _diff_bytes(args, ws, settings, base, target, paths,
+def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base, target, paths,
                 formats=None) -> bytes:
     """One place that decides which format a diff prints.
 
@@ -3492,7 +3525,7 @@ def _diff_bytes(args, ws, settings, base, target, paths,
                                     compare)
 
 
-def _print_diff(args, ws, settings, base, target, paths) -> None:
+def _print_diff(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.UserSettings, base, target, paths) -> None:
     """`_diff_bytes`, written to stdout."""
     sys.stdout.flush()
     sys.stdout.buffer.write(_diff_bytes(args, ws, settings, base, target,

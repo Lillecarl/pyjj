@@ -1,5 +1,9 @@
 """pyjj-cli rewrite command: absorb."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
     _changed_files,
@@ -12,8 +16,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def absorb(args) -> int:
+def absorb(args: argparse.Namespace) -> int:
     """`jj absorb --from X --into Y [FILESETS]` — move hunks into ancestors."""
     with write_tx(args) as (settings, ws, repo, tx):
         source = _resolve_one(repo, settings, args.from_)

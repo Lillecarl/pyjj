@@ -1,6 +1,10 @@
 """config subcommand: config_list."""
+
+from __future__ import annotations
+
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
@@ -11,6 +15,9 @@ from ..common import (
     settings_for,
 )
 from .config_set import _scope
+
+if TYPE_CHECKING:
+    import argparse
 
 
 _BUILTINS = {
@@ -24,7 +31,7 @@ _BUILTINS = {
 _DEFAULT_TEMPLATE = "{% if overridden %}# {% endif %}{{name}} = {{value}}"
 
 
-def config_list(args) -> int:
+def config_list(args: argparse.Namespace) -> int:
     """`jj config list [NAME]`: list what the config layers set.
 
     Every layer of the loaded settings reports its own entries, lowest

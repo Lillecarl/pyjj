@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("fix", help="Update files with formatting fixes")
     add_flags(p, [Flag.SOURCE_REVSET, Flag.INCLUDE_UNCHANGED, Flag.FILESETS])
     p.add_argument("-a", "--all-lines", dest="all_lines",

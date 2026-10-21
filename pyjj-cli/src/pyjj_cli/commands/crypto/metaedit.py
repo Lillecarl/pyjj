@@ -1,19 +1,26 @@
 """command: metaedit — change a revision's metadata, not its content."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ..common import (
-    _check_rewritable,
     CommandError,
+    _check_rewritable,
     _finish,
     _resolve_all,
     complete_newline,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def metaedit(args) -> int:
+
+def metaedit(args: argparse.Namespace) -> int:
     """`jj metaedit`: rewrite metadata, leaving every tree untouched.
 
     Author name and email move together, and separately from the author
@@ -74,7 +81,7 @@ def metaedit(args) -> int:
         return 1
 
 
-def _requested_edits(args) -> bool:
+def _requested_edits(args: argparse.Namespace) -> bool:
     return any((
         args.message is not None,
         getattr(args, "author_timestamp", None) is not None,
@@ -86,7 +93,7 @@ def _requested_edits(args) -> bool:
     ))
 
 
-def _new_author(settings, commit, args):
+def _new_author(settings: pyjj.UserSettings, commit: pyjj.Commit, args: argparse.Namespace):
     """The commit's new author signature, or `None` to leave it alone."""
     old = commit.author
     name, email, timestamp = old.name, old.email, old.timestamp

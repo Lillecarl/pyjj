@@ -1,4 +1,10 @@
-def register(git_sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("init", help="Create a new jj repo backed by Git")
     p.add_argument("destination", nargs="?", default=".", help="Destination directory")
     # jj colocates by default, so `--colocate` only matters when the

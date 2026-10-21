@@ -1,14 +1,20 @@
 """operation subcommand: op_abandon."""
 
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def op_abandon(args) -> int:
+def op_abandon(args: argparse.Namespace) -> int:
     with read_repo(args) as (_settings, ws, _repo):
         ops = getattr(args, "operations", [])
         # Join with .. for range syntax if multiple

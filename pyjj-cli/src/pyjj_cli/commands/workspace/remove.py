@@ -1,22 +1,30 @@
 """workspace subcommand: remove."""
+
+from __future__ import annotations
+
 import os
 import shutil
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
-    read_repo,
     command,
+    read_repo,
 )
 from .workspace_forget import _unlink_worktree
+
+if TYPE_CHECKING:
+    import argparse
 
 _FORGET_HINT = ("Use `jj workspace forget` to stop tracking a workspace "
                 "without deleting files.")
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def workspace_remove(args) -> int:
+def workspace_remove(args: argparse.Namespace) -> int:
     if getattr(args, "ignore_working_copy", False):
         print("Error: This command must be able to update the working "
               "copy.", file=sys.stderr)

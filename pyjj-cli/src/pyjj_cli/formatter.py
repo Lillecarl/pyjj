@@ -28,6 +28,10 @@ from __future__ import annotations
 import contextlib
 import io
 import typing
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pyjj
 
 # The eight names and their bright forms, as 256-colour indices. jj
 # writes these as `38;5;N` rather than the 30-37 range, so a terminal
@@ -309,7 +313,7 @@ class Formatter:
         self.close()
 
 
-def formatter(out, settings=None) -> Formatter:
+def formatter(out, settings: pyjj.UserSettings | None = None) -> Formatter:
     """The formatter for this run's stdout.
 
     The import is local: this module is the colour engine and nothing

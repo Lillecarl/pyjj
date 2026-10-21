@@ -1,6 +1,13 @@
 """templates subcommand: set."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 
 # Allowed template variables — for validation
@@ -33,7 +40,7 @@ def _validate_template(value: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def templates_set(args) -> int:
+def templates_set(args: argparse.Namespace) -> int:
     name = getattr(args, "name")
     value = getattr(args, "value")
     is_repo = getattr(args, "repo", False)

@@ -18,12 +18,19 @@ bound: `repo` is open on the `-R` path unless `--no-repo` says
 otherwise, and the two modules are there either way. Nothing to
 import, and nothing to get wrong on the first line.
 """
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from .common import CommandError, _workspace_path
 
+if TYPE_CHECKING:
+    import argparse
 
-def python_repl(args) -> int:
+
+def python_repl(args: argparse.Namespace) -> int:
     source = getattr(args, "file", None)
     script_args = list(getattr(args, "args", None) or [])
 
@@ -41,8 +48,9 @@ def python_repl(args) -> int:
             return 2
         name = source
 
-    import pyjj
     import pyjj_bindings
+
+    import pyjj
 
     # Bound before anything can fail, and whatever `--no-repo` says: a
     # script that has to open with `import pyjj` first is a script an

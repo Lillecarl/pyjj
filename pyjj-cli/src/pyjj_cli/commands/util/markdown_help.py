@@ -5,6 +5,9 @@ one `##` section per command, then `###### **Subcommands:**`,
 `**Arguments:**` and `**Options:**` lists. The content is pyjj-cli's own
 argparse tree, so `cli_surface` can read either tool's page.
 """
+
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -17,7 +20,7 @@ _FOOTER = """<hr/>
 """
 
 
-def util_markdown_help(args) -> int:
+def util_markdown_help(args: argparse.Namespace) -> int:
     from pyjj_cli.__main__ import GLOBAL_FLAGS_OUTSIDE_ARGPARSE, build_parser
 
     sys.stdout.write(render(build_parser(), sorted(GLOBAL_FLAGS_OUTSIDE_ARGPARSE)))
@@ -40,7 +43,7 @@ def render(parser: argparse.ArgumentParser, global_flags=()) -> str:
     return "".join(out)
 
 
-def _walk(parser, path, about):
+def _walk(parser: argparse.ArgumentParser, path, about):
     yield path, parser, about
     subparsers = _subparsers(parser)
     if subparsers is None:
@@ -49,7 +52,7 @@ def _walk(parser, path, about):
         yield from _walk(sub, f"{path} {name}", help_)
 
 
-def _subparsers(parser):
+def _subparsers(parser: argparse.ArgumentParser):
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             return action
@@ -79,7 +82,7 @@ def _visible(action) -> bool:
                                         argparse._SubParsersAction)))
 
 
-def _section(path, parser, about, global_flags) -> str:
+def _section(path, parser: argparse.ArgumentParser, about, global_flags) -> str:
     positionals = [a for a in parser._actions
                    if not a.option_strings and _visible(a)]
     options = [a for a in parser._actions if a.option_strings and _visible(a)]

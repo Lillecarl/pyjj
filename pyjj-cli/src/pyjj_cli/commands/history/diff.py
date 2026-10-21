@@ -1,5 +1,9 @@
 """history subcommand: diff."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _diff_base,
     _print_diff,
@@ -9,8 +13,11 @@ from ..common import (
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def diff(args) -> int:
+def diff(args: argparse.Namespace) -> int:
     """`jj diff` — compare file contents between revisions."""
     with read_repo(args) as (settings, ws, repo):
         paths = getattr(args, "filesets", None) or None

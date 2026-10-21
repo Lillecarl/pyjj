@@ -1,5 +1,9 @@
 """operation subcommand: op_restore."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _resolve_operation,
     _restore_view_command,
@@ -8,8 +12,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def op_restore(args) -> int:
+def op_restore(args: argparse.Namespace) -> int:
     """`jj op restore <OPERATION>`: make the view match a past operation."""
     with write_tx(args) as (settings, ws, repo, tx):
         # `operation restore` names the same argument `operation`; the

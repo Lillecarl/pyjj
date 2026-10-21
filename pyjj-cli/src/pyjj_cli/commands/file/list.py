@@ -1,14 +1,21 @@
 """file subcommand: file_list."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
-    _resolve_template,
     _resolve_one,
+    _resolve_template,
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def file_list(args) -> int:
+def file_list(args: argparse.Namespace) -> int:
     """`jj file list` — the paths a revision holds.
 
     jj renders each entry with `templates.file_list`, which prints the

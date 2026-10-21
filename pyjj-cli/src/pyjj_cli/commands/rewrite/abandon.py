@@ -1,4 +1,9 @@
 """pyjj-cli rewrite command: abandon."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _check_rewritable,
     _finish,
@@ -7,8 +12,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def abandon(args) -> int:
+def abandon(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         revsets = (list(args.revisions_pos or [])
                    + list(getattr(args, "revision_flags", None) or [])) or ["@"]

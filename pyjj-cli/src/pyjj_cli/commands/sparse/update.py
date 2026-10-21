@@ -1,8 +1,15 @@
 """The shared tail of `sparse set`, `reset` and `edit`."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pyjj
 
 
-def update_sparse_patterns(ws, repo, patterns) -> None:
+def update_sparse_patterns(ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, patterns) -> None:
     """jj's `update_sparse_patterns_with`: deduplicate and sort, set the
     patterns, then report the checkout like `print_checkout_stats`.
 

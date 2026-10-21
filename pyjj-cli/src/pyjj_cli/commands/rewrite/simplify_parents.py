@@ -1,12 +1,20 @@
 """rewrite command: simplify-parents — drop redundant parent edges."""
-import sys
 
+from __future__ import annotations
+
+import sys
+from typing import TYPE_CHECKING
 
 from ..common import _check_rewritable, _finish, _resolve_all, command, write_tx
 
+if TYPE_CHECKING:
+    import argparse
+
+    import pyjj
+
 
 @command
-def simplify_parents(args) -> int:
+def simplify_parents(args: argparse.Namespace) -> int:
     """`jj simplify-parents`: remove parents reachable through another parent.
 
     Where a revision has both B and C as parents and C is already an
@@ -45,7 +53,7 @@ def simplify_parents(args) -> int:
         return 0
 
 
-def _essential_parents(repo, settings, commit):
+def _essential_parents(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit):
     """The parents worth keeping, or `None` when none can be dropped."""
     parents = list(commit.parent_ids)
     if len(parents) < 2:

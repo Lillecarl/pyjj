@@ -1,22 +1,29 @@
 """file subcommand: file_annotate."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ...formatter import render_block
 from ..common import (
     _commit_context,
-    _resolve_template,
     _format_timestamp,
     _resolve_one,
+    _resolve_template,
     _short_id_spans,
-    use_color,
     command,
     read_repo,
+    use_color,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def file_annotate(args) -> int:
+def file_annotate(args: argparse.Namespace) -> int:
     """`jj file annotate` — which commit last touched each line.
 
     jj puts four columns before the text: the change id, the author's

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import argparse
 
 from ..flags import Flag, add_flags
 
 
-def register(sub) -> None:
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("describe", aliases=["desc"], help="Set commit descriptions")
     p.add_argument("-r", "--revision", dest="revisions_opt", action="append",
                    default=None, metavar="REVSETS", help=argparse.SUPPRESS)

@@ -1,23 +1,30 @@
 """resolve subcommand: diffedit."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
+    _changed_files,
     _check_rewritable,
-    command,
     _finish,
     _resolve_one,
     _rev,
-    _changed_files,
-    _split_changed,
     _run_diff_tool,
     _selection_is_empty,
+    _split_changed,
+    command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 
 @command
-def diffedit(args) -> int:
+def diffedit(args: argparse.Namespace) -> int:
     """`jj diffedit`: edit a revision's own changes, or the diff between
     two revisions. Either way the edit lands on the destination side."""
     try:

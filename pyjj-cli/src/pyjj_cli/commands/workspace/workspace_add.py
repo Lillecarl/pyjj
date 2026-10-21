@@ -1,19 +1,27 @@
 """workspace subcommand: workspace_add."""
+
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _resolve_all,
-    join_message_paragraphs,
     command,
+    join_message_paragraphs,
     maybe_add_gitignore,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def workspace_add(args) -> int:
+def workspace_add(args: argparse.Namespace) -> int:
     """`jj workspace add DESTINATION` — a second working copy on one repo."""
     with read_repo(args) as (settings, ws, repo):
         dest = str(Path(args.destination).resolve())
@@ -43,7 +51,7 @@ def workspace_add(args) -> int:
         return maybe_add_gitignore(new_ws)
 
 
-def _should_colocate(ws, settings, args) -> bool:
+def _should_colocate(ws: pyjj.Workspace, settings: pyjj.UserSettings, args: argparse.Namespace) -> bool:
     """Whether the new workspace gets a Git worktree, mirroring
     `cli/src/commands/workspace/add.rs`: `--colocate` forces one,
     `--no-colocate` refuses one, and otherwise a worktree is created
@@ -59,7 +67,7 @@ def _should_colocate(ws, settings, args) -> bool:
     return settings.get_bool("git.colocate") != False
 
 
-def _sparse_patterns(ws, args):
+def _sparse_patterns(ws: pyjj.Workspace, args: argparse.Namespace):
     """What the new workspace's sparse patterns start as. `None` is
     `copy`, the binding's default as it is jj's; `[""]` is everything."""
     choice = getattr(args, "sparse_patterns", "copy")

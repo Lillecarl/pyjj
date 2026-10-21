@@ -1,9 +1,14 @@
 """operation subcommand: op_log."""
-import sys
 
-import pyjj
+from __future__ import annotations
+
+import sys
+from typing import TYPE_CHECKING
+
 from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
+
+import pyjj
 
 from ...formatter import render_block, separate
 from ..common import (
@@ -13,12 +18,15 @@ from ..common import (
     _duration,
     _pyjj_template,
     _resolve_template,
-    dot_attribute,
-    use_color,
-    read_repo,
     command,
+    dot_attribute,
+    read_repo,
+    use_color,
 )
 from .op_diff import print_operation_diff
+
+if TYPE_CHECKING:
+    import argparse
 
 # jj's own builtin template names. These carry labels, and a label
 # decides a colour, so pyjj-cli builds their spans itself rather than
@@ -31,7 +39,7 @@ _SHAPES = {
 }
 
 
-def _shape(settings, ws, args, name: str):
+def _shape(settings: pyjj.UserSettings, ws: pyjj.Workspace, args: argparse.Namespace, name: str):
     """Either one of jj's builtin shapes, or a Jinja template.
 
     A builtin name wins over the Jinja path wherever it appears, on the
@@ -48,7 +56,7 @@ def _shape(settings, ws, args, name: str):
     return None, _resolve_template(settings, ws, args, name)
 
 
-def _fields(op) -> list[tuple[str, tuple[str, ...]]]:
+def _fields(op: pyjj.Operation) -> list[tuple[str, tuple[str, ...]]]:
     """The header fields of an operation, jj's `format_operation` shape.
 
     jj joins these with `separate(" ", ...)`, which drops the empty
@@ -71,7 +79,7 @@ def _fields(op) -> list[tuple[str, tuple[str, ...]]]:
     return separate(parts)
 
 
-def _op_lines(op, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
+def _op_lines(op: pyjj.Operation, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
     """One operation's lines, as labelled spans, without the graph."""
     if not op.parent_ids:
         # The root operation has no user, no time and nothing it did.
@@ -91,7 +99,7 @@ def _op_lines(op, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
     return lines
 
 
-def _jinja_lines(op, current: bool, template):
+def _jinja_lines(op: pyjj.Operation, current: bool, template):
     """A user template's output, as one unlabelled span per line."""
     attributes = "\n".join(f"{key}: {value}" for key, value in op.attributes)
     root = not op.parent_ids
@@ -124,7 +132,7 @@ def _jinja_lines(op, current: bool, template):
     return [[(line, ())] for line in lines or [""]]
 
 
-def render_operation(op, current: bool, shape, template, prefix: str,
+def render_operation(op: pyjj.Operation, current: bool, shape, template, prefix: str,
                      coloured: bool) -> str:
     """One operation's block, ready to print or to hand to the graph.
 
@@ -156,7 +164,7 @@ def render_node(current: bool, prefix: str, coloured: bool) -> str:
     return render_block([line], (prefix, "operation", "node"), coloured)
 
 
-def _op_diff_text(args, settings, ws, repo, op) -> str:
+def _op_diff_text(args: argparse.Namespace, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo, op: pyjj.Operation) -> str:
     """One operation's own diff, as the text that sits under its row.
 
     `jj op log --op-diff` shows what each operation changed, compared
@@ -192,7 +200,7 @@ _DOT_CATALOGUE = (
 _DOT_DEFAULT = ("id", "user", "time_ago", "description", "attributes")
 
 
-def _dot_attributes(op, current: bool, fields) -> dict[str, str]:
+def _dot_attributes(op: pyjj.Operation, current: bool, fields) -> dict[str, str]:
     """One operation's selected fields, as DOT node attributes."""
     values = {
         "id": op.id,
@@ -216,7 +224,7 @@ def _dot_attributes(op, current: bool, fields) -> dict[str, str]:
 
 
 @command
-def op_log(args) -> int:
+def op_log(args: argparse.Namespace) -> int:
     """`jj op log` — the repository's own history of transactions."""
     pre = _dot_preamble(args, _DOT_CONFLICTS, _DOT_DEFAULT, _DOT_CATALOGUE)
     if pre is None:

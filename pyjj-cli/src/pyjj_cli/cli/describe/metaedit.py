@@ -1,4 +1,10 @@
-def register(sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("metaedit",
                        help="Modify metadata of a revision without changing content")
     p.add_argument("revisions_pos", nargs="*", metavar="REVSETS",

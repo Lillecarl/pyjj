@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("evolog", aliases=["evolution-log"],
                        help="Show how a change has evolved over time")
     add_flags(p, [Flag.REVISIONS, Flag.LIMIT, Flag.NO_GRAPH, Flag.PATCH,

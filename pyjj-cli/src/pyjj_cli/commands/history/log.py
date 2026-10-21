@@ -11,12 +11,17 @@ name instead of an email, and a timestamp without the century. It is
 the same fields in the same shape otherwise, so `-T builtin_log_compact`
 prints exactly what `jj log -T builtin_log_compact` prints.
 """
+
+from __future__ import annotations
+
 import datetime
 import sys
+from typing import TYPE_CHECKING
 
-import pyjj
 from pyjj.graph_dot import render_dot
 from pyjj.graph_layout import reverse_graph
+
+import pyjj
 
 from ...formatter import Line, render_block, separate
 from ..common import (
@@ -26,24 +31,27 @@ from ..common import (
     _commit_header_spans,
     _commit_kind,
     _commit_root_spans,
-    _immutable_ids,
-    conflicting_flags,
-    dot_attribute,
-    remote_state,
-    unpushed,
     _diff_base,
     _diff_bytes,
     _diff_formats_for_log,
-    _pyjj_template,
-    _resolve_template,
     _dot_preamble,
+    _immutable_ids,
+    _pyjj_template,
     _render_or_error,
+    _resolve_template,
     _short_id,
     _short_id_spans,
-    use_color,
-    read_repo,
     command,
+    conflicting_flags,
+    dot_attribute,
+    read_repo,
+    remote_state,
+    unpushed,
+    use_color,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 # jj's own builtin template names. `builtin_log_compact` builds its
 # spans directly, because a Jinja render carries no labels and a label
@@ -95,7 +103,7 @@ _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
                 "description", "bookmarks", "unpushed_bookmarks")
 
 
-def _log_revset(settings, revisions, paths) -> str:
+def _log_revset(settings: pyjj.UserSettings, revisions, paths) -> str:
     """Which commits `jj log` walks, given what was asked for.
 
     The configured `revsets.log` applies only when neither a revision
@@ -128,7 +136,7 @@ def _fileset_literal(path: str) -> str:
     return f'"{escaped}"'
 
 
-def _dot_keys(repo, items, by_id):
+def _dot_keys(repo: pyjj.ReadonlyRepo, items, by_id):
     """`{commit hex: change id}` for every node the graph names.
 
     A commit id is a content hash, so a rewrite replaces it, and the
@@ -174,7 +182,7 @@ def _rekey(items, keys):
             for hex_id, parents in items]
 
 
-def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths,
+def _dot_attributes(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, args: argparse.Namespace, ws: pyjj.Workspace, commit: pyjj.Commit, context, fields, paths,
                     names, remotes):
     """One row's selected fields, as DOT node attributes.
 
@@ -243,7 +251,7 @@ def _spans_millennia(nodes) -> bool:
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def log(args) -> int:
+def log(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
         paths = getattr(args, "filesets", None) or None
         revset_expr = _log_revset(settings, getattr(args, "revisions", None),
@@ -434,7 +442,7 @@ def log(args) -> int:
         return 0
 
 
-def _default_lines(repo, settings, commit, kind, names, root: bool,
+def _default_lines(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, kind, names, root: bool,
                    short_year: bool):
     """pyjj-cli's own row: the author's name, and a two-digit year.
 
@@ -476,7 +484,7 @@ def _default_lines(repo, settings, commit, kind, names, root: bool,
     ]
 
 
-def _context(repo, settings, commit, names, short_year, is_wc: bool,
+def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.Commit, names, short_year, is_wc: bool,
              is_current_wc: bool) -> dict:
     """What a user's own Jinja template can name.
 

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import (
     add_context_flag,
     add_diff_tool_flag,
@@ -9,8 +13,11 @@ from ..flags import (
     add_whitespace_flags,
 )
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(sub) -> None:
+
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("interdiff",
                        help="Show differences between the diffs of two revisions")
     p.add_argument("-f", "--from", dest="from_", default=None, metavar="REVSET",

@@ -1,18 +1,26 @@
 """pyjj-cli rewrite command: fix."""
+
+from __future__ import annotations
+
 import subprocess
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     CommandError,
     _finish,
-    _ignore_immutable,
     _fix_pattern_matches,
+    _ignore_immutable,
     command,
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def fix(args) -> int:
+def fix(args: argparse.Namespace) -> int:
     """`jj fix [-s REVSET] [--include-unchanged-files] [FILESETS]` — run formatters."""
     with write_tx(args) as (settings, ws, repo, tx):
         revset = getattr(args, "source", None)

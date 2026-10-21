@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..flags import Flag, add_flags
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(git_sub) -> None:
+
+def register(git_sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = git_sub.add_parser("fetch", help="Fetch from a Git remote")
     # jj takes `--remote` more than once here, and reads each one as a
     # name pattern. Every other command with the flag takes one remote,

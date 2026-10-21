@@ -1,5 +1,9 @@
 """tag subcommand: tag_set."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from ..common import (
     _finish,
@@ -8,8 +12,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def tag_set(args) -> int:
+def tag_set(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         rev = getattr(args, "revision", "@")
         target = _resolve_one(repo, settings, rev)

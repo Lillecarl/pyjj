@@ -1,4 +1,10 @@
-def register(sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("prev", help="Change the working copy revision relative to the parent revision")
     # No default: `--conflict` cannot be used with an explicit offset,
     # so the command must tell "omitted" from "1".

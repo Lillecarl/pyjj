@@ -1,4 +1,10 @@
-def add_parsers(sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_graph = sub.add_parser(
         "graph", help="Compare the repository against a Graphviz DOT graph")
     p_graph.set_defaults(_handler="pyjj_cli.cli.graph:_graph_root")
@@ -32,7 +38,7 @@ def add_parsers(sub) -> None:
     p_apply.set_defaults(_handler="pyjj_cli.commands.graph.apply:apply")
 
 
-def _graph_root(args) -> int:
+def _graph_root(args: argparse.Namespace) -> int:
     import sys
     print("usage: pyjj graph {plan,apply} <FILE>", file=sys.stderr)
     return 2

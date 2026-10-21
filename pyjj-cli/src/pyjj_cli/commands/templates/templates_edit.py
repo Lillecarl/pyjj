@@ -1,16 +1,23 @@
 """templates subcommand: edit — sudoedit-style with .j2 temp file."""
+
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ..common import _pyjj_template, read_repo, command
+from ..common import _pyjj_template, command, read_repo
 from .templates_set import _validate_template
+
+if TYPE_CHECKING:
+    import argparse
 
 
 @command
-def templates_edit(args) -> int:
+def templates_edit(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, _):
         name = getattr(args, "name")
         is_repo = getattr(args, "repo", False)

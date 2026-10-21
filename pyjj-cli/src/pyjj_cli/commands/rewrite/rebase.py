@@ -1,7 +1,12 @@
 """pyjj-cli rewrite command: rebase."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     _check_rewritable,
     _finish,
@@ -11,8 +16,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def rebase(args) -> int:
+def rebase(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         # Determine source mode: -r (commit_ids), -s (root_ids), -b (branch roots)
         revisions = getattr(args, "revisions", None)
@@ -116,7 +124,7 @@ def rebase(args) -> int:
         return 0
 
 
-def _branch_roots(repo, settings, branches, new_parent_ids):
+def _branch_roots(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, branches, new_parent_ids):
     """`roots(destination..branch)`: the commits `jj rebase -b` moves.
 
     A branch commit that is already an ancestor of the destination stays

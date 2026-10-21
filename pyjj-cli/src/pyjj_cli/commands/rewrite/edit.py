@@ -1,5 +1,9 @@
 """pyjj-cli rewrite command: edit."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..common import (
     _check_rewritable,
     _finish,
@@ -8,8 +12,11 @@ from ..common import (
     write_tx,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def edit(args) -> int:
+def edit(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         target = _resolve_one(
             repo, settings,

@@ -1,14 +1,21 @@
 """file subcommand: file_track."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..common import (
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def file_track(args) -> int:
+def file_track(args: argparse.Namespace) -> int:
     # file track is about telling the working copy to start tracking a path
     # that was previously ignored (e.g. via .gitignore). In pyjj, snapshot
     # already handles .gitignore, but file track with --include-ignored

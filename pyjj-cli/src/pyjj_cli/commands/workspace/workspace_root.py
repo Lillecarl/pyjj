@@ -1,15 +1,23 @@
 """workspace subcommand: workspace_root."""
+
+from __future__ import annotations
+
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def workspace_root(args) -> int:
+def workspace_root(args: argparse.Namespace) -> int:
     with read_repo(args) as (_settings, ws, _repo):
         name = getattr(args, "name", None)
         if not name:

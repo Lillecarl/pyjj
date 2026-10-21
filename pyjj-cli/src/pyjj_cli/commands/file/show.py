@@ -1,16 +1,24 @@
 """file subcommand: file_show."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import pyjj
+
 from ..common import (
-    _resolve_template,
     _resolve_one,
+    _resolve_template,
     command,
     read_repo,
 )
 
+if TYPE_CHECKING:
+    import argparse
+
 @command
-def file_show(args) -> int:
+def file_show(args: argparse.Namespace) -> int:
     """`jj file show` — the content of the paths a revision holds.
 
     jj renders each file's metadata with `templates.file_show` before

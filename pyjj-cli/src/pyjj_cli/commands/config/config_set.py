@@ -1,14 +1,21 @@
 """config subcommand: config_set."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pyjj
 
 from ..common import CommandError, read_repo
 from .paths import Scope, config_path, read_config, set_key, write_config
 
+if TYPE_CHECKING:
+    import argparse
 
-def _target_path(args):
+
+def _target_path(args: argparse.Namespace):
     """The file to act on: `--file` names it directly, otherwise the
     scope resolves to its file. A `--file` target is created with its
     parents, the way jj does; no recognized-location check is done."""
@@ -21,7 +28,7 @@ def _target_path(args):
     return None
 
 
-def config_set(args) -> int:
+def config_set(args: argparse.Namespace) -> int:
     """`jj config set --repo|--user|--workspace <name> <value>`."""
     scope = _scope(args)
     if scope is None and getattr(args, "file", None) is None:
@@ -53,7 +60,7 @@ def config_set(args) -> int:
     return 0
 
 
-def _warn_wc_author(args, value, part: str) -> None:
+def _warn_wc_author(args: argparse.Namespace, value, part: str) -> None:
     """The full warning jj prints when the author setting changes."""
     try:
         with read_repo(args) as (_settings, ws, repo):
@@ -71,7 +78,7 @@ def _warn_wc_author(args, value, part: str) -> None:
           "\"jj metaedit --update-author\".", file=sys.stderr)
 
 
-def _scope(args) -> Scope | None:
+def _scope(args: argparse.Namespace) -> Scope | None:
     if getattr(args, "workspace", False):
         return "workspace"
     if getattr(args, "repo", False):
@@ -81,7 +88,7 @@ def _scope(args) -> Scope | None:
     return None
 
 
-def _workspace_root(args):
+def _workspace_root(args: argparse.Namespace):
     with read_repo(args) as (_settings, ws, _repo):
         return ws.workspace_root
 

@@ -1,6 +1,11 @@
 """history subcommand: status."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pyjj
+
 from ..common import (
     _bookmarks_by_commit,
     _commit_summary_spans,
@@ -10,13 +15,16 @@ from ..common import (
     _ui_path_formatter,
     _wc_commit,
     _write_lines,
-    read_repo,
     command,
+    read_repo,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
-def status(args) -> int:
+def status(args: argparse.Namespace) -> int:
     """`jj status` — the working copy, its parents, and what changed."""
     with read_repo(args) as (settings, ws, repo):
         paths = getattr(args, "filesets", None) or None
@@ -30,7 +38,7 @@ def status(args) -> int:
         entries = wc.diff_from_parents(repo, paths)
         bookmarks = _bookmarks_by_commit(repo)
 
-        def summary(commit, working_copy: bool):
+        def summary(commit: pyjj.Commit, working_copy: bool):
             """One commit, under the labels jj gives a bare summary."""
             base = "commit working_copy" if working_copy else "commit"
             return [(text, f"{base} {labels}".strip()) for text, labels

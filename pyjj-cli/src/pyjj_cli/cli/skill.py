@@ -1,4 +1,10 @@
-def add_parsers(sub) -> None:
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
+def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_skill = sub.add_parser(
         "skill", help="Work with the bundled agent skill")
     p_skill.set_defaults(_handler="pyjj_cli.commands.skill:skill_path",
