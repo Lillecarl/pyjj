@@ -22,6 +22,7 @@ line by line misses every one of those.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import TYPE_CHECKING, Literal
 
 import pygraphviz
@@ -38,6 +39,17 @@ _EDGE_STYLE: dict[str, str] = {"indirect": "dashed", "missing": "dotted"}
 _EDGE_TYPE: dict[str, str] = {"dashed": "indirect", "dotted": "missing"}
 
 _NOT_SHOWN = "(not shown)"
+
+
+def _is_placeholder(node: pygraphviz.Node) -> bool:
+    """The label alone is not enough: a commit may carry that text."""
+    return node.attr["label"] == _NOT_SHOWN and node.attr["shape"] == "none"
+
+
+def _edge_type(style: str | None) -> str:
+    """`style` is a comma list, so `"dashed,bold"` is still dashed."""
+    styles = {part.strip() for part in (style or "").split(",")}
+    return next((kind for s, kind in _EDGE_TYPE.items() if s in styles), "direct")
 
 
 class DotError(ValueError):
@@ -89,18 +101,20 @@ def resolve_plan(
 
     # Kahn over the in-graph edges, child depending on parent. A node
     # left over when nothing more can be emitted sits on a cycle.
-    remaining = {key: {p for p in parents if p in known}
-                 for key, parents in wanted.items()}
+    remaining = {key: {p for p in wanted[key] if p in known} for key in nodes}
+    children: dict[str, list[str]] = {key: [] for key in nodes}
+    for key in nodes:
+        for parent in remaining[key]:
+            children[parent].append(key)
     order: list[str] = []
-    ready = [key for key in nodes if not remaining[key]]
+    ready = deque(key for key in nodes if not remaining[key])
     while ready:
-        key = ready.pop(0)
+        key = ready.popleft()
         order.append(key)
-        for child, parents in remaining.items():
-            if key in parents:
-                parents.discard(key)
-                if not parents and child not in order and child not in ready:
-                    ready.append(child)
+        for child in children[key]:
+            remaining[child].discard(key)
+            if not remaining[child]:
+                ready.append(child)
 
     if len(order) != len(nodes):
         stuck = sorted(set(nodes) - set(order))
@@ -196,13 +210,11 @@ def parse_dot_graph(
     if not graph.directed:
         raise DotError("the graph is not directed, so it names no parents")
 
-    nodes = [str(node) for node in graph.nodes()
-             if node.attr["label"] != _NOT_SHOWN]
+    nodes = [str(node) for node in graph.nodes() if not _is_placeholder(node)]
     edges: dict[str, list[tuple[str, str]]] = {}
     for edge in graph.edges():
         source, target = str(edge[0]), str(edge[1])
-        edges.setdefault(source, []).append(
-            (target, _EDGE_TYPE.get(edge.attr["style"] or "", "direct")))
+        edges.setdefault(source, []).append((target, _edge_type(edge.attr["style"])))
     abandoned = set()
     for node in graph.nodes():
         key = str(node)

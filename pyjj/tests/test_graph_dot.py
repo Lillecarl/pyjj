@@ -545,3 +545,13 @@ def test_cli_op_log_dot_refuses_the_op_diff_flag(workspace, repo, settings):
     )
     assert result.returncode == 2
     assert "--dot cannot be used with --op-diff" in result.stderr
+
+
+def test_a_commit_labelled_like_a_placeholder_is_still_a_row():
+    nodes, _edges = parse_dot('digraph { a [label="(not shown)"]; b; b -> a }')
+    assert nodes == ["a", "b"]
+
+
+def test_a_style_list_keeps_its_edge_type():
+    _nodes, edges = parse_dot('digraph { a; b; b -> a [style="dashed,bold"] }')
+    assert edges == {"b": [("a", "indirect")]}
