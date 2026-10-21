@@ -266,6 +266,7 @@ impl PyReadonlyRepo {
     /// merges their trees -- the two descriptions against an empty
     /// base. That merge rarely resolves, so the description the diff
     /// starts from is the conflict, markers and all.
+    #[pyo3(signature = (removes: "typing.Sequence[bytes]", adds: "typing.Sequence[bytes]", settings))]
     fn materialize_merge(
         &self,
         py: Python<'_>,
@@ -1100,7 +1101,7 @@ impl PyTransaction {
     /// `jj squash --tool`: squash a diff-editor's selection instead of a
     /// set of paths. `selections` is the tool's output, per path: bytes
     /// to write that content, `None` to leave the path out.
-    #[pyo3(signature = (source, destination, selections, *, keep_emptied=false))]
+    #[pyo3(signature = (source, destination, selections: "dict[str, bytes | None]", *, keep_emptied=false))]
     fn squash_edited(
         slf: &Bound<'_, Self>,
         source: &PyCommit,
@@ -1133,6 +1134,7 @@ impl PyTransaction {
     /// `split_selected()` for diff-editor flows: `selections` maps changed
     /// paths to post-editing content (`None` = dropped). The first half's
     /// tree is the parent tree overlaid with exactly these contents.
+    #[pyo3(signature = (target, selections: "dict[str, bytes | None]"))]
     fn split_selected_edited(
         slf: &Bound<'_, Self>,
         target: &PyCommit,
@@ -1145,6 +1147,7 @@ impl PyTransaction {
 
     /// Rewrite `commit` with per-path content overrides on top of its own
     /// tree (`diffedit`'s model; `None` removes a path).
+    #[pyo3(signature = (commit, selections: "dict[str, bytes | None]"))]
     fn edit_commit_tree(
         slf: &Bound<'_, Self>,
         commit: &PyCommit,
@@ -1206,6 +1209,7 @@ impl PyTransaction {
     /// committer-timestamp bump), like real `jj resolve` applying all its
     /// merge-tool results to one tree. Raises `JjError` if any path isn't
     /// a resolvable file conflict.
+    #[pyo3(signature = (commit, selections: "dict[str, bytes]"))]
     fn resolve_conflicts(
         slf: &Bound<'_, Self>,
         commit: &PyCommit,
@@ -1307,7 +1311,7 @@ impl PyTransaction {
     /// rebased after the last rewrites", same assertion every other
     /// rewrite-registering call here is subject to).
     #[pyo3(signature = (settings, source_commit, destinations=None, paths=None, *,
-                        check_immutable=false, selections=None))]
+                        check_immutable=false, selections: "dict[str, bytes | None] | None" = None))]
     #[allow(clippy::too_many_arguments)]
     fn absorb(
         &self,
@@ -1402,7 +1406,7 @@ impl PyTransaction {
     /// same rule real `jj fix` follows. A file whose key is missing from
     /// `fixes` is left unchanged. Still needs `rebase_descendants()` before
     /// `commit()`, same as every other rewrite here.
-    #[pyo3(signature = (settings, fixes, revset=None, paths=None, *, include_unchanged_files=false))]
+    #[pyo3(signature = (settings, fixes: "dict[str, bytes]", revset=None, paths=None, *, include_unchanged_files=false))]
     fn fix_apply(
         &self,
         settings: &PyUserSettings,

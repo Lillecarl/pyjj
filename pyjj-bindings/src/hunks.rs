@@ -67,7 +67,7 @@ pub fn diff_hunks(before: &[u8], after: &[u8]) -> Vec<PyHunk> {
 /// ranges. Pure content computation, no repo access -- the same rule
 /// the real CLI's `compute_regions_to_format` applies per tool per file.
 #[pyfunction]
-#[pyo3(signature = (base, current))]
+#[pyo3(signature = (base: "bytes | None", current: "bytes"))]
 pub fn changed_line_ranges(base: Option<Vec<u8>>, current: Vec<u8>) -> Vec<(usize, usize)> {
     let regions = if current.is_empty() {
         RegionsToFormat::LineRanges(vec![])
