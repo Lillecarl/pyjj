@@ -663,6 +663,10 @@ impl PyTransaction {
     /// parent's tree -- so paths the parents changed differently come out
     /// conflicted, same as real jj.
     /// Returns a [`CommitBuilder`] for further configuration.
+    ///
+    /// `settings` is ignored. jj-lib takes the author, committer, signing
+    /// and change-id source from the settings the repo was loaded with,
+    /// not from these or from `start_transaction`'s.
     fn new_commit(
         slf: &Bound<'_, Self>,
         _settings: &PyUserSettings,
@@ -690,6 +694,7 @@ impl PyTransaction {
     }
 
     /// Rewrite an existing commit. Returns a [`CommitBuilder`].
+    /// `settings` is ignored, as in `new_commit`.
     fn rewrite_commit(
         slf: &Bound<'_, Self>,
         _settings: &PyUserSettings,
