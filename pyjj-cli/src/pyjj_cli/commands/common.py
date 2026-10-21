@@ -9,10 +9,14 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 import pyjj
 
 from ..formatter import Formatter, Line, render_block, separate
+
+#: How two lines compare: exactly, or across whitespace (`-w`, `-b`).
+CompareMode = Literal["exact", "ignore-all-space", "ignore-space-change"]
 
 
 def complete_newline(s: str) -> str:
@@ -2552,7 +2556,7 @@ def _commit_summary(repo, settings, commit, bookmarks=None) -> str:
     )
 
 
-def _git_diff_lines(files, context: int = 3, compare: str = "exact"):
+def _git_diff_lines(files, context: int = 3, compare: CompareMode = "exact"):
     """`jj diff --git`'s output for a list of `Commit.git_diff()` files.
 
     The layout follows jj's `show_git_diff`. Two details differ from what
@@ -2605,13 +2609,13 @@ def _git_diff_lines(files, context: int = 3, compare: str = "exact"):
 
 
 def _git_diff_bytes(files, context: int = 3, coloured: bool = False,
-                    compare: str = "exact") -> bytes:
+                    compare: CompareMode = "exact") -> bytes:
     """`_git_diff_lines` as bytes, ready to write to stdout."""
     return _render_diff(_git_diff_lines(files, context, compare), coloured)
 
 
 def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
-                        compare: str = "exact"):
+                        compare: CompareMode = "exact"):
     """The `@@` headers and their lines, as labelled spans.
 
     jj prints these for a file and, in `--git` format, for a commit
@@ -2645,7 +2649,7 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
 
 
 def _unified_hunk_bytes(before: bytes, after: bytes, context: int = 3,
-                        compare: str = "exact") -> bytes:
+                        compare: CompareMode = "exact") -> bytes:
     """`_unified_hunk_lines` as plain bytes."""
     return _render_diff(_unified_hunk_lines(before, after, context, compare),
                         False)
@@ -2999,7 +3003,7 @@ def _context_rows(rows, pending, numbers, num_after, num_before,
 
 
 def _color_words_rows(before: bytes, after: bytes, context: int = 3,
-                      coloured: bool = False, compare: str = "exact"):
+                      coloured: bool = False, compare: CompareMode = "exact"):
     """The numbered body of a color-words diff, as labelled rows.
 
     jj keeps `context` unchanged lines after a change and `context`
@@ -3025,7 +3029,7 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
 
 
 def _color_words_lines(files, to_ui_path, context: int = 3,
-                       coloured: bool = False, compare: str = "exact"):
+                       coloured: bool = False, compare: CompareMode = "exact"):
     """`jj diff`'s default output for a list of `Commit.git_diff()` files.
 
     A conflicted path reads as a regular file here. jj names it a
@@ -3055,7 +3059,7 @@ def _color_words_lines(files, to_ui_path, context: int = 3,
 
 
 def _color_words_bytes(files, to_ui_path, context: int = 3,
-                       coloured: bool = False, compare: str = "exact") -> bytes:
+                       coloured: bool = False, compare: CompareMode = "exact") -> bytes:
     """`_color_words_lines` as bytes, ready to write to stdout."""
     return _render_diff(
         _color_words_lines(files, to_ui_path, context, coloured, compare),
@@ -3208,7 +3212,7 @@ class _FileStat:
             return "C"
         return {"120000": "L", "040000": "G"}.get(mode, "F")
 
-    def __init__(self, f, compare: str = "exact"):
+    def __init__(self, f, compare: CompareMode = "exact"):
         self.path = f.path
         self.status = (
             "added" if f.before_mode is None
@@ -3322,7 +3326,7 @@ def _diff_formats_for_log(args, patch: bool) -> tuple[str | None, str | None]:
     return short, long
 
 
-def _compare_mode(args) -> str:
+def _compare_mode(args) -> CompareMode:
     """How `-w` and `-b` ask for two lines to be compared.
 
     This decides which lines a diff calls the same, so it reaches
