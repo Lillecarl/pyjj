@@ -158,8 +158,9 @@ def add_revision_append_flag(parser: argparse.ArgumentParser, dest: str = "revis
     parser.add_argument("-r", "--revision", dest=dest, action="append", default=None, metavar="REVSETS", help=help)
 
 
-def add_limit_flag(parser: argparse.ArgumentParser, default: int = 10) -> None:
-    parser.add_argument("-n", "--limit", type=int, default=default, metavar="LIMIT", help=f"Max commits to show (default: {default})")
+def add_limit_flag(parser: argparse.ArgumentParser) -> None:
+    # jj shows everything unless asked; a default here truncates silently.
+    parser.add_argument("-n", "--limit", type=int, default=None, metavar="LIMIT", help="Max commits to show")
 
 
 def add_template_flag(parser: argparse.ArgumentParser, dest: str = "template") -> None:
