@@ -92,3 +92,27 @@ def test_full_split_workflow_updates_wc_and_rebases(commit_with_three_files, set
     assert isinstance(rebased_count, int)
     assert new_repo.resolve_single(settings, "@") == second
     assert new_repo.get_commit(first.id) == first
+
+
+def _three_changes(repo, settings, wc_commit):
+    """A commit that deletes a.txt, changes b.txt and adds c.txt."""
+    tx = repo.start_transaction(settings)
+    base = tx.edit_commit_tree(wc_commit, {"a.txt": b"a\n", "b.txt": b"b\n"}).write()
+    child = tx.new_commit(settings, [base.id]).write()
+    child = tx.edit_commit_tree(
+        child, {"a.txt": None, "b.txt": b"b\nmore\n", "c.txt": b"c\n"}).write()
+    tx.rebase_descendants()
+    return tx, child
+
+
+def test_split_by_hunks_moves_only_the_named_hunks(repo, settings, wc_commit):
+    tx, child = _three_changes(repo, settings, wc_commit)
+    first = tx.split_selected(child, None, {"a.txt": [0]}).write()
+    assert first.list_files() == ["b.txt"]
+    assert first.read_file("b.txt") == b"b\n"
+
+
+def test_split_with_no_hunk_selected_moves_nothing(repo, settings, wc_commit):
+    tx, child = _three_changes(repo, settings, wc_commit)
+    first = tx.split_selected(child, None, {"c.txt": []}).write()
+    assert first.list_files() == ["a.txt", "b.txt"]

@@ -65,6 +65,19 @@ impl FileFixer for RecordingFixer {
     }
 }
 
+/// One `FileToFix`, whole. jj_lib hands the fixer the path and the base as
+/// well as the content: a formatter chosen by path, or one that formats
+/// only the lines changed since the base, gives two files with the same
+/// bytes different results.
+fn fix_key(file: &FileToFix) -> String {
+    format!(
+        "{}:{}:{}",
+        file.file_id.hex(),
+        file.base_file_id.as_ref().map(|id| id.hex()).unwrap_or_default(),
+        file.repo_path.as_internal_file_string()
+    )
+}
+
 /// A `FileFixer` that looks up each file's new content in a plain
 /// Python-supplied `key -> bytes` mapping (built from an earlier
 /// `fix_enumerate()` call) instead of calling back into Python per file.
@@ -81,7 +94,7 @@ impl FileFixer for LookupFixer<'_> {
     ) -> Result<HashMap<&'a FileToFix, FileId>, FixError> {
         let mut result = HashMap::new();
         for file_to_fix in files_to_fix {
-            if let Some(new_content) = self.fixes.get(&file_to_fix.file_id.hex()) {
+            if let Some(new_content) = self.fixes.get(&fix_key(file_to_fix)) {
                 let new_file_id = pollster::block_on(
                     store.write_file(&file_to_fix.repo_path, &mut new_content.as_slice()),
                 )?;
@@ -154,7 +167,7 @@ pub fn fix_enumerate(
                 })
                 .transpose()?;
             Ok(PyFileToFix {
-                key: file_to_fix.file_id.hex(),
+                key: fix_key(&file_to_fix),
                 path: file_to_fix.repo_path.as_internal_file_string().to_string(),
                 content: buf,
                 base_content,

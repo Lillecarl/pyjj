@@ -72,12 +72,14 @@ fn read_tree_file_bytes(tree: &MergedTree, path: &RepoPath) -> PyResult<Vec<u8>>
 }
 
 /// Overlays hunk-level selections on top of `base_tree`: for each `path` in
-/// `hunks`, reconstructs the file's content by taking the listed hunk
-/// indices (see `hunks::diff_hunks`) from `commit_tree` and leaving every
-/// other hunk as it is in `parent_tree`, then writes that content as a new
-/// blob and sets it in the tree. A path whose selection doesn't actually
-/// change anything (empty/no-op selection) is left at whatever `base_tree`
-/// already has for it.
+/// `hunks`, takes the listed hunk indices (see `hunks::diff_hunks`) from
+/// `commit_tree` and every other hunk from `parent_tree`.
+///
+/// A selection that keeps every hunk takes `commit_tree`'s value as is, and
+/// one that keeps none takes `parent_tree`'s, so a deleted or added file
+/// stays deleted or added rather than becoming an empty one. A partial
+/// selection writes a file with the executable bit and copy id of whichever
+/// side has one, the commit's first.
 fn apply_hunks(
     base_tree: MergedTree,
     parent_tree: &MergedTree,
@@ -95,24 +97,28 @@ fn apply_hunks(
         let after = read_tree_file_bytes(commit_tree, &repo_path)?;
         let selected: HashSet<usize> = indices.into_iter().collect();
         let new_content = apply_hunk_selection(&before, &after, &selected);
-        if new_content == before {
-            continue;
-        }
-        let executable = pollster::block_on(commit_tree.path_value(&repo_path))
-            .ok()
-            .and_then(|v| v.into_resolved().ok().flatten())
-            .and_then(|tv| match tv {
-                TreeValue::File { executable, .. } => Some(executable),
-                _ => None,
-            })
-            .unwrap_or(false);
-        let file_id = pollster::block_on(store.write_file(&repo_path, &mut new_content.as_slice()))
-            .map_err(map_backend_err)?;
-        let value: jj_lib::backend::MergedTreeValue = Merge::normal(TreeValue::File {
-            id: file_id,
-            executable,
-            copy_id: jj_lib::backend::CopyId::placeholder(),
-        });
+        let parent_value =
+            pollster::block_on(parent_tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let commit_value =
+            pollster::block_on(commit_tree.path_value(&repo_path)).map_err(map_backend_err)?;
+        let value = if selected.is_empty() || new_content == before {
+            parent_value
+        } else if new_content == after {
+            commit_value
+        } else {
+            let (executable, copy_id) = [&commit_value, &parent_value]
+                .into_iter()
+                .find_map(|value| match value.as_resolved() {
+                    Some(Some(TreeValue::File { executable, copy_id, .. })) => {
+                        Some((*executable, copy_id.clone()))
+                    }
+                    _ => None,
+                })
+                .unwrap_or((false, jj_lib::backend::CopyId::placeholder()));
+            let id = pollster::block_on(store.write_file(&repo_path, &mut new_content.as_slice()))
+                .map_err(map_backend_err)?;
+            Merge::normal(TreeValue::File { id, executable, copy_id })
+        };
         builder.set_or_remove(repo_path, value);
     }
     pollster::block_on(builder.write_tree()).map_err(map_backend_err)
@@ -120,9 +126,11 @@ fn apply_hunks(
 
 /// Builds the `selected_tree`/`parent_tree` pair `jj_lib::rewrite` needs for
 /// both squash and split: `parent_tree` overlaid with `commit`'s changes to
-/// paths matched by `paths` (or all of `commit`'s changes if `paths` is
-/// `None`), further overlaid with hunk-level reconstructions for any path
-/// named in `hunks`.
+/// paths matched by `paths`, further overlaid with hunk-level
+/// reconstructions for any path named in `hunks`.
+///
+/// `paths=None` means every path when `hunks` is `None`, and no whole path
+/// when it is given: naming hunks selects only those hunks.
 fn select(
     mut_repo: &MutableRepo,
     commit: &Commit,
@@ -131,7 +139,10 @@ fn select(
 ) -> PyResult<CommitWithSelection> {
     let parent_tree = pollster::block_on(commit.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let commit_tree = commit.tree();
-    let matcher = paths_matcher(paths)?;
+    let matcher: Box<dyn Matcher> = match (&paths, &hunks) {
+        (None, Some(_)) => Box::new(jj_lib::matchers::NothingMatcher),
+        _ => paths_matcher(paths)?,
+    };
     let selected_tree = pollster::block_on(rewrite::restore_tree(
         &commit_tree,
         &parent_tree,

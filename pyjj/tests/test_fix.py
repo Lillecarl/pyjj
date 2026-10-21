@@ -189,3 +189,28 @@ def test_fix_enumerate_defaults_to_reachable_from_working_copy_and_mutable(tmp_p
     files = tx.fix_enumerate(settings)
 
     assert [f.path for f in files] == ["a.txt"]
+
+
+def test_fix_result_lands_only_on_the_path_it_was_given_for(tmp_path):
+    settings = pyjj.UserSettings()
+    workspace_root = tmp_path / "repo"
+    workspace_root.mkdir()
+    ws, repo = pyjj.Workspace.init_internal_git(settings, str(workspace_root))
+    Path(workspace_root, "x.rs").write_text("same\n")
+    Path(workspace_root, "x.txt").write_text("same\n")
+    repo, _ = ws.snapshot(settings)
+    base = repo.resolve_single(settings, "@")
+    repo, base = _describe(repo, settings, base, "base commit")
+    ws.check_out(repo, base)
+
+    tx = repo.start_transaction(settings)
+    files = tx.fix_enumerate(settings, revset="@")
+    fixes = {f.key: b"FORMATTED\n" for f in files if f.path == "x.rs"}
+    summary = tx.fix_apply(settings, fixes, revset="@")
+    tx.rebase_descendants()
+    new_repo = tx.commit("fix")
+
+    (new_id,) = summary.rewrites.values()
+    fixed = new_repo.get_commit(new_id)
+    assert fixed.read_file("x.rs") == b"FORMATTED\n"
+    assert fixed.read_file("x.txt") == b"same\n"
