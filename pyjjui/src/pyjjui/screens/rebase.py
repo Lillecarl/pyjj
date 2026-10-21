@@ -70,6 +70,8 @@ class RebaseScreen(ModalScreen[RebasePlan | None]):
         if event.button.id == "cancel":
             self.dismiss(None)
             return
+        if event.button.id is None:
+            return
         include_descendants = self.query_one(Checkbox).value
         self.dismiss(RebasePlan(mode=event.button.id, include_descendants=include_descendants))
 

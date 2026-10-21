@@ -79,9 +79,10 @@ def _op_lines(op, shape: str) -> list[list[tuple[str, tuple[str, ...]]]]:
         return [[(op.id[:12], ("id", "short")), (" ", ()),
                  ("root()", ("root",))]]
     first_line = op.description.splitlines()[0] if op.description else ""
-    description = [[(first_line, ("description", "first_line"))]]
-    attributes = [[(f"{key}: {value}", ("attributes",))]
-                  for key, value in op.attributes]
+    description: list[list[tuple[str, tuple[str, ...]]]] = [
+        [(first_line, ("description", "first_line"))]]
+    attributes: list[list[tuple[str, tuple[str, ...]]]] = [
+        [(f"{key}: {value}", ("attributes",))] for key, value in op.attributes]
     if shape == "oneline":
         return [separate([_fields(op), *description, *attributes])]
     lines = [_fields(op), *description, *attributes]

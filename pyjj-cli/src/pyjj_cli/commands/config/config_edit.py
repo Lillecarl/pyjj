@@ -3,12 +3,13 @@ import os
 import shlex
 import subprocess
 import sys
+from typing import Literal
 
 import pyjj
 
 from ..common import CommandError, apply_config_args
 from .config_set import _workspace_root
-from .paths import config_path, write_config
+from .paths import Scope, config_path, write_config
 
 
 def _editor_cmd(settings):
@@ -30,7 +31,7 @@ def config_edit(args) -> int:
     directory without it is a state jj refuses outright (see `paths`),
     and real jj creates the file regardless of what the editor does.
     """
-    scopes = [name for name, flag in (
+    scopes: list[Scope | Literal["file"]] = [name for name, flag in (
         ("user", getattr(args, "user", False)),
         ("repo", getattr(args, "repo", False)),
         ("workspace", getattr(args, "workspace", False)),

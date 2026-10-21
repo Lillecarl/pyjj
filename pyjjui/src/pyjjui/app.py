@@ -1,5 +1,7 @@
 """The Textual `App` tying state, widgets, and keybindings together."""
 
+from collections.abc import Callable
+
 from rich.console import RenderableType
 from textual import work
 from textual.app import App, ComposeResult
@@ -103,7 +105,9 @@ class PyjjuiApp(App[None]):
         self.sub_title = self.state.revset
         return True
 
-    async def _run_mutation(self, fn: object, *args: object) -> bool:
+    async def _run_mutation(
+        self, fn: Callable[..., pyjj.ReadonlyRepo], *args: object,
+    ) -> bool:
         """Run a mutation, notifying and swallowing failure instead of
         crashing the whole app -- jj operations fail for user-reachable
         reasons (nothing to undo, describing an immutable commit, etc.),

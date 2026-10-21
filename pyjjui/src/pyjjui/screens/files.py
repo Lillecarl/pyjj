@@ -8,6 +8,7 @@ the highlighted one -- from this commit into the working copy
 again" machinery as every other mutation, one transaction for the whole
 batch. The one mutating action in here, everything else is look-around.
 """
+from typing import TYPE_CHECKING, Any, cast
 
 from rich.console import Group, RenderableType
 from rich.text import Text
@@ -22,6 +23,9 @@ import pyjj
 
 from .. import mutations
 from ..render.diff import render_file_diff, render_files_diff
+
+if TYPE_CHECKING:
+    from ..app import PyjjuiApp
 
 # Binary/very large files aren't worth dumping into the pane.
 _MAX_PREVIEW_BYTES = 512 * 1024
@@ -55,7 +59,7 @@ class ContentPane(VerticalScroll):
         Binding("h", "focus_table", "Files", show=False),
     ]
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._body = Static()
 
@@ -177,7 +181,7 @@ class FilesScreen(ModalScreen[None]):
         if not self._paths:
             return
         paths = self._selected_paths()
-        app = self.app
+        app = cast("PyjjuiApp", self.app)
         wc_commit = app.state.repo.resolve_single(app.state.settings, "@")
         if self._commit.id == wc_commit.id:
             app.notify(
@@ -213,7 +217,7 @@ class FilesScreen(ModalScreen[None]):
         path = self._paths[index]
         pane = self.query_one(ContentPane)
         if self._diff_mode:
-            app = self.app
+            app = cast("PyjjuiApp", self.app)
             wc_commit = app.state.repo.resolve_single(app.state.settings, "@")
             pane.show(
                 f"{path} (diff vs working copy)",

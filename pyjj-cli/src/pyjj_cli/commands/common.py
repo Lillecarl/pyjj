@@ -815,7 +815,7 @@ def _ref_list_items(repo, settings, args, kind: str = "bookmark"):
             items.append((local or _DeletedRef(name),
                           [(r, local_ids) for r in tracked]))
         if include_untracked:
-            items.extend((r, ()) for r in refs if not r.tracked)
+            items.extend((r, []) for r in refs if not r.tracked)
     return items
 
 
@@ -3067,7 +3067,7 @@ def _color_words_bytes(files, to_ui_path, context: int = 3,
 
 
 def _print_color_words_diff(from_commit, to_commit, settings, ws, paths=None,
-                            context=3, compare="exact") -> None:
+                            context=3, compare: CompareMode = "exact") -> None:
     """Writes `jj diff`'s default output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()
@@ -3082,7 +3082,7 @@ _DIFF_SIGILS = {"context": " ", "removed": "-", "added": "+"}
 
 
 def _print_git_diff(from_commit, to_commit, settings, paths=None, context=3,
-                    compare="exact") -> None:
+                    compare: CompareMode = "exact") -> None:
     """Writes `jj diff --git`'s output to stdout."""
     files = from_commit.git_diff(to_commit, settings, paths)
     sys.stdout.flush()

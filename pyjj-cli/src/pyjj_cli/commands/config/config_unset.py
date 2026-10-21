@@ -18,11 +18,16 @@ def config_unset(args) -> int:
     try:
         path = _target_path(args)
         if path is None:
+            if scope is None:  # the check above returned already
+                raise CommandError("no config scope given")
             root = _workspace_root(args) if scope != "user" else None
             # Not `create=True`: a key that is not there fails below, and
             # minting the directory on the way out leaves one jj refuses
             # to read.
             path = config_path(root, scope)
+        if path is None:
+            print(f'Error: "{args.name}" doesn\'t exist', file=sys.stderr)
+            return 1
         data = read_config(path)
         if not unset_key(data, args.name):
             print(f'Error: "{args.name}" doesn\'t exist', file=sys.stderr)

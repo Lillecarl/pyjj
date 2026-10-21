@@ -9,8 +9,8 @@ if a second entry is marked with `space` -- between that marked entry and
 the highlighted one, so two arbitrary points in history can be compared
 without restoring to either first.
 """
-
 from datetime import datetime, timezone
+from typing import Any
 
 from rich.console import Group
 from rich.text import Text
@@ -54,7 +54,7 @@ class DiffPane(VerticalScroll):
         Binding("h", "focus_table", "Log", show=False),
     ]
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._body = Static()
 

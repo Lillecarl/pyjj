@@ -319,7 +319,7 @@ def _classify(name, remote, local, remote_ref, allow_new, allow_delete):
         raise _Refused(f"Bookmark {name}@{remote} is conflicted")
     if remote_ref is not None and not tracked:
         raise _Refused(f"Non-tracking remote bookmark {name}@{remote} exists")
-    before = remote_ref.target_ids[0] if tracked else None
+    before = remote_ref.target_ids[0] if tracked and remote_ref is not None else None
     after = local.target_ids[0] if local is not None else None
     if before is None and not allow_new:
         raise _Refused(f"Refusing to create new remote bookmark {name}@{remote}")

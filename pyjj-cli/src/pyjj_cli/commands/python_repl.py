@@ -47,7 +47,7 @@ def python_repl(args) -> int:
     # Bound before anything can fail, and whatever `--no-repo` says: a
     # script that has to open with `import pyjj` first is a script an
     # agent gets wrong once per session for no reason.
-    namespace = {
+    namespace: dict[str, object] = {
         "__name__": "__main__",
         "__file__": name,
         "pyjj": pyjj,

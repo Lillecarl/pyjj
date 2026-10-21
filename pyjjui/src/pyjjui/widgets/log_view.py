@@ -2,15 +2,16 @@
 nodes with graph-column glyphs (see `graph_layout.py`) plus a one-line
 commit summary per row.
 """
+from typing import Any
 
+from pyjj.graph_layout import GraphRow, layout
 from rich.text import Text
 from textual.binding import Binding
+from textual.message import Message
 from textual.widgets import DataTable
 from textual.widgets.data_table import RowKey
-from textual.message import Message
 
 import pyjj
-from pyjj.graph_layout import GraphRow, layout
 
 
 class LogView(DataTable):
@@ -47,7 +48,7 @@ class LogView(DataTable):
         already bridges `CommitSelected` to `Preview.show_commit()`.
         """
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(cursor_type="row", show_header=False, zebra_stripes=False, **kwargs)
         self._commits: list[pyjj.Commit] = []
         self._row_keys: list[RowKey] = []

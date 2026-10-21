@@ -32,6 +32,8 @@ def main() -> int:
     from .app import PyjjuiApp
 
     revset = args.revset or settings.get_string("revsets.log")
+    if revset is None:
+        raise SystemExit("pyjjui: revsets.log is not set and no revset was given")
     app = PyjjuiApp(workspace=workspace, settings=settings, revset=revset)
     app.run()
     return 0

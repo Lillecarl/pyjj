@@ -130,7 +130,7 @@ def resolve_plan(
 
 
 def render_dot(
-    items: Sequence[tuple[str, Sequence[tuple[str, EdgeType]]]],
+    items: Sequence[tuple[str, Sequence[tuple[str, str]]]],
     labels: Mapping[str, str],
     *,
     name: str = "log",

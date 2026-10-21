@@ -127,7 +127,8 @@ def _parse_timestamp(text: str):
         moment = datetime.fromisoformat(text)
     except ValueError as e:
         raise CommandError(f'Invalid timestamp "{text}": {e}') from e
-    if moment.utcoffset() is None:
+    offset = moment.utcoffset()
+    if offset is None:
         raise CommandError(f'Timestamp "{text}" has no UTC offset')
-    offset_minutes = int(moment.utcoffset().total_seconds() // 60)
+    offset_minutes = int(offset.total_seconds() // 60)
     return pyjj.Timestamp(int(moment.timestamp() * 1000), offset_minutes)

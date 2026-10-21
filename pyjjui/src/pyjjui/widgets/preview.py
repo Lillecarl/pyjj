@@ -1,4 +1,5 @@
 """Preview pane: metadata + diff-against-first-parent for the selected commit."""
+from typing import Any
 
 from rich.console import Group
 from rich.text import Text
@@ -30,7 +31,7 @@ class Preview(VerticalScroll):
         through the App instead of querying LogView directly.
         """
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._body = Static()
 

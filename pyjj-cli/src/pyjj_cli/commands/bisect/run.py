@@ -88,7 +88,7 @@ def bisect_run(args) -> int:
             status = subprocess.run(argv, cwd=ws.workspace_root, env=env).returncode
         except OSError as e:
             print(f"Error: Failed to run evaluation command: {e}", file=sys.stderr)
-            return None, None
+            return None
         return _evaluation_for(status), status
 
     def _print_search_complete():
@@ -113,9 +113,10 @@ def bisect_run(args) -> int:
             print(_summary(commit))
             if (rc := _check_out(commit)) is not None:
                 return rc
-            evaluation, status = _evaluate(commit)
-            if evaluation is None:
+            outcome = _evaluate(commit)
+            if outcome is None:
                 return 1
+            evaluation, status = outcome
             if evaluation != expected:
                 # jj renders the outcome with `Evaluation`'s Display
                 # (`skipped`/`aborted`), while the mark vocabulary says
@@ -150,6 +151,9 @@ def bisect_run(args) -> int:
             break
 
         commit = step.commit
+        if commit is None:
+            print(f"Error: bisection step {step.kind!r} names no revision", file=sys.stderr)
+            return 1
         lower, upper = bisector.remaining_count()
         steps = 0
         while (1 << steps) < lower + 1:
@@ -165,9 +169,10 @@ def bisect_run(args) -> int:
         if (rc := _check_out(commit)) is not None:
             return rc
 
-        evaluation, _status = _evaluate(commit)
-        if evaluation is None:
+        outcome = _evaluate(commit)
+        if outcome is None:
             return 1
+        evaluation, _status = outcome
         print({
             "good": "The revision is good.",
             "bad": "The revision is bad.",

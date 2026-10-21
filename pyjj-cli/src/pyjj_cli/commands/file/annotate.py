@@ -1,6 +1,8 @@
 """file subcommand: file_annotate."""
 import sys
 
+import pyjj
+
 from ...formatter import render_block
 from ..common import (
     _commit_context,
@@ -27,7 +29,7 @@ def file_annotate(args) -> int:
         commit = _resolve_one(repo, settings, args.revision)
         template = _resolve_template(settings, ws, args, "file_annotate")
         lines = commit.annotate(repo, args.path)
-        commits: dict[str, object] = {}
+        commits: dict[str, pyjj.Commit] = {}
         for number, ann in enumerate(lines, start=1):
             key = ann.commit_id.hex()
             line = ann.line.removesuffix(b"\n")

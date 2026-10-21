@@ -5,7 +5,7 @@ from pathlib import Path
 import pyjj
 
 from ..common import CommandError, read_repo
-from .paths import config_path, read_config, set_key, write_config
+from .paths import Scope, config_path, read_config, set_key, write_config
 
 
 def _target_path(args):
@@ -31,6 +31,8 @@ def config_set(args) -> int:
     try:
         path = _target_path(args)
         if path is None:
+            if scope is None:  # the check above returned already
+                raise CommandError("no config scope given")
             root = _workspace_root(args) if scope != "user" else None
             # This one writes, so it may mint the scope's directory.
             path = config_path(root, scope, create=True)
@@ -69,7 +71,7 @@ def _warn_wc_author(args, value, part: str) -> None:
           "\"jj metaedit --update-author\".", file=sys.stderr)
 
 
-def _scope(args):
+def _scope(args) -> Scope | None:
     if getattr(args, "workspace", False):
         return "workspace"
     if getattr(args, "repo", False):

@@ -14,8 +14,11 @@ directory, which is the only way the two tools agree on it.
 import os
 import tomllib
 from pathlib import Path
+from typing import Literal, overload
 
 import pyjj_bindings
+
+Scope = Literal["user", "repo", "workspace"]
 
 
 def config_home() -> Path:
@@ -23,7 +26,11 @@ def config_home() -> Path:
     return Path(xdg) if xdg else Path.home() / ".config"
 
 
-def config_path(workspace_root, scope: str, create: bool = False):
+@overload
+def config_path(workspace_root: str | None, scope: Scope, create: Literal[True]) -> Path: ...
+@overload
+def config_path(workspace_root: str | None, scope: Scope, create: bool = False) -> Path | None: ...
+def config_path(workspace_root: str | None, scope: Scope, create: bool = False) -> Path | None:
     """`scope` is "user", "repo" or "workspace".
 
     **Only a caller that will write passes `create`.** Minting the id
@@ -37,6 +44,8 @@ def config_path(workspace_root, scope: str, create: bool = False):
     """
     if scope == "user":
         return config_home() / "jj" / "config.toml"
+    if workspace_root is None:
+        raise ValueError(f"the {scope} scope needs a workspace root")
     root = Path(workspace_root)
     found = pyjj_bindings.secure_config_file(
         str(root), str(root / ".jj" / "repo"), scope, create=create)

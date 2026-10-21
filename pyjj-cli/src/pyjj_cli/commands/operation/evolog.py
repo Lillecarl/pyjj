@@ -177,7 +177,7 @@ def evolog(args) -> int:
             patch = "" if not with_diff else _patch_bytes(
                 args, ws, settings, repo, entry, formats,
             ).decode("utf-8", "surrogateescape")
-            if no_graph:
+            if no_graph or renderer is None:
                 _write(text + "\n" + patch)
                 return
             glyph = render_block([[(_commit_glyph(kind), kind)]],

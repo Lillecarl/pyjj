@@ -18,6 +18,8 @@ def hunk_split(args) -> int:
         if resolved is None:
             return 2
         spec, message = resolved
+        if message is None:
+            return 2
         target = _resolve_one(repo, settings, _rev(args, "revision"))
         overrides = hunk_mod.spec_to_overrides(repo, target, spec)
         if not overrides:

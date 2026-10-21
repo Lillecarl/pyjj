@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from pyjj_bindings import GraphNode
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 # A lane waits to reach `(key, edge_type)`, or is idle.
 Lane = tuple[Hashable, str] | None
 Items = Sequence[tuple[Hashable, Sequence[tuple[Hashable, str]]]]
+K = TypeVar("K", bound=Hashable)
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ def layout_keyed(items: Items) -> list[LaneRow]:
         if matches:
             column, converging = matches[0], matches[1:]
         else:
-            column, converging = _allocate_lane(lanes), []
+            column, converging = _allocate_lane(lanes), list[int]()
 
         edges: list[LaneEdge] = []
         for i, lane in enumerate(lanes):
@@ -124,7 +125,9 @@ def layout(nodes: list[GraphNode]) -> list[GraphRow]:
     ]
 
 
-def reverse_graph(items: Items) -> list[tuple[Hashable, list[tuple[Hashable, str]]]]:
+def reverse_graph(
+    items: Sequence[tuple[K, Sequence[tuple[K, str]]]],
+) -> list[tuple[K, list[tuple[K, str]]]]:
     """The same DAG walked the other way.
 
     Each node's parents become its children and the order flips, which
@@ -132,7 +135,7 @@ def reverse_graph(items: Items) -> list[tuple[Hashable, list[tuple[Hashable, str
     Reversing the drawn rows instead would leave a merge's fork
     pointing the wrong way.
     """
-    children: dict[Hashable, list[tuple[Hashable, str]]] = {}
+    children: dict[K, list[tuple[K, str]]] = {}
     for key, parents in items:
         for target, edge_type in parents:
             children.setdefault(target, []).append((key, edge_type))

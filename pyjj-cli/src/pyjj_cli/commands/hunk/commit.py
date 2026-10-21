@@ -17,6 +17,8 @@ def hunk_commit(args) -> int:
         if resolved is None:
             return 2
         spec, message = resolved
+        if message is None:
+            return 2
         target = _wc_commit(repo, ws)
         overrides = hunk_mod.spec_to_overrides(repo, target, spec)
         if not overrides:

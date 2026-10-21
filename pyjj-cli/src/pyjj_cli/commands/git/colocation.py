@@ -21,7 +21,7 @@ def git_colocation(args) -> int:
     """`jj git colocation` — manage colocation status."""
     sub = getattr(args, "colocation_command", None)
     handler = {"status": _status, "enable": _enable,
-               "disable": _disable}.get(sub)
+               "disable": _disable}.get(sub or "")
     if handler is None:
         print("usage: pyjj git colocation {status,enable,disable}",
               file=sys.stderr)

@@ -188,8 +188,6 @@ def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths,
     attributes = {}
     base = None
     for field in fields:
-        if field in ("files", "diff") and base is None:
-            base = _diff_base(repo, settings, commit)
         if field == "remote_bookmarks":
             attributes[field] = dot_attribute(
                 [f"{name}@{entry['remote']}" for name in names
@@ -199,9 +197,11 @@ def _dot_attributes(repo, settings, args, ws, commit, context, fields, paths,
             attributes[field] = dot_attribute(
                 [name for name in names if unpushed(remotes, name)])
         elif field == "files":
+            base = base or _diff_base(repo, settings, commit)
             attributes[field] = dot_attribute(
                 [entry.path for entry in base.diff(commit)])
         elif field == "diff":
+            base = base or _diff_base(repo, settings, commit)
             attributes[field] = _diff_bytes(
                 args, ws, settings, base, commit, paths, (None, "git"),
             ).decode("utf-8", "surrogateescape")
@@ -369,7 +369,7 @@ def log(args) -> int:
                         args, ws, settings, _diff_base(repo, settings, commit),
                         commit, paths, formats,
                     ).decode("utf-8", "surrogateescape")
-                if no_graph:
+                if no_graph or renderer is None:
                     head, _, rest = text.partition("\n")
                     out = head + "\n"
                     for line in rest.splitlines():

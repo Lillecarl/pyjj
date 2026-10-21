@@ -1,6 +1,7 @@
 """hunk subcommand: hunk_list."""
 import json
 import sys
+from typing import Any
 
 import yaml
 
@@ -25,10 +26,10 @@ def hunk_list(args) -> int:
     """`pyjj hunk list [-r REV] [--format json|yaml|text]` — list hunks like jj-hunk."""
     with read_repo(args) as (settings, ws, repo):
         target = _resolve_one(repo, settings, args.revision)
-        files_output = []
+        files_output: list[dict[str, Any]] = []
         contents = hunk_mod.collect_file_contents_for_commit(repo, target)
         for path, (before, after) in sorted(contents.items()):
-            entry = {"path": path, "status": _status(before, after)}
+            entry: dict[str, Any] = {"path": path, "status": _status(before, after)}
             old, new = before or b"", after or b""
             if hunk_mod.is_binary(old) or hunk_mod.is_binary(new):
                 files_output.append({**entry, "hunks": [], "binary": True})
