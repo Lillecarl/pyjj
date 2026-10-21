@@ -650,30 +650,11 @@ impl PyWorkspace {
         is_colocated(&inner, repo.store())
     }
 
-    /// The Git HEAD commit's hex hash, when this workspace is colocated
-    /// and HEAD resolves to a commit -- `None` otherwise (not colocated,
-    /// unborn HEAD, or anything else unresolvable). What `jj git
-    /// colocation status` prints as "Last imported/exported Git HEAD".
-    fn git_head_hex(&self) -> PyResult<Option<String>> {
-        let inner = self.inner.lock().unwrap();
-        let repo =
-            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
-        let Ok(backend) = jj_lib::git::get_git_backend(repo.store()) else {
-            return Ok(None);
-        };
-        let Ok(git_repo) = backend.open_git_repo_at_workdir(inner.workspace_root()) else {
-            return Ok(None);
-        };
-        Ok(git_repo.head_id().ok().map(|id| id.to_hex().to_string()))
-    }
-
-    /// Create the Git worktree backing a colocated sibling workspace at
+    /// Create the Git worktree backing an existing secondary workspace at
     /// `destination_path` (`jj_lib::git::create_worktree`: `git worktree
     /// add --orphan`, so nothing is checked out and jj stays responsible
-    /// for the working-copy contents). Runs after `add_workspace`, which
-    /// the primitive supports explicitly (a populated workspace awaiting
-    /// colocation, the same shape `git colocation enable` uses on an
-    /// existing one).
+    /// for the working-copy contents). `git colocation enable` uses it on
+    /// a populated workspace; a new one takes `add_workspace(colocate=True)`.
     fn create_git_worktree(
         &self,
         settings: &PyUserSettings,

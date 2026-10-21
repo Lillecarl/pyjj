@@ -103,6 +103,19 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// The Git HEAD this view last imported or exported for
+    /// `workspace_name`: one hex id per side of a conflict, `None` for an
+    /// absent side. An absent HEAD is `[None]`.
+    fn git_head(&self, workspace_name: &str) -> Vec<Option<String>> {
+        let name = jj_lib::ref_name::WorkspaceNameBuf::from(workspace_name);
+        self.inner
+            .view()
+            .git_head(&name)
+            .iter()
+            .map(|id| id.as_ref().map(|id| id.hex()))
+            .collect()
+    }
+
     /// Look up a commit by its [`CommitId`].
     fn get_commit(&self, commit_id: &PyCommitId) -> PyResult<PyCommit> {
         let commit = pollster::block_on(self.inner.store().get_commit_async(&commit_id.0))
@@ -997,6 +1010,23 @@ impl PyTransaction {
                 std::path::Path::new(workspace_root),
             )
         })
+    }
+
+    /// Forget the Git HEAD recorded for `workspace_name`, as `jj git
+    /// colocation disable` does. Touches no Git repository.
+    fn clear_git_head(&self, workspace_name: &str) -> PyResult<()> {
+        with_mut_repo(self, |mut_repo| {
+            mut_repo.set_git_head_target(
+                &jj_lib::ref_name::WorkspaceNameBuf::from(workspace_name),
+                jj_lib::op_store::RefTarget::absent(),
+            );
+            Ok(())
+        })
+    }
+
+    /// Whether this transaction changed the view or wrote a commit.
+    fn has_changes(&self) -> PyResult<bool> {
+        with_mut_repo(self, |mut_repo| Ok(mut_repo.has_changes()))
     }
 
     /// Names of all configured Git remotes.

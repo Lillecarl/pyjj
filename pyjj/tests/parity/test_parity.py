@@ -2924,8 +2924,7 @@ def test_git_colocation_enable(pair: RepoPair) -> None:
 
     Both repos are colocated already -- that is what `git init` does
     now -- so this is the no-op path: both sides say so and change
-    nothing. Converting a non-colocated repo is still unimplemented, and
-    `test_git_colocation_enable_then_disable` still covers that.
+    nothing. `test_git_colocation_disable_then_enable` converts.
     """
     chain(pair)
     pair.op(jj=["git", "colocation", "enable"])
@@ -2935,13 +2934,30 @@ def test_git_colocation_enable(pair: RepoPair) -> None:
 
 @pytest.mark.covers("git colocation disable")
 @pytest.mark.covers("git colocation enable")
-@UNIMPLEMENTED
 def test_git_colocation_enable_then_disable(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["git", "colocation", "enable"])
     pair.op(jj=["git", "colocation", "disable"])
+    for root in (pair.cli_repo, pair.py_repo):
+        assert not (root / ".git").exists()
+        assert not (root / ".jj" / ".gitignore").exists()
+    pair.assert_parity()
+    pair.op(jj=["git", "colocation", "status"])
+
+
+@pytest.mark.covers("git colocation disable")
+@pytest.mark.covers("git colocation enable")
+def test_git_colocation_disable_then_enable(pair: RepoPair) -> None:
+    """The round trip back: `.git` moves out of the store again, and
+    HEAD and the index match `@-` the way jj leaves them."""
+    chain(pair)
+    pair.op(jj=["git", "colocation", "disable"])
+    pair.op(jj=["git", "colocation", "enable"])
+    for root in (pair.cli_repo, pair.py_repo):
+        assert (root / ".git").is_dir()
     pair.assert_parity()
     assert_ref_parity(pair)
+    pair.op(jj=["git", "colocation", "status"])
 
 
 @pytest.mark.covers("bookmark track")
