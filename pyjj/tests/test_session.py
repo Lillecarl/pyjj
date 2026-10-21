@@ -90,6 +90,71 @@ def test_a_jj_error_inside_a_block_keeps_its_class(session):
     with pytest.raises(pyjj.JjError, match="nothing was written") as caught:
         with session.atomic("bad revision") as tx:
             tx.describe("nonexistent-revision", message="x")
+    assert type(caught.value) is not pyjj.JjError
+    assert "revision 'nonexistent-revision'" in caught.value.__notes__
+
+
+def test_a_foreign_error_is_reraised_as_is(session):
+    with pytest.raises(RuntimeError) as caught:
+        with session.atomic("boom") as tx:
+            raise RuntimeError("boom")
+    assert caught.value.__cause__ is None
+    assert tx.rolled_back
+
+
+def _wc(session):
+    return session.reload().resolve("@")
+
+
+def test_split_of_another_revision_leaves_the_working_copy(session):
+    root = Path(session.root)
+    (root / "a.txt").write_text("a\n")
+    (root / "b.txt").write_text("b\n")
+    session.snapshot()
+    with session.atomic("finish") as tx:
+        tx.commit(message="ab")
+    wc_before = _wc(session).change_id
+    with session.atomic("split @-") as tx:
+        tx.split("@-", paths=["a.txt"], message="a")
+    wc = _wc(session)
+    assert wc.change_id == wc_before
+    assert wc.is_empty(session._repo)
+    assert session.resolve("@-").description.strip() == "ab"
+    assert session.resolve("@--").description.strip() == "a"
+
+
+def test_split_of_the_working_copy_moves_it_onto_the_remainder(session):
+    root = Path(session.root)
+    (root / "a.txt").write_text("a\n")
+    (root / "b.txt").write_text("b\n")
+    with session.atomic("split @") as tx:
+        _first, second = tx.split("@", paths=["a.txt"], message="a")
+    assert _wc(session).id == second.id
+
+
+def test_rebase_after_sees_the_blocks_own_rewrites(session):
+    with session.atomic("describe, then insert after it") as tx:
+        tx.describe("@-", message="second, renamed")
+        tx.new("@--", message="loose", edit=False)
+        tx.rebase("description(exact:'loose')", after="@--")
+    loose = session.reload().resolve("description(exact:'loose')")
+    renamed = session.resolve("description(exact:'second, renamed')")
+    assert [p.hex() for p in renamed.parent_ids] == [loose.id.hex()]
+
+
+def test_new_abandons_an_empty_working_copy(session):
+    before = len(session.revset("all()"))
+    with session.atomic("new twice") as tx:
+        tx.new("@-")
+        tx.new("@-")
+    assert len(session.reload().revset("all()")) == before
+
+
+def test_squash_of_a_merge_needs_a_destination(session):
+    with pytest.raises(pyjj.PyjjError, match="2 parents"):
+        with session.atomic("merge, then squash it") as tx:
+            tx.new(["@-", "@--"], message="merge")
+            tx.squash("@")
 
 
 def test_later_operations_see_the_earlier_ones(session):

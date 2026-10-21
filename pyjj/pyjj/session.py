@@ -229,8 +229,7 @@ class Repo:
         the bookmark moved away from -- found by a blind CTF solver
         whose single atomic block was otherwise perfect.
         """
-        if not os.path.exists(
-                os.path.join(self._workspace.workspace_root, ".git")):
+        if not self._workspace.is_colocated():
             return
         transaction.git_reset_head(
             self._workspace.workspace_name, self._workspace.workspace_root)
@@ -344,8 +343,9 @@ class Atomic:
             builder.set_description(message)
         written = builder.write(self._repo._repo)
         if edit:
-            self._tx.set_wc_commit(self._repo.workspace.workspace_name,
-                                   written.id)
+            # `edit`, not `set_wc_commit`: it abandons the old working-copy
+            # commit when that is empty and undescribed, as `jj new` does.
+            self._tx.edit(self._repo.workspace.workspace_name, written)
         self._finish(written)
         return written
 
@@ -365,8 +365,14 @@ class Atomic:
         files, the shape `pyjj.hunk` produces.
         """
         source = self._commit(revision)
-        destination = self._commit(into) if into is not None else \
-            self._repo._repo.get_commit(source.parent_ids[0])
+        if into is not None:
+            destination = self._commit(into)
+        elif len(source.parent_ids) == 1:
+            destination = self._repo._repo.get_commit(source.parent_ids[0])
+        else:
+            raise PyjjError(
+                f"squash {revision!r}: it has {len(source.parent_ids)} "
+                "parents, so name the destination with `into`.")
         self._guard([source, destination])
         builder = self._tx.squash(source, destination,
                                   list(paths) if paths else None,
@@ -406,7 +412,8 @@ class Atomic:
                           if parallel
                           else self._tx.split_remainder(target, first))
         second = second_builder.write(self._repo._repo)
-        self._tx.set_wc_commit(self._repo.workspace.workspace_name, second.id)
+        # The remainder rewrites `target`, so the rebase moves `@` onto it
+        # only when `@` was `target`, as `jj split` does.
         self._finish(first, second)
         return first, second
 
@@ -432,19 +439,26 @@ class Atomic:
         targets = self._commits(revisions)
         self._guard(targets)
         ids = [commit.id for commit in targets]
+        moving = set(ids)
         parents, children = [], []
         if destination is not None:
             parents = [c.id for c in self._commits(destination)]
         elif after is not None:
-            moved = self._commits(after)
-            parents = [c.id for c in moved]
-            children = [child.id for child in
-                        self._repo.revset(
-                            " | ".join(f"{c.id.hex()}+" for c in moved))]
+            anchors = self._commits(after)
+            parents = [c.id for c in anchors]
+            # Asked of the transaction: the block may have rewritten or
+            # created children since it started.
+            children = [
+                child for child in self._tx.revset(
+                    self._repo.settings,
+                    " | ".join(f"{c.id.hex()}+" for c in anchors))
+                if child not in moving]
         else:
-            moved = self._commits(before)
-            children = [c.id for c in moved]
-            parents = [parent for c in moved for parent in c.parent_ids]
+            anchors = self._commits(before)
+            children = [c.id for c in anchors]
+            parents = list(dict.fromkeys(
+                parent for c in anchors for parent in c.parent_ids
+                if parent not in moving))
         self._tx.move_commits([] if whole_branch else ids,
                               ids if whole_branch else [],
                               parents, children)
