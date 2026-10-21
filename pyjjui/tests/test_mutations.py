@@ -466,3 +466,11 @@ def test_arrange_noop_plan_rewrites_nothing(workspace, settings, seeded_repo):
 
     assert {c.id.hex() for c in
             new_repo.revset(settings, "description(exact:'A')::")} == before
+
+
+def test_arrange_refuses_a_set_with_gaps(workspace, settings, seeded_repo):
+    repo = workspace.load_at_head()
+    gap = repo.resolve_single(settings, "@-")
+    with pytest.raises(mutations.ArrangeRefused, match="gaps") as caught:
+        mutations.arrange_targets(repo, settings, "@ | @--")
+    assert caught.value.hint == f"Revision {gap.id.hex()[:12]} would need to be in the set."

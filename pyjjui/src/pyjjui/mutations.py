@@ -392,7 +392,7 @@ def arrange_targets(
     if gaps:
         raise ArrangeRefused(
             "Cannot arrange revset with gaps in.",
-            f"Revision {gaps[0].hex()[:12]} would need to be in the set.")
+            f"Revision {gaps[0].id.hex()[:12]} would need to be in the set.")
 
     commits = {c.id.hex(): c for c in targets}
     parents = {hex: [p.hex() for p in c.parent_ids]
