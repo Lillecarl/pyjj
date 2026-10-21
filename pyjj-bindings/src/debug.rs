@@ -20,7 +20,7 @@ use jj_lib::op_store::{OperationId, ViewId};
 use jj_lib::operation::Operation;
 use jj_lib::repo::{Repo as _, RepoLoader};
 use jj_lib::repo_path::RepoPathBuf;
-use jj_lib::revset::{self, RevsetExtensions, RevsetStreamExt as _, SymbolResolver};
+use jj_lib::revset::{self, RevsetExtensions, SymbolResolver};
 use jj_lib::stacked_table::{TableSegment as _, TableStore};
 use jj_lib::ui_path::RepoPathUiConverter;
 use jj_lib::working_copy::WorkingCopy as _;

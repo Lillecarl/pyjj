@@ -13,7 +13,7 @@ use crate::repo::PyTransaction;
 use crate::settings::PyUserSettings;
 
 /// One divergent change: a change id naming two or more visible commits.
-#[pyclass(name = "DivergentChange", frozen)]
+#[pyclass(name = "DivergentChange", module = "pyjj_bindings", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyDivergentChange {
     change_id: PyChangeId,
@@ -33,189 +33,77 @@ impl PyDivergentChange {
     }
 }
 
-/// The solved-or-not state of one converged attribute (author,
-/// description, parents). When `solved` is false, `base_commit` names a
-/// commit to merge from and `excluded` names divergent commits to leave
-/// out of that merge -- the hints `jj converge`'s interactive prompts
-/// consume. A headless caller treats unsolved as failure.
-#[pyclass(name = "ConvergedAuthor", frozen)]
-#[derive(Clone)]
-pub struct PyConvergedAuthor {
-    solved: bool,
-    value: Option<PySignature>,
-    base_commit: Option<PyCommitId>,
-    excluded: Vec<PyCommitId>,
-}
-
-#[pymethods]
-impl PyConvergedAuthor {
-    #[getter]
-    fn solved(&self) -> bool {
-        self.solved
-    }
-
-    #[getter]
-    fn value(&self) -> Option<PySignature> {
-        self.value.clone()
-    }
-
-    #[getter]
-    fn base_commit(&self) -> Option<PyCommitId> {
-        self.base_commit.clone()
-    }
-
-    #[getter]
-    fn excluded(&self) -> Vec<PyCommitId> {
-        self.excluded.clone()
-    }
-}
-
-impl From<ConvergedAttribute<jj_lib::backend::Signature>> for PyConvergedAuthor {
-    fn from(attr: ConvergedAttribute<jj_lib::backend::Signature>) -> Self {
-        match attr {
-            ConvergedAttribute::Solved(value) => Self {
-                solved: true,
-                value: Some(PySignature::from(value)),
-                base_commit: None,
-                excluded: vec![],
-            },
-            ConvergedAttribute::Unsolved {
-                base_commit,
-                excluded_divergent_commits,
-            } => Self {
-                solved: false,
-                value: None,
-                base_commit: Some(PyCommitId::from(base_commit)),
-                excluded: excluded_divergent_commits
-                    .into_iter()
-                    .map(PyCommitId::from)
-                    .collect(),
-            },
+/// One pyclass per converged attribute (author, description, parents),
+/// all with the same shape: the solved-or-not state of that attribute.
+/// When `solved` is false, `base_commit` names a commit to merge from and
+/// `excluded` names divergent commits to leave out of that merge -- the
+/// hints `jj converge`'s interactive prompts consume. A headless caller
+/// treats unsolved as failure.
+macro_rules! converged_attribute {
+    ($name:ident, $py_name:literal, $jj:ty, $value:ty, $convert:expr) => {
+        #[pyclass(name = $py_name, module = "pyjj_bindings", frozen, get_all, skip_from_py_object)]
+        #[derive(Clone)]
+        pub struct $name {
+            solved: bool,
+            value: Option<$value>,
+            base_commit: Option<PyCommitId>,
+            excluded: Vec<PyCommitId>,
         }
-    }
-}
 
-/// See [`PyConvergedAuthor`] -- the same shape for the description.
-#[pyclass(name = "ConvergedDescription", frozen)]
-#[derive(Clone)]
-pub struct PyConvergedDescription {
-    solved: bool,
-    value: Option<String>,
-    base_commit: Option<PyCommitId>,
-    excluded: Vec<PyCommitId>,
-}
-
-#[pymethods]
-impl PyConvergedDescription {
-    #[getter]
-    fn solved(&self) -> bool {
-        self.solved
-    }
-
-    #[getter]
-    fn value(&self) -> Option<String> {
-        self.value.clone()
-    }
-
-    #[getter]
-    fn base_commit(&self) -> Option<PyCommitId> {
-        self.base_commit.clone()
-    }
-
-    #[getter]
-    fn excluded(&self) -> Vec<PyCommitId> {
-        self.excluded.clone()
-    }
-}
-
-impl From<ConvergedAttribute<String>> for PyConvergedDescription {
-    fn from(attr: ConvergedAttribute<String>) -> Self {
-        match attr {
-            ConvergedAttribute::Solved(value) => Self {
-                solved: true,
-                value: Some(value),
-                base_commit: None,
-                excluded: vec![],
-            },
-            ConvergedAttribute::Unsolved {
-                base_commit,
-                excluded_divergent_commits,
-            } => Self {
-                solved: false,
-                value: None,
-                base_commit: Some(PyCommitId::from(base_commit)),
-                excluded: excluded_divergent_commits
-                    .into_iter()
-                    .map(PyCommitId::from)
-                    .collect(),
-            },
+        impl From<ConvergedAttribute<$jj>> for $name {
+            fn from(attr: ConvergedAttribute<$jj>) -> Self {
+                match attr {
+                    ConvergedAttribute::Solved(value) => Self {
+                        solved: true,
+                        value: Some($convert(value)),
+                        base_commit: None,
+                        excluded: vec![],
+                    },
+                    ConvergedAttribute::Unsolved {
+                        base_commit,
+                        excluded_divergent_commits,
+                    } => Self {
+                        solved: false,
+                        value: None,
+                        base_commit: Some(PyCommitId::from(base_commit)),
+                        excluded: excluded_divergent_commits
+                            .into_iter()
+                            .map(PyCommitId::from)
+                            .collect(),
+                    },
+                }
+            }
         }
-    }
+    };
 }
 
-/// See [`PyConvergedAuthor`] -- the same shape for the parent list.
-#[pyclass(name = "ConvergedParents", frozen)]
-#[derive(Clone)]
-pub struct PyConvergedParents {
-    solved: bool,
-    value: Option<Vec<PyCommitId>>,
-    base_commit: Option<PyCommitId>,
-    excluded: Vec<PyCommitId>,
-}
-
-#[pymethods]
-impl PyConvergedParents {
-    #[getter]
-    fn solved(&self) -> bool {
-        self.solved
-    }
-
-    #[getter]
-    fn value(&self) -> Option<Vec<PyCommitId>> {
-        self.value.clone()
-    }
-
-    #[getter]
-    fn base_commit(&self) -> Option<PyCommitId> {
-        self.base_commit.clone()
-    }
-
-    #[getter]
-    fn excluded(&self) -> Vec<PyCommitId> {
-        self.excluded.clone()
-    }
-}
-
-impl From<ConvergedAttribute<Vec<jj_lib::backend::CommitId>>> for PyConvergedParents {
-    fn from(attr: ConvergedAttribute<Vec<jj_lib::backend::CommitId>>) -> Self {
-        match attr {
-            ConvergedAttribute::Solved(value) => Self {
-                solved: true,
-                value: Some(value.into_iter().map(PyCommitId::from).collect()),
-                base_commit: None,
-                excluded: vec![],
-            },
-            ConvergedAttribute::Unsolved {
-                base_commit,
-                excluded_divergent_commits,
-            } => Self {
-                solved: false,
-                value: None,
-                base_commit: Some(PyCommitId::from(base_commit)),
-                excluded: excluded_divergent_commits
-                    .into_iter()
-                    .map(PyCommitId::from)
-                    .collect(),
-            },
-        }
-    }
-}
+converged_attribute!(
+    PyConvergedAuthor,
+    "ConvergedAuthor",
+    jj_lib::backend::Signature,
+    PySignature,
+    PySignature::from
+);
+converged_attribute!(
+    PyConvergedDescription,
+    "ConvergedDescription",
+    String,
+    String,
+    std::convert::identity
+);
+converged_attribute!(
+    PyConvergedParents,
+    "ConvergedParents",
+    Vec<jj_lib::backend::CommitId>,
+    Vec<PyCommitId>,
+    |ids: Vec<jj_lib::backend::CommitId>| ids.into_iter().map(PyCommitId::from).collect()
+);
 
 /// The proposed solution tree. Opaque: Python never builds one, it only
 /// carries the handle from one `converge()` call into the next (or into
 /// `apply_converge_solution()`), mirroring how the CLI threads
 /// `TreeIdsAndLabels` through its two `converge_change` calls.
-#[pyclass(name = "ConvergeTree", frozen)]
+#[pyclass(name = "ConvergeTree", module = "pyjj_bindings", frozen, from_py_object)]
 #[derive(Clone)]
 pub struct PyConvergeTree {
     pub(crate) inner: jj_lib::converge::TreeIdsAndLabels,
@@ -224,7 +112,7 @@ pub struct PyConvergeTree {
 /// The proposed solution for converging one change: a solved-or-not
 /// verdict per attribute, plus the tree (absent until the parents are
 /// settled -- see `jj_lib::converge::converge_change`).
-#[pyclass(name = "ConvergeResult", frozen)]
+#[pyclass(name = "ConvergeResult", module = "pyjj_bindings", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyConvergeResult {
     author: PyConvergedAuthor,
