@@ -26,6 +26,14 @@ operation only when the block ends cleanly. An exception halfway through
 leaves no half-applied change and no rollback entry in the operation
 log. `Atomic.rolled_back` says which way a block ended.
 
+Every reader has an `_async` sibling, and `atomic_async` is the block
+for a coroutine. Its verbs are awaitables, and jj's work runs off the
+event loop:
+
+    repo = await pyjj.open_async()
+    async with repo.atomic_async("tidy the stack") as tx:
+        await tx.squash("@", into="@-")
+
 Errors keep their class: a jj failure raises the `pyjj.JjError` subclass
 jj gave, with notes that say what was asked and that nothing was
 written. `PyjjError` is only for what this wrapper refuses itself.
@@ -33,14 +41,24 @@ written. `PyjjError` is only for what this wrapper refuses itself.
 
 from __future__ import annotations
 
+import functools
 import os
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
+import queue
+import threading
+import traceback
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Concatenate, Generic, ParamSpec, TypeVar
 
+import anyio
+import anyio.from_thread
+import anyio.lowlevel
+import anyio.to_thread
 import pyjj_bindings as _bindings
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Sequence
+    from types import TracebackType
 
     from pyjj_bindings import (
         AbsorbStats,
@@ -53,6 +71,24 @@ if TYPE_CHECKING:
 
     Revisions = str | Sequence[str]
     Hunks = dict[str, Sequence[int]]
+
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def _in_thread(fn: Callable[_P, _T]) -> Callable[_P, Coroutine[Any, Any, _T]]:
+    """`fn` as a coroutine that runs it in a worker thread. The bindings
+    release the GIL while jj works, so the event loop keeps running."""
+
+    @functools.wraps(fn)
+    async def run(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+        result: _T = await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs))
+        return result
+
+    run.__name__ = f"{fn.__name__}_async"
+    run.__qualname__ = f"{fn.__qualname__}_async"
+    return run
 
 
 class PyjjError(Exception):
@@ -83,6 +119,9 @@ def open(path: str | None = None) -> Repo:
     # Reloaded under the full settings, the way the CLI does it.
     workspace = _bindings.Workspace.load(settings, root)
     return Repo(workspace, settings)
+
+
+open_async = _in_thread(open)
 
 
 class Repo:
@@ -161,6 +200,48 @@ class Repo:
     @property
     def operation_id(self) -> str:
         return self._repo.operation.id
+
+    reload_async = _in_thread(reload)
+    snapshot_async = _in_thread(snapshot)
+    resolve_async = _in_thread(resolve)
+    revset_async = _in_thread(revset)
+    log_async = _in_thread(log)
+    conflicts_async = _in_thread(conflicts)
+
+    @asynccontextmanager
+    async def atomic_async(
+        self,
+        description: str = "pyjj",
+        *,
+        allow_conflicts: bool = False,
+        allow_immutable: bool = False,
+    ) -> AsyncIterator[AsyncAtomic]:
+        """`atomic`, for a coroutine: the same block, all or nothing.
+
+        A `Transaction` must stay on the thread that made it, so the
+        whole block, from snapshot to commit, runs on one thread of its
+        own. Each verb waits for that thread without blocking the loop.
+        A cancelled verb finishes first; the block then discards.
+        """
+        pinned = _PinnedThread()
+        block = self.atomic(description, allow_conflicts=allow_conflicts,
+                            allow_immutable=allow_immutable)
+        try:
+            handle = AsyncAtomic(await pinned.call(block.__enter__), pinned)
+            try:
+                yield handle
+            except BaseException as e:
+                exit_with = functools.partial(block.__exit__, type(e), e, e.__traceback__)
+                if not await pinned.call(exit_with, outer=e.__traceback__):
+                    raise
+            else:
+                await pinned.call(functools.partial(block.__exit__, None, None, None))
+            finally:
+                # The handle holds the last reference to the transaction,
+                # which must be freed on the thread that made it.
+                await pinned.call(handle._release)
+        finally:
+            pinned.close()
 
     @contextmanager
     def atomic(
@@ -588,3 +669,129 @@ class Atomic:
         raise PyjjError(
             f"the block left {names} in conflict. Pass "
             "allow_conflicts=True to keep a result that has one.")
+
+
+@dataclass
+class _Call(Generic[_T]):
+    """One call handed to a `_PinnedThread`, and how it ended."""
+
+    fn: Callable[[], _T] | None
+    token: anyio.lowlevel.EventLoopToken
+    outer: TracebackType | None
+    done: anyio.Event = field(default_factory=anyio.Event)
+    result: _T | None = None
+    error: BaseException | None = None
+
+
+class _PinnedThread:
+    """One thread that runs every call it gets, in order.
+
+    `anyio.to_thread` may pick a different thread per call, and a
+    `Transaction` panics when another thread touches it.
+    """
+
+    def __init__(self) -> None:
+        self._calls: queue.SimpleQueue[_Call[Any] | None] = queue.SimpleQueue()
+        self._thread = threading.Thread(target=self._run, name="pyjj-atomic", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while (call := self._calls.get()) is not None:
+            fn, call.fn = call.fn, None
+            try:
+                if fn is not None:
+                    call.result = fn()
+            except BaseException as e:  # noqa: BLE001 -- re-raised in `call`
+                call.error = _without_own_frames(e, call.outer)
+            # `fn` may hold the transaction; an error's traceback holds
+            # the frame of `call`, so `call` must not.
+            del fn
+            anyio.from_thread.run_sync(call.done.set, token=call.token)
+
+    async def call(self, fn: Callable[[], _T], *, outer: TracebackType | None = None) -> _T:
+        """`fn()` on this thread. `outer` is the traceback an error passed
+        in already had; frames this thread adds above it are cut."""
+        call = _Call(fn, anyio.lowlevel.current_token(), outer)
+        # An error's traceback holds this frame; `fn` may hold the
+        # transaction, which the pinned thread alone may free.
+        del fn
+        self._calls.put(call)
+        # The thread runs the call to its end whatever happens here, so
+        # wait for it rather than leave the transaction mid-verb.
+        with anyio.CancelScope(shield=True):
+            await call.done.wait()
+        if call.error is not None:
+            raise call.error
+        return call.result  # type: ignore[return-value]
+
+    def close(self) -> None:
+        self._calls.put(None)
+
+
+def _without_own_frames(error: BaseException, outer: TracebackType | None) -> BaseException:
+    """`error` with the frames this thread added cut, kept as a note.
+
+    Those frames hold the transaction. Handed to the event loop, they
+    would free it there, and pyo3 refuses to drop an unsendable object
+    on another thread.
+    """
+    own: list[TracebackType] = []
+    tb = error.__traceback__
+    while tb is not None and tb is not outer:
+        own.append(tb)
+        tb = tb.tb_next
+    if own:
+        lines = traceback.format_list(traceback.extract_tb(own[0], limit=len(own)))
+        error.add_note("On the block's thread:\n" + "".join(lines).rstrip())
+    return error.with_traceback(outer)
+
+
+def _on_pinned(
+    verb: Callable[Concatenate[Atomic, _P], _T],
+) -> Callable[Concatenate[AsyncAtomic, _P], Coroutine[Any, Any, _T]]:
+    """An `Atomic` verb as an `AsyncAtomic` coroutine on the block's thread."""
+
+    async def run(self: AsyncAtomic, /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        return await self._pinned.call(functools.partial(verb, self._block(), *args, **kwargs))
+
+    run.__name__ = verb.__name__
+    run.__qualname__ = f"AsyncAtomic.{verb.__name__}"
+    run.__doc__ = verb.__doc__
+    return run
+
+
+class AsyncAtomic:
+    """`Atomic`'s verbs as coroutines, for `Repo.atomic_async`."""
+
+    def __init__(self, atomic: Atomic, pinned: _PinnedThread) -> None:
+        self._atomic: Atomic | None = atomic
+        self._pinned = pinned
+        self._rolled_back = False
+
+    def _block(self) -> Atomic:
+        if self._atomic is None:
+            raise PyjjError("the block has ended; its verbs are gone with it")
+        return self._atomic
+
+    def _release(self) -> None:
+        if self._atomic is not None:
+            self._rolled_back = self._atomic.rolled_back
+            self._atomic = None
+
+    @property
+    def rolled_back(self) -> bool:
+        """Whether the block ended by discarding its work."""
+        return self._atomic.rolled_back if self._atomic is not None else self._rolled_back
+
+    describe = _on_pinned(Atomic.describe)
+    new = _on_pinned(Atomic.new)
+    commit = _on_pinned(Atomic.commit)
+    squash = _on_pinned(Atomic.squash)
+    split = _on_pinned(Atomic.split)
+    rebase = _on_pinned(Atomic.rebase)
+    abandon = _on_pinned(Atomic.abandon)
+    duplicate = _on_pinned(Atomic.duplicate)
+    absorb = _on_pinned(Atomic.absorb)
+    restore = _on_pinned(Atomic.restore)
+    revert = _on_pinned(Atomic.revert)
+    bookmark = _on_pinned(Atomic.bookmark)

@@ -1760,10 +1760,18 @@ trio alike. The lists there name which methods get one.
   fine to call its methods inline inside an `async def`, they just won't
   yield to the event loop while running, same as any synchronous call.
   (A `Mutex`-based fix like `Workspace`'s doesn't apply here — `Mutex<T>`
-  is only `Send`/`Sync` if `T: Send`, and `Transaction` isn't. A dedicated
-  single-thread-executor wrapper *could* work in principle, pinning one
-  Transaction to one OS thread for its whole lifetime, but was judged not
-  worth the complexity.)
+  is only `Send`/`Sync` if `T: Send`, and `Transaction` isn't.)
+- **`Repo.atomic_async`** is that pinned thread, at the session layer:
+  `_PinnedThread` runs the whole sync `atomic()` block, snapshot to
+  commit, on one OS thread, and each `AsyncAtomic` verb awaits it.
+  Nothing on the event loop may keep the last reference to the
+  transaction: pyo3 refuses to drop it there (an unraisable warning,
+  and a leak). So the handle is released on the pinned thread, frames
+  added there are cut from an error's traceback (kept as a note), and
+  no loop-side frame keeps the call's function. `test_session.py`
+  turns that warning into a failure.
+- Typing: `stub_async.py` adds every `*_async` sibling to the generated
+  `_native.pyi`, typed like its sync method. The package build runs it.
 
 ## Notes
 

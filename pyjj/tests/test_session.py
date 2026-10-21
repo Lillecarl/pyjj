@@ -12,11 +12,17 @@ whole point of that subcommand.
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import anyio
 import pytest
 
 import pyjj
+
+# A transaction freed off its own thread shows up only as an unraisable
+# warning from pyo3, so make that a failure here.
+pytestmark = pytest.mark.filterwarnings("error::pytest.PytestUnraisableExceptionWarning")
 
 
 def _state(repo) -> dict:
@@ -356,3 +362,59 @@ def test_absorb_moves_a_change_into_the_commit_that_owns_it(session):
                  if c.description.strip() == "first")
     assert first.read_file("first.txt") == b"one edited\n", (
         "the edit did not reach the commit that introduced the line")
+
+
+async def test_an_async_block_is_applied(session):
+    repo = await pyjj.open_async(session.root)
+    async with repo.atomic_async("retitle twice") as tx:
+        await tx.describe("@-", message="renamed")
+        await tx.new("@-", message="on top")
+    assert not tx.rolled_back
+    descriptions = [c.description.strip() for c in await repo.revset_async("all()")]
+    assert "renamed" in descriptions and "on top" in descriptions
+
+
+async def test_a_failed_async_block_writes_nothing(session):
+    before = _state(session)
+    with pytest.raises(pyjj.JjError, match="nothing was written") as caught:
+        async with session.atomic_async("bad") as tx:
+            await tx.describe("@-", message="CHANGED")
+            await tx.describe("nonexistent-revision", message="x")
+    assert type(caught.value) is not pyjj.JjError
+    assert tx.rolled_back
+    assert _state(session) == before
+
+
+async def test_a_foreign_error_leaves_an_async_block_as_is(session):
+    before = _state(session)
+    with pytest.raises(RuntimeError, match="boom"):
+        async with session.atomic_async("boom") as tx:
+            await tx.describe("@-", message="CHANGED")
+            raise RuntimeError("boom")
+    assert _state(session) == before
+
+
+def test_async_names_carry_their_own_names():
+    assert pyjj.Repo.revset_async.__name__ == "revset_async"
+    assert pyjj.AsyncAtomic.squash.__qualname__ == "AsyncAtomic.squash"
+
+
+async def test_an_async_block_leaves_the_event_loop_free(session):
+    for i in range(500):
+        (Path(session.root) / f"file{i}.txt").write_text("x" * 200)
+    beats: list[float] = []
+
+    async def heartbeat() -> None:
+        for _ in range(15):
+            beats.append(time.monotonic())
+            await anyio.sleep(0.01)
+
+    async def block() -> None:
+        async with session.atomic_async("snapshot and retitle") as tx:
+            await tx.describe("@", message="many files")
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(heartbeat)
+        tg.start_soon(block)
+    gaps = [b - a for a, b in zip(beats, beats[1:])]
+    assert max(gaps) < 0.2, f"the event loop was blocked for {max(gaps):.2f}s"
