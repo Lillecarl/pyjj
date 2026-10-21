@@ -17,9 +17,12 @@
   python3,
   pyjj,
   pyjj-cli,
+  pyjjui,
   jj,
   gitMinimal,
   openssh,
+  pyrefly,
+  ruff,
 }:
 
 let
@@ -74,6 +77,43 @@ in
 
         # shellcheck disable=SC2086
         pytest tests ${pytestArgsStr}
+        touch "$out"
+      '';
+
+  # Types and lint, against the packages as built: pyjj_bindings brings its
+  # generated stub. pyjj and the binding's Python are strict; the CLI and
+  # the TUI take pyrefly's default preset (see each pyproject.toml).
+  pyjj-lint =
+    let
+      lintEnv = python3.withPackages (_: [
+        pyjj-cli
+        pyjjui
+      ]);
+    in
+    runCommand "pyjj-lint"
+      {
+        nativeBuildInputs = [
+          pyrefly
+          ruff
+        ];
+      }
+      ''
+        mkdir -p src/pyjj-bindings
+        cp -r ${./../pyjj} src/pyjj
+        cp -r ${./../pyjj-cli} src/pyjj-cli
+        cp -r ${./../pyjjui} src/pyjjui
+        cp -r ${./../pyjj-bindings/python} src/pyjj-bindings/python
+        cp ${./../pyjj-bindings/fix_stub.py} src/pyjj-bindings/fix_stub.py
+        cp ${./../pyjj-bindings/pyproject.toml} src/pyjj-bindings/pyproject.toml
+        chmod -R u+w ./src
+        cd ./src
+        check() {
+          (cd "$1" && pyrefly check --python-interpreter-path ${lintEnv}/bin/python3 --summary=none)
+        }
+        check pyjj
+        check pyjj-cli
+        check pyjjui
+        ruff check --no-cache pyjj/pyjj pyjj-bindings/python pyjj-bindings/fix_stub.py
         touch "$out"
       '';
 }

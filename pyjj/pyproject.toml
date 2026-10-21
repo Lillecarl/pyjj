@@ -28,10 +28,12 @@ select = ["E", "F", "W", "B", "UP", "SIM", "RUF", "FA", "BLE", "PLC0415", "TID25
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLC0415", "TID251"]
 
-[tool.mypy]
-python_version = "3.11"
-packages = ["pyjj"]
-warn_unused_ignores = true
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["pyjj"]
+python-version = "3.11"
+# pygraphviz has no stubs, and its attribute maps are built at runtime.
+replace-imports-with-any = ["pygraphviz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

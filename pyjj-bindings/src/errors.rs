@@ -11,20 +11,16 @@ use pyo3::pyclass_init::PyClassInitializer;
 /// masking the real error.
 macro_rules! py_error {
     ($name:ident, $base:ident) => {
+        // `message` lives on the base; a second copy here would shadow
+        // its getter, and the stub would show an override.
         #[pyclass(extends = $base, module = "pyjj_bindings")]
-        pub struct $name {
-            #[pyo3(get)]
-            pub message: String,
-        }
+        pub struct $name {}
 
         #[pymethods]
         impl $name {
             #[new]
             fn new(message: String) -> PyClassInitializer<Self> {
-                PyClassInitializer::from($base {
-                    message: message.clone(),
-                })
-                .add_subclass(Self { message })
+                PyClassInitializer::from($base { message }).add_subclass(Self {})
             }
         }
 

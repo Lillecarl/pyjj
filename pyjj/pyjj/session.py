@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from pyjj_bindings import (
         AbsorbStats,
         Commit,
+        CommitId,
         GraphNode,
         Transaction,
         UserSettings,
@@ -533,7 +534,8 @@ class Atomic:
         self._guard(targets)
         ids = [commit.id for commit in targets]
         moving = set(ids)
-        parents, children = [], []
+        parents: list[CommitId] = []
+        children: list[CommitId] = []
         if destination is not None:
             parents = [c.id for c in self._commits(destination)]
         elif after is not None:

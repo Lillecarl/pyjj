@@ -365,6 +365,7 @@ impl PyCommit {
     /// add/add-style conflicts. Raises `JjError` unless `path` is a
     /// two-sided plain-file conflict (real `jj resolve` rejects anything
     /// else too).
+    #[pyo3(signature = (path) -> "dict[str, bytes | bool]")]
     fn conflict_sides<'a>(
         &self,
         py: Python<'a>,

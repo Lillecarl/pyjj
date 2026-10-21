@@ -28,5 +28,10 @@ select = ["E", "F", "W", "B", "UP", "SIM", "RUF", "FA", "BLE", "PLC0415", "TID25
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "asyncio".msg = "Use anyio."
 
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["python"]
+python-version = "3.11"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

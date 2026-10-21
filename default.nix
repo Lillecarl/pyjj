@@ -65,7 +65,7 @@ let
   # Store-built conformance runs: the pyjj pytest suite (unit + parity vs
   # real jj) with the pinned `jj` on PATH. See nix/checks.nix.
   checks = pkgs.callPackage ./nix/checks.nix {
-    inherit pyjj pyjj-cli jj;
+    inherit pyjj pyjj-cli pyjjui jj;
   };
 
   # Human-workable impure test runner for `PYTEST_ARGS="..." nix run --file . tests`
