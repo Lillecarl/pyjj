@@ -95,7 +95,13 @@ impl PyUserSettings {
         config: jj_lib::config::StackedConfig,
         mut warnings: Vec<String>,
     ) -> PyResult<Self> {
-        warnings.extend(crate::revset::alias_warnings(&config)?);
+        // `with_command_args` passes the warnings it already holds, and
+        // the alias check sees the same base layers again.
+        for warning in crate::revset::alias_warnings(&config)? {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
         let settings = UserSettings::from_config_and_home_dir(config, crate::config::home_dir())
             .map_err(crate::errors::map_config_err)?;
         Ok(Self(settings, warnings))

@@ -23,3 +23,11 @@ def test_layer_keys_are_quoted_as_toml():
         [("config", 'aliases."my.alias" = ["log"]')])
     names = {name for layer in settings.config_layers() for name in layer.entries}
     assert 'aliases."my.alias"' in names
+
+
+def test_layering_more_args_does_not_repeat_a_warning():
+    base = pyjj.UserSettings(load_config=False).with_command_args(
+        [("config", 'revset-aliases."bad(" = "x"')])
+    layered = base.with_command_args([("config", "ui.color = 'never'")])
+    assert layered.warnings == base.warnings
+    assert len(base.warnings) == 1
