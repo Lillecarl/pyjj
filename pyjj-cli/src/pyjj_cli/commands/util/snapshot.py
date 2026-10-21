@@ -26,5 +26,5 @@ def util_snapshot(args) -> int:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
         return 1
     report_refused(stats)
-    print("Snapshot complete." if stats["changed"] else "No snapshot needed.")
+    print("Snapshot complete." if stats.changed else "No snapshot needed.")
     return 0

@@ -115,7 +115,7 @@ async def test_commit_async_methods_match_sync(workspace, repo, settings, wc_com
 async def test_workspace_snapshot_async_matches_sync(workspace, settings):
     Path(workspace.workspace_root, "b.txt").write_text("world\n")
     new_repo, stats = await workspace.snapshot_async(settings)
-    assert "untracked_paths" in stats
+    assert stats.untracked_paths == 0
     wc = new_repo.resolve_single(settings, "@")
     assert wc.read_file("b.txt") == b"world\n"
 
@@ -130,7 +130,7 @@ async def test_workspace_check_out_and_update_stale_async(workspace, repo, setti
     new_repo = tx.commit("advance wc")
 
     stats = await workspace.check_out_async(new_repo, child)
-    assert isinstance(stats, dict)
+    assert isinstance(stats, pyjj.CheckoutStats)
     assert new_repo.resolve_single(settings, "@").id == child.id
 
     fresh = workspace.load_at_head()
@@ -144,7 +144,7 @@ async def test_workspace_sparse_patterns_async(workspace, settings):
     workspace.snapshot(settings)
 
     stats = await workspace.set_sparse_patterns_async(["dir"])
-    assert isinstance(stats, dict)
+    assert isinstance(stats, pyjj.CheckoutStats)
     assert workspace.sparse_patterns() == ["dir"]
     await workspace.set_sparse_patterns_async([""])
     assert workspace.sparse_patterns() == [""]

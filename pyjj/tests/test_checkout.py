@@ -14,16 +14,16 @@ def test_snapshot_with_no_changes_keeps_same_wc_commit(workspace, repo, settings
     new_repo, stats = workspace.snapshot(settings)
     new_wc = new_repo.resolve_single(settings, "@")
     assert new_wc.id == wc_commit.id
-    assert stats["untracked_paths"] == 0
+    assert stats.untracked_paths == 0
     # `jj util snapshot` reports exactly this bit.
-    assert stats["changed"] is False
+    assert stats.changed is False
 
 
 def test_snapshot_reports_that_it_changed_something(workspace, repo, settings,
                                                     wc_commit):
     Path(workspace.workspace_root, "moved.txt").write_text("moved\n")
     _new_repo, stats = workspace.snapshot(settings)
-    assert stats["changed"] is True
+    assert stats.changed is True
 
 
 def test_snapshot_picks_up_new_file(workspace, repo, settings, wc_commit):
@@ -191,7 +191,7 @@ def test_check_out_does_not_write_through_a_directory_symlink_escaping_the_works
     commit_with_files = repo.get_commit(commit_with_files.id)
     stats = workspace.check_out(repo, commit_with_files)
 
-    assert stats["skipped_files"] == 2
+    assert stats.skipped_files == 2
     outside = root.parent
     assert not (outside / "escaped1").exists()
     assert not (outside / "escaped2").exists()
@@ -218,7 +218,7 @@ def test_check_out_skips_a_file_replaced_with_a_directory_without_failing(
     (root / "file").mkdir()
 
     stats = workspace.check_out(repo, commit2)
-    assert stats["skipped_files"] == 1
+    assert stats.skipped_files == 1
     assert (root / "file").is_dir()
 
 
@@ -232,7 +232,7 @@ def test_check_out_writes_target_commits_tree_to_disk(workspace, repo, settings,
     new_repo = tx.commit("advance wc")
 
     stats = workspace.check_out(new_repo, child)
-    assert isinstance(stats, dict)
+    assert isinstance(stats, pyjj.CheckoutStats)
     assert new_repo.resolve_single(settings, "@").id == child.id
 
 
@@ -339,6 +339,6 @@ def test_snapshot_puts_a_new_commit_on_an_immutable_wc(workspace, wc_commit):
 
     repo, stats = workspace.snapshot(settings)
     new_wc = repo.resolve_single(settings, "@")
-    assert stats["wc_immutable"] is True
+    assert stats.wc_immutable is True
     assert new_wc.parent_ids == [wc_commit.id]
     assert repo.get_commit(wc_commit.id).list_files() == []

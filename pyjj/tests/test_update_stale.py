@@ -51,8 +51,8 @@ def test_update_stale_detects_and_recovers_stale_working_copy(workspace, setting
 
     stats = workspace.update_stale(fresh)
     assert stats is not None
-    assert stats["removed_files"] == 1
-    assert stats["added_files"] == 0
+    assert stats.removed_files == 1
+    assert stats.added_files == 0
 
     after = workspace.load_at_head()
     assert after.resolve_single(settings, "@").id == new_wc_commit.id

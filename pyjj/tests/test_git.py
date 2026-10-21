@@ -29,8 +29,8 @@ def test_import_refs_with_nothing_to_import(colocated, settings):
     _ws, repo = colocated
     tx = repo.start_transaction(settings)
     stats = tx.git_import_refs()
-    assert stats["changed_remote_bookmarks"] == 0
-    assert stats["failed_ref_names"] == []
+    assert stats.changed_remote_bookmarks == 0
+    assert stats.failed_ref_names == []
 
 
 def test_import_refs_picks_up_git_side_commit(colocated, settings):
@@ -43,7 +43,7 @@ def test_import_refs_picks_up_git_side_commit(colocated, settings):
 
     tx = repo.start_transaction(settings)
     stats = tx.git_import_refs()
-    assert stats["changed_remote_bookmarks"] == 1
+    assert stats.changed_remote_bookmarks == 1
 
     new_repo = tx.commit("import")
     bm = new_repo.get_bookmark("feature")
@@ -58,8 +58,8 @@ def test_export_refs_with_nothing_to_export(colocated, settings):
     _ws, repo = colocated
     tx = repo.start_transaction(settings)
     stats = tx.git_export_refs()
-    assert stats["failed_bookmarks"] == []
-    assert stats["failed_tags"] == []
+    assert stats.failed_bookmarks == []
+    assert stats.failed_tags == []
 
 
 def test_export_refs_creates_git_ref_for_jj_bookmark(colocated, settings):
@@ -70,7 +70,7 @@ def test_export_refs_creates_git_ref_for_jj_bookmark(colocated, settings):
     wc_commit_id = pyjj.CommitId(next(iter(view.values())))
     tx.set_bookmark("exported", wc_commit_id)
     stats = tx.git_export_refs()
-    assert stats["failed_bookmarks"] == []
+    assert stats.failed_bookmarks == []
     tx.commit("export")
 
     result = subprocess.run(
@@ -103,5 +103,5 @@ def test_import_honours_abandon_unreachable_commits(colocated, abandon):
     stats = tx.git_import_refs()
     tx.rebase_descendants()
     repo = tx.commit("import deletion")
-    assert stats["abandoned_commits"] == (1 if abandon else 0)
+    assert stats.abandoned_commits == (1 if abandon else 0)
     assert bool(repo.revset(settings, f"{imported.hex()} & visible_heads()")) is not abandon

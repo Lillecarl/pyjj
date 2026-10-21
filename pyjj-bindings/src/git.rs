@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::io;
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 use jj_lib::git::{
     self, GitFetch, GitFetchRefExpression, GitImportOptions, GitProgress, GitPushOptions,
@@ -91,28 +90,13 @@ fn remote_expression(name: &RemoteName, text: &str, field: &str) -> PyResult<Str
 /// Reflect changes made in the underlying (colocated) Git repo into the jj
 /// view: new/moved/deleted Git refs become remote bookmarks/tags, reachable
 /// commits become visible. Returns a summary dict.
-pub fn import_refs(mut_repo: &mut MutableRepo, settings: &PyUserSettings) -> PyResult<Py<PyAny>> {
+pub fn import_refs(
+    mut_repo: &mut MutableRepo,
+    settings: &PyUserSettings,
+) -> PyResult<PyGitImportStats> {
     let stats = pollster::block_on(git::import_refs(mut_repo, &import_options(settings)?))
         .map_err(map_git_import_err)?;
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item("abandoned_commits", stats.abandoned_commits.len())?;
-        dict.set_item("rewritten_commits", stats.rewritten_commit_ids.len())?;
-        dict.set_item(
-            "changed_remote_bookmarks",
-            stats.changed_remote_bookmarks.len(),
-        )?;
-        dict.set_item("changed_remote_tags", stats.changed_remote_tags.len())?;
-        dict.set_item(
-            "failed_ref_names",
-            stats
-                .failed_ref_names
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        Ok(dict.unbind().into_any())
-    })
+    Ok(PyGitImportStats::new(&stats, None))
 }
 /// `jj`'s colocated-repo HEAD update: point git's `HEAD` at the first
 /// parent of `workspace_name`'s working-copy commit, which is what
@@ -147,27 +131,14 @@ pub fn export_refs_only(mut_repo: &mut MutableRepo) -> PyResult<()> {
     Ok(())
 }
 
-pub fn export_refs(mut_repo: &mut MutableRepo) -> PyResult<Py<PyAny>> {
+pub fn export_refs(mut_repo: &mut MutableRepo) -> PyResult<PyGitExportStats> {
     let stats = git::export_refs(mut_repo).map_err(map_git_export_err)?;
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item(
-            "failed_bookmarks",
-            stats
-                .failed_bookmarks
-                .iter()
-                .map(|(symbol, _)| symbol.to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        dict.set_item(
-            "failed_tags",
-            stats
-                .failed_tags
-                .iter()
-                .map(|(symbol, _)| symbol.to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        Ok(dict.unbind().into_any())
+    let symbols = |failed: &[(jj_lib::ref_name::RemoteRefSymbolBuf, _)]| {
+        failed.iter().map(|(symbol, _)| symbol.to_string()).collect()
+    };
+    Ok(PyGitExportStats {
+        failed_bookmarks: symbols(&stats.failed_bookmarks),
+        failed_tags: symbols(&stats.failed_tags),
     })
 }
 
@@ -377,7 +348,7 @@ pub fn fetch(
     branches: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     tracked: bool,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<PyGitImportStats> {
     let remote_name = RemoteName::new(remote);
     let subprocess_options =
         jj_lib::git::GitSubprocessOptions::from_settings(&settings.0).map_err(map_py_err)?;
@@ -396,25 +367,7 @@ pub fn fetch(
         .map_err(map_git_fetch_err)?;
     let stats = pollster::block_on(git_fetch.import_refs()).map_err(map_git_import_err)?;
 
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item("abandoned_commits", stats.abandoned_commits.len())?;
-        dict.set_item("rewritten_commits", stats.rewritten_commit_ids.len())?;
-        dict.set_item(
-            "changed_remote_bookmarks",
-            stats.changed_remote_bookmarks.len(),
-        )?;
-        dict.set_item("changed_remote_tags", stats.changed_remote_tags.len())?;
-        dict.set_item(
-            "failed_ref_names",
-            stats
-                .failed_ref_names
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>(),
-        )?;
-        Ok(dict.unbind().into_any())
-    })
+    Ok(PyGitImportStats::new(&stats, None))
 }
 
 /// The bookmark patterns `jj git clone -b` accepts, as one expression.
@@ -442,17 +395,44 @@ pub fn bookmark_expression(patterns: Option<Vec<String>>) -> PyResult<StringExpr
     Ok(StringExpression::union_all(parts))
 }
 
-/// Plain-Rust result of `fetch_all_inner` -- used both to build
-/// `fetch_all()`'s Python-facing stats dict and, in `workspace.rs`'s
-/// `Workspace.clone_git()`, to decide what to check out without round-
-/// tripping through a `Py<PyAny>` dict.
-pub struct FetchAllResult {
-    pub default_branch: Option<RefNameBuf>,
+/// What a Git import did: `git_import_refs`, `git_fetch` and
+/// `git_fetch_all`. `default_branch` is set by `git_fetch_all` only.
+#[pyclass(name = "GitImportStats", module = "pyjj_bindings", frozen, get_all)]
+pub struct PyGitImportStats {
     pub abandoned_commits: usize,
     pub rewritten_commits: usize,
     pub changed_remote_bookmarks: usize,
     pub changed_remote_tags: usize,
     pub failed_ref_names: Vec<String>,
+    /// The remote's default branch, as `git remote show` reports it.
+    pub default_branch: Option<String>,
+}
+
+impl PyGitImportStats {
+    fn new(stats: &git::GitImportStats, default_branch: Option<&RefNameBuf>) -> Self {
+        Self {
+            abandoned_commits: stats.abandoned_commits.len(),
+            rewritten_commits: stats.rewritten_commit_ids.len(),
+            changed_remote_bookmarks: stats.changed_remote_bookmarks.len(),
+            changed_remote_tags: stats.changed_remote_tags.len(),
+            failed_ref_names: stats.failed_ref_names.iter().map(|n| n.to_string()).collect(),
+            default_branch: default_branch.map(|name| name.as_str().to_owned()),
+        }
+    }
+}
+
+/// What a Git export did: the refs jj could not write to the Git repo.
+#[pyclass(name = "GitExportStats", module = "pyjj_bindings", frozen, get_all)]
+pub struct PyGitExportStats {
+    pub failed_bookmarks: Vec<String>,
+    pub failed_tags: Vec<String>,
+}
+
+/// `fetch_all_inner`'s result: the stats, and the default branch as a
+/// ref name, for `Workspace.clone_git()` to check out.
+pub struct FetchAllResult {
+    pub default_branch: Option<RefNameBuf>,
+    pub stats: PyGitImportStats,
 }
 
 /// `jj git clone`'s fetch step: fetches *all* branches and tags from
@@ -490,16 +470,8 @@ pub fn fetch_all_inner(
     let stats = pollster::block_on(git_fetch.import_refs()).map_err(map_git_import_err)?;
 
     Ok(FetchAllResult {
+        stats: PyGitImportStats::new(&stats, default_branch.as_ref()),
         default_branch,
-        abandoned_commits: stats.abandoned_commits.len(),
-        rewritten_commits: stats.rewritten_commit_ids.len(),
-        changed_remote_bookmarks: stats.changed_remote_bookmarks.len(),
-        changed_remote_tags: stats.changed_remote_tags.len(),
-        failed_ref_names: stats
-            .failed_ref_names
-            .iter()
-            .map(|n| n.to_string())
-            .collect(),
     })
 }
 
@@ -510,7 +482,7 @@ pub fn fetch_all(
     mut_repo: &mut MutableRepo,
     settings: &PyUserSettings,
     remote: &str,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<PyGitImportStats> {
     let result = fetch_all_inner(
         mut_repo,
         settings,
@@ -519,22 +491,7 @@ pub fn fetch_all(
         StringExpression::all(),
         None,
     )?;
-    Python::attach(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item("abandoned_commits", result.abandoned_commits)?;
-        dict.set_item("rewritten_commits", result.rewritten_commits)?;
-        dict.set_item("changed_remote_bookmarks", result.changed_remote_bookmarks)?;
-        dict.set_item("changed_remote_tags", result.changed_remote_tags)?;
-        dict.set_item("failed_ref_names", result.failed_ref_names)?;
-        dict.set_item(
-            "default_branch",
-            result
-                .default_branch
-                .as_ref()
-                .map(|n| n.as_str().to_string()),
-        )?;
-        Ok(dict.unbind().into_any())
-    })
+    Ok(result.stats)
 }
 
 /// `jj git push`, with the caller deciding what to push.

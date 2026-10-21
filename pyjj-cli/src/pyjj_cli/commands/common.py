@@ -594,7 +594,7 @@ def report_refused(stats) -> None:
     `snapshot.max-new-file-size` is exactly the setting whose effect a
     user needs told. jj words it per path; so does the binding.
     """
-    refused = (stats or {}).get("refused") or {}
+    refused = stats.refused if stats is not None else {}
     if not refused:
         return
     print("Warning: Refused to snapshot some files:", file=sys.stderr)

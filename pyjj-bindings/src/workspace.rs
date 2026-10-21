@@ -727,11 +727,8 @@ impl PyWorkspace {
         py: Python<'_>,
         settings: &PyUserSettings,
         args: Option<String>,
-    ) -> PyResult<(PyReadonlyRepo, Py<PyAny>)> {
-        let (repo, outcome) = self.with_ws(py, move |inner| {
-            crate::checkout::snapshot(inner, settings, args)
-        })?;
-        Ok((repo, outcome.into_py(py)?))
+    ) -> PyResult<(PyReadonlyRepo, crate::checkout::SnapshotOutcome)> {
+        self.with_ws(py, move |inner| crate::checkout::snapshot(inner, settings, args))
     }
 
     /// `jj file untrack <paths>`: drop `paths` from the working-copy
@@ -758,9 +755,9 @@ impl PyWorkspace {
         py: Python<'_>,
         repo: &PyReadonlyRepo,
         commit: &PyCommit,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<crate::checkout::PyCheckoutStats> {
         let stats = self.with_ws(py, move |inner| crate::checkout::check_out(inner, repo, commit))?;
-        crate::checkout::checkout_stats_into_py(py, &stats)
+        Ok(stats.into())
     }
 
     /// Re-syncs the working copy's tracked-file-state bookkeeping to
@@ -806,7 +803,11 @@ impl PyWorkspace {
     /// matters, snapshot against the *old* operation yourself first (e.g.
     /// via a `Workspace` loaded at the stale op) before calling this,
     /// since it will otherwise simply overwrite them with `repo`'s tree.
-    fn update_stale(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<Option<Py<PyAny>>> {
+    fn update_stale(
+        &self,
+        py: Python<'_>,
+        repo: &PyReadonlyRepo,
+    ) -> PyResult<Option<crate::checkout::PyCheckoutStats>> {
         let stats = self.with_ws(py, move |inner| {
             let wc_commit_id = repo
                 .inner
@@ -858,9 +859,7 @@ impl PyWorkspace {
                 }
             }
         })?;
-        stats
-            .map(|stats| crate::checkout::checkout_stats_into_py(py, &stats))
-            .transpose()
+        Ok(stats.map(Into::into))
     }
 
     /// The current sparse patterns: repo-relative path strings, each
@@ -887,7 +886,11 @@ impl PyWorkspace {
     /// reset`). Doesn't touch the repo's view or create a new jj
     /// operation, since sparse patterns are purely workspace-local state.
     /// Returns a stats dict shaped like `check_out()`'s.
-    fn set_sparse_patterns(&self, py: Python<'_>, patterns: Vec<String>) -> PyResult<Py<PyAny>> {
+    fn set_sparse_patterns(
+        &self,
+        py: Python<'_>,
+        patterns: Vec<String>,
+    ) -> PyResult<crate::checkout::PyCheckoutStats> {
         let repo_paths: Vec<RepoPathBuf> = patterns
             .iter()
             .map(|p| crate::tree::repo_path(p))
@@ -896,7 +899,7 @@ impl PyWorkspace {
         let stats = self.with_ws(py, move |inner| {
             crate::checkout::set_sparse_patterns(inner, repo_paths)
         })?;
-        crate::checkout::checkout_stats_into_py(py, &stats)
+        Ok(stats.into())
     }
 
     /// `jj workspace add <destination>` equivalent: creates a brand-new

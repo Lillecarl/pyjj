@@ -85,17 +85,13 @@ impl PyReadonlyRepo {
     }
 
     /// Get the current view summary (workspace→commit mapping).
-    fn view(&self) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| {
-            let dict = pyo3::types::PyDict::new(py);
-            let view = self.inner.view();
-            for (ws_name, commit_id) in view.wc_commit_ids() {
-                let key: &str = ws_name.as_ref();
-                let val = commit_id.hex();
-                dict.set_item(key, val)?;
-            }
-            Ok(dict.unbind().into_any())
-        })
+    fn view(&self) -> std::collections::BTreeMap<String, String> {
+        self.inner
+            .view()
+            .wc_commit_ids()
+            .iter()
+            .map(|(name, commit_id)| (name.as_str().to_owned(), commit_id.hex()))
+            .collect()
     }
 
     /// The Git HEAD this view last imported or exported for
@@ -884,7 +880,7 @@ impl PyTransaction {
     /// its immutable descendants must not follow.
     #[pyo3(signature = (delete_abandoned_bookmarks=false))]
     fn rebase_descendants(&self, delete_abandoned_bookmarks: bool) -> PyResult<usize> {
-        let settings = PyUserSettings(self.settings.clone());
+        let settings = PyUserSettings(self.settings.clone(), Vec::new());
         with_tx(self, |tx| {
             let immutable = crate::rewrite::immutable_or_none(
                 tx.base_repo().as_ref(),
@@ -949,14 +945,14 @@ impl PyTransaction {
 
     /// `jj git import` equivalent: reflect changes from the underlying
     /// (colocated) Git repo into this transaction's view.
-    fn git_import_refs(&self) -> PyResult<Py<PyAny>> {
-        let settings = PyUserSettings(self.settings.clone());
+    fn git_import_refs(&self) -> PyResult<crate::git::PyGitImportStats> {
+        let settings = PyUserSettings(self.settings.clone(), Vec::new());
         with_mut_repo(self, |mut_repo| crate::git::import_refs(mut_repo, &settings))
     }
 
     /// `jj git export` equivalent: reflect bookmark/tag changes made in this
     /// transaction into the underlying (colocated) Git repo's refs.
-    fn git_export_refs(&self) -> PyResult<Py<PyAny>> {
+    fn git_export_refs(&self) -> PyResult<crate::git::PyGitExportStats> {
         with_mut_repo(self, crate::git::export_refs)
     }
 
@@ -1077,7 +1073,7 @@ impl PyTransaction {
         branches: Option<Vec<String>>,
         tags: Option<Vec<String>>,
         tracked: bool,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<crate::git::PyGitImportStats> {
         with_mut_repo(self, |mut_repo| {
             crate::git::fetch(mut_repo, settings, remote, branches, tags, tracked)
         })
@@ -1088,7 +1084,11 @@ impl PyTransaction {
     /// step behind `Workspace.clone_git()`. Returns the same stats shape
     /// as `git_fetch()`, plus `default_branch` (`Optional[str]`, the
     /// remote's default branch name if discoverable).
-    fn git_fetch_all(&self, settings: &PyUserSettings, remote: &str) -> PyResult<Py<PyAny>> {
+    fn git_fetch_all(
+        &self,
+        settings: &PyUserSettings,
+        remote: &str,
+    ) -> PyResult<crate::git::PyGitImportStats> {
         with_mut_repo(self, |mut_repo| {
             crate::git::fetch_all(mut_repo, settings, remote)
         })

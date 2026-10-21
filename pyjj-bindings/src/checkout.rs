@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 use jj_lib::commit::Commit;
 use jj_lib::config::ConfigGetError;
@@ -215,13 +214,20 @@ fn untracked_reason(reason: &UntrackedReason) -> Option<String> {
     }
 }
 
-/// The result of `snapshot()`, as plain data: the caller converts it to
-/// Python after it releases the workspace lock.
+/// What `Workspace.snapshot()` did.
+#[pyclass(name = "SnapshotStats", module = "pyjj_bindings", frozen, get_all)]
 pub struct SnapshotOutcome {
+    /// Paths the snapshot left untracked, for any reason.
     untracked_paths: usize,
-    refused: Vec<(String, String)>,
+    /// `{path: reason}` for files jj refused to track, such as one over
+    /// `snapshot.max-new-file-size`.
+    refused: std::collections::BTreeMap<String, String>,
+    /// Whether the walk found anything: `jj util snapshot`'s "Snapshot
+    /// complete." against "No snapshot needed.".
     changed: bool,
+    /// Whether `@` was immutable, so the snapshot made a new commit on top.
     wc_immutable: bool,
+    /// Descendants of `@` the snapshot rebased.
     rebased: usize,
 }
 
@@ -241,25 +247,6 @@ impl SnapshotOutcome {
             wc_immutable: false,
             rebased: 0,
         }
-    }
-
-    /// `{"untracked_paths": int, "refused": {path: reason}, "changed":
-    /// bool, "wc_immutable": bool, "rebased": int}`.
-    pub fn into_py(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let dict = PyDict::new(py);
-        dict.set_item("untracked_paths", self.untracked_paths)?;
-        let refused = PyDict::new(py);
-        for (path, message) in self.refused {
-            refused.set_item(path, message)?;
-        }
-        dict.set_item("refused", refused)?;
-        // `jj util snapshot` reports exactly this: whether the walk found
-        // anything, which is the difference between "Snapshot complete."
-        // and "No snapshot needed."
-        dict.set_item("changed", self.changed)?;
-        dict.set_item("wc_immutable", self.wc_immutable)?;
-        dict.set_item("rebased", self.rebased)?;
-        Ok(dict.unbind().into_any())
     }
 }
 
@@ -476,13 +463,25 @@ pub fn set_sparse_patterns(
 }
 
 /// `{"updated_files", "added_files", "removed_files", "skipped_files"}`.
-pub fn checkout_stats_into_py(py: Python<'_>, stats: &CheckoutStats) -> PyResult<Py<PyAny>> {
-    let dict = PyDict::new(py);
-    dict.set_item("updated_files", stats.updated_files)?;
-    dict.set_item("added_files", stats.added_files)?;
-    dict.set_item("removed_files", stats.removed_files)?;
-    dict.set_item("skipped_files", stats.skipped_files)?;
-    Ok(dict.unbind().into_any())
+/// What a checkout did to the files on disk.
+#[pyclass(name = "CheckoutStats", module = "pyjj_bindings", frozen, get_all)]
+pub struct PyCheckoutStats {
+    pub updated_files: u32,
+    pub added_files: u32,
+    pub removed_files: u32,
+    /// Files left alone because they were not what jj expected on disk.
+    pub skipped_files: u32,
+}
+
+impl From<CheckoutStats> for PyCheckoutStats {
+    fn from(stats: CheckoutStats) -> Self {
+        Self {
+            updated_files: stats.updated_files,
+            added_files: stats.added_files,
+            removed_files: stats.removed_files,
+            skipped_files: stats.skipped_files,
+        }
+    }
 }
 
 /// Re-syncs the working copy's *tracked-file-state bookkeeping* (recorded
