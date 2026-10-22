@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 def _git_help(args: argparse.Namespace):
     import sys
-    print("usage: pyjj git {init,clone,fetch,push,import,export,remote,root}", file=sys.stderr)
+    print("usage: pyjj git {init,clone,fetch,pull,push,import,export,remote,root}", file=sys.stderr)
     return 2
 
 
@@ -20,7 +20,7 @@ def _git_remote_help(args: argparse.Namespace):
 
 
 def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    from . import clone, colocation, export, fetch, git_import, init, push, remote, root
+    from . import clone, colocation, export, fetch, git_import, init, pull, push, remote, root
 
     p_git = sub.add_parser("git", help="Git interop commands")
     p_git.set_defaults(_handler="pyjj_cli.cli.git:_git_help")
@@ -30,6 +30,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     clone.register(git_sub)
     colocation.register(git_sub)
     fetch.register(git_sub)
+    pull.register(git_sub)
     git_import.register(git_sub)
     export.register(git_sub)
     push.register(git_sub)
