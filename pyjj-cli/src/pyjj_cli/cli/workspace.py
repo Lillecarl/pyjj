@@ -1,16 +1,28 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import argparse
+import re
+from datetime import timedelta
+from typing import Final
 
 from .flags import Flag, add_flags
 
-if TYPE_CHECKING:
-    import argparse
+_UNIT_SECONDS: Final = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+_DURATION_PART: Final = re.compile(r"(\d+)([smhdw])")
+
+
+def _parse_duration(text: str) -> timedelta:
+    """`30d`, `2w`, `1w3d12h`: whole numbers, each with one of s m h d w."""
+    parts: list[tuple[str, str]] = _DURATION_PART.findall(text)
+    if not parts or "".join(n + u for n, u in parts) != text:
+        raise argparse.ArgumentTypeError(
+            f"invalid duration {text!r} (expected e.g. 30d, 2w, 1d12h)")
+    return timedelta(seconds=sum(int(n) * _UNIT_SECONDS[u] for n, u in parts))
 
 
 def _workspace_help(args: argparse.Namespace):
     import sys
-    print("usage: pyjj workspace {add,forget,list,remove,rename,root,update-stale}", file=sys.stderr)
+    print("usage: pyjj workspace {add,clean,forget,list,remove,rename,root,update-stale}", file=sys.stderr)
     return 2
 
 
@@ -54,3 +66,40 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p_ws_remove = ws_sub.add_parser("remove", help="Remove a workspace and its files from disk")
     p_ws_remove.add_argument("names", nargs="+", help="Workspaces to remove")
     p_ws_remove.set_defaults(_handler="pyjj_cli.commands.workspace.remove:workspace_remove")
+    p_ws_clean = ws_sub.add_parser(
+        "clean",
+        help="Remove every workspace whose work is all in trunk()",
+        description="Remove and forget every workspace whose work is in "
+                    "trunk(): its working-copy commit has no ancestors "
+                    "outside trunk() (ignoring an empty undescribed "
+                    "working-copy commit), or trunk() already holds all its "
+                    "changes as other commits, as after a squash-merge. "
+                    "Workspaces whose directory is gone are forgotten. A "
+                    "workspace with files changed on disk is always kept, "
+                    "stale or not. Nothing is written until --force; without "
+                    "it the command only lists, like git clean. A workspace "
+                    "that a process is using (working directory, executable "
+                    "or open file, read from /proc and checked again just "
+                    "before deleting) is never removed; without /proc nothing "
+                    "is. The current workspace and the one holding the "
+                    "repository are never removed. pyjj's own; jj has no such "
+                    "command.")
+    p_ws_clean.add_argument("-f", "--force", dest="force", action="store_true",
+                            help="Remove the workspaces instead of listing them")
+    p_ws_clean.add_argument(
+        "--grace", dest="grace", metavar="DURATION", type=_parse_duration,
+        default=timedelta(hours=1),
+        help="Keep workspaces whose working-copy commit changed more recently "
+             "than DURATION (default 1h; 0s turns it off). Covers a workspace "
+             "created for work no process has started in yet")
+    p_ws_clean.add_argument("--format", choices=["text", "json"], default="text",
+                            help="json prints every workspace with its action "
+                                 "and reason as one object on stdout")
+    p_ws_clean.add_argument(
+        "--older-than", dest="older_than", metavar="DURATION",
+        type=_parse_duration, default=None,
+        help="Also remove workspaces whose working-copy commit was last "
+             "rewritten longer ago than DURATION (30d, 2w, 1d12h), merged "
+             "or not. Their commits stay in the repository; only the "
+             "directory goes")
+    p_ws_clean.set_defaults(_handler="pyjj_cli.commands.workspace.clean:workspace_clean")

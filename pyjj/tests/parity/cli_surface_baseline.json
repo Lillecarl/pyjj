@@ -52,7 +52,8 @@
     "templates get",
     "templates list",
     "templates set",
-    "templates unset"
+    "templates unset",
+    "workspace clean"
   ],
   "missing_commands": [],
   "missing_flags": {}
