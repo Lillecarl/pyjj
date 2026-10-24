@@ -213,6 +213,28 @@ pub fn interdiff_commits(
     diff_trees(&from_tree, &to.inner.tree(), paths)
 }
 
+/// Whether `onto` already holds every change `base` -> `tip` makes:
+/// applying that change to `onto` with a three-way merge leaves `onto`'s
+/// tree as it is. This finds work that reached `onto` as other commits,
+/// such as a squash- or rebase-merge. One tree merge, proportional to the
+/// paths that differ; nothing is written to the operation log.
+///
+/// False when `base` -> `tip` changes nothing: every tree contains an
+/// empty change, so it is no evidence of a merge.
+pub fn contains_changes(onto: &PyCommit, base: &PyCommit, tip: &PyCommit) -> PyResult<bool> {
+    if base.inner.tree().tree_ids() == tip.inner.tree().tree_ids() {
+        return Ok(false);
+    }
+    let onto_tree = onto.inner.tree();
+    let merged = pollster::block_on(MergedTree::merge(jj_lib::merge::Merge::from_vec(vec![
+        (onto_tree.clone(), "onto".to_owned()),
+        (base.inner.tree(), "base".to_owned()),
+        (tip.inner.tree(), "tip".to_owned()),
+    ])))
+    .map_err(map_backend_err)?;
+    Ok(merged.tree_ids() == onto_tree.tree_ids())
+}
+
 /// Like `diff_commits`, but detects copies and renames using the backend's
 /// `get_copy_records` (content-similarity-based for the git backend, via
 /// `gix`'s tree-diff rewrite tracking — the same mechanism `jj diff --git`

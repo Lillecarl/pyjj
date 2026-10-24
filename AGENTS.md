@@ -1582,6 +1582,16 @@ Current state:
   writing when the walk found the same tree; the flag just says which
   path it took. `jj util snapshot` reports exactly this, as the
   difference between "Snapshot complete." and "No snapshot needed."
+- **Read-only probes for `workspace clean`**:
+  `Workspace.has_unrecorded_changes(settings)` runs the snapshot walk and
+  releases the lock unfinished, so it records no operation. It compares
+  disk to the working copy's *own* recorded tree, not the view's commit,
+  so it answers for a stale working copy, which `snapshot()` refuses.
+  `ReadonlyRepo.contains_changes(onto, base, tip)` three-way merges
+  `base -> tip` onto `onto` and reports whether the tree stays the same:
+  work that reached trunk as other commits (a squash or rebase merge).
+  An empty `base -> tip` answers false, since every tree contains it.
+  Both may write unreferenced objects to the store, never to the op log.
 - **Diff stats**: `Commit.diff_stats(other, settings, paths=None)` is what
   `--stat` needs, mirroring `DiffStats::calculate`. Each side is
   materialized first, so a conflict counts its marker lines the way jj

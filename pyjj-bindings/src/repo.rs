@@ -361,6 +361,18 @@ impl PyReadonlyRepo {
         })
     }
 
+    /// Whether `onto` already holds every change `base` -> `tip` makes,
+    /// however it got there. See `pyjj_bindings.tree::contains_changes`.
+    fn contains_changes(
+        &self,
+        py: Python<'_>,
+        onto: &PyCommit,
+        base: &PyCommit,
+        tip: &PyCommit,
+    ) -> PyResult<bool> {
+        py.detach(|| crate::tree::contains_changes(onto, base, tip))
+    }
+
     /// All local tags, in lexicographical order. Tags are typically
     /// populated by `git_import_refs()` from real Git tags, though nothing
     /// prevents setting them by hand via `Transaction.set_tag()`.

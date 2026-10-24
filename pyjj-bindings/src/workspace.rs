@@ -739,6 +739,13 @@ impl PyWorkspace {
         self.with_ws(py, move |inner| crate::checkout::snapshot(inner, settings, args))
     }
 
+    /// Whether the files on disk differ from what the working copy last
+    /// recorded, without writing an operation. Answers for a stale working
+    /// copy too. See `pyjj_bindings.checkout::has_unrecorded_changes`.
+    fn has_unrecorded_changes(&self, py: Python<'_>, settings: &PyUserSettings) -> PyResult<bool> {
+        self.with_ws(py, move |inner| crate::checkout::has_unrecorded_changes(inner, settings))
+    }
+
     /// `jj file untrack <paths>`: drop `paths` from the working-copy
     /// commit's tree, leaving the files on disk. Returns
     /// `(new_repo, added_back)`. When `added_back` is non-empty the paths

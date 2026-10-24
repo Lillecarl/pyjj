@@ -338,6 +338,27 @@ pub fn snapshot(
     Ok((wrap_repo(workspace, new_repo), outcome))
 }
 
+/// Whether the files on disk differ from the tree the working copy last
+/// recorded. The snapshot walk runs with the same options as `snapshot()`,
+/// but the lock is released unfinished, so no operation, view change or
+/// tree state is written; only unreferenced file and tree objects may land
+/// in the store.
+///
+/// It compares against the working copy's own recorded tree, not the
+/// view's working-copy commit, so it answers for a stale working copy too.
+pub fn has_unrecorded_changes(workspace: &mut Workspace, settings: &PyUserSettings) -> PyResult<bool> {
+    let workspace_root = workspace.workspace_root().to_path_buf();
+    let repo = load_head(workspace)?;
+    let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
+    let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
+        .map_err(map_working_copy_err)?;
+    let old_tree = locked_ws.locked_wc().old_tree().clone();
+    let (new_tree, _stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
+        .map_err(map_working_copy_err)?;
+    drop(locked_ws);
+    Ok(new_tree.tree_ids_and_labels() != old_tree.tree_ids_and_labels())
+}
+
 fn load_head(workspace: &Workspace) -> PyResult<Arc<ReadonlyRepo>> {
     pollster::block_on(workspace.repo_loader().load_at_head())
         .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))
