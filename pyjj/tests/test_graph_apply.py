@@ -159,6 +159,37 @@ def test_allow_conflicts_keeps_the_result(topics, tmp_path):
     assert conflicted.stdout.strip(), "nothing ended up conflicted"
 
 
+def test_dry_run_reports_the_conflict(topics, tmp_path):
+    """A dry run carries out the reshape and judges it: refusing a
+    conflict is the default, so it exits 1, and still writes nothing."""
+    root, home = topics(shared=True)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _stack_a_on_b(current, target)
+
+    before = _state(root, home)
+    result = _run(root, "graph", "apply", "--dry-run", str(target), home=home)
+    assert result.returncode == 1
+    assert "would rebase" in result.stdout
+    assert "New conflicts would appear in" in result.stdout
+    assert _state(root, home) == before
+
+    result = _run(root, "graph", "apply", "--dry-run", "--allow-conflicts",
+                  str(target), home=home)
+    assert result.returncode == 0, result.stderr
+    assert _state(root, home) == before
+
+
+def test_allow_conflicts_contradicts_abort_on_conflict(topics, tmp_path):
+    root, home = topics(shared=False)
+    current, target = tmp_path / "c.dot", tmp_path / "t.dot"
+    _graph(root, current, home=home)
+    _stack_a_on_b(current, target)
+    result = _run(root, "graph", "apply", "--allow-conflicts",
+                  "--abort-on-conflict", str(target), home=home)
+    assert result.returncode == 2
+
+
 def _make_a_immutable(root, home):
     result = _run(root, "config", "set", "--repo",
                   'revset-aliases."immutable_heads()"', "a", home=home)

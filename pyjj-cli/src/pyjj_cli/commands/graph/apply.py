@@ -4,54 +4,36 @@ Every step is a `move_commits`, the same primitive `rebase -r` uses --
 but the whole reshape runs in one transaction, so it is all-or-nothing
 by construction: anything going wrong drops the transaction and the
 repository is exactly as it was, with no rollback path to maintain.
-(Only a conflict discovered *after* committing needs
-`op restore`-backed rollback, since the result is already written by
-then.) The pre-apply operation id is also printed on success, so
-`op restore` is one paste away even when everything worked.
+The conflict check runs before the commit too (`_finish`'s trial).
+The pre-apply operation id is printed on success, so `op restore` is
+one paste away even when everything worked.
 
 Two refusals stand between a graph and a rewrite, and both are the
 default:
 
 - an immutable commit is not rewritten, the way every other rewrite
   command here refuses one;
-- a conflict the reshape introduced rolls the whole thing back, since
+- a conflict the reshape introduced drops the whole thing, since
   a graph describes topology and cannot have asked for one.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
-from typing import TYPE_CHECKING
 
 import pyjj
 
 from ..common import (
     CommandError,
+    TrialStop,
     _check_rewritable,
     _finish,
     _load,
     _start_transaction,
 )
 from .resolve import read_graph, resolve
-
-if TYPE_CHECKING:
-    import argparse
-    from collections.abc import Iterable
-
-
-def _conflicted(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, keys: Iterable[str]) -> list[str]:
-    """Which of `keys` name a commit carrying a conflict now."""
-    out: list[str] = []
-    for key in keys:
-        try:
-            commit = repo.resolve_single(settings, key)
-        except pyjj.JjError:
-            # The reshape can abandon a commit; that is not a conflict.
-            continue
-        if commit.has_conflict:
-            out.append(key)
-    return out
 
 
 def _current_id(tx: pyjj.Transaction, settings: pyjj.UserSettings, change_key: str):
@@ -87,20 +69,24 @@ def apply(args: argparse.Namespace) -> int:
         print("Nothing to do: the repository already matches the graph.")
         return 0
 
-    # The rollback point, recorded before anything is written.
+    # The way back, recorded before anything is written.
     before = repo.operation.id
 
-    if getattr(args, "dry_run", False):
+    dry_run = getattr(args, "dry_run", False)
+    allow_conflicts = getattr(args, "allow_conflicts", False)
+    if allow_conflicts and getattr(args, "abort_on_conflict", False):
+        print("Error: --allow-conflicts cannot be used with "
+              "--abort-on-conflict", file=sys.stderr)
+        return 2
+    if dry_run:
         for key in abandons:
             print(f"would abandon {key}")
         for key, parents in steps:
             print(f"would rebase {key} onto {' '.join(parents)}")
-        return 0
 
     changes = {key: commit.change_id.reverse_hex()
                for key, commit in commits.items()}
-    # Not write_tx: the load carries exit-2 mapping, and the rollback
-    # below must open its own transaction after committing.
+    # Not write_tx: the load carries exit-2 mapping.
     tx = _start_transaction(repo, settings)
     try:
         if not getattr(args, "ignore_immutable", False):
@@ -125,37 +111,22 @@ def apply(args: argparse.Namespace) -> int:
             parts.append(f"{len(steps)} rebased")
         if abandons:
             parts.append(f"{len(abandons)} abandoned")
+        # A graph describes topology and cannot have asked for a
+        # conflict, so refusing one is the default here.
         _finish(tx, f"graph apply: {' and '.join(parts)}",
-                settings, ws, repo)
+                settings, ws, repo,
+                trial=argparse.Namespace(dry_run=dry_run,
+                                         abort_on_conflict=not allow_conflicts))
+    except TrialStop as stop:
+        if stop.exit_code and not dry_run:
+            print("Hint: re-run with --allow-conflicts to keep the result",
+                  file=sys.stderr)
+        return stop.exit_code
     except (pyjj.JjError, CommandError) as e:
         # Nothing committed: the transaction is dropped, so the
         # repository is exactly as it was -- no rollback to run.
         print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
         return 1
-
-    try:
-        repo = ws.load_at_head()
-        if not getattr(args, "allow_conflicts", False):
-            conflicted = _conflicted(repo, settings, list(commits))
-            if conflicted:
-                _rollback(
-                    ws, settings, before,
-                    "the reshape left "
-                    + ", ".join(sorted(conflicted)[:4])
-                    + (" and others" if len(conflicted) > 4 else "")
-                    + " in conflict", len(applied),
-                    hint="re-run with --allow-conflicts to keep the result")
-                return 1
-    except (pyjj.JjError, CommandError) as e:
-        _rollback(ws, settings, before, f"{getattr(e, 'message', e)}",
-                  len(applied))
-        return 1
-    except Exception as e:  # noqa: BLE001 -- a half-reshaped repository
-        # is the state worth never leaving behind, even for an error
-        # this module did not predict.
-        _rollback(ws, settings, before,
-                  f"unexpected {type(e).__name__}: {e}", len(applied))
-        raise
 
     if getattr(args, "format", "text") == "json":
         print(json.dumps({"applied": applied, "rolled_back": False,
@@ -164,31 +135,3 @@ def apply(args: argparse.Namespace) -> int:
         print(f"Reshaped {len(applied)} commits.")
     print(f"Restore with: pyjj op restore {before}", file=sys.stderr)
     return 0
-
-
-def _rollback(ws: pyjj.Workspace, settings: pyjj.UserSettings, operation_id: str, why: str, applied: int,
-              hint: str | None = None) -> None:
-    """Put the repository back where it started, and say so.
-
-    Only the conflict path still needs this: mid-apply failures drop
-    their transaction unwritten, but a conflict is found after
-    committing. A partial reshape is the state worth never leaving
-    behind either way.
-    """
-    print(f"Error: {why}", file=sys.stderr)
-    try:
-        repo = ws.load_at_head()
-        target = repo.load_operation(operation_id)
-        # Not write_tx: this runs after committing, by design.
-        tx = _start_transaction(repo, settings)
-        tx.restore_operation(target)
-        _finish(tx, "graph apply: roll back", settings, ws, repo)
-    except (pyjj.JjError, CommandError) as e:
-        print(f"Error: rollback failed: {getattr(e, 'message', e)}. "
-              f"Restore it by hand with `pyjj op restore {operation_id}`",
-              file=sys.stderr)
-        return
-    print(f"Rolled back {applied} applied step(s); the repository is as "
-          "it was.", file=sys.stderr)
-    if hint:
-        print(f"Hint: {hint}", file=sys.stderr)

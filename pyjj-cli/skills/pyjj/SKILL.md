@@ -26,8 +26,8 @@ Never chain `jj undo`; one `op restore` returns to a known-good point.
 
 pyjj-only flags; jj has neither. On `rebase`, `squash`, `split`,
 `absorb`, `abandon`, `duplicate`, `restore`, `revert`,
-`simplify-parents`, `fix`, `new`, `diffedit`, `file chmod/delete/edit`
-and `hunk split/commit/squash`.
+`simplify-parents`, `fix`, `new`, `diffedit`, `file chmod/delete/edit`,
+`hunk split/commit/squash` and `graph apply`.
 
 - `--dry-run` — prints `Would write N commits.`, `Would abandon N
   commits.` and any commits newly in conflict (`  <change id>
@@ -48,8 +48,9 @@ Not on `parallelize`: it commits two transactions.
 exports the shape. Edit edges, then:
 
 - `pyjj graph plan base.dot` — prints the rebases, writes nothing. Read it.
-- `pyjj graph apply base.dot` — all-or-nothing; conflicts or immutable
-  commits roll everything back.
+- `pyjj graph apply base.dot` — all-or-nothing; a new conflict or an
+  immutable commit drops the whole reshape unwritten. `--dry-run` runs
+  it and reports, exiting 1 if it would conflict.
 
 Every step is a rebase, plus abandonment: a node with
 `abandon="true"` is dropped and its children re-pointed at its own
@@ -103,7 +104,8 @@ prints, no need for the full hex.
   sees the block's own writes; the repo object still answers from the
   starting state.
 - `graph apply` refuses immutable commits (override: `--ignore-immutable`)
-  and rolls back on introduced conflicts (keep: `--allow-conflicts`).
+  and introduced conflicts (keep: `--allow-conflicts`); it takes
+  `--abort-on-conflict` too, as its default.
 - Output templates are Jinja2 (`-T` takes Jinja, not jj's template language).
 - `jj commit` labels `@` then opens a fresh empty child; further edits land
   in the child, not the commit just finished.

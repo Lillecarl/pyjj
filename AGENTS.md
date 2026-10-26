@@ -433,9 +433,10 @@ first, then one `move_commits` per step -- in a single transaction,
 tracking each commit through the plan by change id (which survives
 rewrites, where a commit id would go stale behind its hidden
 predecessor), so a failure drops the transaction unwritten and there
-is no half-applied state to roll back. Only a conflict discovered
-*after* committing still restores via `op restore`, since the result
-is already written by then. A node opts into abandonment with an
+is no half-applied state to roll back. The conflict refusal runs
+before the commit as well, through `_finish`'s trial check (the
+`--abort-on-conflict` every rewrite takes, on by default here), so
+nothing is written and then restored. A node opts into abandonment with an
 `abandon="true"` attribute; `resolve_abandons` in `graph_dot.py`
 folds abandoned nodes out beforehand, re-pointing their children at
 the abandoned commit's own parents (the static half of
@@ -521,10 +522,9 @@ vocabulary is jj's -- `revision`, `destination`, `into`, `after`,
 **A block is one transaction.** The operations accumulate and the
 transaction becomes an operation only on a clean exit, so a failure
 writes nothing: no half-applied change, and no rollback entry either.
-`graph apply` works the same way since its single-transaction
-rewrite (one transaction for abandons plus every rebase step, tracked
-by change id); the difference left is downstream of commit, not of
-failure handling. A clean exit
+`graph apply` works the same way: one transaction for abandons plus
+every rebase step, tracked by change id, judged for conflicts before
+it commits. A clean exit
 also exports git refs on colocated repos (HEAD reset + bookmark/tag
 export, the CLI's own finish behavior) -- without it a scripted
 rewrite leaves `<name>@git` stale behind the moved bookmark -- and
@@ -544,9 +544,8 @@ already replaced and left the change divergent. `Transaction.revset`
 is the one that sees the block's own writes, and its docstring says
 so; the wrapper exists partly to make that unmissable.
 
-The `except BaseException` in `atomic` is deliberate, for the reason
-`graph apply`'s conflict path still records: a rollback covering only
-predicted errors is absent exactly when it is needed.
+The `except BaseException` in `atomic` is deliberate: a rollback
+covering only predicted errors is absent exactly when it is needed.
 
 `pyjj python` carries the interpreter rather than the logic. pyjj is a
 native extension with its own closure, so outside a Nix shell built

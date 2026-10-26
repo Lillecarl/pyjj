@@ -1469,21 +1469,27 @@ def _trial(tx: pyjj.Transaction, settings: pyjj.UserSettings,
     when the rewrite put a commit in conflict that was not before.
     Raising before `tx.commit` drops the transaction unwritten.
 
-    Only `mutable()` is compared: nothing immutable can have been
-    rewritten. Matching is by change id, since a rewrite replaces the
-    commit id. `base_repo.get_commit` loads the transaction's commits:
-    they are in the store already, only the base index lacks them.
+    The transaction's index holds the base commits too, so both sides
+    are revsets against the old heads: what became visible, and what
+    stopped being visible. That reaches commits `--ignore-immutable`
+    rewrote, which a `mutable()` scan would miss, and never walks
+    history both sides share. Matching is by change id, since a rewrite
+    replaces the commit id. `base_repo.get_commit` loads the
+    transaction's commits: they are in the store already, only the base
+    index lacks them.
     """
     if not (dry_run or abort_on_conflict):
         return
-    before = {c.id.hex(): c for c in base_repo.revset(settings, "mutable()")}
-    after = [base_repo.get_commit(i) for i in tx.revset(settings, "mutable()")]
-    before_changes = {c.change_id.reverse_hex() for c in before.values()}
-    after_changes = {c.change_id.reverse_hex() for c in after}
-    was_conflicted = {c.change_id.reverse_hex() for c in before.values()
+    old_heads = " | ".join(
+        c.id.hex() for c in base_repo.revset(settings, "visible_heads()"))
+    written = [base_repo.get_commit(i) for i in tx.revset(
+        settings, f"::visible_heads() ~ ::({old_heads})")]
+    hidden = [base_repo.get_commit(i) for i in tx.revset(
+        settings, f"::({old_heads}) ~ ::visible_heads()")]
+    written_changes = {c.change_id.reverse_hex() for c in written}
+    abandoned = {c.change_id.reverse_hex() for c in hidden} - written_changes
+    was_conflicted = {c.change_id.reverse_hex() for c in hidden
                       if c.has_conflict}
-    written = [c for c in after if c.id.hex() not in before]
-    abandoned = before_changes - after_changes
     conflicted = [
         c for c in written
         if c.has_conflict and c.change_id.reverse_hex() not in was_conflicted
