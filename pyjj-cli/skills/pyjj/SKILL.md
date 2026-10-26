@@ -22,6 +22,22 @@ Every `graph apply` prints `Restore with: pyjj op restore <id>` on success
 with `pyjj op log --no-graph --limit 1` and restore that id on trouble.
 Never chain `jj undo`; one `op restore` returns to a known-good point.
 
+## Trial a rebase
+
+pyjj-only `rebase` flags; jj has neither. Both take any `-r`/`-s`/`-b`
+and `-d`/`-o`/`-A`/`-B` combination.
+
+- `--dry-run` — prints `Would rebase N commits.` and any commits the
+  rebase would newly conflict (`  <change id> <description>`), writes
+  nothing, exits 0.
+- `--abort-on-conflict` — commits a clean rebase; on a new conflict
+  lists the commits on stderr, writes nothing, exits 1.
+- Both — writes nothing; exit 1 means the rebase would conflict.
+
+Only conflicts the rebase introduces count; an already-conflicted
+commit does not trip it. No op is recorded on refusal, so there is
+nothing to restore.
+
 ## Reshape via DOT graph
 
 `pyjj log -r '<revset>' --dot --dot-key change_id -T '{{ description }}' > base.dot`
