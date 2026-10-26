@@ -24,5 +24,13 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("--simplify-parents", dest="simplify_parents",
                    action="store_true", default=False,
                    help="Drop a parent that is an ancestor of another parent")
+    # pyjj's own: jj has neither.
+    p.add_argument("--dry-run", dest="dry_run", action="store_true",
+                   default=False,
+                   help="Report what the rebase would do and write nothing")
+    p.add_argument("--abort-on-conflict", dest="abort_on_conflict",
+                   action="store_true", default=False,
+                   help="Write nothing and exit 1 if the rebase would add "
+                        "conflicts")
     add_flags(p, [Flag.SOURCE, Flag.BRANCH, Flag.DESTINATION, Flag.ONTO, Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.rebase:rebase")

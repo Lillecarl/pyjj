@@ -115,7 +115,7 @@ def rebase(args: argparse.Namespace) -> int:
         # `-A`/`-B` also rebase whatever followed the insertion point.
         _check_rewritable(
             tx, settings, target_commit_ids + target_root_ids + new_child_ids)
-        tx.move_commits(
+        stats = tx.move_commits(
             target_commit_ids=target_commit_ids, target_root_ids=target_root_ids,
             new_parent_ids=new_parent_ids, new_child_ids=new_child_ids,
             skip_emptied=getattr(args, "skip_emptied", False),
@@ -123,8 +123,55 @@ def rebase(args: argparse.Namespace) -> int:
             # with identical contents, unless this asks it not to.
             keep_divergent=getattr(args, "keep_divergent", False),
             simplify_parents=getattr(args, "simplify_parents", False))
+        dry_run = getattr(args, "dry_run", False)
+        abort_on_conflict = getattr(args, "abort_on_conflict", False)
+        if dry_run or abort_on_conflict:
+            tx.rebase_descendants()
+            conflicted = _new_conflicts(repo, tx, settings)
+            if dry_run:
+                rebased = (stats.num_rebased_targets
+                           + stats.num_rebased_descendants)
+                print(f"Would rebase {rebased} commits.")
+                if conflicted:
+                    print(f"New conflicts would appear in "
+                          f"{len(conflicted)} commits:")
+                    print("\n".join(conflicted))
+            elif conflicted:
+                print(f"Error: the rebase would leave {len(conflicted)} "
+                      f"commits in conflict:", file=sys.stderr)
+                print("\n".join(conflicted), file=sys.stderr)
+                print("Nothing changed.", file=sys.stderr)
+            # Returning before `_finish` drops the transaction unwritten.
+            if conflicted and abort_on_conflict:
+                return 1
+            if dry_run:
+                return 0
         _finish(tx, "rebase commit", settings, ws, repo)
         return 0
+
+
+def _new_conflicts(repo: pyjj.ReadonlyRepo, tx: pyjj.Transaction,
+                   settings: pyjj.UserSettings) -> list[str]:
+    """`  <change id> <description>` for each commit the rebase put in
+    conflict, as jj's "New conflicts appeared" lists them.
+
+    Matched by change id, because the rebase rewrote the commit ids. A
+    commit that was already conflicted does not count. Only mutable
+    commits are scanned: nothing immutable can have been rewritten.
+    """
+    expression = "conflicts() & mutable()"
+    before = {c.change_id.reverse_hex() for c in repo.revset(settings, expression)}
+    lines = []
+    for commit_id in tx.revset(settings, expression):
+        # The store holds the transaction's commits already; only the
+        # base repo's index lacks them.
+        commit = repo.get_commit(commit_id)
+        change = commit.change_id.reverse_hex()
+        if change in before:
+            continue
+        first_line = (commit.description.splitlines() or [""])[0]
+        lines.append(f"  {change[:8]} {first_line or '(no description set)'}")
+    return lines
 
 
 def _branch_roots(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings,
