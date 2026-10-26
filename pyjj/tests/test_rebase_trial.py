@@ -105,7 +105,7 @@ def test_dry_run_writes_nothing(topics, shared):
     result = _run(root, "rebase", "-s", "b", "-d", "a", "--dry-run",
                   home=home)
     assert result.returncode == 0, result.stderr
-    assert "Would rebase 2 commits." in result.stdout
+    assert "Would write 2 commits." in result.stdout
     assert ("New conflicts would appear in 2 commits:" in result.stdout) == shared
     assert _state(root, home) == before
 

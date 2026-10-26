@@ -97,6 +97,9 @@ class Flag(Enum):
     ALLOW_PRIVATE = auto()
     ALLOW_CONFLICTS = auto()
     DRY_RUN = auto()
+    # pyjj's own --dry-run/--abort-on-conflict pair for rewrites; the
+    # command must pass `trial=args` to `_finish`
+    TRIAL = auto()
     CHANGE = auto()  # -c/--change
     NAMED = auto()
     DEPTH = auto()
@@ -364,6 +367,16 @@ def add_dry_run_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show what would be pushed without actually pushing")
 
 
+def add_trial_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        default=False,
+                        help="Report what the rewrite would do and write nothing")
+    parser.add_argument("--abort-on-conflict", dest="abort_on_conflict",
+                        action="store_true", default=False,
+                        help="Write nothing and exit 1 if the rewrite would "
+                             "add conflicts")
+
+
 def add_change_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-c", "--change", dest="changes", action="append", default=None, metavar="REVSETS", help="Push this commit by creating a bookmark")
 
@@ -500,6 +513,7 @@ _FLAG_HANDLERS: dict[Flag, Callable[[argparse.ArgumentParser], None]] = {
     Flag.ALLOW_PRIVATE: lambda p: add_allow_private_flag(p),
     Flag.ALLOW_CONFLICTS: lambda p: add_allow_conflicts_flag(p),
     Flag.DRY_RUN: lambda p: add_dry_run_flag(p),
+    Flag.TRIAL: lambda p: add_trial_flags(p),
     Flag.CHANGE: lambda p: add_change_flag(p),
     Flag.NAMED: lambda p: add_named_flag(p),
     Flag.DEPTH: lambda p: add_depth_flag(p),

@@ -87,6 +87,18 @@ class CommandError(Exception):
         self.message = message
 
 
+class TrialStop(Exception):
+    """`_finish` declined to commit under `--dry-run`/`--abort-on-conflict`.
+
+    Control flow, not an error: `command` returns `exit_code` without an
+    `Error:` line, so it must stay outside the `CommandError` hierarchy.
+    """
+
+    def __init__(self, exit_code: int) -> None:
+        super().__init__(exit_code)
+        self.exit_code = exit_code
+
+
 @overload
 def command(fn: Handler, *, catch: tuple[type[BaseException], ...] = ()) -> Handler: ...
 @overload
@@ -116,6 +128,8 @@ def command(
         def run(args: argparse.Namespace) -> int:
             try:
                 return fn(args)
+            except TrialStop as stop:
+                return stop.exit_code
             except (pyjj.JjError, CommandError, *catch) as e:
                 print(f"Error: {getattr(e, 'message', str(e))}",
                       file=sys.stderr)
@@ -1410,7 +1424,7 @@ def _advance_if_immutable(tx: pyjj.Transaction, settings: pyjj.UserSettings, ws:
 
 def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings, ws: pyjj.Workspace, base_repo: pyjj.ReadonlyRepo, *,
             delete_abandoned_bookmarks: bool = False, restore_descendants: bool = False,
-            rebase: bool = True) -> None:
+            rebase: bool = True, trial: argparse.Namespace | None = None) -> None:
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
     commit (e.g. an abandon or rebase rebased it), update the on-disk
@@ -1423,6 +1437,10 @@ def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings,
     `rebase=False` skips the descendant step entirely, for operations
     that record no rewrites (undo/redo/op restore) -- see
     `_restore_view_command`.
+
+    `trial` is the parsed command line of a command carrying
+    `Flag.TRIAL`. Under `--dry-run` or `--abort-on-conflict` it may
+    raise `TrialStop` instead of committing; see `_trial`.
     """
     old_wc_hex = base_repo.view()[ws.workspace_name]
     if rebase:
@@ -1430,10 +1448,69 @@ def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings,
             tx.reparent_descendants()
         else:
             tx.rebase_descendants(delete_abandoned_bookmarks=delete_abandoned_bookmarks)
+    if trial is not None:
+        # Before the advance: its fresh working-copy commit is not part
+        # of the rewrite being judged.
+        _trial(tx, settings, base_repo,
+               dry_run=getattr(trial, "dry_run", False),
+               abort_on_conflict=getattr(trial, "abort_on_conflict", False))
     _advance_if_immutable(tx, settings, ws, base_repo)
     _export_git_refs(tx, ws)
     tx.commit(description)
     _checkout_if_moved(settings, ws, old_wc_hex)
+
+
+def _trial(tx: pyjj.Transaction, settings: pyjj.UserSettings,
+           base_repo: pyjj.ReadonlyRepo, *, dry_run: bool,
+           abort_on_conflict: bool) -> None:
+    """Judge the finished rewrite in `tx`; raise `TrialStop` to drop it.
+
+    `--dry-run` reports and never commits. `--abort-on-conflict` exits 1
+    when the rewrite put a commit in conflict that was not before.
+    Raising before `tx.commit` drops the transaction unwritten.
+
+    Only `mutable()` is compared: nothing immutable can have been
+    rewritten. Matching is by change id, since a rewrite replaces the
+    commit id. `base_repo.get_commit` loads the transaction's commits:
+    they are in the store already, only the base index lacks them.
+    """
+    if not (dry_run or abort_on_conflict):
+        return
+    before = {c.id.hex(): c for c in base_repo.revset(settings, "mutable()")}
+    after = [base_repo.get_commit(i) for i in tx.revset(settings, "mutable()")]
+    before_changes = {c.change_id.reverse_hex() for c in before.values()}
+    after_changes = {c.change_id.reverse_hex() for c in after}
+    was_conflicted = {c.change_id.reverse_hex() for c in before.values()
+                      if c.has_conflict}
+    written = [c for c in after if c.id.hex() not in before]
+    abandoned = before_changes - after_changes
+    conflicted = [
+        c for c in written
+        if c.has_conflict and c.change_id.reverse_hex() not in was_conflicted
+    ]
+    lines = []
+    for commit in conflicted:
+        first_line = (commit.description.splitlines() or [""])[0]
+        lines.append(f"  {commit.change_id.reverse_hex()[:8]} "
+                     f"{first_line or '(no description set)'}")
+
+    if dry_run:
+        print(f"Would write {len(written)} commits.")
+        if abandoned:
+            print(f"Would abandon {len(abandoned)} commits.")
+        if lines:
+            print(f"New conflicts would appear in {len(lines)} commits:")
+            print("\n".join(lines))
+    elif lines:
+        print(f"Error: this would leave {len(lines)} commits in conflict:",
+              file=sys.stderr)
+        print("\n".join(lines), file=sys.stderr)
+        print("Nothing changed.", file=sys.stderr)
+    if lines and abort_on_conflict:
+        raise TrialStop(1)
+    if dry_run:
+        raise TrialStop(0)
+
 
 def _restore_view_command(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings, ws: pyjj.Workspace, repo: pyjj.ReadonlyRepo) -> None:
     """Shared tail for view-restoring operations (undo/redo/op restore):
