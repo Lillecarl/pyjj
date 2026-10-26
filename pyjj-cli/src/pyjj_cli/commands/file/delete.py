@@ -37,5 +37,5 @@ def file_delete(args: argparse.Namespace) -> int:
             tx.set_wc_commit(ws.workspace_name, rewritten.id)
         _finish(tx, f"delete paths in commit {commit.id.hex()}",
                 settings, ws, repo,
-                restore_descendants=getattr(args, "restore_descendants", False))
+                restore_descendants=getattr(args, "restore_descendants", False), trial=args)
         return 0

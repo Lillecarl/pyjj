@@ -67,7 +67,7 @@ def new(args: argparse.Namespace) -> int:
             # old commit a non-head -- so this only differs when `new`
             # names a revision somewhere else.
             tx.edit(ws.workspace_name, child)
-        _finish(tx, "new empty commit", settings, ws, repo)
+        _finish(tx, "new empty commit", settings, ws, repo, trial=args)
         return 0
 
 

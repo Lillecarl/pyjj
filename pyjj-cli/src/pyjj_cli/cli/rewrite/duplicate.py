@@ -17,5 +17,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("-o", "--onto", "-d", "--destination", dest="ontos",
                    action="append", default=None, metavar="REVSETS",
                    help="Revisions to duplicate onto")
-    add_flags(p, [Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
+    add_flags(p, [Flag.INSERT_AFTER, Flag.INSERT_BEFORE, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.duplicate:duplicate")

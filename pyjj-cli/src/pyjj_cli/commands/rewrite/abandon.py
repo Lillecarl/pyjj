@@ -33,12 +33,12 @@ def abandon(args: argparse.Namespace) -> int:
             tx.abandon_restoring_descendants(
                 [c.id for c in targets], delete_abandoned_bookmarks=delete_bookmarks)
             _finish(tx, f"abandon commit {targets[0].id.hex()}", settings, ws,
-                    repo, delete_abandoned_bookmarks=delete_bookmarks)
+                    repo, delete_abandoned_bookmarks=delete_bookmarks, trial=args)
             return 0
         for commit in targets:
             tx.abandon_commit(commit)
         # jj deletes bookmarks pointing at the abandoned commits by
         # default; --retain-bookmarks moves them to the parent instead.
         _finish(tx, f"abandon commit {targets[0].id.hex()}", settings, ws, repo,
-                delete_abandoned_bookmarks=delete_bookmarks)
+                delete_abandoned_bookmarks=delete_bookmarks, trial=args)
         return 0

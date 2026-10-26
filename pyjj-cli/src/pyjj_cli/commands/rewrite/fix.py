@@ -122,6 +122,6 @@ def fix(args: argparse.Namespace) -> int:
             return 0
 
         tx.fix_apply(settings, fixes, revset=revset, paths=paths, include_unchanged_files=include_unchanged)
-        _finish(tx, f"fix {revset or 'reachable(@, mutable())'}", settings, ws, repo)
+        _finish(tx, f"fix {revset or 'reachable(@, mutable())'}", settings, ws, repo, trial=args)
         return 0
         return 0

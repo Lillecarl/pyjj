@@ -1,8 +1,11 @@
-"""`rebase --dry-run` and `rebase --abort-on-conflict`: pyjj's own flags.
+"""`--dry-run` and `--abort-on-conflict` on the rewrite commands:
+pyjj's own flags.
 
-Both work out the rebase in full inside the transaction and decide
-afterwards whether to commit it. So each refusal compares the commit
-ids before and after, rather than trusting the message.
+Both work out the rewrite in full inside the transaction and decide in
+`_finish` whether to commit it. So each refusal compares the commit
+ids before and after, rather than trusting the message. `rebase` gets
+the full matrix; the other commands cover one path each through
+`_finish`: abandoning (`squash`, `abandon`) and creating (`new`).
 """
 
 import os
@@ -117,4 +120,43 @@ def test_dry_run_with_abort_on_conflict_exits_1_on_a_conflict(topics):
                   "--abort-on-conflict", home=home)
     assert result.returncode == 1
     assert "topic b" in result.stdout
+    assert _state(root, home) == before
+
+
+def test_squash_abort_on_conflict(topics):
+    """`b`'s file lands on `a`'s copy of it: `a` conflicts, and `b`
+    would be abandoned."""
+    root, home = topics(shared=True)
+    before = _state(root, home)
+    squash = ["squash", "--from", "b", "--into", "a", "-u"]
+    result = _run(root, *squash, "--dry-run", home=home)
+    assert result.returncode == 0, result.stderr
+    assert "Would abandon 1 commits." in result.stdout
+    assert "New conflicts would appear in 1 commits:" in result.stdout
+    assert "topic a" in result.stdout
+    result = _run(root, *squash, "--abort-on-conflict", home=home)
+    assert result.returncode == 1
+    assert _state(root, home) == before
+
+
+def test_new_merge_dry_run(topics):
+    root, home = topics(shared=True)
+    before = _state(root, home)
+    result = _run(root, "new", "a", "b", "--dry-run", home=home)
+    assert result.returncode == 0, result.stderr
+    assert "Would write 1 commits." in result.stdout
+    assert "New conflicts would appear in 1 commits:" in result.stdout
+    assert _state(root, home) == before
+
+
+def test_abandon_abort_on_conflict(topics):
+    """`c` rewrites `a`'s file; without `a` under it, that is a conflict."""
+    root, home = topics(shared=True)
+    _run(root, "new", "a", "-m", "topic c", home=home)
+    (root / "shared.txt").write_text("c\n")
+    _run(root, "new", home=home)
+    before = _state(root, home)
+    result = _run(root, "abandon", "a", "--abort-on-conflict", home=home)
+    assert result.returncode == 1
+    assert "topic c" in result.stderr
     assert _state(root, home) == before

@@ -43,5 +43,5 @@ def absorb(args: argparse.Namespace) -> int:
                           check_immutable=not _ignore_immutable(),
                           selections=selections)
         _finish(tx, f"absorb changes into {len(stats.destinations)} commits",
-                settings, ws, repo)
+                settings, ws, repo, trial=args)
         return 0

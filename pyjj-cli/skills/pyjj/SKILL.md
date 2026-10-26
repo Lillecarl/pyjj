@@ -22,21 +22,25 @@ Every `graph apply` prints `Restore with: pyjj op restore <id>` on success
 with `pyjj op log --no-graph --limit 1` and restore that id on trouble.
 Never chain `jj undo`; one `op restore` returns to a known-good point.
 
-## Trial a rebase
+## Trial a rewrite
 
-pyjj-only `rebase` flags; jj has neither. Both take any `-r`/`-s`/`-b`
-and `-d`/`-o`/`-A`/`-B` combination.
+pyjj-only flags; jj has neither. On `rebase`, `squash`, `split`,
+`absorb`, `abandon`, `duplicate`, `restore`, `revert`,
+`simplify-parents`, `fix`, `new`, `diffedit`, `file chmod/delete/edit`
+and `hunk split/commit/squash`.
 
-- `--dry-run` — prints `Would rebase N commits.` and any commits the
-  rebase would newly conflict (`  <change id> <description>`), writes
-  nothing, exits 0.
-- `--abort-on-conflict` — commits a clean rebase; on a new conflict
+- `--dry-run` — prints `Would write N commits.`, `Would abandon N
+  commits.` and any commits newly in conflict (`  <change id>
+  <description>`), writes nothing, exits 0.
+- `--abort-on-conflict` — commits a clean rewrite; on a new conflict
   lists the commits on stderr, writes nothing, exits 1.
-- Both — writes nothing; exit 1 means the rebase would conflict.
+- Both — writes nothing; exit 1 means the rewrite would conflict.
 
-Only conflicts the rebase introduces count; an already-conflicted
-commit does not trip it. No op is recorded on refusal, so there is
-nothing to restore.
+Only conflicts the rewrite introduces count; an already-conflicted
+commit does not trip it. The rewrite itself records no operation on
+refusal, but loading still snapshots a dirty working copy. Editors and
+diff tools (`split`, `-i`, `diffedit`, `file edit`) still open first.
+Not on `parallelize`: it commits two transactions.
 
 ## Reshape via DOT graph
 

@@ -38,5 +38,5 @@ def hunk_commit(args: argparse.Namespace) -> int:
         first = first_builder.write(repo)
         second = tx.split_remainder(target, first).write(repo)
         tx.set_wc_commit(ws.workspace_name, second.id)
-        _finish(tx, f"commit {target.id.hex()}", settings, ws, repo)
+        _finish(tx, f"commit {target.id.hex()}", settings, ws, repo, trial=args)
         return 0

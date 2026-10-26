@@ -69,7 +69,7 @@ def restore(args: argparse.Namespace) -> int:
             if dst.id.hex() == repo.view().get(ws.workspace_name):
                 tx.set_wc_commit(ws.workspace_name, restored.id)
             _finish(tx, f"restore into commit {dst.id.hex()}", settings, ws, repo,
-                    restore_descendants=getattr(args, "restore_descendants", False))
+                    restore_descendants=getattr(args, "restore_descendants", False), trial=args)
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)

@@ -26,5 +26,5 @@ def file_chmod(args: argparse.Namespace) -> int:
         for path in getattr(args, "paths", []):
             b = tx.set_executable(commit, path, executable)
             b.write(repo)
-        _finish(tx, f"chmod {rev}", settings, ws, repo)
+        _finish(tx, f"chmod {rev}", settings, ws, repo, trial=args)
         return 0

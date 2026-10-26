@@ -25,5 +25,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
                    help="Leave the source revision behind when it ends up empty")
     add_flags(p, [Flag.INTO, Flag.USE_DEST_MESSAGE, Flag.MESSAGE, Flag.EDITOR,
                   Flag.TOOL, Flag.INSERT_AFTER, Flag.INSERT_BEFORE,
-                  Flag.FILESETS])
+                  Flag.FILESETS, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.squash:squash")

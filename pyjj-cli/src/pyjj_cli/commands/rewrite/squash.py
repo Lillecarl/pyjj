@@ -126,7 +126,7 @@ def squash(args: argparse.Namespace) -> int:
             # reads `squash commit <id>`.
             _finish(tx, squashed if inserting
                     else f"squash commits into {dest.id.hex()}",
-                    settings, ws, repo)
+                    settings, ws, repo, trial=args)
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)

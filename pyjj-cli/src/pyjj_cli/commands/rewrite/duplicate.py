@@ -36,7 +36,7 @@ def duplicate(args: argparse.Namespace) -> int:
             # have put them in the first place.
             tx.move_commits(target_commit_ids=[c.id for c in copies], target_root_ids=[],
                             new_parent_ids=parents, new_child_ids=children)
-        _finish(tx, "duplicate commit", settings, ws, repo)
+        _finish(tx, "duplicate commit", settings, ws, repo, trial=args)
         return 0
 
 

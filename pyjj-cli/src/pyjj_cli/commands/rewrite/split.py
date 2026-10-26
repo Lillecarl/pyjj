@@ -161,7 +161,7 @@ def split(args: argparse.Namespace) -> int:
                     target_commit_ids=[first.id], target_root_ids=[],
                     new_parent_ids=_by_change_ids(tx, settings, parent_changes),
                     new_child_ids=_by_change_ids(tx, settings, child_changes))
-            _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo)
+            _finish(tx, f"split commit {target.id.hex()}", settings, ws, repo, trial=args)
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",
               file=sys.stderr)

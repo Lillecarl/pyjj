@@ -13,5 +13,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("-r", "--revision", dest="revisions", action="append", default=None,
                    metavar="REVSETS", required=True,
                    help="Revision(s) to revert")
-    add_flags(p, [Flag.ONTO, Flag.DESTINATION, Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
+    add_flags(p, [Flag.ONTO, Flag.DESTINATION, Flag.INSERT_AFTER, Flag.INSERT_BEFORE, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.revert:revert")

@@ -43,5 +43,5 @@ def hunk_squash(args: argparse.Namespace) -> int:
             print("Nothing selected to squash.")
             return 1
         builder.write(repo)
-        _finish(tx, "squash commit", settings, ws, repo)
+        _finish(tx, "squash commit", settings, ws, repo, trial=args)
         return 0

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..flags import Flag, add_flags
+
 if TYPE_CHECKING:
     import argparse
 def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -21,4 +23,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("--retain-bookmarks", dest="retain_bookmarks",
                    action="store_true", default=False,
                    help="Move bookmarks to the parent instead of deleting them")
+    add_flags(p, [Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.abandon:abandon")

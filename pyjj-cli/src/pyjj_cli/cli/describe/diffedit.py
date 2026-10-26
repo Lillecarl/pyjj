@@ -23,5 +23,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
                    action="store_true", default=False,
                    help="Preserve the content (not the diff) when rebasing "
                         "descendants")
-    add_flags(p, [Flag.TOOL])
+    add_flags(p, [Flag.TOOL, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.resolve.diffedit:diffedit")

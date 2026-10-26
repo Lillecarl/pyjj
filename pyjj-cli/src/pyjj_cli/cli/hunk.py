@@ -41,7 +41,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
                               help="Spec string (JSON/YAML), alternative to positional <spec>")
     p_hunk_split.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                               help="Read spec from file (JSON/YAML)")
-    add_flags(p_hunk_split, [Flag.STDIN])
+    add_flags(p_hunk_split, [Flag.STDIN, Flag.TRIAL])
     p_hunk_split.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
     p_hunk_split.add_argument("message", nargs="?", help="Commit message for first half (or '-' for stdin)")
     p_hunk_split.set_defaults(_handler="pyjj_cli.commands.hunk.split:hunk_split")
@@ -51,7 +51,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
                                help="Spec string (JSON/YAML), alternative to positional <spec>")
     p_hunk_commit.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                                help="Read spec from file (JSON/YAML)")
-    add_flags(p_hunk_commit, [Flag.STDIN])
+    add_flags(p_hunk_commit, [Flag.STDIN, Flag.TRIAL])
     p_hunk_commit.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
     p_hunk_commit.add_argument("message", nargs="?", help="Commit message (or '-' for stdin)")
     p_hunk_commit.set_defaults(_handler="pyjj_cli.commands.hunk.commit:hunk_commit")
@@ -63,6 +63,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p_hunk_squash.add_argument("--spec-file", dest="spec_file", default=None, metavar="PATH",
                                help="Read spec from file (JSON/YAML)")
     p_hunk_squash.add_argument("spec", nargs="?", help="Spec JSON/YAML string or '-' for stdin")
+    add_flags(p_hunk_squash, [Flag.TRIAL])
     p_hunk_squash.set_defaults(_handler="pyjj_cli.commands.hunk.squash:hunk_squash")
 
     p_hunk_schema = hunk_sub.add_parser("schema", help="Dump JSON schema for LLM tool-calling")

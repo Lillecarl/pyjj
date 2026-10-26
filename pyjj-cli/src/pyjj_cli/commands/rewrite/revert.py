@@ -110,6 +110,6 @@ def revert(args: argparse.Namespace) -> int:
 
         # If the source was @ and we created a new commit, the working copy should follow?
         # _finish will handle rebase_descendants and checkout.
-        _finish(tx, f"revert {rev_args[0] if rev_args else ''}", settings, ws, repo)
+        _finish(tx, f"revert {rev_args[0] if rev_args else ''}", settings, ws, repo, trial=args)
         return 0
         return 0

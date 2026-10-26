@@ -18,5 +18,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
                    help="Description of the new change")
     p.add_argument("--no-edit", dest="no_edit", action="store_true", default=False,
                    help="Do not edit the newly created change")
-    add_flags(p, [Flag.INSERT_AFTER, Flag.INSERT_BEFORE])
+    add_flags(p, [Flag.INSERT_AFTER, Flag.INSERT_BEFORE, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.describe.new:new")

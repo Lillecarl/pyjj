@@ -16,5 +16,5 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
                    help="Destination revisions to absorb into (default: mutable())")
     p.add_argument("-i", "--interactive", action="store_true",
                    help="Interactively choose which parts to absorb")
-    add_flags(p, [Flag.TOOL, Flag.FILESETS])
+    add_flags(p, [Flag.TOOL, Flag.FILESETS, Flag.TRIAL])
     p.set_defaults(_handler="pyjj_cli.commands.rewrite.absorb:absorb")

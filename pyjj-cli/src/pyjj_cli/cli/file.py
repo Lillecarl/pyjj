@@ -39,6 +39,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     add_revision_flag(p_fchmod, dest="revision", default="@", help="Revision to update (default: @)")
     p_fchmod.add_argument("mode", choices=["n", "x", "normal", "executable"], help="n: non-executable, x: executable")
     p_fchmod.add_argument("paths", nargs="+", help="Paths to update")
+    add_flags(p_fchmod, [Flag.TRIAL])
     p_fchmod.set_defaults(_handler="pyjj_cli.commands.file.chmod:file_chmod")
 
     p_ftrack = file_sub.add_parser("track", help="Start tracking specified paths in the working copy")
@@ -66,6 +67,7 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p_fedit.add_argument("--restore-descendants", dest="restore_descendants",
                          action="store_true",
                          help="Preserve the content (not the diff) when rebasing descendants")
+    add_flags(p_fedit, [Flag.TRIAL])
     p_fedit.set_defaults(_handler="pyjj_cli.commands.file.edit:file_edit")
 
     p_fdelete = file_sub.add_parser("delete", help="Delete files from a revision")
@@ -75,4 +77,5 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p_fdelete.add_argument("--restore-descendants", dest="restore_descendants",
                            action="store_true",
                            help="Preserve the content (not the diff) when rebasing descendants")
+    add_flags(p_fdelete, [Flag.TRIAL])
     p_fdelete.set_defaults(_handler="pyjj_cli.commands.file.delete:file_delete")

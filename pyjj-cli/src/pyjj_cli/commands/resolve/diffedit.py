@@ -67,7 +67,7 @@ def diffedit(args: argparse.Namespace) -> int:
                 tx.set_wc_commit(ws.workspace_name, edited.id)
             _finish(
                 tx, f"edit commit {to_commit.id.hex()}", settings, ws, repo,
-                restore_descendants=getattr(args, "restore_descendants", False),
+                restore_descendants=getattr(args, "restore_descendants", False), trial=args,
             )
     except subprocess.CalledProcessError as e:
         print(f"Error: diff editor exited with status {e.returncode}",

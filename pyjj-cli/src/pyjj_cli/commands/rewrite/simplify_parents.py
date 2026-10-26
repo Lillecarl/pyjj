@@ -48,7 +48,7 @@ def simplify_parents(args: argparse.Namespace) -> int:
         if not simplified:
             print("Nothing changed.", file=sys.stderr)
             return 0
-        _finish(tx, f"simplify {simplified} commits", settings, ws, repo)
+        _finish(tx, f"simplify {simplified} commits", settings, ws, repo, trial=args)
         print(f"Removed parent edges from {simplified} commits")
         return 0
 
