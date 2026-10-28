@@ -249,12 +249,14 @@ pub fn operation_diff(
             .evaluate(merged_repo)
             .map_err(map_revset_eval_err)?
             .count_estimate()
+            .await
             .map_err(map_revset_eval_err)?;
         let elided_newly_hidden = newly_hidden_expr
             .minus(&from_changes_expr)
             .evaluate(merged_repo)
             .map_err(map_revset_eval_err)?
             .count_estimate()
+            .await
             .map_err(map_revset_eval_err)?;
 
         // Commits that stopped being visible. One per change is kept, so

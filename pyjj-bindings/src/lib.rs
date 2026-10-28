@@ -29,6 +29,7 @@ mod rewrite;
 mod run;
 mod secure_config;
 mod settings;
+mod source_symbol;
 mod tag;
 mod tree;
 mod workspace;
@@ -178,6 +179,8 @@ mod _native {
     use crate::hunks::content_hunks;
     #[pymodule_export]
     use crate::hunks::diff_hunks;
+    #[pymodule_export]
+    use crate::hunks::source_symbol_from_line;
     #[pymodule_export]
     use crate::hunks::unified_hunks;
     #[pymodule_export]

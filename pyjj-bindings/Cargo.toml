@@ -3,7 +3,7 @@
 [package]
 name = "pyjj-bindings"
 description = "Python bindings for Jujutsu (jj) VCS via PyO3"
-version = "0.46.0"
+version = "0.47.1"
 edition = "2024"
 rust-version = "1.97.1"
 license = "Apache-2.0"
@@ -17,15 +17,16 @@ crate-type = ["cdylib"]
 [dependencies]
 # `watchman`, as jj's CLI builds it: `debug watchman` and the
 # `fsmonitor.backend = "watchman"` setting need it.
-jj-lib = { version = "0.46.0", features = ["git", "watchman"] }
+jj-lib = { version = "0.47.1", features = ["git", "watchman"] }
 # jj's own gix line, feature for feature. Anything narrower resolves to
 # a second gix in the graph, and the copy without `sha1`/`sha256` gives
 # `gix-hash` an enum with no variants, which does not compile.
-gix = { version = "0.88.0", default-features = false, features = [
+gix = { version = "0.90.0", default-features = false, features = [
     "attributes",
+    "auto-chain-error",
     "blob-diff",
     "index",
-    "max-performance-safe",
+    "max-performance",
     "sha1",
     "sha256",
 ] }
@@ -41,6 +42,10 @@ chrono = { version = "0.4.44", default-features = false, features = [
     "serde",
 ] }
 serde = "1.0.229"
+# jj's, for the vendored `source_symbol.rs`.
+regex = "1.12.3"
+# jj's clock type since 0.47 (`RevsetParseContext::current_time`).
+jiff = "0.2"
 thiserror = "2.0.17"
 futures = "0.3.32"
 etcetera = "0.11.0"
@@ -50,4 +55,4 @@ rand_chacha = "0.10.0"
 rand = "0.10.1"
 dunce = "1.0.5"
 whoami = "2.1.2"
-sapling-renderdag = "0.1.0"
+sapling-renderdag = "0.2.0"

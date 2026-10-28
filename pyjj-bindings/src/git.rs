@@ -116,11 +116,20 @@ pub fn reset_head(
     };
     let commit = pollster::block_on(mut_repo.store().get_commit_async(&id))
         .map_err(crate::errors::map_backend_err)?;
+    // The transaction's starting working-copy commit: jj leaves the git
+    // index alone when only `@`'s description or tree moved.
+    let old_commit = match mut_repo.base_repo().view().get_wc_commit_id(&name).cloned() {
+        Some(old_id) => Some(
+            pollster::block_on(mut_repo.store().get_commit_async(&old_id))
+                .map_err(crate::errors::map_backend_err)?,
+        ),
+        None => None,
+    };
     pollster::block_on(git::reset_head(
         mut_repo,
         name.as_ref(),
         workspace_root,
-        &commit,
+        (old_commit.as_ref(), &commit),
     ))
     .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
     Ok(())
@@ -367,13 +376,12 @@ pub fn fetch(
     let (bookmark, tag) =
         fetch_expressions(mut_repo, settings, remote_name, branches, tags, tracked)?;
     let expr = GitFetchRefExpression { bookmark, tag };
-    let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
 
     let mut git_fetch =
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, None)
+        .fetch(remote_name, &expr, &mut callback, None)
         .map_err(map_git_fetch_err)?;
     let stats = pollster::block_on(git_fetch.import_refs()).map_err(map_git_import_err)?;
 
@@ -468,7 +476,6 @@ pub fn fetch_all_inner(
     let import_options = import_options(settings)?;
 
     let expr = GitFetchRefExpression { bookmark, tag };
-    let expanded = git::expand_fetch_refspecs(remote_name, expr).map_err(map_py_err)?;
 
     let depth = depth.and_then(std::num::NonZeroU32::new);
 
@@ -476,7 +483,7 @@ pub fn fetch_all_inner(
         GitFetch::new(mut_repo, subprocess_options, &import_options).map_err(map_py_err)?;
     let mut callback = SilentCallback;
     git_fetch
-        .fetch(remote_name, expanded, &mut callback, depth)
+        .fetch(remote_name, &expr, &mut callback, depth)
         .map_err(map_git_fetch_err)?;
     let default_branch = git_fetch
         .get_default_branch(remote_name)
@@ -584,9 +591,6 @@ pub struct PyGitPushStats {
     pub rejected: Vec<(String, Option<String>)>,
     /// `(ref, reason)`: refs the remote refused.
     pub remote_rejected: Vec<(String, Option<String>)>,
-    /// `(bookmark@remote, reason)`: pushed bookmarks jj could not record
-    /// in the colocated Git repo. jj warns about each one.
-    pub unexported: Vec<(String, String)>,
 }
 
 impl From<git::GitPushStats> for PyGitPushStats {
@@ -604,20 +608,6 @@ impl From<git::GitPushStats> for PyGitPushStats {
                 .collect(),
             rejected: refs(stats.rejected),
             remote_rejected: refs(stats.remote_rejected),
-            unexported: stats
-                .unexported_bookmarks
-                .into_iter()
-                .map(|(symbol, reason)| {
-                    let chain =
-                        std::iter::successors(Some(&reason as &dyn std::error::Error), |err| {
-                            err.source()
-                        })
-                        .map(|err| err.to_string())
-                        .collect::<Vec<_>>()
-                        .join(": ");
-                    (symbol.to_string(), chain)
-                })
-                .collect(),
         }
     }
 }

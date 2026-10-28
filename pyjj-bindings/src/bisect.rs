@@ -369,7 +369,7 @@ impl PyBisector {
         }
         let bisector = self.rebuild()?;
         let revset = pollster::block_on(bisector.remaining_revset()).map_err(map_py_err)?;
-        revset.count_estimate().map_err(map_revset_eval_err)
+        pollster::block_on(revset.count_estimate()).map_err(map_revset_eval_err)
     }
 
     #[getter]

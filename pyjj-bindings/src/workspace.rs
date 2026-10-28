@@ -10,12 +10,14 @@ use jj_lib::default_backend_factories::{
 };
 use jj_lib::file_util;
 use jj_lib::object_id::ObjectId as _;
-use jj_lib::ref_name::{RemoteName, WorkspaceNameBuf};
+use jj_lib::ref_name::{RemoteName, WorkspaceName, WorkspaceNameBuf};
 use jj_lib::repo::{ReadonlyRepo, Repo as _};
 use jj_lib::repo_path::RepoPathBuf;
 use jj_lib::rewrite::merge_commit_trees;
 use jj_lib::simple_workspace_store::SimpleWorkspaceStore;
-use jj_lib::workspace::Workspace;
+use jj_lib::workspace::{
+    DefaultWorkspaceLoaderFactory, WorkingCopyFactories, Workspace, WorkspaceLoaderFactory as _,
+};
 // The store *trait* moved to `jj-core` in 0.46 and is re-exported as
 // `jj_lib::workspace_store` -- this split import is correct as-is,
 // not half-migrated.
@@ -119,8 +121,7 @@ impl PyWorkspace {
             return Err(JjError::new_err("New workspace name cannot be empty"));
         }
 
-        let repo =
-            pollster::block_on(inner.repo_loader().load_at_head()).map_err(map_repo_load_err)?;
+        let repo = pollster::block_on(inner.load_at_head()).map_err(map_repo_load_err)?;
         if repo.view().get_wc_commit_id(&workspace_name).is_some() {
             return Err(JjError::new_err(format!(
                 "Workspace named '{}' already exists",
@@ -156,6 +157,7 @@ impl PyWorkspace {
             &repo,
             working_copy_factory.as_ref(),
             workspace_name.clone(),
+            Some(inner.workspace_name()),
         ))
         .map_err(map_workspace_init_err)?;
 
@@ -315,8 +317,13 @@ impl PyWorkspace {
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
         let kind = resolve_object_hash(settings, object_hash)?;
-        let (ws, repo) = pollster::block_on(Workspace::init_internal_git(&settings.0, path, kind))
-            .map_err(map_workspace_init_err)?;
+        let (ws, repo) = pollster::block_on(Workspace::init_internal_git(
+            &settings.0,
+            path,
+            WorkspaceName::DEFAULT,
+            kind,
+        ))
+        .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((Self::new(ws), py_repo))
     }
@@ -331,8 +338,13 @@ impl PyWorkspace {
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
         let kind = resolve_object_hash(settings, object_hash)?;
-        let (ws, repo) = pollster::block_on(Workspace::init_colocated_git(&settings.0, path, kind))
-            .map_err(map_workspace_init_err)?;
+        let (ws, repo) = pollster::block_on(Workspace::init_colocated_git(
+            &settings.0,
+            path,
+            WorkspaceName::DEFAULT,
+            kind,
+        ))
+        .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((Self::new(ws), py_repo))
     }
@@ -351,9 +363,13 @@ impl PyWorkspace {
     ) -> PyResult<(Self, PyReadonlyRepo)> {
         let path = std::path::Path::new(&workspace_path);
         let git_path = std::path::Path::new(&git_repo_path);
-        let (ws, repo) =
-            pollster::block_on(Workspace::init_external_git(&settings.0, path, git_path))
-                .map_err(map_workspace_init_err)?;
+        let (ws, repo) = pollster::block_on(Workspace::init_external_git(
+            &settings.0,
+            path,
+            WorkspaceName::DEFAULT,
+            git_path,
+        ))
+        .map_err(map_workspace_init_err)?;
         let py_repo = wrap_repo(&ws, repo);
         Ok((Self::new(ws), py_repo))
     }
@@ -411,9 +427,19 @@ impl PyWorkspace {
             let result = (|| {
                 let kind = resolve_object_hash(settings, object_hash)?;
                 let (initial_ws, repo) = if colocate {
-                    pollster::block_on(Workspace::init_colocated_git(&settings.0, path, kind))
+                    pollster::block_on(Workspace::init_colocated_git(
+                        &settings.0,
+                        path,
+                        WorkspaceName::DEFAULT,
+                        kind,
+                    ))
                 } else {
-                    pollster::block_on(Workspace::init_internal_git(&settings.0, path, kind))
+                    pollster::block_on(Workspace::init_internal_git(
+                        &settings.0,
+                        path,
+                        WorkspaceName::DEFAULT,
+                        kind,
+                    ))
                 }
                 .map_err(map_workspace_init_err)?;
 
@@ -432,7 +458,7 @@ impl PyWorkspace {
                 let store_factories = default_backend_factories();
                 let working_copy_factories = default_working_copy_factories();
                 let mut new_ws =
-                    Workspace::load(&settings.0, path, &store_factories, &working_copy_factories)
+                    load_workspace(&settings.0, path, &store_factories, &working_copy_factories)
                         .map_err(map_workspace_load_err)?;
                 let op = pollster::block_on(new_ws.repo_loader().load_operation(&op_id))
                     .map_err(map_repo_load_err)?;
@@ -574,7 +600,7 @@ impl PyWorkspace {
         let path = std::path::Path::new(&workspace_path);
         let store_factories = default_backend_factories();
         let working_copy_factories = default_working_copy_factories();
-        let ws = Workspace::load(&settings.0, path, &store_factories, &working_copy_factories)
+        let ws = load_workspace(&settings.0, path, &store_factories, &working_copy_factories)
             .map_err(map_workspace_load_err)?;
         Ok(Self::new(ws))
     }
@@ -687,8 +713,8 @@ impl PyWorkspace {
     /// Load the repo at the current operation (head).
     fn load_at_head(&self, py: Python<'_>) -> PyResult<PyReadonlyRepo> {
         self.with_ws(py, |inner| {
-            let repo: Arc<ReadonlyRepo> = pollster::block_on(inner.repo_loader().load_at_head())
-                .map_err(map_repo_load_err)?;
+            let repo: Arc<ReadonlyRepo> =
+                pollster::block_on(inner.load_at_head()).map_err(map_repo_load_err)?;
             Ok(wrap_repo(&inner, repo))
         })
     }
@@ -705,6 +731,20 @@ impl PyWorkspace {
     ) -> PyResult<(PyReadonlyRepo, crate::checkout::SnapshotOutcome)> {
         self.with_ws(py, move |inner| {
             crate::checkout::snapshot(inner, settings, args)
+        })
+    }
+
+    /// `jj workspace remove`'s snapshot of a workspace about to be
+    /// deleted: a hidden child of its working-copy commit, recorded
+    /// nowhere. Pass the id to `forget_workspaces(add_heads=...)`.
+    /// `None` when nothing changed on disk.
+    fn snapshot_for_removal(
+        &self,
+        py: Python<'_>,
+        settings: &PyUserSettings,
+    ) -> PyResult<Option<crate::ids::PyCommitId>> {
+        self.with_ws(py, move |inner| {
+            crate::checkout::snapshot_for_removal(inner, settings)
         })
     }
 
@@ -949,7 +989,7 @@ impl PyWorkspace {
     /// path outlives it); `jj remove` drops it along with the deleted
     /// directory. Defaults to dropping, preserving the historical
     /// behavior for existing callers.
-    #[pyo3(signature = (settings, names, description=None, *, forget_store=true))]
+    #[pyo3(signature = (settings, names, description=None, *, forget_store=true, add_heads=Vec::new()))]
     fn forget_workspaces(
         &self,
         py: Python<'_>,
@@ -957,6 +997,7 @@ impl PyWorkspace {
         names: Vec<String>,
         description: Option<String>,
         forget_store: bool,
+        add_heads: Vec<crate::ids::PyCommitId>,
     ) -> PyResult<PyReadonlyRepo> {
         self.with_ws(py, move |inner| {
             if names.is_empty() {
@@ -969,8 +1010,7 @@ impl PyWorkspace {
                 .map(|n| WorkspaceNameBuf::from(n.as_str()))
                 .collect();
 
-            let repo = pollster::block_on(inner.repo_loader().load_at_head())
-                .map_err(map_repo_load_err)?;
+            let repo = pollster::block_on(inner.load_at_head()).map_err(map_repo_load_err)?;
             for name in &names {
                 if repo.view().get_wc_commit_id(name).is_none() {
                     return Err(JjError::new_err(format!(
@@ -987,6 +1027,11 @@ impl PyWorkspace {
 
             let mut tx = open_tx(&repo, &settings.0, inner.workspace_name(), None);
             let mut_repo = tx.repo_mut();
+            for id in &add_heads {
+                let commit = pollster::block_on(mut_repo.store().get_commit_async(&id.0))
+                    .map_err(map_backend_err)?;
+                pollster::block_on(mut_repo.add_head(&commit)).map_err(map_backend_err)?;
+            }
             for name in &names {
                 pollster::block_on(mut_repo.remove_workspace(name.as_ref()))
                     .map_err(|err| JjError::new_err(err.to_string()))?;
@@ -1040,8 +1085,7 @@ impl PyWorkspace {
             }
             let old_name = inner.workspace_name().to_owned();
 
-            let repo = pollster::block_on(inner.repo_loader().load_at_head())
-                .map_err(map_repo_load_err)?;
+            let repo = pollster::block_on(inner.load_at_head()).map_err(map_repo_load_err)?;
             if new_name == old_name {
                 return Ok(wrap_repo(&inner, repo));
             }
@@ -1088,4 +1132,17 @@ impl PyWorkspace {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!("Workspace({})", self.workspace_root(py)?))
     }
+}
+
+fn load_workspace(
+    settings: &jj_lib::settings::UserSettings,
+    path: &std::path::Path,
+    store_factories: &jj_lib::repo::StoreFactories,
+    working_copy_factories: &WorkingCopyFactories,
+) -> Result<Workspace, jj_lib::workspace::WorkspaceLoadError> {
+    DefaultWorkspaceLoaderFactory.create(path)?.load(
+        settings,
+        store_factories,
+        working_copy_factories,
+    )
 }

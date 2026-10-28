@@ -1,4 +1,6 @@
 use futures::AsyncReadExt as _;
+use futures::StreamExt as _;
+use jj_lib::repo::Repo as _;
 use pyo3::prelude::*;
 
 use jj_lib::backend::MergedTreeValueExt as _;
@@ -62,7 +64,7 @@ pub fn parent_contents(
     repo: &crate::commit::PyReadonlyRepo,
     paths: Vec<String>,
 ) -> PyResult<std::collections::HashMap<String, Option<Vec<u8>>>> {
-    let tree = pollster::block_on(commit.inner.parent_tree(repo.inner.as_ref()))
+    let tree = pollster::block_on(commit.inner.parent_tree(repo.inner.index()))
         .map_err(map_backend_err)?;
     let mut out = std::collections::HashMap::new();
     for path in paths {
@@ -151,7 +153,8 @@ pub fn is_executable(commit: &PyCommit, path: &str) -> PyResult<Option<bool>> {
 pub fn list_files(commit: &PyCommit, paths: Option<Vec<String>>) -> PyResult<Vec<String>> {
     let matcher = crate::rewrite::paths_matcher(paths)?;
     let tree = commit.inner.tree();
-    tree.entries_matching(matcher.as_ref())
+    pollster::block_on(tree.entries_matching(matcher.as_ref()).collect::<Vec<_>>())
+        .into_iter()
         .map(|(path, value)| {
             value.map_err(map_backend_err)?;
             Ok(path.as_internal_file_string().to_string())
@@ -200,7 +203,9 @@ pub fn match_filesets(
     let matcher = expression.to_matcher();
     let tree = commit.inner.tree();
     let mut matched = Vec::new();
-    for (path, value) in tree.entries_matching(matcher.as_ref()) {
+    for (path, value) in
+        pollster::block_on(tree.entries_matching(matcher.as_ref()).collect::<Vec<_>>())
+    {
         value.map_err(map_backend_err)?;
         matched.push(path.as_internal_file_string().to_string());
     }

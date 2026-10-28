@@ -1,5 +1,6 @@
 use futures::StreamExt as _;
 use futures::TryStreamExt as _;
+use jj_lib::repo::Repo as _;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -154,7 +155,7 @@ fn diff_trees(
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyDiffEntry>> {
     let matcher = crate::rewrite::paths_matcher(paths)?;
-    let stream = from_tree.diff_stream(to_tree, matcher.as_ref());
+    let stream = from_tree.diff(to_tree, matcher.as_ref());
     let entries: Vec<TreeDiffEntry> = pollster::block_on(stream.collect());
 
     entries
@@ -193,7 +194,7 @@ pub fn diff_from_parents(
     repo: &PyReadonlyRepo,
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyDiffEntry>> {
-    let parent_tree = pollster::block_on(commit.inner.parent_tree(repo.inner.as_ref()))
+    let parent_tree = pollster::block_on(commit.inner.parent_tree(repo.inner.index()))
         .map_err(map_backend_err)?;
     diff_trees(&parent_tree, &commit.inner.tree(), paths)
 }
@@ -213,7 +214,7 @@ pub fn interdiff_commits(
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyDiffEntry>> {
     let from_tree = pollster::block_on(jj_lib::rewrite::rebase_to_dest_parent(
-        repo.inner.as_ref(),
+        repo.inner.index(),
         std::slice::from_ref(&from.inner),
         &to.inner,
     ))
@@ -269,7 +270,7 @@ pub fn diff_commits_with_copies(
     let from_tree = from.inner.tree();
     let to_tree = to.inner.tree();
     let matcher = crate::rewrite::paths_matcher(paths)?;
-    let stream = from_tree.diff_stream_with_copies(&to_tree, matcher.as_ref(), &copy_records);
+    let stream = from_tree.diff_with_copies(&to_tree, matcher.as_ref(), &copy_records);
     let entries: Vec<_> = pollster::block_on(stream.collect());
 
     entries
@@ -384,7 +385,7 @@ pub fn diff_stats(
     // rename then reads as a removal plus an addition, which is what the
     // plain `diff()` binding reports too.
     let copy_records = CopyRecords::default();
-    let tree_diff = from_tree.diff_stream_with_copies(&to_tree, matcher.as_ref(), &copy_records);
+    let tree_diff = from_tree.diff_with_copies(&to_tree, matcher.as_ref(), &copy_records);
     let labels = ConflictLabels::unlabeled();
 
     pollster::block_on(async {
@@ -578,7 +579,7 @@ pub fn interdiff_files(
     paths: Option<Vec<String>>,
 ) -> PyResult<Vec<PyGitDiffFile>> {
     let from_tree = pollster::block_on(jj_lib::rewrite::rebase_to_dest_parent(
-        repo.inner.as_ref(),
+        repo.inner.index(),
         from,
         &to.inner,
     ))
@@ -630,7 +631,7 @@ fn git_diff_trees(
             pollster::block_on(record_stream.try_collect()).map_err(map_backend_err)?;
         copy_records.add_records(records);
     }
-    let tree_diff = from_tree.diff_stream_with_copies(to_tree, matcher.as_ref(), &copy_records);
+    let tree_diff = from_tree.diff_with_copies(to_tree, matcher.as_ref(), &copy_records);
     pollster::block_on(async {
         // A conflicted tree carries the labels its conflict was created
         // with, and jj names the sides of a materialized conflict from

@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "pyjj-bindings"
 description = "Raw PyO3 bindings for Jujutsu VCS"
 requires-python = ">=3.11"
-version = "0.46.0"
+version = "0.47.1"
 license = { text = "Apache-2.0" }
 dependencies = ["anyio>=4"]
 

@@ -155,6 +155,10 @@ pub struct PyUnifiedHunk {
     /// and lacks one exactly when the file does.
     #[pyo3(get)]
     pub lines: Vec<(String, Vec<(String, Vec<u8>)>)>,
+    /// The source line jj appends after the `@@` header (`@@ ... @@
+    /// fn main() {`), already trimmed to Git's 80 bytes, or `None`.
+    #[pyo3(get)]
+    pub symbol: Option<Vec<u8>>,
 }
 
 #[pymethods]
@@ -180,15 +184,21 @@ impl PyUnifiedHunk {
 /// different algorithm would not, however the output was formatted.
 ///
 /// `compare` is how two lines are compared: `"exact"`,
-/// `"ignore-all-space"` or `"ignore-space-change"`.
+/// `"ignore-all-space"` or `"ignore-space-change"`. `path` picks the
+/// language whose patterns find each hunk's `symbol`; jj uses the
+/// file's after-side path, and a generic pattern for an unknown one.
+/// Without a `path` no symbol is looked for, which is what jj's
+/// `show_git_diff_texts` does for a description or `jj util diff`.
 #[pyfunction]
-#[pyo3(signature = (before, after, context=3, *, compare: "typing.Literal['exact', 'ignore-all-space', 'ignore-space-change']" = "exact"))]
+#[pyo3(signature = (before, after, context=3, *, compare: "typing.Literal['exact', 'ignore-all-space', 'ignore-space-change']" = "exact", path=None))]
 pub fn unified_hunks(
     before: &[u8],
     after: &[u8],
     context: usize,
     compare: &str,
+    path: Option<&str>,
 ) -> PyResult<Vec<PyUnifiedHunk>> {
+    use crate::source_symbol::{SourceSymbolScanner, language_for, trim_source_symbol};
     use bstr::BStr;
     use jj_lib::diff_presentation::DiffTokenType;
     use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
@@ -205,39 +215,78 @@ pub fn unified_hunks(
     }
 
     let contents = Diff::new(before, after).map(BStr::new);
+    let language = path.map(|path| language_for(Some(path)));
+    let before_symbols = language.map(|lang| SourceSymbolScanner::new(lang, contents.before));
+    let after_symbols = language.map(|lang| SourceSymbolScanner::new(lang, contents.after));
     Ok(
         unified_diff_hunks(contents, context, compare_mode(compare)?)
             .into_iter()
-            .map(|hunk| PyUnifiedHunk {
-                left_start: to_line_number(&hunk.left_line_range),
-                left_len: hunk.left_line_range.len(),
-                right_start: to_line_number(&hunk.right_line_range),
-                right_len: hunk.right_line_range.len(),
-                lines: hunk
+            .map(|hunk| {
+                // `show_unified_diff_hunks`: prefer the new side, except
+                // for a hunk that only removes lines.
+                let has_added_lines = hunk
                     .lines
-                    .into_iter()
-                    .map(|(line_type, tokens)| {
-                        let kind = match line_type {
-                            DiffLineType::Context => "context",
-                            DiffLineType::Removed => "removed",
-                            DiffLineType::Added => "added",
-                        };
-                        let tokens = tokens
-                            .into_iter()
-                            .map(|(token_type, content)| {
-                                let token_kind = match token_type {
-                                    DiffTokenType::Matching => "matching",
-                                    DiffTokenType::Different => "different",
-                                };
-                                (token_kind.to_owned(), content.to_vec())
-                            })
-                            .collect();
-                        (kind.to_owned(), tokens)
-                    })
-                    .collect(),
+                    .iter()
+                    .any(|(line_type, _)| *line_type == DiffLineType::Added);
+                let (first, second) = if has_added_lines {
+                    (
+                        (&after_symbols, &hunk.right_line_range),
+                        (&before_symbols, &hunk.left_line_range),
+                    )
+                } else {
+                    (
+                        (&before_symbols, &hunk.left_line_range),
+                        (&after_symbols, &hunk.right_line_range),
+                    )
+                };
+                let symbol = first
+                    .0
+                    .as_ref()
+                    .and_then(|scanner| scanner.find(first.1))
+                    .or_else(|| second.0.as_ref().and_then(|scanner| scanner.find(second.1)))
+                    .map(|symbol| trim_source_symbol(symbol).to_vec());
+                PyUnifiedHunk {
+                    left_start: to_line_number(&hunk.left_line_range),
+                    left_len: hunk.left_line_range.len(),
+                    right_start: to_line_number(&hunk.right_line_range),
+                    right_len: hunk.right_line_range.len(),
+                    lines: hunk
+                        .lines
+                        .into_iter()
+                        .map(|(line_type, tokens)| {
+                            let kind = match line_type {
+                                DiffLineType::Context => "context",
+                                DiffLineType::Removed => "removed",
+                                DiffLineType::Added => "added",
+                            };
+                            let tokens = tokens
+                                .into_iter()
+                                .map(|(token_type, content)| {
+                                    let token_kind = match token_type {
+                                        DiffTokenType::Matching => "matching",
+                                        DiffTokenType::Different => "different",
+                                    };
+                                    (token_kind.to_owned(), content.to_vec())
+                                })
+                                .collect();
+                            (kind.to_owned(), tokens)
+                        })
+                        .collect(),
+                    symbol,
+                }
             })
             .collect(),
     )
+}
+
+/// The source symbol on `line`, if it is one: what `jj diff`'s default
+/// format prints after `    ...    ` for a skipped range. `path` picks
+/// the language as for `unified_hunks`.
+#[pyfunction]
+#[pyo3(signature = (line, path=None))]
+pub fn source_symbol_from_line(line: &[u8], path: Option<&str>) -> Option<Vec<u8>> {
+    use crate::source_symbol::{language_for, source_symbol_from_line};
+    source_symbol_from_line(language_for(path), line).map(<[u8]>::to_vec)
 }
 
 /// The raw hunks of a content diff: `(kind, before, after)`, where kind

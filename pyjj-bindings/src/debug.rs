@@ -184,13 +184,21 @@ pub fn debug_tree(
         };
         let tree = pollster::block_on(repo.inner.store().get_tree(dir, &tree_id))
             .map_err(map_backend_err)?;
-        for (path, value) in tree.entries_matching(matcher.as_ref()) {
-            let value: jj_lib::backend::BackendResult<_> = Ok(Merge::normal(value));
+        for (path, value) in
+            pollster::block_on(tree.entries_matching(matcher.as_ref()).collect::<Vec<_>>())
+        {
+            let value: jj_lib::backend::BackendResult<_> = value.map(Merge::normal);
             write(path, &value);
         }
     } else {
         let commit = commit.ok_or_else(|| err("debug_tree needs a commit or a tree id"))?;
-        for (path, value) in commit.inner.tree().entries_matching(matcher.as_ref()) {
+        for (path, value) in pollster::block_on(
+            commit
+                .inner
+                .tree()
+                .entries_matching(matcher.as_ref())
+                .collect::<Vec<_>>(),
+        ) {
             write(path, &value);
         }
     }
@@ -478,6 +486,7 @@ pub fn debug_init_simple(settings: &PyUserSettings, path: &str) -> PyResult<()> 
     pollster::block_on(jj_lib::workspace::Workspace::init_simple(
         &settings.0,
         std::path::Path::new(path),
+        jj_lib::ref_name::WorkspaceName::DEFAULT,
     ))
     .map_err(err)?;
     Ok(())

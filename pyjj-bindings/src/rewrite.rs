@@ -113,7 +113,9 @@ fn apply_hunks(
                 [&commit_value, &parent_value],
             )?
         };
-        builder.set_or_remove(repo_path, value);
+        builder
+            .set_or_remove_merge(repo_path, value)
+            .map_err(crate::errors::map_py_err)?;
     }
     pollster::block_on(builder.write_tree()).map_err(map_backend_err)
 }
@@ -159,7 +161,8 @@ fn select(
     paths: Option<Vec<String>>,
     hunks: Option<HashMap<String, Vec<usize>>>,
 ) -> PyResult<CommitWithSelection> {
-    let parent_tree = pollster::block_on(commit.parent_tree(mut_repo)).map_err(map_backend_err)?;
+    let parent_tree =
+        pollster::block_on(commit.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let commit_tree = commit.tree();
     let matcher: Box<dyn Matcher> = match (&paths, &hunks) {
         (None, Some(_)) => Box::new(jj_lib::matchers::NothingMatcher),
@@ -237,7 +240,7 @@ pub fn squash_edited(
     keep_emptied: bool,
 ) -> PyResult<Option<DetachedCommitBuilder>> {
     let parent_tree =
-        pollster::block_on(source.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+        pollster::block_on(source.inner.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let selected_tree =
         overlay_contents(parent_tree.clone(), Some(&source.inner.tree()), selections)?;
     let selection = CommitWithSelection {
@@ -295,7 +298,9 @@ pub(crate) fn overlay_contents(
         let repo_path = crate::tree::repo_file_path(&path_str)?;
         match content {
             None => {
-                builder.set_or_remove(repo_path, Merge::absent());
+                builder
+                    .set_or_remove_merge(repo_path, Merge::absent())
+                    .map_err(crate::errors::map_py_err)?;
             }
             Some(bytes) => {
                 let mut sides = Vec::with_capacity(2);
@@ -309,7 +314,9 @@ pub(crate) fn overlay_contents(
                         .map_err(map_backend_err)?,
                 );
                 let value = file_value(&store, &repo_path, &bytes, &sides)?;
-                builder.set_or_remove(repo_path, value);
+                builder
+                    .set_or_remove_merge(repo_path, value)
+                    .map_err(crate::errors::map_py_err)?;
             }
         }
     }
@@ -328,7 +335,7 @@ pub fn split_selected_edited(
 ) -> PyResult<DetachedCommitBuilder> {
     reject_root(mut_repo, target.inner.id())?;
     let parent_tree =
-        pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+        pollster::block_on(target.inner.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let edited = overlay_contents(parent_tree, Some(&target.inner.tree()), selections)?;
     let builder = mut_repo.rewrite_commit(&target.inner).set_tree(edited);
     Ok(builder.detach())
@@ -390,7 +397,7 @@ pub fn split_remainder_parallel(
     first: &PyCommit,
 ) -> PyResult<DetachedCommitBuilder> {
     let parent_tree =
-        pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+        pollster::block_on(target.inner.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let target_tree = target.inner.tree();
     let selected_diff = jj_lib::merge::Diff::new(
         (parent_tree, "parents of split revision".to_string()),
@@ -523,7 +530,9 @@ pub fn set_executable(
         copy_id,
     });
     let mut builder = MergedTreeBuilder::new(tree);
-    builder.set_or_remove(repo_path, new_value);
+    builder
+        .set_or_remove_merge(repo_path, new_value)
+        .map_err(crate::errors::map_py_err)?;
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
     Ok(builder.detach())
@@ -551,9 +560,8 @@ pub fn restore(
     // merge commit as changing everything its other parents contributed.
     let from_tree = match from_commit {
         Some(commit) => commit.inner.tree(),
-        None => {
-            pollster::block_on(into_commit.inner.parent_tree(mut_repo)).map_err(map_backend_err)?
-        }
+        None => pollster::block_on(into_commit.inner.parent_tree(mut_repo.index()))
+            .map_err(map_backend_err)?,
     };
     let into_tree = into_commit.inner.tree();
     if let Some(paths) = &paths {

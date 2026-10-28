@@ -31,19 +31,44 @@ pub struct PyBookmark {
     /// side.
     #[pyo3(get)]
     pub removed_ids: Vec<PyCommitId>,
+    /// Every side of a conflicted target, as jj's `removed_targets()`
+    /// and `added_targets()` list them: `None` where a side is absent
+    /// (the bookmark did not exist there). Empty unless `has_conflict`.
+    #[pyo3(get)]
+    pub removed_targets: Vec<Option<PyCommitId>>,
+    #[pyo3(get)]
+    pub added_targets: Vec<Option<PyCommitId>>,
     #[pyo3(get)]
     pub has_conflict: bool,
 }
 
 impl PyBookmark {
     pub(crate) fn from_target(name: &RefName, target: &RefTarget) -> Self {
+        let (removed_targets, added_targets) = conflict_sides(target);
         Self {
             name: name.as_str().to_string(),
             target_ids: target.present_adds().map(PyCommitId::from).collect(),
             removed_ids: target.present_removes().map(PyCommitId::from).collect(),
+            removed_targets,
+            added_targets,
             has_conflict: !target.is_resolved(),
         }
     }
+}
+
+/// `(removes, adds)` of a conflicted target, `None` for an absent side;
+/// both empty for a resolved one.
+pub(crate) fn conflict_sides(
+    target: &RefTarget,
+) -> (Vec<Option<PyCommitId>>, Vec<Option<PyCommitId>>) {
+    if target.is_resolved() {
+        return (Vec::new(), Vec::new());
+    }
+    let side = |id: &Option<jj_lib::backend::CommitId>| id.clone().map(PyCommitId::from);
+    (
+        target.removes().map(side).collect(),
+        target.adds().map(side).collect(),
+    )
 }
 
 #[pymethods]
@@ -74,6 +99,13 @@ pub struct PyRemoteBookmark {
     /// `has_conflict`.
     #[pyo3(get)]
     pub removed_ids: Vec<PyCommitId>,
+    /// Every side of a conflicted target, as jj's `removed_targets()`
+    /// and `added_targets()` list them: `None` where a side is absent
+    /// (the bookmark did not exist there). Empty unless `has_conflict`.
+    #[pyo3(get)]
+    pub removed_targets: Vec<Option<PyCommitId>>,
+    #[pyo3(get)]
+    pub added_targets: Vec<Option<PyCommitId>>,
     #[pyo3(get)]
     pub has_conflict: bool,
     /// Whether the local bookmark of the same name follows this one.

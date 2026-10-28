@@ -52,7 +52,7 @@ pub fn revert_commit(
 
     let old_parents = pollster::block_on(commit.inner.parents()).map_err(map_backend_err)?;
     let old_base_tree =
-        pollster::block_on(commit.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+        pollster::block_on(commit.inner.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let old_tree = commit.inner.tree();
     let old_base_label = conflict_label_for_commits(&old_parents);
 

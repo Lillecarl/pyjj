@@ -34,16 +34,26 @@ pub struct PyTag {
     /// a bookmark.
     #[pyo3(get)]
     pub removed_ids: Vec<PyCommitId>,
+    /// Every side of a conflicted target, as jj's `removed_targets()`
+    /// and `added_targets()` list them: `None` where a side is absent
+    /// (the tag did not exist there). Empty unless `has_conflict`.
+    #[pyo3(get)]
+    pub removed_targets: Vec<Option<PyCommitId>>,
+    #[pyo3(get)]
+    pub added_targets: Vec<Option<PyCommitId>>,
     #[pyo3(get)]
     pub has_conflict: bool,
 }
 
 impl PyTag {
     pub(crate) fn from_target(name: &RefName, target: &RefTarget) -> Self {
+        let (removed_targets, added_targets) = crate::bookmark::conflict_sides(target);
         Self {
             name: name.as_str().to_string(),
             target_ids: target.present_adds().map(PyCommitId::from).collect(),
             removed_ids: target.present_removes().map(PyCommitId::from).collect(),
+            removed_targets,
+            added_targets,
             has_conflict: !target.is_resolved(),
         }
     }
@@ -76,6 +86,13 @@ pub struct PyRemoteTag {
     /// `target_ids` as the side it moved to. Empty unless `has_conflict`.
     #[pyo3(get)]
     pub removed_ids: Vec<PyCommitId>,
+    /// Every side of a conflicted target, as jj's `removed_targets()`
+    /// and `added_targets()` list them: `None` where a side is absent
+    /// (the tag did not exist there). Empty unless `has_conflict`.
+    #[pyo3(get)]
+    pub removed_targets: Vec<Option<PyCommitId>>,
+    #[pyo3(get)]
+    pub added_targets: Vec<Option<PyCommitId>>,
     #[pyo3(get)]
     pub has_conflict: bool,
     /// Whether the local tag of the same name follows this one.

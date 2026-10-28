@@ -19,7 +19,7 @@ filtering a shared monorepo tree — see "Reproducible builds" below.
   different kind of project — a Textual app, not a binding layer).
 
 Binding-surface coverage below (API coverage, async model, etc.) was written
-against `jj_lib` 0.46.0 and describes `jj_lib`'s own behavior, not anything
+against `jj_lib` 0.47.1 and describes `jj_lib`'s own behavior, not anything
 monorepo-specific — it stays accurate regardless of where this repo lives.
 When bumping the `jj-lib` crates.io version in `pyjj-bindings/Cargo.toml`,
 re-check this section against that release's actual behavior/changelog.
@@ -133,7 +133,7 @@ both forms compose.
 
 ## jj CLI parity coverage
 
-Every command the pinned `jj` (0.46) offers has a scenario in
+Every command the pinned `jj` (0.47) offers has a scenario in
 `pyjj/tests/parity/test_parity.py`. A command pyjj-cli does not implement
 yet still has one, marked `UNIMPLEMENTED` (a **strict** xfail): the day
 the command lands, its scenario stops being an expected failure and the
@@ -1567,9 +1567,9 @@ Current state:
   operation store drops operations unreachable from the current head,
   the commit store drops objects no commit in the index refers to -- and
   what "drop" means is the backend's business, so the Git backend runs
-  `git gc`. Since jj 0.46 there is no `Store::gc` anymore: the binding
-  calls `op_store().gc()` always and `GitBackend::gc()` only when
-  `get_git_backend()` succeeds, exactly like `cli`'s own `cmd_util_gc`.
+  `git gc`. Like `cli`'s own `cmd_util_gc`, the binding calls
+  `op_store().gc()`, then `store().backend().gc()` with the heads
+  `index().all_heads_for_gc()` lists.
   Anything newer than the cutoff survives whether reachable or
   not, because a concurrent process may not have referenced its new
   objects yet. Two traps. The sweep starts from the repo's *own*
@@ -1806,8 +1806,40 @@ trio alike. The lists there name which methods get one.
 ## Notes
 
 - `pyjj-bindings/Cargo.toml` pins `jj-lib` to a specific crates.io version
-  (currently `0.46.0`) rather than a path dependency into a jj checkout.
-  Bumping it can require source changes on this side too: jj 0.46 moved
+  (currently `0.47.1`; skip `0.47.0`, whose Linux build is broken)
+  rather than a path dependency into a jj checkout.
+  Bumping it can require source changes on this side too. jj 0.47 split
+  `jj-lib` again (`jj-default-index`, `jj-dsl`, `jj-git-backend`,
+  `jj-local-util`; `Commit` now lives in `jj-core`), and: `parent_tree`,
+  `is_empty`, `is_discardable` and `rebase_to_dest_parent` take
+  `repo.index()` rather than the repo; `Commit::is_hidden` is gone
+  (`resolve_change_id` + `has_visible`, as the templater does);
+  `MergedTree::diff_stream*` became `diff*`, and `entries_matching`/
+  `conflicts` are streams; `MergedTreeBuilder::set_or_remove` takes an
+  `Option<TreeValue>`, with `set_or_remove_merge` (fallible) for merges;
+  `count_estimate`, `TreeState::check_out`/`set_sparse_patterns` are
+  async; `Workspace::load` became `DefaultWorkspaceLoaderFactory.create(
+  path)?.load(...)`, and `init_*` take the workspace name (jj passes
+  `WorkspaceName::DEFAULT`); `Workspace::load_at_head()` replaces
+  `repo_loader().load_at_head()`, which now takes a workspace name;
+  `git::reset_head` takes `(old_wc_commit, new_wc_commit)` -- the old one
+  is how jj leaves the git index alone on `describe -r@`;
+  `GitFetch::fetch` takes the `GitFetchRefExpression` itself;
+  `GitPushStats::unexported_bookmarks` is gone (a push exports nothing);
+  backend `gc` is a `Backend` trait method; `RevsetParseContext` takes
+  `current_time: jiff::Zoned`; `remove_repo_config_dir` is
+  `remove_config_dir`; and `revsets.git-sign-on-push` joined the defaults.
+  Four files are copies of jj's CLI and need re-copying on every bump,
+  diffed first: `pyjj-bindings/vendor/revsets.toml`
+  (`cli/src/config/revsets.toml`), `pyjj-bindings/src/source_symbol.rs`
+  (`cli/src/source_symbol.rs`, the `@@ ... @@ fn name` hunk-header
+  context and color-words `    ...    symbol` rows),
+  `pyjj-cli/src/pyjj_cli/data/config-schema.json`, and the palette in
+  `pyjj-cli/src/pyjj_cli/formatter.py` (`cli/src/config/colors.toml`).
+  Diff `cli/src/config/templates.toml` too: builtin templates are
+  hand-ported, so a changed one (0.47: `(current)` in `workspace list`,
+  `(absent)` sides of a conflicted ref) only shows as a corpus failure.
+  jj 0.46 moved
   `Merge::{added_ids, removed_ids, has_conflict}` to
   `{present_adds, present_removes, !is_resolved()}` (in `jj-core`),
   `SignBehavior` from `jj_lib::signing` to `jj_lib::settings`,
@@ -1843,7 +1875,7 @@ trio alike. The lists there name which methods get one.
   binary, and pyjj-cli matches both.
 - `pyjj-bindings/Cargo.lock` and `pyjj`/`pyjj-cli`/`pyjjui`'s own
   `pyproject.toml`-declared dependencies are independent of each other.
-- `pyjj`/`pyjj-bindings` versions track the jj release (`0.46.0`);
+- `pyjj`/`pyjj-bindings` versions track the jj release (`0.47.1`);
   `pyjj-cli`/`pyjjui` version independently (`0.1.0`). A
   version-consistency audit that flags the split as drift is wrong.
 - If `pyjj-bindings`'s public API shape changes, update `pyjj/pyjj/__init__.py`

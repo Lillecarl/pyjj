@@ -125,7 +125,7 @@ pub fn repo_config_repo_path(config_dir: &str) -> PyResult<Option<String>> {
 /// else raises rather than taking a file the user put there.
 #[pyfunction]
 pub fn remove_repo_config_dir(config_dir: &str) -> PyResult<()> {
-    jj_lib::secure_config::remove_repo_config_dir(Path::new(config_dir))
+    jj_lib::secure_config::remove_config_dir(Path::new(config_dir))
         .map_err(|err| JjError::new_err(format!("Failed to delete {config_dir}: {err}")))
 }
 

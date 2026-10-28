@@ -201,7 +201,6 @@ def test_push_bookmark_delivers_to_remote(repo_with_remote, settings, bare_remot
     assert stats.pushed == ["refs/heads/main"]
     assert stats.rejected == []
     assert stats.remote_rejected == []
-    assert stats.unexported == []
     tx3.commit("push main")
 
     result = subprocess.run(

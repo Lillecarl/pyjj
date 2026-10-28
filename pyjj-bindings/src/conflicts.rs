@@ -158,7 +158,9 @@ pub fn resolve_conflict(
     let new_value = resolve_file_value(&tree, &repo_path, value, content)?;
 
     let mut builder = MergedTreeBuilder::new(tree.clone());
-    builder.set_or_remove(repo_path, new_value);
+    builder
+        .set_or_remove_merge(repo_path, new_value)
+        .map_err(crate::errors::map_py_err)?;
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
 
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
@@ -192,7 +194,9 @@ pub fn resolve_conflicts(
             return Err(JjError::new_err(format!("`{path_str}` is not conflicted")));
         }
         let new_value = resolve_file_value(&tree, &repo_path, value, &content)?;
-        builder.set_or_remove(repo_path, new_value);
+        builder
+            .set_or_remove_merge(repo_path, new_value)
+            .map_err(crate::errors::map_py_err)?;
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
@@ -339,7 +343,9 @@ pub fn pick_conflict_sides(
             }),
             None => Merge::absent(),
         };
-        builder.set_or_remove(repo_path, new_value);
+        builder
+            .set_or_remove_merge(repo_path, new_value)
+            .map_err(crate::errors::map_py_err)?;
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
     let commit_builder = mut_repo.rewrite_commit(&commit.inner).set_tree(new_tree);
@@ -362,7 +368,9 @@ pub fn conflicted_paths(commit: &PyCommit) -> PyResult<Vec<(String, usize, usize
     use jj_lib::backend::TreeValue;
 
     let mut out = Vec::new();
-    for (path, value) in commit.inner.tree().conflicts() {
+    for (path, value) in pollster::block_on(futures::StreamExt::collect::<Vec<_>>(
+        commit.inner.tree().conflicts(),
+    )) {
         let conflict = value.map_err(map_backend_err)?.simplify();
         let sides = conflict.num_sides();
         let adds = conflict.adds().flatten().count();

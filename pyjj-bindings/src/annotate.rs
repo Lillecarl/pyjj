@@ -42,8 +42,8 @@ pub fn annotate(
         .lines()
         .map(|(result, line)| {
             let (commit_id, is_boundary) = match result {
-                Ok(id) => (id.clone(), false),
-                Err(id) => (id.clone(), true),
+                Ok(commit) => (commit.id().clone(), false),
+                Err(commit) => (commit.id().clone(), true),
             };
             PyAnnotationLine {
                 commit_id: PyCommitId(commit_id),

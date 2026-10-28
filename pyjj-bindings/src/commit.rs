@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use jj_lib::repo::Repo as _;
 use pyo3::prelude::*;
 
 use jj_lib::commit::Commit;
@@ -137,8 +138,9 @@ impl PyCommit {
     /// `(hidden)` wherever it prints one.
     fn is_hidden(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
         py.detach(|| {
-            pollster::block_on(self.inner.is_hidden(repo.inner.as_ref()))
-                .map_err(crate::errors::map_py_err)
+            let targets = pollster::block_on(repo.inner.resolve_change_id(self.inner.change_id()))
+                .map_err(crate::errors::map_py_err)?;
+            Ok(targets.is_none_or(|t| !t.has_visible(self.inner.id())))
         })
     }
 
@@ -178,14 +180,14 @@ impl PyCommit {
     /// Whether this commit has no changes compared to its parent(s).
     fn is_empty(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
         py.detach(|| {
-            pollster::block_on(self.inner.is_empty(repo.inner.as_ref())).map_err(map_py_err)
+            pollster::block_on(self.inner.is_empty(repo.inner.index())).map_err(map_py_err)
         })
     }
 
     /// Whether this commit is discardable (empty + no description).
     fn is_discardable(&self, py: Python<'_>, repo: &PyReadonlyRepo) -> PyResult<bool> {
         py.detach(|| {
-            pollster::block_on(self.inner.is_discardable(repo.inner.as_ref())).map_err(map_py_err)
+            pollster::block_on(self.inner.is_discardable(repo.inner.index())).map_err(map_py_err)
         })
     }
 

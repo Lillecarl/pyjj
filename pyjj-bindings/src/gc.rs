@@ -8,9 +8,8 @@
 //! Both take a cutoff and keep anything newer, because an object written
 //! by a concurrent process may not be referenced yet.
 //!
-//! This mirrors `cli/src/commands/util/gc.rs`: the op-store sweep always
-//! runs, and the commit-store sweep runs only when the store is git-backed
-//! (`jj_lib::git::get_git_backend`); other backends have nothing to sweep.
+//! This mirrors `cli/src/commands/util/gc.rs`: the op-store sweep, then
+//! the backend's own `gc` from the index's heads.
 
 use std::slice;
 use std::time::{Duration, SystemTime};
@@ -63,10 +62,12 @@ pub fn gc(repo: &PyReadonlyRepo, max_age_secs: f64) -> PyResult<()> {
             .gc(slice::from_ref(inner.op_id()), keep_newer),
     )
     .map_err(map_py_err)?;
-    if let Ok(git_backend) = jj_lib::git::get_git_backend(inner.store()) {
-        git_backend
-            .gc(inner.index(), keep_newer)
-            .map_err(map_backend_err)?;
-    }
+    let new_heads: Vec<_> = inner
+        .index()
+        .all_heads_for_gc()
+        .map_err(map_py_err)?
+        .collect();
+    pollster::block_on(inner.store().backend().gc(&new_heads, keep_newer))
+        .map_err(map_backend_err)?;
     Ok(())
 }

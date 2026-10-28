@@ -69,11 +69,6 @@ def git_push(args: argparse.Namespace) -> int:
         for name, reason in rejected:
             print(f"Error: {name} rejected: {reason or 'no reason given'}",
                   file=sys.stderr)
-        if stats.unexported:
-            print("Warning: The following bookmarks couldn't be updated locally:",
-                  file=sys.stderr)
-            for symbol, reason in stats.unexported:
-                print(f"  {symbol}: {reason}", file=sys.stderr)
         if not stats.pushed and rejected:
             return 1
         _finish(tx, f"push to {remote}", settings, ws, repo)

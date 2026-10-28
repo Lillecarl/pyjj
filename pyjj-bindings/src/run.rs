@@ -221,10 +221,8 @@ impl PyRunPool {
             None => vec![jj_lib::repo_path::RepoPathBuf::root()],
             Some(patterns) => patterns.clone(),
         };
-        tree_state
-            .set_sparse_patterns(patterns)
-            .map_err(map_py_err)?;
-        tree_state.check_out(&commit.tree()).map_err(map_py_err)?;
+        pollster::block_on(tree_state.set_sparse_patterns(patterns)).map_err(map_py_err)?;
+        pollster::block_on(tree_state.check_out(&commit.tree())).map_err(map_py_err)?;
         // Checking out an empty tree deletes the slot directory itself:
         // `check_out` removes empty directories until something stops
         // it, and a slot has no `.jj` to stop it. Put it back.
@@ -294,7 +292,7 @@ fn remove_newly_ignored_files(
     let original_tree = commit.tree();
 
     let added_paths = pollster::block_on(async {
-        let mut diff = original_tree.diff_stream(&post_snapshot_tree, &EverythingMatcher);
+        let mut diff = original_tree.diff(&post_snapshot_tree, &EverythingMatcher);
         let mut added = Vec::new();
         while let Some(entry) = diff.next().await {
             let values = entry.values.map_err(map_backend_err)?;
@@ -309,7 +307,7 @@ fn remove_newly_ignored_files(
         remove_if_present(&path.to_fs_path_unchecked(working_copy_dir))?;
     }
     if !added_paths.is_empty() {
-        tree_state.check_out(&original_tree).map_err(map_py_err)?;
+        pollster::block_on(tree_state.check_out(&original_tree)).map_err(map_py_err)?;
     }
     Ok(())
 }

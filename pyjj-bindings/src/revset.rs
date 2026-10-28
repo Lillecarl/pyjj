@@ -184,7 +184,7 @@ fn parse_user_revset(
         aliases_map: &aliases_map,
         local_variables: Default::default(),
         user_email: settings.0.user_email(),
-        date_pattern_context: chrono::Local::now().into(),
+        current_time: jiff::Zoned::now(),
         // `default_ignored_remote_name` in jj's cli_util.rs: a Git-backed
         // store hides `@git` from `remote_bookmarks()` and its kin.
         default_ignored_remote: jj_lib::git::get_git_backend(store)

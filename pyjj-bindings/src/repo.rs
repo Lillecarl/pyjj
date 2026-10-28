@@ -303,17 +303,23 @@ impl PyReadonlyRepo {
         self.inner
             .view()
             .all_remote_bookmarks()
-            .map(|(symbol, remote_ref)| crate::bookmark::PyRemoteBookmark {
-                name: symbol.name.as_str().to_string(),
-                remote: symbol.remote.as_str().to_string(),
-                target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
-                removed_ids: remote_ref
-                    .target
-                    .present_removes()
-                    .map(Into::into)
-                    .collect(),
-                has_conflict: !remote_ref.target.is_resolved(),
-                tracked: remote_ref.is_tracked(),
+            .map(|(symbol, remote_ref)| {
+                let (removed_targets, added_targets) =
+                    crate::bookmark::conflict_sides(&remote_ref.target);
+                crate::bookmark::PyRemoteBookmark {
+                    name: symbol.name.as_str().to_string(),
+                    remote: symbol.remote.as_str().to_string(),
+                    target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
+                    removed_ids: remote_ref
+                        .target
+                        .present_removes()
+                        .map(Into::into)
+                        .collect(),
+                    removed_targets,
+                    added_targets,
+                    has_conflict: !remote_ref.target.is_resolved(),
+                    tracked: remote_ref.is_tracked(),
+                }
             })
             .collect()
     }
@@ -338,9 +344,7 @@ impl PyReadonlyRepo {
             let unwanted: Vec<CommitId> = unwanted.into_iter().map(|id| id.0).collect();
             let revset = jj_lib::revset::walk_revs(self.inner.as_ref(), &wanted, &unwanted)
                 .map_err(crate::errors::map_revset_eval_err)?;
-            revset
-                .count_estimate()
-                .map_err(crate::errors::map_revset_eval_err)
+            pollster::block_on(revset.count_estimate()).map_err(crate::errors::map_revset_eval_err)
         })
     }
 
@@ -386,17 +390,23 @@ impl PyReadonlyRepo {
         self.inner
             .view()
             .all_remote_tags()
-            .map(|(symbol, remote_ref)| crate::tag::PyRemoteTag {
-                name: symbol.name.as_str().to_string(),
-                remote: symbol.remote.as_str().to_string(),
-                target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
-                removed_ids: remote_ref
-                    .target
-                    .present_removes()
-                    .map(Into::into)
-                    .collect(),
-                has_conflict: !remote_ref.target.is_resolved(),
-                tracked: remote_ref.is_tracked(),
+            .map(|(symbol, remote_ref)| {
+                let (removed_targets, added_targets) =
+                    crate::bookmark::conflict_sides(&remote_ref.target);
+                crate::tag::PyRemoteTag {
+                    name: symbol.name.as_str().to_string(),
+                    remote: symbol.remote.as_str().to_string(),
+                    target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
+                    removed_ids: remote_ref
+                        .target
+                        .present_removes()
+                        .map(Into::into)
+                        .collect(),
+                    removed_targets,
+                    added_targets,
+                    has_conflict: !remote_ref.target.is_resolved(),
+                    tracked: remote_ref.is_tracked(),
+                }
             })
             .collect()
     }

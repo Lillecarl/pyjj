@@ -273,7 +273,7 @@ pub fn snapshot(
 ) -> PyResult<(PyReadonlyRepo, SnapshotOutcome)> {
     let workspace_name = workspace.workspace_name().to_owned();
     let workspace_root = workspace.workspace_root().to_path_buf();
-    let repo = pollster::block_on(workspace.repo_loader().load_at_head())
+    let repo = pollster::block_on(workspace.load_at_head())
         .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))?;
     let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
     let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
@@ -346,6 +346,62 @@ pub fn snapshot(
     Ok((wrap_repo(workspace, new_repo), outcome))
 }
 
+/// `snapshot_workspace` in jj's `workspace remove`: snapshots a workspace
+/// that is about to be deleted into a new, hidden child of its
+/// working-copy commit, described `SNAPSHOT OF REMOVED WORKSPACE `name``.
+///
+/// Nothing is recorded: no operation, and the lock is released
+/// unfinished. The caller adds the commit as a head in the removal's own
+/// transaction (`forget_workspaces(add_heads=...)`). The repo is loaded at
+/// the working copy's own operation, so a stale workspace snapshots too.
+/// Returns `None` when the files match the working-copy commit, and
+/// raises jj's error when a new file would stay untracked.
+pub fn snapshot_for_removal(
+    workspace: &mut Workspace,
+    settings: &PyUserSettings,
+) -> PyResult<Option<crate::ids::PyCommitId>> {
+    let workspace_name = workspace.workspace_name().to_owned();
+    let workspace_root = workspace.workspace_root().to_path_buf();
+    let repo_loader = workspace.repo_loader().clone();
+    let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
+        .map_err(map_working_copy_err)?;
+    let op_id = locked_ws.locked_wc().old_operation_id().clone();
+    let op = pollster::block_on(repo_loader.load_operation(&op_id))
+        .map_err(crate::errors::map_repo_load_err)?;
+    let repo =
+        pollster::block_on(repo_loader.load_at(&op)).map_err(crate::errors::map_repo_load_err)?;
+    let Some(wc_commit_id) = repo.view().get_wc_commit_id(&workspace_name).cloned() else {
+        return Ok(None);
+    };
+    let wc_commit = pollster::block_on(repo.store().get_commit_async(&wc_commit_id))
+        .map_err(map_backend_err)?;
+    let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
+    let (new_tree, stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
+        .map_err(map_working_copy_err)?;
+    if !stats.untracked_paths.is_empty() || !stats.invalid_utf8_paths.is_empty() {
+        return Err(crate::errors::JjError::new_err(format!(
+            "Cannot remove workspace '{}' with unsnapshotted changes",
+            workspace_name.as_symbol()
+        )));
+    }
+    if new_tree.tree_ids_and_labels() == wc_commit.tree().tree_ids_and_labels() {
+        return Ok(None);
+    }
+    let mut tx = repo.start_transaction();
+    let new_commit = pollster::block_on(
+        tx.repo_mut()
+            .new_commit(vec![wc_commit.id().clone()], new_tree)
+            .detach()
+            .set_description(format!(
+                "SNAPSHOT OF REMOVED WORKSPACE `{}`\n",
+                workspace_name.as_symbol()
+            ))
+            .write_hidden(),
+    )
+    .map_err(map_backend_err)?;
+    Ok(Some(new_commit.id().clone().into()))
+}
+
 /// Whether the files on disk differ from the tree the working copy last
 /// recorded. The snapshot walk runs with the same options as `snapshot()`,
 /// but the lock is released unfinished, so no operation, view change or
@@ -371,7 +427,7 @@ pub fn has_unrecorded_changes(
 }
 
 fn load_head(workspace: &Workspace) -> PyResult<Arc<ReadonlyRepo>> {
-    pollster::block_on(workspace.repo_loader().load_at_head())
+    pollster::block_on(workspace.load_at_head())
         .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))
 }
 
@@ -415,7 +471,9 @@ pub fn untrack_paths(
 
     let mut builder = MergedTreeBuilder::new(old_commit.tree());
     for repo_path in &repo_paths {
-        builder.set_or_remove(repo_path.clone(), Merge::absent());
+        builder
+            .set_or_remove_merge(repo_path.clone(), Merge::absent())
+            .map_err(crate::errors::map_py_err)?;
     }
     let new_tree = pollster::block_on(builder.write_tree()).map_err(map_backend_err)?;
 
