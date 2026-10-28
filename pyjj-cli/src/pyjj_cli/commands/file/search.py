@@ -35,7 +35,10 @@ def file_search(args: argparse.Namespace) -> int:
     jj matches a line at a time, so an anchored pattern can name a whole
     line, and a glob has to match one end to end. Each matching line
     prints as `path:line` (`path:lineno:line` under `-n`), and
-    `--name-only` prints each matching file once, by name.
+    `--name-only` prints each matching file once, by name. A binary
+    file (a NUL in its first 8000 bytes; for a conflict, on any side)
+    prints `Binary file matches: path` instead of its lines, unless
+    `--binary-as-text` or `--skip-binary` says otherwise.
     """
     with read_repo(args) as (settings, _ws, repo):
         commit = _resolve_one(repo, settings, args.revision)
@@ -43,11 +46,22 @@ def file_search(args: argparse.Namespace) -> int:
         paths = getattr(args, "filesets", None) or None
         name_only = getattr(args, "name_only", False)
         line_number = getattr(args, "line_number", False)
+        as_text = getattr(args, "binary_as_text", False)
+        skip_binary = getattr(args, "skip_binary", False)
         for path in sorted(commit.list_files(paths)):
-            for content in _searchable_contents(repo, commit, path):
+            contents = _searchable_contents(repo, commit, path)
+            if not as_text and any(_is_binary(content) for content in contents):
+                if not skip_binary and any(
+                        matches(line) for content in contents for line in _lines(content)):
+                    line = path if name_only else f"Binary file matches: {path}"
+                    # The buffer, as `_print_matches` writes: `print` would
+                    # land after bytes already sitting in it.
+                    sys.stdout.buffer.write(line.encode() + b"\n")
+                continue
+            for content in contents:
                 if name_only:
                     if any(matches(line) for line in _lines(content)):
-                        print(path)
+                        sys.stdout.buffer.write(path.encode() + b"\n")
                         break
                 else:
                     _print_matches(path, content, matches, line_number)
@@ -91,6 +105,11 @@ def _print_matches(
         # One write through the binary buffer: mixing `print` with
         # `sys.stdout.buffer` can reorder the two buffered layers.
         sys.stdout.buffer.write(head.encode() + line + b"\n")
+
+
+def _is_binary(content: bytes) -> bool:
+    """git's heuristic, and jj's `file_util::is_binary`."""
+    return b"\0" in content[:8000]
 
 
 def _lines(content: bytes):

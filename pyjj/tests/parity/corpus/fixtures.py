@@ -139,6 +139,17 @@ def whitespace(pair) -> None:
     )
 
 
+def binary(pair) -> None:
+    """A text file and a binary one (a NUL byte), both containing
+    `needle`: what `file search` prints for each depends on its binary
+    flags."""
+    pair.init()
+    pair.op(
+        files={"text.txt": b"needle in text\n", "blob.bin": b"needle\0blob\n"},
+        jj=["describe", "-m", "binary"],
+    )
+
+
 def rewritten_stack(pair) -> None:
     """A chain whose oldest commit is rewritten, so the stack moves.
 
@@ -250,5 +261,6 @@ FIXTURES = {
     "squashed": squashed,
     "executable": executable,
     "whitespace": whitespace,
+    "binary": binary,
     "conflicted_refs": conflicted_refs,
 }

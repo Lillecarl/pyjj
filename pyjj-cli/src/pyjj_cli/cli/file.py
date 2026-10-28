@@ -58,6 +58,11 @@ def add_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
                            help="Print only the paths of files that contain a match")
     p_fsearch.add_argument("-n", "--line-number", dest="line_number", action="store_true",
                            help="Prefix each matched line with its 1-based line number")
+    binary = p_fsearch.add_mutually_exclusive_group()
+    binary.add_argument("--binary-as-text", dest="binary_as_text", action="store_true",
+                        help="Treat binary files as text, matching and printing raw bytes")
+    binary.add_argument("--skip-binary", dest="skip_binary", action="store_true",
+                        help="Skip binary files entirely")
     add_flags(p_fsearch, {Flag.FILESETS})
     p_fsearch.set_defaults(_handler="pyjj_cli.commands.file.search:file_search")
 
