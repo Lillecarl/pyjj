@@ -164,8 +164,13 @@ def set_config_args(config_args: Iterable[tuple[str, str]]) -> None:
     _CONFIG_ARGS = list(config_args)
 
 
-def apply_config_args(settings: pyjj.UserSettings) -> pyjj.UserSettings:
+def apply_config_args(settings: pyjj.UserSettings, workspace: pyjj.Workspace | None = None) -> pyjj.UserSettings:
     """Settings with this run's `--config`/`--config-file` layers on top.
+
+    With a `workspace`, the identity hooks of `pyjj.extensions` run too,
+    and their answer goes in under the command line's layers. They see
+    the settings with those layers already applied, so `--config
+    pyjj.extensions=...` loads an extension for one run.
 
     Every command builds settings through here (via `settings_for` or
     `_load`, or directly where there is no repository yet), so no
@@ -175,9 +180,20 @@ def apply_config_args(settings: pyjj.UserSettings) -> pyjj.UserSettings:
     raises `ConfigArgsError`, which `main()` turns into exit 1 before
     the command reads or writes anything.
     """
-    if _CONFIG_ARGS:
+    layers = list(_CONFIG_ARGS)
+    try:
+        if workspace is not None:
+            seen = settings.with_command_args(layers)
+            layers = pyjj.extensions.identity_config(seen, workspace) + layers
+    except pyjj.extensions.ExtensionError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        raise ConfigArgsError from e
+    except pyjj.JjError:
+        # The command-line layer is at fault; the rebuild below reports it.
+        pass
+    if layers:
         try:
-            settings = settings.with_command_args(_CONFIG_ARGS)
+            settings = settings.with_command_args(layers)
         except pyjj.JjError as e:
             print(f"Config error: {getattr(e, 'message', str(e))}\n{_CONFIG_HELP_FOOTER}",
                   file=sys.stderr)
@@ -685,7 +701,7 @@ def settings_for(args: argparse.Namespace):
     except Exception:  # noqa: BLE001 -- no repository is the normal case
         return settings
     return apply_config_args(
-        pyjj.UserSettings.for_repo(ws.repo_path, ws.workspace_root)
+        pyjj.UserSettings.for_repo(ws.repo_path, ws.workspace_root), ws
     )
 
 
@@ -708,7 +724,7 @@ def _load(args: argparse.Namespace):
         # the caller is written to report.
         return settings, *_open(settings, args)
     settings = apply_config_args(
-        pyjj.UserSettings.for_repo(probe.repo_path, probe.workspace_root)
+        pyjj.UserSettings.for_repo(probe.repo_path, probe.workspace_root), probe
     )
     ws, repo = _open(settings, args)
     return settings, ws, repo

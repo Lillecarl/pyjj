@@ -56,6 +56,8 @@ import anyio.lowlevel
 import anyio.to_thread
 import pyjj_bindings as _bindings
 
+from . import extensions
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Sequence
     from types import TracebackType
@@ -117,6 +119,9 @@ def open(path: str | None = None) -> Repo:
         raise
     settings = _bindings.UserSettings.for_repo(
         workspace.repo_path, workspace.workspace_root)
+    identity = extensions.identity_config(settings, workspace)
+    if identity:
+        settings = settings.with_command_args(identity)
     # Reloaded under the full settings, the way the CLI does it.
     workspace = _bindings.Workspace.load(settings, root)
     return Repo(workspace, settings)
