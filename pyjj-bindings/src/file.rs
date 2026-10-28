@@ -3,7 +3,9 @@ use pyo3::prelude::*;
 
 use jj_lib::backend::MergedTreeValueExt as _;
 use jj_lib::backend::TreeValue;
-use jj_lib::fileset::{FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext};
+use jj_lib::fileset::{
+    FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext,
+};
 use jj_lib::ui_path::RepoPathUiConverter;
 
 use crate::commit::PyCommit;
@@ -68,9 +70,8 @@ pub fn parent_contents(
         let value = crate::tree::tree_value(&tree, &repo_path)?;
         let content = match value.as_resolved() {
             Some(Some(TreeValue::File { id, .. })) => {
-                let mut reader =
-                    pollster::block_on(commit.inner.store().read_file(&repo_path, id))
-                        .map_err(map_backend_err)?;
+                let mut reader = pollster::block_on(commit.inner.store().read_file(&repo_path, id))
+                    .map_err(map_backend_err)?;
                 let mut buf = Vec::new();
                 pollster::block_on(reader.read_to_end(&mut buf))
                     .map_err(|err| JjError::new_err(err.to_string()))?;
@@ -191,9 +192,8 @@ pub fn match_filesets(
     let mut diagnostics = FilesetDiagnostics::new();
     let mut expressions = Vec::with_capacity(patterns.len());
     for pattern in &patterns {
-        let expression =
-            jj_lib::fileset::parse_maybe_bare(&mut diagnostics, pattern, &context)
-                .map_err(|err| JjError::new_err(err.to_string()))?;
+        let expression = jj_lib::fileset::parse_maybe_bare(&mut diagnostics, pattern, &context)
+            .map_err(|err| JjError::new_err(err.to_string()))?;
         expressions.push(expression);
     }
     let expression = FilesetExpression::union_all(expressions);
@@ -206,8 +206,7 @@ pub fn match_filesets(
     }
     let mut unmatched = Vec::new();
     for path in expression.explicit_paths() {
-        let value =
-            pollster::block_on(tree.path_value(path)).map_err(map_backend_err)?;
+        let value = pollster::block_on(tree.path_value(path)).map_err(map_backend_err)?;
         if value.is_absent() {
             unmatched.push(path.as_internal_file_string().to_string());
         }

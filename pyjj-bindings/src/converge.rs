@@ -13,7 +13,12 @@ use crate::repo::PyTransaction;
 use crate::settings::PyUserSettings;
 
 /// One divergent change: a change id naming two or more visible commits.
-#[pyclass(name = "DivergentChange", module = "pyjj_bindings", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "DivergentChange",
+    module = "pyjj_bindings",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub struct PyDivergentChange {
     change_id: PyChangeId,
@@ -103,7 +108,12 @@ converged_attribute!(
 /// carries the handle from one `converge()` call into the next (or into
 /// `apply_converge_solution()`), mirroring how the CLI threads
 /// `TreeIdsAndLabels` through its two `converge_change` calls.
-#[pyclass(name = "ConvergeTree", module = "pyjj_bindings", frozen, from_py_object)]
+#[pyclass(
+    name = "ConvergeTree",
+    module = "pyjj_bindings",
+    frozen,
+    from_py_object
+)]
 #[derive(Clone)]
 pub struct PyConvergeTree {
     pub(crate) inner: jj_lib::converge::TreeIdsAndLabels,
@@ -112,7 +122,12 @@ pub struct PyConvergeTree {
 /// The proposed solution for converging one change: a solved-or-not
 /// verdict per attribute, plus the tree (absent until the parents are
 /// settled -- see `jj_lib::converge::converge_change`).
-#[pyclass(name = "ConvergeResult", module = "pyjj_bindings", frozen, skip_from_py_object)]
+#[pyclass(
+    name = "ConvergeResult",
+    module = "pyjj_bindings",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub struct PyConvergeResult {
     author: PyConvergedAuthor,

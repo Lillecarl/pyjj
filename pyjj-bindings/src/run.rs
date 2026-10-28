@@ -126,9 +126,7 @@ impl PyRunPool {
             .map(|patterns| {
                 patterns
                     .iter()
-                    .map(|p| {
-                        crate::tree::repo_path(p)
-                    })
+                    .map(|p| crate::tree::repo_path(p))
                     .collect::<PyResult<Vec<_>>>()
             })
             .transpose()?;
@@ -157,7 +155,9 @@ impl PyRunPool {
             .map(|secs| {
                 std::time::Duration::try_from_secs_f64(secs.max(0.0))
                     .map(|wait| std::time::Instant::now() + wait)
-                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(format!("invalid timeout: {secs}")))
+                    .map_err(|_| {
+                        pyo3::exceptions::PyValueError::new_err(format!("invalid timeout: {secs}"))
+                    })
             })
             .transpose()?;
         py.detach(|| self.acquire_inner(&commit.inner, deadline))
@@ -309,9 +309,7 @@ fn remove_newly_ignored_files(
         remove_if_present(&path.to_fs_path_unchecked(working_copy_dir))?;
     }
     if !added_paths.is_empty() {
-        tree_state
-            .check_out(&original_tree)
-            .map_err(map_py_err)?;
+        tree_state.check_out(&original_tree).map_err(map_py_err)?;
     }
     Ok(())
 }
@@ -369,9 +367,10 @@ impl PyRunSlot {
     fn finish(&mut self, py: Python<'_>, success: bool) -> PyResult<(bool, Option<PyTreeId>)> {
         let base_ignores = self.base_ignores.clone();
         let working_copy_dir = self.working_copy_dir.clone();
-        let tree_state = self.tree_state.as_mut().ok_or_else(|| {
-            crate::errors::JjError::new_err("run slot already released")
-        })?;
+        let tree_state = self
+            .tree_state
+            .as_mut()
+            .ok_or_else(|| crate::errors::JjError::new_err("run slot already released"))?;
         let result = py.detach(|| {
             let options = snapshot_options(&base_ignores);
             let (dirty, stats) =

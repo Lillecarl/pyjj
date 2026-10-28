@@ -12,7 +12,9 @@ use pyo3::prelude::*;
 
 use jj_lib::backend::{CommitId, FileId, SymlinkId, TreeId, TreeValue};
 use jj_lib::default_index::{DefaultIndexStore, DefaultReadonlyIndex};
-use jj_lib::fileset::{self, FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext};
+use jj_lib::fileset::{
+    self, FilesetAliasesMap, FilesetDiagnostics, FilesetExpression, FilesetParseContext,
+};
 use jj_lib::local_working_copy::LocalWorkingCopy;
 use jj_lib::merge::Merge;
 use jj_lib::object_id::ObjectId as _;
@@ -71,7 +73,9 @@ fn union_filesets(
 fn head_operation(loader: &RepoLoader) -> PyResult<Operation> {
     let heads = pollster::block_on(loader.op_heads_store().get_op_heads()).map_err(err)?;
     let [head] = heads.as_slice() else {
-        return Err(err("Concurrent operations; run any jj command to merge them first"));
+        return Err(err(
+            "Concurrent operations; run any jj command to merge them first",
+        ));
     };
     pollster::block_on(loader.load_operation(head)).map_err(err)
 }
@@ -94,8 +98,13 @@ pub fn debug_revset(
     no_optimize: bool,
 ) -> PyResult<String> {
     let mut out = String::new();
-    let expression =
-        crate::revset::parse_revset(repo.inner.store(), &repo.workspace_root, &repo.workspace_name, settings, revision)?;
+    let expression = crate::revset::parse_revset(
+        repo.inner.store(),
+        &repo.workspace_root,
+        &repo.workspace_name,
+        settings,
+        revision,
+    )?;
     writeln!(out, "-- Parsed:\n{expression:#?}\n").unwrap();
     if no_resolve && no_optimize {
         return Ok(out);
@@ -142,7 +151,9 @@ pub fn debug_fileset(
 ) -> PyResult<String> {
     let expression = union_filesets(settings, &converter(workspace_root, cwd), &[path])?;
     let matcher = expression.to_matcher();
-    Ok(format!("-- Parsed:\n{expression:#?}\n\n-- Matcher:\n{matcher:#?}\n"))
+    Ok(format!(
+        "-- Parsed:\n{expression:#?}\n\n-- Matcher:\n{matcher:#?}\n"
+    ))
 }
 
 /// `jj debug tree`: the entries of `commit`'s tree, or of the tree `id`
@@ -255,7 +266,8 @@ pub fn debug_object_view(
 /// The resolved tree value at `path` in `commit`, for `debug object
 /// file/symlink/tree --revision`.
 fn resolved_value(commit: &PyCommit, path: &RepoPathBuf) -> PyResult<Option<TreeValue>> {
-    let value = pollster::block_on(commit.inner.tree().path_value(path)).map_err(map_backend_err)?;
+    let value =
+        pollster::block_on(commit.inner.tree().path_value(path)).map_err(map_backend_err)?;
     Ok(value.into_resolved().ok().flatten())
 }
 
@@ -348,7 +360,8 @@ pub fn debug_index(workspace: &PyWorkspace) -> PyResult<String> {
     let loader = ws.repo_loader();
     let op = head_operation(loader)?;
     let index_store = loader.index_store();
-    let index = pollster::block_on(index_store.get_index_at_op(&op, loader.store())).map_err(err)?;
+    let index =
+        pollster::block_on(index_store.get_index_at_op(&op, loader.store())).map_err(err)?;
     let Some(index) = index.downcast_ref::<DefaultReadonlyIndex>() else {
         return Err(err(format!(
             "Cannot get stats for indexes of type '{}'",
@@ -360,7 +373,12 @@ pub fn debug_index(workspace: &PyWorkspace) -> PyResult<String> {
     writeln!(out, "=== Commits ===").unwrap();
     writeln!(out, "Number of commits: {}", stats.num_commits).unwrap();
     writeln!(out, "Number of merges: {}", stats.num_merges).unwrap();
-    writeln!(out, "Max generation number: {}", stats.max_generation_number).unwrap();
+    writeln!(
+        out,
+        "Max generation number: {}",
+        stats.max_generation_number
+    )
+    .unwrap();
     writeln!(out, "Number of heads: {}", stats.num_heads).unwrap();
     writeln!(out, "Number of changes: {}", stats.num_changes).unwrap();
     writeln!(out, "Stats per level:").unwrap();
@@ -378,7 +396,12 @@ pub fn debug_index(workspace: &PyWorkspace) -> PyResult<String> {
     for (i, level) in stats.changed_path_levels.iter().enumerate() {
         writeln!(out, "  Level {i}:").unwrap();
         writeln!(out, "    Number of commits: {}", level.num_commits).unwrap();
-        writeln!(out, "    Number of changed paths: {}", level.num_changed_paths).unwrap();
+        writeln!(
+            out,
+            "    Number of changed paths: {}",
+            level.num_changed_paths
+        )
+        .unwrap();
         writeln!(out, "    Number of paths: {}", level.num_paths).unwrap();
         writeln!(out, "    Name: {}", level.name).unwrap();
     }
@@ -417,7 +440,10 @@ pub fn debug_index_changed_paths(
     ))
     .map_err(err)?;
     // jj unwraps here; a library returns `None` when nothing is indexed.
-    Ok(index.stats().changed_path_commits_range.map(|range| format!("{range:?}")))
+    Ok(index
+        .stats()
+        .changed_path_commits_range
+        .map(|range| format!("{range:?}")))
 }
 
 /// `jj debug stacked-table`.
@@ -435,7 +461,12 @@ pub fn debug_stacked_table(dir: &str, key_size: usize) -> PyResult<String> {
     writeln!(out, "Stats per level:").unwrap();
     for (i, table) in segments.iter().enumerate() {
         writeln!(out, "  Level {i}:").unwrap();
-        writeln!(out, "    Number of entries: {}", table.segment_num_entries()).unwrap();
+        writeln!(
+            out,
+            "    Number of entries: {}",
+            table.segment_num_entries()
+        )
+        .unwrap();
         writeln!(out, "    Name: {}", table.name()).unwrap();
     }
     Ok(out)
@@ -481,7 +512,10 @@ pub fn debug_watchman(
     let mut out = String::new();
     let internal = |e: &dyn std::fmt::Display| Some((format!("Internal error: {e}"), 255));
     let not_local = || {
-        Some(("Error: This command requires a standard local-disk working copy".to_owned(), 1))
+        Some((
+            "Error: This command requires a standard local-disk working copy".to_owned(),
+            1,
+        ))
     };
     let default_config = WatchmanConfig {
         register_trigger: false,
@@ -507,7 +541,11 @@ pub fn debug_watchman(
                     out,
                     "Background snapshotting is {}. Use \
                      `fsmonitor.watchman.register-snapshot-trigger` to control it.",
-                    if config.register_trigger { "enabled" } else { "disabled" }
+                    if config.register_trigger {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
                 )
                 .unwrap();
                 config
@@ -518,7 +556,11 @@ pub fn debug_watchman(
                     r#"Watchman is disabled. Set `fsmonitor.backend="watchman"` to enable."#
                 )
                 .unwrap();
-                writeln!(out, "Attempting to contact the `watchman` CLI regardless...").unwrap();
+                writeln!(
+                    out,
+                    "Attempting to contact the `watchman` CLI regardless..."
+                )
+                .unwrap();
                 default_config
             }
             other => {
@@ -541,8 +583,11 @@ pub fn debug_watchman(
     };
     match subcommand {
         "status" => {
-            writeln!(out, "The watchman server seems to be installed and working correctly.")
-                .unwrap();
+            writeln!(
+                out,
+                "The watchman server seems to be installed and working correctly."
+            )
+            .unwrap();
             let active = match pollster::block_on(wc.is_watchman_trigger_registered(&config)) {
                 Ok(active) => active,
                 Err(e) => return Ok((out, String::new(), internal(&e))),

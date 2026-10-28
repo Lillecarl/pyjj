@@ -35,11 +35,17 @@ use crate::errors::{JjError, map_backend_err, map_py_err};
 /// operations added, the head among them.
 pub fn gc(repo: &PyReadonlyRepo, max_age_secs: f64) -> PyResult<()> {
     // Not `f64::max`: it maps NaN to 0, which is "expire now".
-    let age = if max_age_secs < 0.0 { 0.0 } else { max_age_secs };
+    let age = if max_age_secs < 0.0 {
+        0.0
+    } else {
+        max_age_secs
+    };
     let keep_newer = Duration::try_from_secs_f64(age)
         .ok()
         .and_then(|age| SystemTime::now().checked_sub(age))
-        .ok_or_else(|| PyValueError::new_err(format!("max_age_secs out of range: {max_age_secs}")))?;
+        .ok_or_else(|| {
+            PyValueError::new_err(format!("max_age_secs out of range: {max_age_secs}"))
+        })?;
     let inner = repo.inner.as_ref();
     let heads = pollster::block_on(get_current_head_ops(
         inner.op_store(),

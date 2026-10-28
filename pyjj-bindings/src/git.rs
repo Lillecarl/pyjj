@@ -3,15 +3,15 @@ use std::io;
 
 use pyo3::prelude::*;
 
+use jj_lib::config::ConfigGetError;
 use jj_lib::git::{
     self, GitFetch, GitFetchRefExpression, GitImportOptions, GitProgress, GitPushOptions,
     GitPushRefTargets, GitSidebandLineTerminator, GitSubprocessCallback,
 };
-use jj_lib::config::ConfigGetError;
 use jj_lib::merge::Diff;
-use jj_lib::settings::{RemoteSettings, RemoteSettingsMap};
 use jj_lib::ref_name::{RefName, RefNameBuf, RemoteName};
 use jj_lib::repo::{MutableRepo, Repo as _};
+use jj_lib::settings::{RemoteSettings, RemoteSettingsMap};
 use jj_lib::str_util::StringExpression;
 
 use crate::errors::{
@@ -116,11 +116,15 @@ pub fn reset_head(
     };
     let commit = pollster::block_on(mut_repo.store().get_commit_async(&id))
         .map_err(crate::errors::map_backend_err)?;
-    pollster::block_on(git::reset_head(mut_repo, name.as_ref(), workspace_root, &commit))
-        .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
+    pollster::block_on(git::reset_head(
+        mut_repo,
+        name.as_ref(),
+        workspace_root,
+        &commit,
+    ))
+    .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
     Ok(())
 }
-
 
 /// Reflect bookmark/tag changes made in the jj view into the underlying
 /// (colocated) Git repo's refs. Returns a summary dict.
@@ -134,7 +138,10 @@ pub fn export_refs_only(mut_repo: &mut MutableRepo) -> PyResult<()> {
 pub fn export_refs(mut_repo: &mut MutableRepo) -> PyResult<PyGitExportStats> {
     let stats = git::export_refs(mut_repo).map_err(map_git_export_err)?;
     let symbols = |failed: &[(jj_lib::ref_name::RemoteRefSymbolBuf, _)]| {
-        failed.iter().map(|(symbol, _)| symbol.to_string()).collect()
+        failed
+            .iter()
+            .map(|(symbol, _)| symbol.to_string())
+            .collect()
     };
     Ok(PyGitExportStats {
         failed_bookmarks: symbols(&stats.failed_bookmarks),
@@ -245,11 +252,7 @@ pub fn untrack_remote_bookmark(mut_repo: &mut MutableRepo, remote: &str, bookmar
 
 /// `jj tag track` equivalent for one remote tag: a tracked remote tag
 /// merges into the local tag of the same name on the next fetch.
-pub fn track_remote_tag(
-    mut_repo: &mut MutableRepo,
-    remote: &str,
-    tag: &str,
-) -> PyResult<()> {
+pub fn track_remote_tag(mut_repo: &mut MutableRepo, remote: &str, tag: &str) -> PyResult<()> {
     let symbol = RefName::new(tag).to_remote_symbol(RemoteName::new(remote));
     pollster::block_on(mut_repo.track_remote_tag(symbol)).map_err(map_py_err)
 }
@@ -302,31 +305,38 @@ fn fetch_expressions(
     let is_specific = branches.is_some() || tags.is_some();
     let remote = remote_settings(settings)?.remove(remote_name);
     let configured = |text: Option<&String>, field: &str| {
-        text.map(|text| remote_expression(remote_name, text, field)).transpose()
+        text.map(|text| remote_expression(remote_name, text, field))
+            .transpose()
     };
     let bookmark = match branches {
         Some(patterns) => bookmark_expression(Some(patterns))?,
         None if is_specific => StringExpression::none(),
-        None => if let Some(expr) =
-            configured(remote.as_ref().and_then(|r| r.fetch_bookmarks.as_ref()), "fetch-bookmarks")?
-        {
-            expr
-        } else {
-            let git_repo = git::get_git_backend(mut_repo.store())
-                .map_err(map_py_err)?
-                .git_repo();
-            // The second half is the refspecs jj cannot express, which
-            // it warns about. There is no ui here, so they are dropped.
-            let (_ignored, expr) =
-                git::load_default_fetch_bookmarks(remote_name, &git_repo).map_err(map_py_err)?;
-            expr
-        },
+        None => {
+            if let Some(expr) = configured(
+                remote.as_ref().and_then(|r| r.fetch_bookmarks.as_ref()),
+                "fetch-bookmarks",
+            )? {
+                expr
+            } else {
+                let git_repo = git::get_git_backend(mut_repo.store())
+                    .map_err(map_py_err)?
+                    .git_repo();
+                // The second half is the refspecs jj cannot express, which
+                // it warns about. There is no ui here, so they are dropped.
+                let (_ignored, expr) = git::load_default_fetch_bookmarks(remote_name, &git_repo)
+                    .map_err(map_py_err)?;
+                expr
+            }
+        }
     };
     let tag = match tags {
         Some(patterns) => bookmark_expression(Some(patterns))?,
         None if is_specific => StringExpression::none(),
-        None => configured(remote.as_ref().and_then(|r| r.fetch_tags.as_ref()), "fetch-tags")?
-            .unwrap_or_else(StringExpression::all),
+        None => configured(
+            remote.as_ref().and_then(|r| r.fetch_tags.as_ref()),
+            "fetch-tags",
+        )?
+        .unwrap_or_else(StringExpression::all),
     };
     Ok((bookmark, tag))
 }
@@ -415,7 +425,11 @@ impl PyGitImportStats {
             rewritten_commits: stats.rewritten_commit_ids.len(),
             changed_remote_bookmarks: stats.changed_remote_bookmarks.len(),
             changed_remote_tags: stats.changed_remote_tags.len(),
-            failed_ref_names: stats.failed_ref_names.iter().map(|n| n.to_string()).collect(),
+            failed_ref_names: stats
+                .failed_ref_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect(),
             default_branch: default_branch.map(|name| name.as_str().to_owned()),
         }
     }
@@ -517,7 +531,11 @@ pub fn push_updates(
     mut_repo: &mut MutableRepo,
     settings: &PyUserSettings,
     remote: &str,
-    updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
+    updates: Vec<(
+        String,
+        Option<crate::ids::PyCommitId>,
+        Option<crate::ids::PyCommitId>,
+    )>,
     push_options: Vec<String>,
 ) -> PyResult<PyGitPushStats> {
     if let Some((name, _, _)) = updates.iter().find(|(_, before, after)| before == after) {
@@ -579,24 +597,27 @@ impl From<git::GitPushStats> for PyGitPushStats {
                 .collect()
         };
         Self {
-            pushed: stats.pushed.iter().map(|name| name.as_str().to_owned()).collect(),
+            pushed: stats
+                .pushed
+                .iter()
+                .map(|name| name.as_str().to_owned())
+                .collect(),
             rejected: refs(stats.rejected),
             remote_rejected: refs(stats.remote_rejected),
             unexported: stats
                 .unexported_bookmarks
                 .into_iter()
                 .map(|(symbol, reason)| {
-                    let chain = std::iter::successors(
-                        Some(&reason as &dyn std::error::Error),
-                        |err| err.source(),
-                    )
-                    .map(|err| err.to_string())
-                    .collect::<Vec<_>>()
-                    .join(": ");
+                    let chain =
+                        std::iter::successors(Some(&reason as &dyn std::error::Error), |err| {
+                            err.source()
+                        })
+                        .map(|err| err.to_string())
+                        .collect::<Vec<_>>()
+                        .join(": ");
                     (symbol.to_string(), chain)
                 })
                 .collect(),
         }
     }
 }
-

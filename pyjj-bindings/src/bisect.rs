@@ -102,7 +102,8 @@ pub struct PyBisector {
 impl PyBisector {
     /// Rebuild a real `Bisector` holding this object's state. See the
     /// module docs for why the replay order is bad, good, skipped.
-    fn rebuild(&self) -> PyResult<Bisector<'_>> {        let mut bisector = pollster::block_on(Bisector::new(
+    fn rebuild(&self) -> PyResult<Bisector<'_>> {
+        let mut bisector = pollster::block_on(Bisector::new(
             self.repo.as_ref(),
             self.input_range.clone(),
             false,
@@ -135,7 +136,11 @@ impl PyBisector {
     /// unioned, matching `jj bisect run`'s repeatable `--range`.
     #[new]
     #[pyo3(signature = (repo, settings, revisions))]
-    fn new(repo: &PyReadonlyRepo, settings: &PyUserSettings, revisions: Vec<String>) -> PyResult<Self> {
+    fn new(
+        repo: &PyReadonlyRepo,
+        settings: &PyUserSettings,
+        revisions: Vec<String>,
+    ) -> PyResult<Self> {
         if revisions.is_empty() {
             return Err(PyValueError::new_err("bisect needs at least one range"));
         }
@@ -310,8 +315,12 @@ impl PyBisector {
                 .then(|| format!("commit {} is already marked {name}", commit_id.hex()))
         };
         let clash = match evaluation {
-            Evaluation::Good => conflict(&self.bad, "bad").or_else(|| conflict(&self.skipped, "skipped")),
-            Evaluation::Bad => conflict(&self.good, "good").or_else(|| conflict(&self.skipped, "skipped")),
+            Evaluation::Good => {
+                conflict(&self.bad, "bad").or_else(|| conflict(&self.skipped, "skipped"))
+            }
+            Evaluation::Bad => {
+                conflict(&self.good, "good").or_else(|| conflict(&self.skipped, "skipped"))
+            }
             Evaluation::Skip => conflict(&self.good, "good").or_else(|| conflict(&self.bad, "bad")),
             Evaluation::Abort => conflict(&self.good, "good")
                 .or_else(|| conflict(&self.bad, "bad"))

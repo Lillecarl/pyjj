@@ -8,8 +8,9 @@ use jj_lib::dsl_util::{AliasDeclarationParser, AliasesMap};
 use jj_lib::fileset::FilesetAliasesMap;
 use jj_lib::repo::Repo as _;
 use jj_lib::revset::{
-    self, ResolvedRevset, ResolvedRevsetExpression, RevsetAliasesMap, RevsetDiagnostics, RevsetExtensions,
-    RevsetParseContext, RevsetStreamExt as _, RevsetWorkspaceContext, SymbolResolver,
+    self, ResolvedRevset, ResolvedRevsetExpression, RevsetAliasesMap, RevsetDiagnostics,
+    RevsetExtensions, RevsetParseContext, RevsetStreamExt as _, RevsetWorkspaceContext,
+    SymbolResolver,
 };
 use jj_lib::ui_path::RepoPathUiConverter;
 
@@ -79,7 +80,11 @@ where
                         item.type_name()
                     )
                 })
-                .and_then(|v| aliases_map.insert(decl, v, None).map_err(|e: P::Error| e.to_string()));
+                .and_then(|v| {
+                    aliases_map
+                        .insert(decl, v, None)
+                        .map_err(|e: P::Error| e.to_string())
+                });
             if let Err(error) = loaded {
                 warnings.push(format!("Failed to load `{table_name}.{decl}`: {error}"));
             }
@@ -201,8 +206,13 @@ fn resolve_user_revset<'a>(
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<ResolvedRevset<'a>> {
-    let expression =
-        parse_user_revset(repo.store(), settings, workspace_root, workspace_name, revision)?;
+    let expression = parse_user_revset(
+        repo.store(),
+        settings,
+        workspace_root,
+        workspace_name,
+        revision,
+    )?;
     let extensions = RevsetExtensions::new();
     let symbol_resolver = SymbolResolver::new(repo, extensions.symbol_resolvers());
     expression
@@ -236,9 +246,11 @@ pub fn resolve_revset(
     settings: &PyUserSettings,
     revision: &str,
 ) -> PyResult<Arc<ResolvedRevsetExpression>> {
-    Ok(resolve_user_revset(repo, workspace_root, workspace_name, settings, revision)?
-        .into_inner()
-        .0)
+    Ok(
+        resolve_user_revset(repo, workspace_root, workspace_name, settings, revision)?
+            .into_inner()
+            .0,
+    )
 }
 
 /// Parses a revset expression *without* resolving its symbols, which is

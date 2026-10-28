@@ -56,7 +56,10 @@ pub(crate) fn edge_type_str(edge_type: GraphEdgeType) -> &'static str {
 /// them are hidden -- a rewrite leaves its earlier version behind. No
 /// revset expression reaches those, but naming their ids does, which is
 /// exactly what jj itself does here (`RevsetExpression::commits`).
-pub fn commits_graph(repo: &PyReadonlyRepo, commit_ids: Vec<PyCommitId>) -> PyResult<Vec<PyGraphNode>> {
+pub fn commits_graph(
+    repo: &PyReadonlyRepo,
+    commit_ids: Vec<PyCommitId>,
+) -> PyResult<Vec<PyGraphNode>> {
     let repo_ref = repo.inner.as_ref();
     let ids = commit_ids.into_iter().map(|id| id.0).collect();
     let expr: std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression> =

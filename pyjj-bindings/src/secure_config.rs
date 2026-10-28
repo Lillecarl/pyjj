@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 
-use crate::errors::{map_py_err, JjError};
+use crate::errors::{JjError, map_py_err};
 
 /// Which of jj's two id-indirected scopes a call means.
 ///
@@ -33,11 +33,7 @@ pub(crate) fn scoped(
     let root = crate::config::secure_config_root(match kind {
         "repo" => "repos",
         "workspace" => "workspaces",
-        other => {
-            return Err(JjError::new_err(format!(
-                "unknown config scope `{other}`"
-            )))
-        }
+        other => return Err(JjError::new_err(format!("unknown config scope `{other}`"))),
     })
     .ok_or_else(|| JjError::new_err("no platform config directory"))?;
     let config = match kind {
@@ -62,7 +58,12 @@ pub fn secure_config_file(
     kind: &str,
     create: bool,
 ) -> PyResult<Option<String>> {
-    let loaded = load_scoped(Path::new(workspace_root), Path::new(repo_path), kind, create)?;
+    let loaded = load_scoped(
+        Path::new(workspace_root),
+        Path::new(repo_path),
+        kind,
+        create,
+    )?;
     Ok(loaded
         .config_file
         .map(|path| path.to_string_lossy().into_owned()))

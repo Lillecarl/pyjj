@@ -15,9 +15,14 @@ use crate::errors::map_backend_err;
 /// root. Raises `ValueError` for a malformed path, and for `.` or `..`
 /// components, which no tree jj builds contains.
 pub(crate) fn repo_path(path: &str) -> PyResult<RepoPathBuf> {
-    let invalid = |why: &str| PyValueError::new_err(format!("invalid repository path {path:?}: {why}"));
-    let parsed = RepoPathBuf::from_internal_string(path).map_err(|err| invalid(&err.to_string()))?;
-    if parsed.components().any(|c| matches!(c.as_internal_str(), "." | "..")) {
+    let invalid =
+        |why: &str| PyValueError::new_err(format!("invalid repository path {path:?}: {why}"));
+    let parsed =
+        RepoPathBuf::from_internal_string(path).map_err(|err| invalid(&err.to_string()))?;
+    if parsed
+        .components()
+        .any(|c| matches!(c.as_internal_str(), "." | ".."))
+    {
         return Err(invalid("`.` and `..` are not path components"));
     }
     Ok(parsed)
@@ -33,7 +38,10 @@ pub(crate) fn repo_file_path(path: &str) -> PyResult<RepoPathBuf> {
     if parsed.is_root() {
         return Err(PyValueError::new_err("empty repository path"));
     }
-    if parsed.components().any(|c| matches!(c.as_internal_str(), ".git" | ".jj")) {
+    if parsed
+        .components()
+        .any(|c| matches!(c.as_internal_str(), ".git" | ".jj"))
+    {
         return Err(PyValueError::new_err(format!(
             "invalid repository path {path:?}: `.git` and `.jj` are reserved"
         )));
@@ -393,18 +401,9 @@ pub fn diff_stats(
                 (true, false) => "removed",
                 _ => "modified",
             };
-            let before = read_side(
-                entry.path.source(),
-                values.before,
-                &materialize_options,
-            )
-            .await?;
-            let after = read_side(
-                entry.path.target(),
-                values.after,
-                &materialize_options,
-            )
-            .await?;
+            let before =
+                read_side(entry.path.source(), values.before, &materialize_options).await?;
+            let after = read_side(entry.path.target(), values.after, &materialize_options).await?;
 
             let (added, removed) = if before.is_binary || after.is_binary {
                 (None, None)
@@ -446,8 +445,8 @@ async fn read_side(
     options: &jj_lib::conflicts::ConflictMaterializeOptions,
 ) -> PyResult<jj_lib::diff_presentation::FileContent<bstr::BString>> {
     use bstr::BString;
-    use jj_lib::conflicts::{materialize_merge_result_to_bytes, MaterializedTreeValue};
-    use jj_lib::diff_presentation::{file_content_for_diff, FileContent};
+    use jj_lib::conflicts::{MaterializedTreeValue, materialize_merge_result_to_bytes};
+    use jj_lib::diff_presentation::{FileContent, file_content_for_diff};
 
     Ok(match value {
         MaterializedTreeValue::File(mut file) => {

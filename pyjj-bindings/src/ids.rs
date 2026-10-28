@@ -4,7 +4,15 @@ use jj_lib::backend::{ChangeId, CommitId, FileId, Signature, Timestamp, TreeId};
 use jj_lib::object_id::ObjectId as _;
 
 /// A commit's content hash — changes when the commit is rewritten.
-#[pyclass(name = "CommitId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[pyclass(
+    name = "CommitId",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    ord,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyCommitId(pub(crate) CommitId);
 
@@ -36,8 +44,6 @@ impl PyCommitId {
     fn __str__(&self) -> String {
         self.0.hex()
     }
-
-
 }
 
 impl From<CommitId> for PyCommitId {
@@ -53,7 +59,15 @@ impl From<&CommitId> for PyCommitId {
 }
 
 /// A commit's stable identity — follows the commit across rewrites.
-#[pyclass(name = "ChangeId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[pyclass(
+    name = "ChangeId",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    ord,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyChangeId(pub(crate) ChangeId);
 
@@ -86,8 +100,6 @@ impl PyChangeId {
     fn __str__(&self) -> String {
         self.0.reverse_hex()
     }
-
-
 }
 
 impl From<ChangeId> for PyChangeId {
@@ -97,7 +109,15 @@ impl From<ChangeId> for PyChangeId {
 }
 
 /// A tree object identifier.
-#[pyclass(name = "TreeId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[pyclass(
+    name = "TreeId",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    ord,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyTreeId(pub(crate) TreeId);
 
@@ -117,11 +137,18 @@ impl PyTreeId {
     fn __repr__(&self) -> String {
         format!("TreeId({})", self.0.hex())
     }
-
 }
 
 /// A file content identifier.
-#[pyclass(name = "FileId", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[pyclass(
+    name = "FileId",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    ord,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyFileId(pub(crate) FileId);
 
@@ -141,11 +168,18 @@ impl PyFileId {
     fn __repr__(&self) -> String {
         format!("FileId({})", self.0.hex())
     }
-
 }
 
 /// A timestamp with millisecond precision and a timezone offset.
-#[pyclass(name = "Timestamp", module = "pyjj_bindings", frozen, eq, hash, ord, from_py_object)]
+#[pyclass(
+    name = "Timestamp",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    ord,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PyTimestamp(pub(crate) Timestamp);
 
@@ -173,12 +207,17 @@ impl PyTimestamp {
     fn __repr__(&self) -> String {
         format!("Timestamp({}, {}min)", self.0.timestamp.0, self.0.tz_offset)
     }
-
-
 }
 
 /// The name, email, and timestamp for a commit author or committer.
-#[pyclass(name = "Signature", module = "pyjj_bindings", frozen, eq, hash, from_py_object)]
+#[pyclass(
+    name = "Signature",
+    module = "pyjj_bindings",
+    frozen,
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PySignature(pub(crate) Signature);
 
@@ -211,8 +250,6 @@ impl PySignature {
     fn __repr__(&self) -> String {
         format!("Signature({} <{}>)", self.0.name, self.0.email)
     }
-
-
 }
 
 impl From<Signature> for PySignature {

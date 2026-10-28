@@ -74,12 +74,15 @@ pub fn absorb(
             let commit = &source_commit.inner;
             let parent_tree =
                 pollster::block_on(commit.parent_tree(mut_repo)).map_err(map_py_err)?;
-            let selected =
-                overlay_contents(parent_tree.clone(), Some(&commit.tree()), selections)?;
+            let selected = overlay_contents(parent_tree.clone(), Some(&commit.tree()), selections)?;
             if selected.tree_ids() == parent_tree.tree_ids() {
                 return Err(JjError::new_err("No changes selected"));
             }
-            pollster::block_on(AbsorbSource::from_tree(commit.clone(), selected, parent_tree))
+            pollster::block_on(AbsorbSource::from_tree(
+                commit.clone(),
+                selected,
+                parent_tree,
+            ))
         }
     }
     .map_err(map_py_err)?;

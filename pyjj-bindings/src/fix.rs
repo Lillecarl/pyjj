@@ -73,7 +73,10 @@ fn fix_key(file: &FileToFix) -> String {
     format!(
         "{}:{}:{}",
         file.file_id.hex(),
-        file.base_file_id.as_ref().map(|id| id.hex()).unwrap_or_default(),
+        file.base_file_id
+            .as_ref()
+            .map(|id| id.hex())
+            .unwrap_or_default(),
         file.repo_path.as_internal_file_string()
     )
 }
@@ -127,8 +130,7 @@ pub fn fix_enumerate(
     include_unchanged_files: bool,
     check_immutable: bool,
 ) -> PyResult<Vec<PyFileToFix>> {
-    let root_commits =
-        resolve_root_commits(tx, mut_repo, settings, revset, check_immutable)?;
+    let root_commits = resolve_root_commits(tx, mut_repo, settings, revset, check_immutable)?;
     let matcher = paths_matcher(paths)?;
     let mut fixer = RecordingFixer { files: Vec::new() };
     pollster::block_on(lib_fix_files(

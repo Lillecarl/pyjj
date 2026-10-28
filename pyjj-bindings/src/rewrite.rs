@@ -106,7 +106,12 @@ fn apply_hunks(
         } else if new_content == after {
             commit_value
         } else {
-            file_value(&store, &repo_path, &new_content, [&commit_value, &parent_value])?
+            file_value(
+                &store,
+                &repo_path,
+                &new_content,
+                [&commit_value, &parent_value],
+            )?
         };
         builder.set_or_remove(repo_path, value);
     }
@@ -125,14 +130,20 @@ fn file_value<'a>(
     let (executable, copy_id) = sides
         .into_iter()
         .find_map(|value| match value.as_resolved() {
-            Some(Some(TreeValue::File { executable, copy_id, .. })) => {
-                Some((*executable, copy_id.clone()))
-            }
+            Some(Some(TreeValue::File {
+                executable,
+                copy_id,
+                ..
+            })) => Some((*executable, copy_id.clone())),
             _ => None,
         })
         .unwrap_or((false, jj_lib::backend::CopyId::placeholder()));
     let id = pollster::block_on(store.write_file(path, &mut &*content)).map_err(map_backend_err)?;
-    Ok(Merge::normal(TreeValue::File { id, executable, copy_id }))
+    Ok(Merge::normal(TreeValue::File {
+        id,
+        executable,
+        copy_id,
+    }))
 }
 
 /// Builds the `selected_tree`/`parent_tree` pair `jj_lib::rewrite` needs for
@@ -227,11 +238,8 @@ pub fn squash_edited(
 ) -> PyResult<Option<DetachedCommitBuilder>> {
     let parent_tree =
         pollster::block_on(source.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
-    let selected_tree = overlay_contents(
-        parent_tree.clone(),
-        Some(&source.inner.tree()),
-        selections,
-    )?;
+    let selected_tree =
+        overlay_contents(parent_tree.clone(), Some(&source.inner.tree()), selections)?;
     let selection = CommitWithSelection {
         commit: source.inner.clone(),
         selected_tree,
@@ -322,9 +330,7 @@ pub fn split_selected_edited(
     let parent_tree =
         pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let edited = overlay_contents(parent_tree, Some(&target.inner.tree()), selections)?;
-    let builder = mut_repo
-        .rewrite_commit(&target.inner)
-        .set_tree(edited);
+    let builder = mut_repo.rewrite_commit(&target.inner).set_tree(edited);
     Ok(builder.detach())
 }
 
@@ -383,7 +389,8 @@ pub fn split_remainder_parallel(
     target: &PyCommit,
     first: &PyCommit,
 ) -> PyResult<DetachedCommitBuilder> {
-    let parent_tree = pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
+    let parent_tree =
+        pollster::block_on(target.inner.parent_tree(mut_repo)).map_err(map_backend_err)?;
     let target_tree = target.inner.tree();
     let selected_diff = jj_lib::merge::Diff::new(
         (parent_tree, "parents of split revision".to_string()),
@@ -544,8 +551,9 @@ pub fn restore(
     // merge commit as changing everything its other parents contributed.
     let from_tree = match from_commit {
         Some(commit) => commit.inner.tree(),
-        None => pollster::block_on(into_commit.inner.parent_tree(mut_repo))
-            .map_err(map_backend_err)?,
+        None => {
+            pollster::block_on(into_commit.inner.parent_tree(mut_repo)).map_err(map_backend_err)?
+        }
     };
     let into_tree = into_commit.inner.tree();
     if let Some(paths) = &paths {
@@ -557,12 +565,13 @@ pub fn restore(
         for path in paths {
             let repo_path = crate::tree::repo_file_path(path)?;
             let absent = |tree: &MergedTree| -> PyResult<bool> {
-    let value = crate::tree::tree_value(&tree, &repo_path)?;
+                let value = crate::tree::tree_value(&tree, &repo_path)?;
                 Ok(matches!(value.as_resolved(), Some(None)))
             };
             if absent(&from_tree)? && absent(&into_tree)? {
                 return Err(JjError::new_err(format!(
-                    "{path}: no such file in either revision")));
+                    "{path}: no such file in either revision"
+                )));
             }
         }
     }
@@ -655,7 +664,11 @@ pub fn is_immutable(
     settings: &crate::settings::PyUserSettings,
     id: &CommitId,
 ) -> PyResult<bool> {
-    if settings.0.get_value(["revset-aliases", "immutable()"]).is_err() {
+    if settings
+        .0
+        .get_value(["revset-aliases", "immutable()"])
+        .is_err()
+    {
         return Ok(id == repo.store().root_commit_id());
     }
     let immutable = immutable_set(repo, workspace_root, workspace_name, settings)?;
@@ -670,7 +683,11 @@ pub fn immutable_or_none(
     workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
     settings: &crate::settings::PyUserSettings,
 ) -> PyResult<std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression>> {
-    if settings.0.get_value(["revset-aliases", "immutable()"]).is_err() {
+    if settings
+        .0
+        .get_value(["revset-aliases", "immutable()"])
+        .is_err()
+    {
         return Ok(jj_lib::revset::ResolvedRevsetExpression::none());
     }
     immutable_set(repo, workspace_root, workspace_name, settings)
@@ -682,7 +699,13 @@ fn immutable_set(
     workspace_name: &jj_lib::ref_name::WorkspaceNameBuf,
     settings: &crate::settings::PyUserSettings,
 ) -> PyResult<std::sync::Arc<jj_lib::revset::ResolvedRevsetExpression>> {
-    crate::revset::resolve_revset(repo, workspace_root, workspace_name, settings, "immutable()")
+    crate::revset::resolve_revset(
+        repo,
+        workspace_root,
+        workspace_name,
+        settings,
+        "immutable()",
+    )
 }
 
 /// The first of `ids` that `set` contains.
@@ -827,8 +850,8 @@ pub fn move_commits(
         },
         simplify_ancestor_merge: simplify_parents,
     };
-    let mut computed =
-        pollster::block_on(rewrite::compute_move_commits(mut_repo, &loc)).map_err(map_backend_err)?;
+    let mut computed = pollster::block_on(rewrite::compute_move_commits(mut_repo, &loc))
+        .map_err(map_backend_err)?;
     if !keep_divergent {
         let abandoned = pollster::block_on(rewrite::find_duplicate_divergent_commits(
             mut_repo,

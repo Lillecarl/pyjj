@@ -74,10 +74,7 @@ pub fn changed_line_ranges(base: Option<Vec<u8>>, current: Vec<u8>) -> Vec<(usiz
     } else if let Some(base) = base.as_deref() {
         compute_changed_ranges(base, &current)
     } else {
-        RegionsToFormat::LineRanges(vec![LineRange::new(
-            1,
-            compute_file_line_count(&current),
-        )])
+        RegionsToFormat::LineRanges(vec![LineRange::new(1, compute_file_line_count(&current))])
     };
     let RegionsToFormat::LineRanges(ranges) = regions;
     ranges.into_iter().map(|r| (r.first, r.last)).collect()
@@ -193,8 +190,8 @@ pub fn unified_hunks(
     compare: &str,
 ) -> PyResult<Vec<PyUnifiedHunk>> {
     use bstr::BStr;
-    use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
     use jj_lib::diff_presentation::DiffTokenType;
+    use jj_lib::diff_presentation::unified::{DiffLineType, unified_diff_hunks};
     use jj_lib::merge::Diff;
 
     // "If the chunk size is 0, the first number is one lower than one
@@ -208,37 +205,39 @@ pub fn unified_hunks(
     }
 
     let contents = Diff::new(before, after).map(BStr::new);
-    Ok(unified_diff_hunks(contents, context, compare_mode(compare)?)
-        .into_iter()
-        .map(|hunk| PyUnifiedHunk {
-            left_start: to_line_number(&hunk.left_line_range),
-            left_len: hunk.left_line_range.len(),
-            right_start: to_line_number(&hunk.right_line_range),
-            right_len: hunk.right_line_range.len(),
-            lines: hunk
-                .lines
-                .into_iter()
-                .map(|(line_type, tokens)| {
-                    let kind = match line_type {
-                        DiffLineType::Context => "context",
-                        DiffLineType::Removed => "removed",
-                        DiffLineType::Added => "added",
-                    };
-                    let tokens = tokens
-                        .into_iter()
-                        .map(|(token_type, content)| {
-                            let token_kind = match token_type {
-                                DiffTokenType::Matching => "matching",
-                                DiffTokenType::Different => "different",
-                            };
-                            (token_kind.to_owned(), content.to_vec())
-                        })
-                        .collect();
-                    (kind.to_owned(), tokens)
-                })
-                .collect(),
-        })
-        .collect())
+    Ok(
+        unified_diff_hunks(contents, context, compare_mode(compare)?)
+            .into_iter()
+            .map(|hunk| PyUnifiedHunk {
+                left_start: to_line_number(&hunk.left_line_range),
+                left_len: hunk.left_line_range.len(),
+                right_start: to_line_number(&hunk.right_line_range),
+                right_len: hunk.right_line_range.len(),
+                lines: hunk
+                    .lines
+                    .into_iter()
+                    .map(|(line_type, tokens)| {
+                        let kind = match line_type {
+                            DiffLineType::Context => "context",
+                            DiffLineType::Removed => "removed",
+                            DiffLineType::Added => "added",
+                        };
+                        let tokens = tokens
+                            .into_iter()
+                            .map(|(token_type, content)| {
+                                let token_kind = match token_type {
+                                    DiffTokenType::Matching => "matching",
+                                    DiffTokenType::Different => "different",
+                                };
+                                (token_kind.to_owned(), content.to_vec())
+                            })
+                            .collect();
+                        (kind.to_owned(), tokens)
+                    })
+                    .collect(),
+            })
+            .collect(),
+    )
 }
 
 /// The raw hunks of a content diff: `(kind, before, after)`, where kind
@@ -262,10 +261,7 @@ pub fn content_hunks(
     compare: &str,
 ) -> PyResult<Vec<(String, Vec<u8>, Vec<u8>)>> {
     let diff = match by {
-        "line" => jj_lib::diff_presentation::diff_by_line(
-            [before, after],
-            &compare_mode(compare)?,
-        ),
+        "line" => jj_lib::diff_presentation::diff_by_line([before, after], &compare_mode(compare)?),
         "word" => ContentDiff::by_word([before, after]),
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(

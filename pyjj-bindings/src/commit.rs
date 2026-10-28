@@ -106,10 +106,11 @@ impl PyCommit {
 
     /// Every conflicted path in this commit's tree, as `(path, sides,
     /// adds, objects)`. See `conflicts::conflicted_paths`.
-    fn conflicted_paths(&self, py: Python<'_>) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
-        py.detach(|| {
-            crate::conflicts::conflicted_paths(self)
-        })
+    fn conflicted_paths(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Vec<(String, usize, usize, Vec<String>)>> {
+        py.detach(|| crate::conflicts::conflicted_paths(self))
     }
 
     /// This commit's changes against its parents *merged*, which is what
@@ -126,9 +127,7 @@ impl PyCommit {
         repo: &PyReadonlyRepo,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        py.detach(|| {
-            crate::tree::diff_from_parents(self, repo, paths)
-        })
+        py.detach(|| crate::tree::diff_from_parents(self, repo, paths))
     }
 
     /// Whether this commit is no longer reachable from any visible head.
@@ -203,9 +202,7 @@ impl PyCommit {
         other: &Self,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        py.detach(|| {
-            crate::tree::diff_commits(self, other, paths)
-        })
+        py.detach(|| crate::tree::diff_commits(self, other, paths))
     }
 
     /// `jj diff --stat`'s numbers: lines added and removed at each
@@ -227,9 +224,7 @@ impl PyCommit {
         paths: Option<Vec<String>>,
         compare: &str,
     ) -> PyResult<Vec<crate::tree::PyDiffStat>> {
-        py.detach(|| {
-            crate::tree::diff_stats(self, other, settings, paths, compare)
-        })
+        py.detach(|| crate::tree::diff_stats(self, other, settings, paths, compare))
     }
 
     /// The per-file halves of `jj diff --git`: mode, abbreviated hash and
@@ -247,9 +242,7 @@ impl PyCommit {
         paths: Option<Vec<String>>,
         copies: bool,
     ) -> PyResult<Vec<crate::tree::PyGitDiffFile>> {
-        py.detach(|| {
-            crate::tree::git_diff_files(self, other, settings, paths, copies)
-        })
+        py.detach(|| crate::tree::git_diff_files(self, other, settings, paths, copies))
     }
 
     /// Like `diff()`, but detects copies and renames (backend-dependent —
@@ -262,17 +255,13 @@ impl PyCommit {
         other: &Self,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        py.detach(|| {
-            crate::tree::diff_commits_with_copies(self, other, paths)
-        })
+        py.detach(|| crate::tree::diff_commits_with_copies(self, other, paths))
     }
 
     /// The content of the file (or symlink target) at `path` in this
     /// commit's tree, as `bytes`.
     fn read_file(&self, py: Python<'_>, path: &str) -> PyResult<Vec<u8>> {
-        py.detach(|| {
-            crate::file::read_file(self, path)
-        })
+        py.detach(|| crate::file::read_file(self, path))
     }
 
     /// The bytes at each of `paths` in this commit's *merged parent*
@@ -285,18 +274,14 @@ impl PyCommit {
         repo: &PyReadonlyRepo,
         paths: Vec<String>,
     ) -> PyResult<std::collections::HashMap<String, Option<Vec<u8>>>> {
-        py.detach(|| {
-            crate::file::parent_contents(self, repo, paths)
-        })
+        py.detach(|| crate::file::parent_contents(self, repo, paths))
     }
 
     /// Whether `path` names a regular/executable file or symlink in this
     /// commit's tree (`False` for directories, submodules, absent paths,
     /// and unresolved conflicts).
     fn file_exists(&self, py: Python<'_>, path: &str) -> PyResult<bool> {
-        py.detach(|| {
-            crate::file::file_exists(self, path)
-        })
+        py.detach(|| crate::file::file_exists(self, path))
     }
 
     /// `jj file list [paths]` equivalent — every path in this commit's tree,
@@ -304,9 +289,7 @@ impl PyCommit {
     /// for the path-or-subtree matching rules).
     #[pyo3(signature = (paths=None))]
     fn list_files(&self, py: Python<'_>, paths: Option<Vec<String>>) -> PyResult<Vec<String>> {
-        py.detach(|| {
-            crate::file::list_files(self, paths)
-        })
+        py.detach(|| crate::file::list_files(self, paths))
     }
 
     /// Whether `path` is a regular file with the executable bit set.
@@ -314,9 +297,7 @@ impl PyCommit {
     /// directory, submodule, absent, or conflicted) — see
     /// `pyjj_bindings.file.is_executable` for details.
     fn is_executable(&self, py: Python<'_>, path: &str) -> PyResult<Option<bool>> {
-        py.detach(|| {
-            crate::file::is_executable(self, path)
-        })
+        py.detach(|| crate::file::is_executable(self, path))
     }
 
     /// The kind of tree entry at `path` — `"file"`, `"symlink"`, `"dir"`,
@@ -324,9 +305,7 @@ impl PyCommit {
     /// `"other-conflict"` (see `pyjj_bindings.file.file_kind`).
     #[pyo3(signature = (path) -> "typing.Literal['file', 'symlink', 'dir', 'submodule', 'absent', 'file-conflict', 'other-conflict']")]
     fn file_kind(&self, py: Python<'_>, path: &str) -> PyResult<String> {
-        py.detach(|| {
-            crate::file::file_kind(self, path)
-        })
+        py.detach(|| crate::file::file_kind(self, path))
     }
 
     /// `jj`'s fileset matching against this commit's tree: `(matched,
@@ -339,9 +318,7 @@ impl PyCommit {
         workspace_root: &str,
         patterns: Vec<String>,
     ) -> PyResult<(Vec<String>, Vec<String>)> {
-        py.detach(|| {
-            crate::file::match_filesets(self, settings, workspace_root, patterns)
-        })
+        py.detach(|| crate::file::match_filesets(self, settings, workspace_root, patterns))
     }
 
     /// Renders the conflict at `path` as conflict-marker text, the same
@@ -353,9 +330,7 @@ impl PyCommit {
         settings: &crate::settings::PyUserSettings,
         path: &str,
     ) -> PyResult<Vec<u8>> {
-        py.detach(|| {
-            crate::conflicts::materialize_conflict(self, settings, path)
-        })
+        py.detach(|| crate::conflicts::materialize_conflict(self, settings, path))
     }
 
     /// The raw sides of the file conflict at `path`, as an external 3-way
@@ -371,8 +346,7 @@ impl PyCommit {
         py: Python<'a>,
         path: &str,
     ) -> PyResult<Bound<'a, pyo3::types::PyDict>> {
-        let (base, left, right, executable) =
-            crate::conflicts::conflict_sides(self, path)?;
+        let (base, left, right, executable) = crate::conflicts::conflict_sides(self, path)?;
         let dict = pyo3::types::PyDict::new(py);
         dict.set_item("base", base)?;
         dict.set_item("left", left)?;
@@ -389,9 +363,7 @@ impl PyCommit {
         repo: &PyReadonlyRepo,
         path: &str,
     ) -> PyResult<Vec<crate::annotate::PyAnnotationLine>> {
-        py.detach(|| {
-            crate::annotate::annotate(self, repo, path)
-        })
+        py.detach(|| crate::annotate::annotate(self, repo, path))
     }
 
     fn __repr__(&self) -> String {

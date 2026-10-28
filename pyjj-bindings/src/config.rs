@@ -32,8 +32,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use etcetera::BaseStrategy as _;
-use pyo3::prelude::*;
 use jj_lib::config::{ConfigLayer, ConfigLoadError, ConfigSource, StackedConfig};
+use pyo3::prelude::*;
 
 const OP_HOSTNAME: &str = "operation.hostname";
 const OP_USERNAME: &str = "operation.username";
@@ -267,8 +267,12 @@ pub fn load_config_for_repo(
     let load_err = crate::errors::map_config_err;
     let mut config = load_user_layers().map_err(load_err)?;
     let mut warnings = Vec::new();
-    for (kind, source) in [("repo", ConfigSource::Repo), ("workspace", ConfigSource::Workspace)] {
-        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind, &mut warnings)? {
+    for (kind, source) in [
+        ("repo", ConfigSource::Repo),
+        ("workspace", ConfigSource::Workspace),
+    ] {
+        if let Some(path) = existing_scoped_config(workspace_root, repo_path, kind, &mut warnings)?
+        {
             load_layers_at(&mut config, source, &[path]).map_err(load_err)?;
         }
     }

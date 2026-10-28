@@ -16,7 +16,9 @@ use jj_lib::transaction::Transaction;
 
 use crate::bookmark::PyBookmark;
 use crate::commit::{PyCommit, PyReadonlyRepo};
-use crate::errors::{map_backend_err, map_index_err, map_py_err, map_repo_load_err, map_transaction_err};
+use crate::errors::{
+    map_backend_err, map_index_err, map_py_err, map_repo_load_err, map_transaction_err,
+};
 use crate::ids::{PyChangeId, PyCommitId, PySignature};
 use crate::settings::PyUserSettings;
 
@@ -91,7 +93,6 @@ impl PyReadonlyRepo {
         )?;
         Ok(context.disambiguate_within(expression))
     }
-
 }
 
 #[pymethods]
@@ -103,7 +104,12 @@ impl PyReadonlyRepo {
     /// the settings the repo was loaded with, as in jj_lib.
     fn start_transaction(&self, settings: &PyUserSettings, args: Option<String>) -> PyTransaction {
         PyTransaction {
-            inner: RefCell::new(Some(open_tx(&self.inner, &settings.0, &self.workspace_name, args))),
+            inner: RefCell::new(Some(open_tx(
+                &self.inner,
+                &settings.0,
+                &self.workspace_name,
+                args,
+            ))),
             settings: settings.0.clone(),
             workspace_root: self.workspace_root.clone(),
             workspace_name: self.workspace_name.clone(),
@@ -148,10 +154,13 @@ impl PyReadonlyRepo {
     /// Parse and evaluate a revset expression (e.g. `"@"`, `"main"`,
     /// `"ancestors(@, 5)"`), returning matching commits in topological
     /// (children-before-parents) order.
-    fn revset(&self, py: Python<'_>, settings: &PyUserSettings, revision: &str) -> PyResult<Vec<PyCommit>> {
-        py.detach(|| {
-            crate::revset::evaluate_revset(self, settings, revision)
-        })
+    fn revset(
+        &self,
+        py: Python<'_>,
+        settings: &PyUserSettings,
+        revision: &str,
+    ) -> PyResult<Vec<PyCommit>> {
+        py.detach(|| crate::revset::evaluate_revset(self, settings, revision))
     }
 
     /// `jj converge`'s search half: evaluate `revset` and return the
@@ -164,9 +173,7 @@ impl PyReadonlyRepo {
         settings: &PyUserSettings,
         revset: &str,
     ) -> PyResult<Vec<crate::converge::PyDivergentChange>> {
-        py.detach(|| {
-            crate::converge::divergent_changes_for(self, settings, revset)
-        })
+        py.detach(|| crate::converge::divergent_changes_for(self, settings, revset))
     }
 
     /// Like `revset()`, but each commit comes with edges to its relevant
@@ -182,9 +189,7 @@ impl PyReadonlyRepo {
         revision: &str,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::graph::PyGraphNode>> {
-        py.detach(|| {
-            crate::graph::log_graph(self, settings, revision, limit)
-        })
+        py.detach(|| crate::graph::log_graph(self, settings, revision, limit))
     }
 
     /// The same graph over a set of commits named outright. `jj op diff`
@@ -196,9 +201,7 @@ impl PyReadonlyRepo {
         py: Python<'_>,
         commit_ids: Vec<crate::ids::PyCommitId>,
     ) -> PyResult<Vec<crate::graph::PyGraphNode>> {
-        py.detach(|| {
-            crate::graph::commits_graph(self, commit_ids)
-        })
+        py.detach(|| crate::graph::commits_graph(self, commit_ids))
     }
 
     /// How the given commits evolved: every earlier version of each
@@ -211,9 +214,7 @@ impl PyReadonlyRepo {
         start_commits: Vec<PyCommitId>,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
-        py.detach(|| {
-            crate::evolution::evolution_log(self, start_commits, limit)
-        })
+        py.detach(|| crate::evolution::evolution_log(self, start_commits, limit))
     }
 
     /// The same walk, topologically grouped and carrying graph edges --
@@ -226,9 +227,7 @@ impl PyReadonlyRepo {
         start_commits: Vec<PyCommitId>,
         limit: Option<usize>,
     ) -> PyResult<Vec<crate::evolution::PyEvolutionEntry>> {
-        py.detach(|| {
-            crate::evolution::evolution_graph(self, start_commits, limit)
-        })
+        py.detach(|| crate::evolution::evolution_graph(self, start_commits, limit))
     }
 
     /// All local bookmarks, in lexicographical order.
@@ -277,8 +276,7 @@ impl PyReadonlyRepo {
         py.detach(|| {
             use jj_lib::conflict_labels::ConflictLabels;
             use jj_lib::conflicts::{
-                ConflictMarkerStyle, ConflictMaterializeOptions,
-                materialize_merge_result_to_bytes,
+                ConflictMarkerStyle, ConflictMaterializeOptions, materialize_merge_result_to_bytes,
             };
             let marker_style: ConflictMarkerStyle = settings
                 .0
@@ -290,11 +288,8 @@ impl PyReadonlyRepo {
                 merge: self.inner.store().merge_options().clone(),
             };
             let merge = jj_lib::merge::Merge::from_removes_adds(removes, adds);
-            let out = materialize_merge_result_to_bytes(
-                &merge,
-                &ConflictLabels::unlabeled(),
-                &options,
-            );
+            let out =
+                materialize_merge_result_to_bytes(&merge, &ConflictLabels::unlabeled(), &options);
             Ok(std::borrow::Cow::Owned(out.into()))
         })
     }
@@ -312,7 +307,11 @@ impl PyReadonlyRepo {
                 name: symbol.name.as_str().to_string(),
                 remote: symbol.remote.as_str().to_string(),
                 target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
-                removed_ids: remote_ref.target.present_removes().map(Into::into).collect(),
+                removed_ids: remote_ref
+                    .target
+                    .present_removes()
+                    .map(Into::into)
+                    .collect(),
                 has_conflict: !remote_ref.target.is_resolved(),
                 tracked: remote_ref.is_tracked(),
             })
@@ -356,9 +355,7 @@ impl PyReadonlyRepo {
         to: &PyCommit,
         paths: Option<Vec<String>>,
     ) -> PyResult<Vec<crate::tree::PyDiffEntry>> {
-        py.detach(|| {
-            crate::tree::interdiff_commits(self, from_, to, paths)
-        })
+        py.detach(|| crate::tree::interdiff_commits(self, from_, to, paths))
     }
 
     /// Whether `onto` already holds every change `base` -> `tip` makes,
@@ -393,7 +390,11 @@ impl PyReadonlyRepo {
                 name: symbol.name.as_str().to_string(),
                 remote: symbol.remote.as_str().to_string(),
                 target_ids: remote_ref.target.present_adds().map(Into::into).collect(),
-                removed_ids: remote_ref.target.present_removes().map(Into::into).collect(),
+                removed_ids: remote_ref
+                    .target
+                    .present_removes()
+                    .map(Into::into)
+                    .collect(),
                 has_conflict: !remote_ref.target.is_resolved(),
                 tracked: remote_ref.is_tracked(),
             })
@@ -423,7 +424,12 @@ impl PyReadonlyRepo {
     /// Convenience for revsets expected to resolve to exactly one commit.
     /// Raises `RevsetEvalError` if the revset matched zero or more than one
     /// commit.
-    fn resolve_single(&self, py: Python<'_>, settings: &PyUserSettings, revision: &str) -> PyResult<PyCommit> {
+    fn resolve_single(
+        &self,
+        py: Python<'_>,
+        settings: &PyUserSettings,
+        revision: &str,
+    ) -> PyResult<PyCommit> {
         py.detach(|| {
             let mut commits = crate::revset::evaluate_revset(self, settings, revision)?;
             match commits.len() {
@@ -497,17 +503,17 @@ impl PyReadonlyRepo {
     /// The full operation log, walked backward from `self.operation`,
     /// newest first -- same order as `jj op log`.
     fn operation_log(&self, py: Python<'_>) -> PyResult<Vec<crate::operation::PyOperation>> {
-        py.detach(|| {
-            crate::oplog::operation_log(self.inner.as_ref())
-        })
+        py.detach(|| crate::oplog::operation_log(self.inner.as_ref()))
     }
 
     /// Loads an arbitrary past operation by its full hex id (see
     /// `Operation.id` / `operation_log()`).
-    fn load_operation(&self, py: Python<'_>, op_id: &str) -> PyResult<crate::operation::PyOperation> {
-        py.detach(|| {
-            crate::oplog::load_operation(self.inner.as_ref(), op_id)
-        })
+    fn load_operation(
+        &self,
+        py: Python<'_>,
+        op_id: &str,
+    ) -> PyResult<crate::operation::PyOperation> {
+        py.detach(|| crate::oplog::load_operation(self.inner.as_ref(), op_id))
     }
 
     /// `jj --at-op=<id>` equivalent: loads a full read-only repo view as it
@@ -516,10 +522,14 @@ impl PyReadonlyRepo {
     /// doesn't touch the working copy or move any workspace's current
     /// operation; use `Transaction.restore_operation()` (and commit it) if
     /// you actually want to move the repo backward.
-    fn load_at_operation(&self, py: Python<'_>, op: &crate::operation::PyOperation) -> PyResult<PyReadonlyRepo> {
+    fn load_at_operation(
+        &self,
+        py: Python<'_>,
+        op: &crate::operation::PyOperation,
+    ) -> PyResult<PyReadonlyRepo> {
         py.detach(|| {
-            let repo =
-                pollster::block_on(self.inner.loader().load_at(&op.0)).map_err(map_repo_load_err)?;
+            let repo = pollster::block_on(self.inner.loader().load_at(&op.0))
+                .map_err(map_repo_load_err)?;
             Ok(PyReadonlyRepo {
                 inner: repo,
                 workspace_root: self.workspace_root.clone(),
@@ -551,9 +561,7 @@ impl PyReadonlyRepo {
     /// `ValueError` for a cutoff no clock can represent.
     #[pyo3(signature = (max_age_secs=14.0 * 86400.0))]
     fn gc(&self, py: Python<'_>, max_age_secs: f64) -> PyResult<()> {
-        py.detach(|| {
-            crate::gc::gc(self, max_age_secs)
-        })
+        py.detach(|| crate::gc::gc(self, max_age_secs))
     }
 
     /// Folds `operations` into the single operation their merge
@@ -567,9 +575,7 @@ impl PyReadonlyRepo {
         py: Python<'_>,
         operations: Vec<crate::operation::PyOperation>,
     ) -> PyResult<crate::operation::PyOperation> {
-        py.detach(|| {
-            crate::opdiff::merge_operations(self, operations)
-        })
+        py.detach(|| crate::opdiff::merge_operations(self, operations))
     }
 
     /// `jj op diff`: what changed in the repository between the
@@ -590,9 +596,7 @@ impl PyReadonlyRepo {
         settings: &PyUserSettings,
         changes_in: Option<&str>,
     ) -> PyResult<crate::opdiff::PyOperationDiff> {
-        py.detach(|| {
-            crate::opdiff::operation_diff(other, self, settings, changes_in)
-        })
+        py.detach(|| crate::opdiff::operation_diff(other, self, settings, changes_in))
     }
 
     /// Hex id of the operation this repo view was loaded at.
@@ -779,8 +783,7 @@ impl PyTransaction {
         use jj_lib::ref_name::WorkspaceNameBuf;
         let name = WorkspaceNameBuf::from(workspace_name.as_str());
         let new_commit = with_mut_repo(self, |mut_repo| {
-            pollster::block_on(mut_repo.check_out(name, &commit.inner))
-                .map_err(map_transaction_err)
+            pollster::block_on(mut_repo.check_out(name, &commit.inner)).map_err(map_transaction_err)
         })?;
         Ok(PyCommit {
             inner: new_commit,
@@ -943,7 +946,9 @@ impl PyTransaction {
     /// (colocated) Git repo into this transaction's view.
     fn git_import_refs(&self) -> PyResult<crate::git::PyGitImportStats> {
         let settings = PyUserSettings(self.settings.clone(), Vec::new());
-        with_mut_repo(self, |mut_repo| crate::git::import_refs(mut_repo, &settings))
+        with_mut_repo(self, |mut_repo| {
+            crate::git::import_refs(mut_repo, &settings)
+        })
     }
 
     /// `jj git export` equivalent: reflect bookmark/tag changes made in this
@@ -958,13 +963,13 @@ impl PyTransaction {
     /// exports refs, and it keeps `HEAD` one step behind `@` because `@`
     /// is the commit being written rather than a checked-out one. Does
     /// nothing when the workspace has no working-copy commit here.
-    fn git_reset_head(&self, workspace_name: &str, workspace_root: std::path::PathBuf) -> PyResult<()> {
+    fn git_reset_head(
+        &self,
+        workspace_name: &str,
+        workspace_root: std::path::PathBuf,
+    ) -> PyResult<()> {
         with_mut_repo(self, |mut_repo| {
-            crate::git::reset_head(
-                mut_repo,
-                workspace_name,
-                &workspace_root,
-            )
+            crate::git::reset_head(mut_repo, workspace_name, &workspace_root)
         })
     }
 
@@ -1290,7 +1295,6 @@ impl PyTransaction {
         })
     }
 
-
     /// `jj restore [paths] --from <src> --into <dest>` equivalent. Overwrites
     /// `paths` (or everything) in `into_commit`'s tree with content from
     /// `from_commit`, leaving `from_commit` untouched. Returns a
@@ -1406,8 +1410,14 @@ impl PyTransaction {
     ) -> PyResult<Vec<crate::fix::PyFileToFix>> {
         with_mut_repo(self, |mut_repo| {
             crate::fix::fix_enumerate(
-                self, mut_repo, settings, revset, paths, include_unchanged_files,
-                check_immutable)
+                self,
+                mut_repo,
+                settings,
+                revset,
+                paths,
+                include_unchanged_files,
+                check_immutable,
+            )
         })
     }
 
@@ -1428,7 +1438,15 @@ impl PyTransaction {
         include_unchanged_files: bool,
     ) -> PyResult<crate::fix::PyFixSummary> {
         with_mut_repo(self, |mut_repo| {
-            crate::fix::fix_apply(self, mut_repo, settings, revset, paths, fixes, include_unchanged_files)
+            crate::fix::fix_apply(
+                self,
+                mut_repo,
+                settings,
+                revset,
+                paths,
+                fixes,
+                include_unchanged_files,
+            )
         })
     }
 
@@ -1478,9 +1496,7 @@ impl PyTransaction {
     /// onto its parents -- but only once `rebase_descendants()` is called
     /// afterward, same as every other rewrite here.
     fn abandon_commit(&self, commit: &PyCommit) -> PyResult<()> {
-        with_mut_repo(self, |mut_repo| {
-            crate::rewrite::abandon(mut_repo, commit)
-        })
+        with_mut_repo(self, |mut_repo| crate::rewrite::abandon(mut_repo, commit))
     }
 
     /// `jj run`'s rewrite half: put each command's resulting tree onto
@@ -1603,8 +1619,13 @@ impl PyTransaction {
         String,
     )> {
         with_mut_repo(self, |mut_repo| {
-            let workspace_name = workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
-            crate::oplog::undo(mut_repo, Some(workspace_name.as_str()), allow_cross_workspace)
+            let workspace_name =
+                workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
+            crate::oplog::undo(
+                mut_repo,
+                Some(workspace_name.as_str()),
+                allow_cross_workspace,
+            )
         })
     }
 
@@ -1622,8 +1643,13 @@ impl PyTransaction {
         String,
     )> {
         with_mut_repo(self, |mut_repo| {
-            let workspace_name = workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
-            crate::oplog::redo(mut_repo, Some(workspace_name.as_str()), allow_cross_workspace)
+            let workspace_name =
+                workspace_name.unwrap_or_else(|| self.workspace_name.as_str().to_owned());
+            crate::oplog::redo(
+                mut_repo,
+                Some(workspace_name.as_str()),
+                allow_cross_workspace,
+            )
         })
     }
 
@@ -1637,7 +1663,11 @@ impl PyTransaction {
         &self,
         settings: &PyUserSettings,
         remote: &str,
-        updates: Vec<(String, Option<crate::ids::PyCommitId>, Option<crate::ids::PyCommitId>)>,
+        updates: Vec<(
+            String,
+            Option<crate::ids::PyCommitId>,
+            Option<crate::ids::PyCommitId>,
+        )>,
         push_options: Vec<String>,
     ) -> PyResult<crate::git::PyGitPushStats> {
         with_mut_repo(self, |mut_repo| {
@@ -1669,7 +1699,11 @@ impl PyTransaction {
             }
             Ok(())
         })?;
-        let tx = self.inner.borrow_mut().take().ok_or_else(transaction_finished)?;
+        let tx = self
+            .inner
+            .borrow_mut()
+            .take()
+            .ok_or_else(transaction_finished)?;
         let repo = pollster::block_on(tx.commit(description)).map_err(map_transaction_err)?;
         Ok(PyReadonlyRepo {
             inner: repo,
@@ -1775,7 +1809,13 @@ impl PyCommitBuilder {
 
     /// The commits this one records as the ones it rewrites.
     fn predecessors(&self) -> PyResult<Vec<PyCommitId>> {
-        Ok(self.builder()?.predecessors().iter().cloned().map(PyCommitId).collect())
+        Ok(self
+            .builder()?
+            .predecessors()
+            .iter()
+            .cloned()
+            .map(PyCommitId)
+            .collect())
     }
 
     /// Replace that list outright. `jj squash -A`/`-B`/`-o` uses this to
@@ -1850,10 +1890,7 @@ impl PyCommitBuilder {
     /// CLI refuses to rewrite immutable commits first, and the root
     /// commit is always immutable.
     #[pyo3(signature = (repo=None))]
-    fn write(
-        mut slf: PyRefMut<'_, Self>,
-        repo: Option<&PyReadonlyRepo>,
-    ) -> PyResult<PyCommit> {
+    fn write(mut slf: PyRefMut<'_, Self>, repo: Option<&PyReadonlyRepo>) -> PyResult<PyCommit> {
         let tx = slf.tx.clone_ref(slf.py());
         let tx = tx.borrow(slf.py());
         let commit = with_mut_repo(&tx, |mut_repo| {

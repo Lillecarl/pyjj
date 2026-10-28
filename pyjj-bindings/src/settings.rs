@@ -28,7 +28,11 @@ fn flatten_layer(
     for (key, item) in table.iter() {
         // TOML's own key quoting, as jj prints a config name.
         let part = toml_edit::Key::new(key).display_repr().into_owned();
-        let dotted = if prefix.is_empty() { part } else { format!("{prefix}.{part}") };
+        let dotted = if prefix.is_empty() {
+            part
+        } else {
+            format!("{prefix}.{part}")
+        };
         match item {
             toml_edit::Item::Table(table) => flatten_layer(table, dotted, out),
             toml_edit::Item::Value(value) => {
@@ -154,11 +158,11 @@ impl PyUserSettings {
     /// layers `immutable_heads()` set by `jj config set --repo` has no
     /// effect, and a rewrite real jj refuses goes through.
     #[staticmethod]
-    fn for_repo(repo_path: std::path::PathBuf, workspace_root: std::path::PathBuf) -> PyResult<Self> {
-        let (config, warnings) = crate::config::load_config_for_repo(
-            &repo_path,
-            &workspace_root,
-        )?;
+    fn for_repo(
+        repo_path: std::path::PathBuf,
+        workspace_root: std::path::PathBuf,
+    ) -> PyResult<Self> {
+        let (config, warnings) = crate::config::load_config_for_repo(&repo_path, &workspace_root)?;
         Self::from_config(config, warnings)
     }
 
@@ -186,7 +190,8 @@ impl PyUserSettings {
         for (kind, text) in &args {
             match kind.as_str() {
                 "config" => {
-                    let layer = parse_config_pair(text).map_err(crate::errors::ConfigError::new_err)?;
+                    let layer =
+                        parse_config_pair(text).map_err(crate::errors::ConfigError::new_err)?;
                     config.add_layer(layer);
                 }
                 "config-file" => {

@@ -10,8 +10,8 @@ use jj_lib::gitignore::GitIgnoreFile;
 use jj_lib::matchers::{Matcher, NothingMatcher};
 use jj_lib::merge::Merge;
 use jj_lib::merged_tree_builder::MergedTreeBuilder;
-use jj_lib::op_store::OpStoreError;
 use jj_lib::object_id::ObjectId as _;
+use jj_lib::op_store::OpStoreError;
 use jj_lib::ref_name::WorkspaceName;
 use jj_lib::repo::{ReadonlyRepo, Repo as _};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
@@ -79,7 +79,10 @@ fn config_err(err: ConfigGetError) -> PyErr {
 }
 
 /// `snapshot.auto-track`, parsed as a fileset rooted at the workspace.
-fn auto_track_matcher(settings: &PyUserSettings, workspace_root: &Path) -> PyResult<Box<dyn Matcher>> {
+fn auto_track_matcher(
+    settings: &PyUserSettings,
+    workspace_root: &Path,
+) -> PyResult<Box<dyn Matcher>> {
     let pattern = match settings.0.get_string("snapshot.auto-track") {
         Err(ConfigGetError::NotFound { .. }) => "all()".to_owned(),
         other => other.map_err(config_err)?,
@@ -94,8 +97,8 @@ fn auto_track_matcher(settings: &PyUserSettings, workspace_root: &Path) -> PyRes
         aliases_map: &aliases_map,
         path_converter: &path_converter,
     };
-    let expression =
-        jj_lib::fileset::parse(&mut FilesetDiagnostics::new(), &pattern, &context).map_err(|err| {
+    let expression = jj_lib::fileset::parse(&mut FilesetDiagnostics::new(), &pattern, &context)
+        .map_err(|err| {
             crate::errors::JjError::new_err(format!("In `snapshot.auto-track`: {err}"))
         })?;
     Ok(expression.to_matcher())
@@ -116,13 +119,14 @@ fn base_ignores(workspace_root: &Path, store: &Store) -> PyResult<Arc<GitIgnoreF
             None => xdg_config_home().map(|dir| dir.join("git").join("ignore")),
         }
     };
-    let ignore_err = |err: jj_lib::gitignore::GitIgnoreError| {
-        crate::errors::JjError::new_err(err.to_string())
-    };
+    let ignore_err =
+        |err: jj_lib::gitignore::GitIgnoreError| crate::errors::JjError::new_err(err.to_string());
     let mut ignores = GitIgnoreFile::empty();
     if let Ok(git_backend) = jj_lib::git::get_git_backend(store) {
         if let Some(path) = excludes_file(&git_backend.git_repo().config_snapshot()) {
-            ignores = ignores.chain_with_file(RepoPath::root(), path).map_err(ignore_err)?;
+            ignores = ignores
+                .chain_with_file(RepoPath::root(), path)
+                .map_err(ignore_err)?;
         }
         ignores = ignores
             .chain_with_file(
@@ -133,7 +137,9 @@ fn base_ignores(workspace_root: &Path, store: &Store) -> PyResult<Arc<GitIgnoreF
     } else if let Ok(config) = gix::config::File::from_globals()
         && let Some(path) = excludes_file(&config)
     {
-        ignores = ignores.chain_with_file(RepoPath::root(), path).map_err(ignore_err)?;
+        ignores = ignores
+            .chain_with_file(RepoPath::root(), path)
+            .map_err(ignore_err)?;
     }
     Ok(ignores)
 }
@@ -306,7 +312,9 @@ pub fn snapshot(
     let builder = if outcome.wc_immutable {
         mut_repo.new_commit(vec![old_commit.id().clone()], new_tree.clone())
     } else {
-        mut_repo.rewrite_commit(&old_commit).set_tree(new_tree.clone())
+        mut_repo
+            .rewrite_commit(&old_commit)
+            .set_tree(new_tree.clone())
     };
     let new_commit = pollster::block_on(builder.write()).map_err(map_backend_err)?;
     mut_repo
@@ -330,8 +338,8 @@ pub fn snapshot(
         }
         crate::git::export_refs_only(mut_repo)?;
     }
-    let new_repo = pollster::block_on(tx.commit("snapshot working copy"))
-        .map_err(map_transaction_err)?;
+    let new_repo =
+        pollster::block_on(tx.commit("snapshot working copy")).map_err(map_transaction_err)?;
     pollster::block_on(locked_ws.finish(new_repo.operation().id().clone()))
         .map_err(map_working_copy_err)?;
     outcome.changed = true;
@@ -346,7 +354,10 @@ pub fn snapshot(
 ///
 /// It compares against the working copy's own recorded tree, not the
 /// view's working-copy commit, so it answers for a stale working copy too.
-pub fn has_unrecorded_changes(workspace: &mut Workspace, settings: &PyUserSettings) -> PyResult<bool> {
+pub fn has_unrecorded_changes(
+    workspace: &mut Workspace,
+    settings: &PyUserSettings,
+) -> PyResult<bool> {
     let workspace_root = workspace.workspace_root().to_path_buf();
     let repo = load_head(workspace)?;
     let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
@@ -419,13 +430,14 @@ pub fn untrack_paths(
 
     pollster::block_on(locked_ws.locked_wc().reset(&new_commit)).map_err(map_working_copy_err)?;
 
-    let (snapshot_tree, _stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
-        .map_err(map_working_copy_err)?;
+    let (snapshot_tree, _stats) =
+        pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
+            .map_err(map_working_copy_err)?;
 
     let mut added_back = Vec::new();
     for (path, repo_path) in paths.iter().zip(&repo_paths) {
-        let value = pollster::block_on(snapshot_tree.path_value(repo_path))
-            .map_err(map_backend_err)?;
+        let value =
+            pollster::block_on(snapshot_tree.path_value(repo_path)).map_err(map_backend_err)?;
         if !value.is_absent() {
             added_back.push(path.clone());
         }

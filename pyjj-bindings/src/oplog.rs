@@ -296,12 +296,9 @@ pub fn revert_operation(
     };
 
     let loader = mut_repo.base_repo().loader().clone();
-    let repo_at_target =
-        pollster::block_on(loader.load_at(&target_op.0)).map_err(map_py_err)?;
-    let repo_at_parent =
-        pollster::block_on(loader.load_at(&target_parent)).map_err(map_py_err)?;
-    pollster::block_on(mut_repo.merge(&repo_at_target, &repo_at_parent))
-        .map_err(map_py_err)?;
+    let repo_at_target = pollster::block_on(loader.load_at(&target_op.0)).map_err(map_py_err)?;
+    let repo_at_parent = pollster::block_on(loader.load_at(&target_parent)).map_err(map_py_err)?;
+    pollster::block_on(mut_repo.merge(&repo_at_target, &repo_at_parent)).map_err(map_py_err)?;
 
     let merged_view = mut_repo.view().store_view().clone();
     let base_view = mut_repo.base_repo().view().store_view().clone();

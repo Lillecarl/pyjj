@@ -13,8 +13,8 @@ use jj_lib::repo_path::RepoPathBuf;
 
 use crate::commit::PyCommit;
 use crate::errors::{JjError, map_backend_err, map_py_err};
-use jj_lib::commit_builder::DetachedCommitBuilder;
 use crate::settings::PyUserSettings;
+use jj_lib::commit_builder::DetachedCommitBuilder;
 
 /// Renders the conflict at `path` in `commit`'s tree as conflict-marker
 /// text -- the same thing you'd see if you looked at the file in a real
@@ -218,20 +218,19 @@ pub fn conflict_sides(
     match value.clone().into_resolved() {
         Err(_conflict) => {
             let store = tree.store();
-            let materialized =
-                pollster::block_on(try_materialize_file_conflict_value(
-                    store,
-                    &repo_path,
-                    &value,
-                    tree.labels(),
-                ))
-                .map_err(map_backend_err)?
-                .ok_or_else(|| {
-                    JjError::new_err(format!(
-                        "`{path}` is conflicted, but not as a plain file -- no 3-way \
+            let materialized = pollster::block_on(try_materialize_file_conflict_value(
+                store,
+                &repo_path,
+                &value,
+                tree.labels(),
+            ))
+            .map_err(map_backend_err)?
+            .ok_or_else(|| {
+                JjError::new_err(format!(
+                    "`{path}` is conflicted, but not as a plain file -- no 3-way \
                                  merge sides to expose"
-                    ))
-                })?;
+                ))
+            })?;
             if materialized.ids.num_sides() > 2 {
                 return Err(JjError::new_err(format!(
                     "`{path}` has a {}-sided conflict; only 3-way (two-sided) conflicts \
@@ -245,11 +244,12 @@ pub fn conflict_sides(
                              merge tool"
                 )));
             }
-            let get_side = |get: fn(&Merge<bstr::BString>, usize) -> Option<&bstr::BString>| -> Vec<u8> {
-                get(&materialized.contents, 0)
-                    .map(|b| b.to_vec())
-                    .unwrap_or_default()
-            };
+            let get_side =
+                |get: fn(&Merge<bstr::BString>, usize) -> Option<&bstr::BString>| -> Vec<u8> {
+                    get(&materialized.contents, 0)
+                        .map(|b| b.to_vec())
+                        .unwrap_or_default()
+                };
             let base = get_side(Merge::get_remove);
             let left = get_side(Merge::get_add);
             let right = materialized
@@ -367,10 +367,18 @@ pub fn conflicted_paths(commit: &PyCommit) -> PyResult<Vec<(String, usize, usize
         let sides = conflict.num_sides();
         let adds = conflict.adds().flatten().count();
         let mut objects: Vec<String> = Vec::new();
-        for term in conflict.removes().flatten().chain(conflict.adds().flatten()) {
+        for term in conflict
+            .removes()
+            .flatten()
+            .chain(conflict.adds().flatten())
+        {
             let name = match term {
-                TreeValue::File { executable: false, .. } => continue,
-                TreeValue::File { executable: true, .. } => "an executable",
+                TreeValue::File {
+                    executable: false, ..
+                } => continue,
+                TreeValue::File {
+                    executable: true, ..
+                } => "an executable",
                 TreeValue::Symlink(_) => "a symlink",
                 TreeValue::Tree(_) => "a directory",
                 TreeValue::GitSubmodule(_) => "a git submodule",

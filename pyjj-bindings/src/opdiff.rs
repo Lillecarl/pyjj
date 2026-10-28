@@ -21,7 +21,9 @@ use jj_lib::evolution::accumulate_predecessors;
 use jj_lib::op_store::{RefTarget, RemoteRefState};
 use jj_lib::refs::{diff_named_commit_ids, diff_named_ref_targets, diff_named_remote_refs};
 use jj_lib::repo::{ReadonlyRepo, Repo};
-use jj_lib::revset::{ResolvedRevsetExpression, RevsetExpression, RevsetExtensions, SymbolResolver};
+use jj_lib::revset::{
+    ResolvedRevsetExpression, RevsetExpression, RevsetExtensions, SymbolResolver,
+};
 use jj_lib::store::Store;
 
 use crate::commit::{PyCommit, PyReadonlyRepo};
@@ -388,8 +390,13 @@ pub fn operation_diff(
                 remote: Some(symbol.remote.as_str().to_string()),
                 after: summarize_target(&store, &keep_alive, &to_ref.target, Some(&to_ref.state))
                     .await?,
-                before: summarize_target(&store, &keep_alive, &from_ref.target, Some(&from_ref.state))
-                    .await?,
+                before: summarize_target(
+                    &store,
+                    &keep_alive,
+                    &from_ref.target,
+                    Some(&from_ref.state),
+                )
+                .await?,
             });
         }
 
@@ -406,8 +413,13 @@ pub fn operation_diff(
                 remote: Some(symbol.remote.as_str().to_string()),
                 after: summarize_target(&store, &keep_alive, &to_ref.target, Some(&to_ref.state))
                     .await?,
-                before: summarize_target(&store, &keep_alive, &from_ref.target, Some(&from_ref.state))
-                    .await?,
+                before: summarize_target(
+                    &store,
+                    &keep_alive,
+                    &from_ref.target,
+                    Some(&from_ref.state),
+                )
+                .await?,
             });
         }
 
