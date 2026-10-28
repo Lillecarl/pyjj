@@ -39,20 +39,26 @@ def workspace_list(args: argparse.Namespace) -> int:
             # with the name and root beneath it (`workspace name`,
             # `workspace root relative`) -- the debug golden carries the
             # whole stacks.
-            under = "workspace target"
+            # `label(if(current_workspace, "current_workspace"), ...)`
+            # wraps the whole row of the workspace running the command.
+            row = "workspace"
+            if name == ws.workspace_name:
+                row = "workspace current_workspace"
+            under = f"{row} target"
             if commit_id == view.get(ws.workspace_name):
-                under = "workspace working_copy target"
+                under = f"{row} working_copy target"
             # jj prints the workspace's root path, relative to where
             # the command runs, between the name and the summary --
             # `if(root, root.relative())` in the default template. The
             # workspace running the command shows `.`.
-            spans = [(name, "workspace name"), (": ", "workspace")]
+            current = " (current)" if name == ws.workspace_name else ""
+            spans = [(name, f"{row} name"), (f"{current}: ", row)]
             rel = ws.workspace_path(name)
             if rel is not None:
                 # `workspace_path()` is already absolute; show it
                 # relative to where the command runs.
                 root = os.path.relpath(os.path.normpath(rel), os.getcwd())
-                spans += [(root, "workspace root relative"), (" ", "workspace")]
+                spans += [(root, f"{row} root relative"), (" ", row)]
             spans += [(text, f"{under} {labels}".strip()) for text, labels
                       in _commit_summary_spans(repo, settings, commit, refs)]
             print(render_block([spans], "workspace_list",

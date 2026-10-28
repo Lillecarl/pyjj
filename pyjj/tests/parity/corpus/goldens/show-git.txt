@@ -11,5 +11,5 @@ new file mode 100644
 index 0000000000..5626abf0f7
 --- /dev/null
 +++ b/one.txt
-@@ -0,0 +1,1 @@
+@@ -0,0 +1,1 @@ one
 +one

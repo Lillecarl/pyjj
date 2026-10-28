@@ -1,2 +1,2 @@
-default: . yqymtrmq f966b4d0 two
+default (current): . yqymtrmq f966b4d0 two
 second: second swmyvzmq 0a7b4209 (empty) (no description set)

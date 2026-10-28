@@ -2,7 +2,7 @@ diff --git a/ws.txt b/ws.txt
 index a65094835a..7d1a31d374 100644
 --- a/ws.txt
 +++ b/ws.txt
-@@ -1,4 +1,4 @@
+@@ -1,4 +1,4 @@ spaced out
          indented
  spaced out
  stripped

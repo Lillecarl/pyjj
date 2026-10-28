@@ -540,11 +540,6 @@
                     "description": "Whether to generate synthetic predecessors for fetched/imported commits",
                     "default": true
                 },
-                "sign-on-push": {
-                    "type": "boolean",
-                    "description": "Whether jj should sign commits before pushing",
-                    "default": false
-                },
                 "track-default-bookmark-on-clone": {
                     "type": "boolean",
                     "description": "Whether `jj git clone` creates a local bookmark tracking the default remote bookmark",
@@ -737,6 +732,11 @@
                     "description": "Set of revisions for pushing bookmarks and tags (has access to the `remote` name)",
                     "default": "remote_bookmarks(remote=exact:remote)..@"
                 },
+                "git-sign-on-push": {
+                    "type": "string",
+                    "description": "Set of revisions to sign before pushing with jj git push",
+                    "default": "none()"
+                },
                 "log": {
                     "type": "string",
                     "description": "Default set of revisions to show when no explicit revset is given for jj log and similar commands",
@@ -855,7 +855,7 @@
                         "properties": {
                             "enabled": {
                                 "type": "boolean",
-                                "description": "Whether this alias is enabled",
+                                "description": "Whether this alias is enabled.",
                                 "default": true
                             },
                             "definition": {
@@ -866,19 +866,6 @@
                             },
                             "doc": {
                                 "type": "string"
-                            }
-                        },
-                        "required": [
-                            "definition"
-                        ]
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "enabled": {
-                                "type": "boolean",
-                                "const": false,
-                                "description": "Disable this alias."
                             }
                         }
                     }

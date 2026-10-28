@@ -152,6 +152,7 @@ _RULES: tuple[tuple[tuple[str, ...], dict[str, str | bool]], ...] = (
     (('signature', 'status', 'bad'), {'fg': 'red'}),
     (('signature', 'status', 'invalid'), {'fg': 'red'}),
     (('workspace', 'name'), {'fg': 'green'}),
+    (('workspace', 'current_workspace'), {'bold': True}),
     # TODO: qualify "root" as "commit root" and "operation root"; remove "workspace root"
     (('workspace', 'root'), {'fg': 'default'}),
     (('arrange', 'context', 'commit'), {'dim': True}),

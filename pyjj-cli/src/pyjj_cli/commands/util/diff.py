@@ -82,6 +82,7 @@ def util_diff(args: argparse.Namespace) -> int:
             [(f"--- {before_path}", "file_header")],
             [(f"+++ {after_path}", "file_header")],
         ]
+        # `show_git_diff_texts`: jj looks for no source symbol here.
         lines += _unified_hunk_lines(before, after, context, compare)
         out = _render_diff(lines, coloured)
     else:
@@ -90,7 +91,8 @@ def util_diff(args: argparse.Namespace) -> int:
         else:
             header = f"Modified {after_path}:"
         lines = [[(header, "header")]]
-        lines += _color_words_rows(before, after, context, coloured, compare)
+        lines += _color_words_rows(before, after, context, coloured, compare,
+                                   path=after_path)
         out = _render_diff(lines, coloured, "diff color_words")
     sys.stdout.flush()
     sys.stdout.buffer.write(out)

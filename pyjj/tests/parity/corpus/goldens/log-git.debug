@@ -5,7 +5,7 @@
 │  [1m<<diff git file_header::index 0000000000..f719efd430>>[0m
 │  [1m<<diff git file_header::--- /dev/null>>[0m
 │  [1m<<diff git file_header::+++ b/two.txt>>[0m
-│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@>>[39m
+│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@ two>>[39m
 │  [38;5;2m<<diff git added::+>>[4m<<diff git added token::two>>[24m[39m
 <<log commit node mutable::○>>  [1m[38;5;5m<<log commit mutable change_id shortest prefix::m>>[0m[38;5;8m<<log commit mutable change_id shortest rest::ovruppx>>[39m<<log commit mutable:: >>[38;5;3m<<log commit mutable author email local::alice>><<log commit mutable author email::@>><<log commit mutable author email domain::example.com>>[39m<<log commit mutable:: >>[38;5;6m<<log commit mutable committer timestamp local format::2001-02-03 09:35:06>>[39m<<log commit mutable:: >>[38;5;5m<<log commit mutable bookmarks name::main>>[39m<<log commit mutable:: >>[1m[38;5;4m<<log commit mutable commit_id shortest prefix::4>>[0m[38;5;8m<<log commit mutable commit_id shortest rest::2ad4b07>>[39m<<log commit mutable::>>
 │  <<log commit mutable description first_line::one>><<log commit mutable::>>
@@ -14,7 +14,7 @@
 │  [1m<<diff git file_header::index 0000000000..5626abf0f7>>[0m
 │  [1m<<diff git file_header::--- /dev/null>>[0m
 │  [1m<<diff git file_header::+++ b/one.txt>>[0m
-│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@>>[39m
+│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@ one>>[39m
 │  [38;5;2m<<diff git added::+>>[4m<<diff git added token::one>>[24m[39m
 <<log commit node mutable::○>>  [1m[38;5;5m<<log commit mutable change_id shortest prefix::s>>[0m[38;5;8m<<log commit mutable change_id shortest rest::upuptlt>>[39m<<log commit mutable:: >>[38;5;3m<<log commit mutable author email local::alice>><<log commit mutable author email::@>><<log commit mutable author email domain::example.com>>[39m<<log commit mutable:: >>[38;5;6m<<log commit mutable committer timestamp local format::2001-02-03 09:35:06>>[39m<<log commit mutable:: >>[1m[38;5;4m<<log commit mutable commit_id shortest prefix::f6>>[0m[38;5;8m<<log commit mutable commit_id shortest rest::a17347>>[39m<<log commit mutable::>>
 │  <<log commit mutable description first_line::base>><<log commit mutable::>>
@@ -23,6 +23,6 @@
 │  [1m<<diff git file_header::index 0000000000..df967b96a5>>[0m
 │  [1m<<diff git file_header::--- /dev/null>>[0m
 │  [1m<<diff git file_header::+++ b/base.txt>>[0m
-│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@>>[39m
+│  [38;5;6m<<diff git hunk_header::@@ -0,0 +1,1 @@ base>>[39m
 │  [38;5;2m<<diff git added::+>>[4m<<diff git added token::base>>[24m[39m
 [1m[38;5;14m<<log commit node immutable::◆>>[0m  [1m[38;5;5m<<log commit immutable change_id shortest prefix::z>>[0m[38;5;8m<<log commit immutable change_id shortest rest::zzzzzzz>>[39m<<log commit immutable:: >>[38;5;2m<<log commit immutable root::root()>>[39m<<log commit immutable:: >>[1m[38;5;4m<<log commit immutable commit_id shortest prefix::0>>[0m[38;5;8m<<log commit immutable commit_id shortest rest::0000000>>[39m<<log commit immutable::>>

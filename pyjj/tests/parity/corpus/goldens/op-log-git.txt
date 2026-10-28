@@ -36,7 +36,7 @@
 │     index 0000000000..f719efd430
 │     --- /dev/null
 │     +++ b/two.txt
-│     @@ -0,0 +1,1 @@
+│     @@ -0,0 +1,1 @@ two
 │     +two
 │
 │  Changed working copy default@:

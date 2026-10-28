@@ -763,7 +763,7 @@ See [`jj help -k config`][config] to know more about file locations, supported c
 ###### **Subcommands:**
 
 * `edit` — Start an editor on a jj config file
-* `gc` — Find and optionally delete repo-level config directories whose repo path no longer exists
+* `gc` — Find and optionally delete repo and workspace config directories whose paths no longer exist
 * `get` — Get the value of a given config option.
 * `list` — List variables set in config files, along with their values
 * `path` — Print the paths to the config files
@@ -799,7 +799,7 @@ Creates the file if it doesn't already exist regardless of what the editor does.
 
 ## `jj config gc`
 
-Find and optionally delete repo-level config directories whose repo path no longer exists
+Find and optionally delete repo and workspace config directories whose paths no longer exist
 
 **Usage:** `jj config gc`
 
@@ -1346,8 +1346,6 @@ Search for content in files
 
 Prints each line that matches the specified pattern, prefixed by the file path. Use `--name-only` to print only the file paths.
 
-This is an early version of the command. It does not search files concurrently.
-
 **Usage:** `jj file search [OPTIONS] --pattern <PATTERN> [FILESETS]...`
 
 ###### **Arguments:**
@@ -1368,6 +1366,8 @@ This is an early version of the command. It does not search files concurrently.
    [string pattern syntax]: https://docs.jj-vcs.dev/latest/revsets/#string-patterns
 * `--name-only` — Print only the paths of files that contain a match, not the matched lines
 * `-n`, `--line-number` — Prefix each matched line with its 1-based line number within the file
+* `--binary-as-text` — Treat binary files as text, matching and printing raw bytes even if they contain null bytes
+* `--skip-binary` — Skip binary files entirely
 
 
 
@@ -1932,7 +1932,7 @@ If the setting `git.colocate` has the value `false`, then new repositories will 
 
    If the specified `--git-repo` path is the same as `DESTINATION`, then a [colocated workspace] will be created, and both `jj` and `git` commands will work on the repo. The `git.colocate` setting is ignored in this case.
 
-   If the specified `--git-repo` path is outside of the given `DESTINATION`, then the Jujutsa workspace will store a reference to the external Git repository (not a colocated workspace). This option is mutually exclusive with `--collate`.
+   If the specified `--git-repo` path is outside of the given `DESTINATION`, then the Jujutsu workspace will store a reference to the external Git repository (not a colocated workspace). This option is mutually exclusive with `--colocate`.
 
    [colocated workspace]: https://docs.jj-vcs.dev/latest/git-compatibility/#colocated-jujutsugit-workspaces
 
@@ -3061,7 +3061,9 @@ By default, `jj redo` refuses to redo an undo-operation that was performed in an
 
 Resolve conflicted files with an external merge tool
 
-Only conflicts that can be resolved with a 3-way merge are supported. See docs for merge tool configuration instructions. External merge tools will be invoked for each conflicted file one-by-one until all conflicts are resolved. To stop resolving conflicts, exit the merge tool without making any changes.
+Only conflicts that can be resolved with a 3-way merge are supported by most merge tools. See docs for merge tool configuration instructions. External merge tools will be invoked for each conflicted file one-by-one until all conflicts are resolved. To stop resolving conflicts, exit the merge tool without making any changes.
+
+The built-in `:editor` tool opens the conflicted file with conflict markers in your text editor (`ui.editor`). Conflicts with any number of sides are supported, and conflict markers left in the file are kept as a partially resolved conflict.
 
 Note that conflicts can also be resolved without using this command. You may edit the conflict markers in the conflicted file directly with a text editor.
 
@@ -3079,7 +3081,7 @@ Note that conflicts can also be resolved without using this command. You may edi
 * `-l`, `--list` — Instead of resolving conflicts, list all the conflicts
 * `--tool <NAME>` — Specify 3-way merge tool to be used
 
-   The built-in merge tools `:ours` and `:theirs` can be used to choose side #1 and side #2 of the conflict respectively.
+   The built-in merge tool `:editor` opens the conflict markers in your text editor. The built-in merge tools `:ours` and `:theirs` can be used to choose side #1 and side #2 of the conflict respectively.
 
 
 

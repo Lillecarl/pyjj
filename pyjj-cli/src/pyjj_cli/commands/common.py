@@ -796,6 +796,8 @@ class _DeletedRef:
     has_conflict: bool = False
     removed_ids: tuple[pyjj.CommitId, ...] = ()
     target_ids: tuple[pyjj.CommitId, ...] = ()
+    removed_targets: tuple[pyjj.CommitId | None, ...] = ()
+    added_targets: tuple[pyjj.CommitId | None, ...] = ()
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -1904,10 +1906,15 @@ def _print_ref(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, ref: Listed
             fmt.write(" ")
             fmt.write("(conflicted)", "conflict")
             fmt.write(":\n")
-            for commit_id in item.removed_ids:
-                line(commit_id, prefix="  - ", under="removed_targets map join")
-            for commit_id in item.target_ids:
-                line(commit_id, prefix="  + ", under="added_targets map join")
+            sides = (("  - ", "removed_targets map join", item.removed_targets),
+                     ("  + ", "added_targets map join", item.added_targets))
+            for prefix, under, side in sides:
+                for commit_id in side:
+                    if commit_id is not None:
+                        line(commit_id, prefix=prefix, under=under)
+                    else:
+                        fmt.write(prefix + "(absent)", *under.split())
+                        fmt.write("\n")
         elif item.target_ids:
             line(item.target_ids[0], head=head)
         else:
@@ -2814,7 +2821,7 @@ def _git_diff_lines(files: Iterable[pyjj.GitDiffFile], context: int = 3, compare
         line(f"--- {left_name}")
         line(f"+++ {right_name}")
         lines.extend(_unified_hunk_lines(f.before_content, f.after_content,
-                                         context, compare))
+                                         context, compare, path=f.path))
     return lines
 
 
@@ -2825,8 +2832,12 @@ def _git_diff_bytes(files: Iterable[pyjj.GitDiffFile], context: int = 3, coloure
 
 
 def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
-                        compare: CompareMode = "exact") -> list[SpanLine]:
+                        compare: CompareMode = "exact",
+                        path: str | None = None) -> list[SpanLine]:
     """The `@@` headers and their lines, as labelled spans.
+
+    With `path`, each header carries jj's source symbol for that file;
+    without one it carries none.
 
     jj prints these for a file and, in `--git` format, for a commit
     description as well, under a dummy path.
@@ -2838,10 +2849,13 @@ def _unified_hunk_lines(before: bytes, after: bytes, context: int = 3,
     underline is written all the same.
     """
     lines: list[SpanLine] = []
-    for hunk in pyjj.unified_hunks(before, after, context, compare=compare):
-        lines.append([(f"@@ -{hunk.left_start},{hunk.left_len} "
-                       f"+{hunk.right_start},{hunk.right_len} @@",
-                       "hunk_header")])
+    for hunk in pyjj.unified_hunks(before, after, context, compare=compare,
+                                   path=path):
+        header = (f"@@ -{hunk.left_start},{hunk.left_len} "
+                  f"+{hunk.right_start},{hunk.right_len} @@")
+        if hunk.symbol is not None:
+            header += " " + hunk.symbol.decode("utf-8", "surrogateescape")
+        lines.append([(header, "hunk_header")])
         for kind, tokens in hunk.lines:
             content = b"".join(token for _token_kind, token in tokens)
             tokens = list(tokens)
@@ -3182,8 +3196,14 @@ def _unchanged_rows(rows: list[Row], left_lines: Sequence[bytes], right_lines: S
 
 
 def _context_rows(rows: list[Row], pending: tuple[bytes, bytes] | None, numbers: list[int],
-                  num_after: int, num_before: int, coloured: bool) -> None:
-    """`num_after` unchanged rows, `    ...`, then `num_before` more."""
+                  num_after: int, num_before: int, coloured: bool,
+                  path: str | None = None) -> None:
+    """`num_after` unchanged rows, `    ...`, then `num_before` more.
+
+    The `...` carries the last source symbol line jj finds in the skipped
+    range (`    ...    def main():`), unless the first shown trailing line
+    is a symbol itself. Without `path` it carries none.
+    """
     if pending is None:
         return
 
@@ -3201,7 +3221,19 @@ def _context_rows(rows: list[Row], pending: tuple[bytes, bytes] | None, numbers:
     right_head, right_tail, right_skipped = split(pending[1])
     _unchanged_rows(rows, left_head, right_head, numbers, coloured)
     if left_skipped or right_skipped:
-        rows.append([("    ...", "")])
+        right_lines = _split_inclusive(pending[1])[num_after:]
+        shown = right_lines[len(right_lines) - num_before:] if num_before else []
+        hidden = right_lines[:len(right_lines) - len(shown)]
+        symbol = None
+        if path is not None and not (
+                shown and pyjj.source_symbol_from_line(shown[0], path) is not None):
+            symbol = next((line for line in reversed(hidden)
+                           if pyjj.source_symbol_from_line(line, path) is not None), None)
+        if symbol is None:
+            rows.append([("    ...", "")])
+        else:
+            text = symbol.decode("utf-8", "surrogateescape").removesuffix("\n")
+            rows.append([("    ...    ", ""), (text, "context")])
         numbers[0] += left_skipped
         numbers[1] += right_skipped
         if len(left_tail) > num_before:
@@ -3214,7 +3246,8 @@ def _context_rows(rows: list[Row], pending: tuple[bytes, bytes] | None, numbers:
 
 
 def _color_words_rows(before: bytes, after: bytes, context: int = 3,
-                      coloured: bool = False, compare: CompareMode = "exact") -> list[Row]:
+                      coloured: bool = False, compare: CompareMode = "exact",
+                      path: str | None = None) -> list[Row]:
     """The numbered body of a color-words diff, as labelled rows.
 
     jj keeps `context` unchanged lines after a change and `context`
@@ -3230,10 +3263,11 @@ def _color_words_rows(before: bytes, after: bytes, context: int = 3,
             pending = (lhs, rhs)
             continue
         _context_rows(rows, pending, numbers,
-                      context if emitted else 0, context, coloured)
+                      context if emitted else 0, context, coloured, path)
         pending = None
         emitted = True
         _changed_rows(rows, lhs, rhs, numbers, coloured)
+    # No path: jj shows no source symbol in the trailing context.
     _context_rows(rows, pending, numbers,
                   context if emitted else 0, 0, coloured)
     return rows
@@ -3265,7 +3299,7 @@ def _color_words_lines(files: Iterable[pyjj.GitDiffFile], to_ui_path: UiPath, co
         if before == after:
             continue
         rows.extend(_color_words_rows(before, after, context, coloured,
-                                      compare))
+                                      compare, path=f.path))
     return rows
 
 
@@ -3404,10 +3438,12 @@ def _description_diff_bytes(args: argparse.Namespace, before: str, after: str,
             [(f"--- {_DESCRIPTION_PATH}", "file_header")],
             [(f"+++ {_DESCRIPTION_PATH}", "file_header")],
         ]
+        # jj looks for no source symbol in a `--git` description diff.
         lines += _unified_hunk_lines(left, right, compare=compare)
         return _render_diff(lines, coloured, "diff")
     lines = [[("Modified JJ-COMMIT-DESCRIPTION:", "header")]]
-    lines += _color_words_rows(left, right, coloured=coloured, compare=compare)
+    lines += _color_words_rows(left, right, coloured=coloured, compare=compare,
+                               path=_DESCRIPTION_PATH)
     return _render_diff(lines, coloured, "diff")
 
 
