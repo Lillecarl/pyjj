@@ -2892,19 +2892,19 @@ def test_workspace_rename(pair: RepoPair) -> None:
 
 @pytest.mark.covers("workspace remove")
 def test_workspace_remove_deletes_the_directory(pair: RepoPair) -> None:
-    """Uncommitted work in the removed workspace is snapshotted first.
-    Undoing the removal brings the workspace record back pointing at
-    that snapshot, so the file is recoverable -- which is also what
-    proves the snapshot happened: skipping it would leave the same
-    visible state but no commit holding the file."""
+    """Uncommitted work in the removed workspace survives as a new child
+    of its `@`, described `SNAPSHOT OF REMOVED WORKSPACE`, made visible
+    by the removal's own operation. Its commit id pins tree, parent,
+    description and timestamps, so `assert_parity` covers all four."""
     chain(pair)
     pair.op(jj=["workspace", "add", "--name", "second", "../second"])
     pair.op(files={"../second/late.txt": b"late\n"},
             jj=["util", "exec", "--", sys.executable, "-c", "pass"])
     pair.op(jj=["workspace", "remove", "second"])
-    pair.op(jj=["undo"])
-    out = pair.assert_output(["file", "show", "-r", "second@",
-                              "late.txt"])
+    out = pair.assert_output(
+        ["file", "show", "-r",
+         'description(substring:"SNAPSHOT OF REMOVED WORKSPACE `second`")',
+         "late.txt"])
     assert "late" in out
     pair.assert_parity()
 

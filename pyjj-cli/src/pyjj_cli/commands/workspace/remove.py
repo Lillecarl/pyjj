@@ -74,15 +74,26 @@ def removal_target(settings: pyjj.UserSettings, ws: pyjj.Workspace, name: str) -
     return Target(name, other, canon)
 
 
-def snapshot_targets(settings: pyjj.UserSettings, targets: Sequence[Target]) -> None:
-    """Snapshot each workspace before its directory goes away, so tracked
-    working-copy changes that were never committed survive as a commit."""
+def snapshot_targets(settings: pyjj.UserSettings, targets: Sequence[Target]) -> list[pyjj.CommitId]:
+    """Snapshot each workspace before its directory goes away, so
+    working-copy changes survive as a commit.
+
+    Each snapshot is a hidden child of the workspace's `@`; the removal's
+    own transaction makes it visible, so removing records one operation.
+    """
+    heads = []
     for target in targets:
-        target.workspace.snapshot(settings)
+        commit_id = target.workspace.snapshot_for_removal(settings)
+        if commit_id is not None:
+            print(f"Snapshot commit created for workspace '{target.name}': "
+                  f"{commit_id.hex()[:12]}", file=sys.stderr)
+            heads.append(commit_id)
+    return heads
 
 
 def forget_and_delete(settings: pyjj.UserSettings, ws: pyjj.Workspace,
-                      names: Sequence[str], roots: Sequence[Path]) -> dict[Path, OSError | None]:
+                      names: Sequence[str], roots: Sequence[Path],
+                      heads: Sequence[pyjj.CommitId] = ()) -> dict[Path, OSError | None]:
     """Forget `names` in one operation, then delete `roots`.
 
     The description starts with `remove workspace`, which is what `undo`
@@ -91,7 +102,8 @@ def forget_and_delete(settings: pyjj.UserSettings, ws: pyjj.Workspace,
     """
     noun = "workspace" if len(names) == 1 else "workspaces"
     ws.forget_workspaces(settings, list(names),
-                         description=f"remove {noun} {', '.join(names)}")
+                         description=f"remove {noun} {', '.join(names)}",
+                         add_heads=list(heads))
     for name in names:
         _unlink_worktree(settings, ws, name)
     deleted: dict[Path, OSError | None] = {}
@@ -115,9 +127,10 @@ def report_deleted(deleted: dict[Path, OSError | None]) -> None:
             print(f"Error: {error}", file=sys.stderr)
 
 
-def remove_targets(settings: pyjj.UserSettings, ws: pyjj.Workspace, targets: Sequence[Target]) -> None:
+def remove_targets(settings: pyjj.UserSettings, ws: pyjj.Workspace, targets: Sequence[Target],
+                   heads: Sequence[pyjj.CommitId] = ()) -> None:
     report_deleted(forget_and_delete(settings, ws, [target.name for target in targets],
-                                     [target.root for target in targets]))
+                                     [target.root for target in targets], heads))
 
 
 def refuse_unwritable_working_copy(args: argparse.Namespace) -> int | None:
@@ -154,8 +167,8 @@ def workspace_remove(args: argparse.Namespace) -> int:
                 print(f"Hint: {e.hint}", file=sys.stderr)
             return 1
         try:
-            snapshot_targets(settings, targets)
-            remove_targets(settings, ws, targets)
+            heads = snapshot_targets(settings, targets)
+            remove_targets(settings, ws, targets, heads)
         except (pyjj.JjError, CommandError) as e:
             print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
             return 1
