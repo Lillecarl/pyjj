@@ -18,7 +18,9 @@ import os
 import sys
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(argv: list[str] | None = None) -> argparse.ArgumentParser:
+    """`argv` is the command line, when known: `workflow` reads it to
+    decide whether to load the user's extensions."""
     parser = argparse.ArgumentParser(
         prog="pyjj",
         description="Jujutsu VCS — Python CLI (pyjj bindings)",
@@ -56,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
         tag,
         templates,
         util,
+        workflow,
         workspace,
     )
 
@@ -81,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     converge.add_parsers(sub)
     debug.add_parsers(sub)
     stubs.add_parsers(sub)
+    workflow.add_parsers(sub, argv)
 
     return parser
 
@@ -243,7 +247,9 @@ def _complete(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+    from pyjj_cli.cli.workflow import argv_for_parser
+
+    parser = build_parser(argv_for_parser(argv))
     # Completion runs the CLI itself on every <TAB>; keep everything heavy
     # out of that path — handlers are not imported yet.
     _complete(parser)

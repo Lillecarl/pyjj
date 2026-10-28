@@ -557,6 +557,27 @@ script runs.
 own dest, and a run without `-c` then overwrote the subcommand name
 with None, so the CLI printed usage instead of dispatching.
 
+### Extensions
+
+`pyjj/pyjj/extensions.py`: files listed in config `pyjj.extensions`,
+imported once per process. Two registries:
+
+- **Identity hooks** (`pyjj.identity`). jj_lib reads author, committer
+  and signer from the settings a repo was *loaded* with, so the hooks
+  run between `for_repo` and the final load: `apply_config_args(...,
+  workspace)` in `common.py` and `session.open`. Their answer becomes
+  `--config` pairs placed *before* the command line's, in one
+  `with_command_args` call; no answer means no rebuild (RNG reseed).
+  The hooks see settings with `--config` applied, so `--config
+  pyjj.extensions=...` works. A raising hook is `ConfigArgsError`.
+- **Workflows** (`pyjj.Workflow` subclasses). `cli/workflow.py` adds
+  `workflow`/`wf` and loads extensions only when argv (or `COMP_LINE`
+  during completion) names the command; every other run and Tab pays
+  nothing. Handler builds `pyjj.Repo(ws, settings)` from `_load`.
+
+`git init`/`git clone` build settings with no workspace, so no hook
+runs there.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in

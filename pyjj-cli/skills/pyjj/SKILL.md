@@ -84,6 +84,26 @@ with repo.atomic("tidy the stack") as tx:
 EOF
 ```
 
+## Extensions: identity hooks and workflows
+
+`pyjj.extensions` (config, list of `.py` paths, `~` expanded) names
+files imported once per run. `--config 'pyjj.extensions=["x.py"]'`
+loads one for a single run.
+
+- `pyjj.identity(fn)` (decorator or lambda): `fn(ctx)` returns
+  `pyjj.Identity(name, email, signing_key, signing_backend,
+  sign_behavior)`, a `{config key: value}` dict, or `None` (next hook).
+  `ctx`: `remotes` (name → fetch URL), `workspace_root`, `repo_path`,
+  `settings`. Runs when a repository loads (CLI and `pyjj.open()`), as a
+  layer under `--config`. A raising hook fails the command, nothing
+  written. Rewrites keep a commit's author (jj's rule); new commits and
+  committer/signature use the hook's answer. No hook on `git init`/`clone`.
+- `class X(pyjj.Workflow)`: `name`, `help`, `add_arguments(parser)`,
+  `run(repo, args) -> int | None`; `self.pyjj(repo, *argv)` runs a pyjj
+  command in-process. `pyjj workflow` (`wf`) lists them, `pyjj wf NAME
+  ...` runs one. Metavars `REVSET`/`BOOKMARK`/`REMOTE`/... complete like
+  pyjj's own; an argument's `completer` attribute overrides.
+
 Operation ids accept unique prefixes wherever a command names one
 (`op restore`, `op show`, `--at-op`): paste the short id `op log`
 prints, no need for the full hex.
