@@ -184,3 +184,13 @@ def test_identity_hook_picks_the_signing_key(repo, tmp_path):
     signed = repo.run("python", "-c",
                       "print(repo.log('@')[0].commit.is_signed)")
     assert signed.stdout.strip() == "True", signed.stderr
+
+
+def test_pyjj_python_honours_command_line_config(repo, tmp_path):
+    """An extension named only by `--config` still picks the identity."""
+    ext = tmp_path / "cli_ext.py"
+    ext.write_text("import pyjj\npyjj.identity(lambda ctx: pyjj.Identity(email='cli@ext.example'))\n")
+    result = repo.run("--config", f'pyjj.extensions=["{ext}"]', "python", "-c",
+                      "print(repo.settings.get_string('user.email'))")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "cli@ext.example"

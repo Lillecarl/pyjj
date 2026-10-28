@@ -24,7 +24,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from .common import CommandError, _workspace_path
+from .common import CommandError, ConfigArgsError, _workspace_path, settings_for
 
 if TYPE_CHECKING:
     import argparse
@@ -64,7 +64,12 @@ def python_repl(args: argparse.Namespace) -> int:
     }
     if not getattr(args, "no_repo", False):
         try:
-            namespace["repo"] = pyjj.open(_workspace_path(args))
+            # Not `pyjj.open()`: it cannot see `--config`/`--config-file`.
+            settings = settings_for(args)
+            workspace = pyjj.Workspace.load(settings, _workspace_path(args))
+            namespace["repo"] = pyjj.Repo(workspace, settings)
+        except ConfigArgsError:
+            raise
         except Exception as e:  # noqa: BLE001
             # Not fatal: a script may be about to `git init`, or may
             # only want the API. It says so rather than failing here.
