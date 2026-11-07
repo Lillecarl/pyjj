@@ -290,3 +290,26 @@ def test_util_diff_missing_file_reports_cannot_access(tmp_path):
         f"Error: Cannot access {root / 'nope.txt'}\n"
         "Caused by: No such file or directory (os error 2)\n"
     )
+
+
+def test_a_closed_pipe_exits_quietly_with_jjs_status(tmp_path):
+    """A reader that leaves (`| head`) stops the command: exit 3, as jj's
+    `BROKEN_PIPE_EXIT_CODE`, and nothing on stderr -- no traceback, and
+    no `Exception ignored while flushing sys.stdout`. The read end is
+    closed before pyjj writes, so the write always fails."""
+    root, home = tmp_path / "repo", tmp_path / "home"
+    root.mkdir()
+    home.mkdir()
+    _file_repo(root, home)
+    read_end, write_end = os.pipe()
+    os.close(read_end)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pyjj_cli", "-R", str(root), "diff",
+             "-r", "@-", "--git"],
+            stdout=write_end, stderr=subprocess.PIPE, text=True, env=_env(home),
+        )
+    finally:
+        os.close(write_end)
+    assert result.returncode == 3
+    assert result.stderr == ""

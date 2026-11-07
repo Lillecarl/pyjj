@@ -99,6 +99,9 @@ def build_parser(argv: list[str] | None = None) -> argparse.ArgumentParser:
 # layer. `--at-operation`, `--ignore-working-copy` and `--color` are
 # honoured too.
 _IGNORED_GLOBAL_FLAGS = {"--no-pager", "--quiet", "--debug"}
+
+#: jj's exit status when the reader of its output goes away.
+_BROKEN_PIPE_EXIT_CODE = 3
 _IGNORED_GLOBAL_OPTIONS: set[str] = set()
 
 # Globals that change behaviour. argparse only accepts top-level options
@@ -299,6 +302,13 @@ def main(argv: list[str] | None = None) -> int:
         return handler(args)
     except common.ConfigArgsError:
         return 1
+    except BrokenPipeError:
+        # jj's `BROKEN_PIPE_EXIT_CODE`: the reader left (`| head`), which
+        # is a reason to stop, not an error. Point stdout at /dev/null so
+        # the interpreter's own flush at exit cannot raise again.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        return _BROKEN_PIPE_EXIT_CODE
 
 
 if __name__ == "__main__":
