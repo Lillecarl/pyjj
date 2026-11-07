@@ -72,7 +72,9 @@ if TYPE_CHECKING:
         Workspace,
     )
 
-    Revisions = str | Sequence[str]
+    # a revset, or a commit an earlier verb in the block returned
+    Revision = str | Commit
+    Revisions = Revision | Sequence[Revision]
     Hunks = dict[str, Sequence[int]]
 
 
@@ -365,7 +367,7 @@ class Atomic:
         cover. Anything done through it joins the same block."""
         return self._tx
 
-    def _commit(self, revision: str | Commit) -> Commit:
+    def _commit(self, revision: Revision) -> Commit:
         """A revision argument, as a commit. Accepts a commit already.
 
         **Resolved against the transaction, not against the repository
@@ -389,7 +391,7 @@ class Atomic:
         return self._repo._repo.get_commit(found[0])
 
     def _commits(self, revisions: Revisions) -> list[Commit]:
-        if isinstance(revisions, str):
+        if isinstance(revisions, str | _bindings.Commit):
             revisions = [revisions]
         return [self._commit(revision) for revision in revisions]
 
@@ -418,7 +420,7 @@ class Atomic:
 
     # ---- the operations -------------------------------------------------
 
-    def describe(self, revision: str = "@", *, message: str) -> Commit:
+    def describe(self, revision: Revision = "@", *, message: str) -> Commit:
         """`jj describe`: set a commit's description."""
         target = self._commit(revision)
         self._guard([target])
@@ -448,13 +450,13 @@ class Atomic:
         self._finish(written)
         return written
 
-    def commit(self, *, message: str, revision: str = "@") -> Commit:
+    def commit(self, *, message: str, revision: Revision = "@") -> Commit:
         """`jj commit`: describe the working-copy commit and start a
         new one on top, which is where the next edits land."""
         described = self.describe(revision, message=message)
         return self.new(described.id.hex(), edit=True)
 
-    def squash(self, revision: str = "@", *, into: str | None = None,
+    def squash(self, revision: Revision = "@", *, into: Revision | None = None,
                paths: Sequence[str] | None = None,
                hunks: Hunks | None = None, keep_emptied: bool = False) -> Commit:
         """`jj squash`: move a commit's changes into another.
@@ -485,7 +487,7 @@ class Atomic:
         self._finish(written)
         return written
 
-    def split(self, revision: str = "@", *,
+    def split(self, revision: Revision = "@", *,
               paths: Sequence[str] | None = None,
               hunks: Hunks | None = None,
               message: str | None = None,
@@ -589,7 +591,7 @@ class Atomic:
         self._record(*copies)
         return copies
 
-    def absorb(self, revision: str = "@", *,
+    def absorb(self, revision: Revision = "@", *,
                into: str | None = None,
                paths: Sequence[str] | None = None) -> AbsorbStats:
         """`jj absorb`: push each change back into the ancestor that
@@ -606,7 +608,7 @@ class Atomic:
         return stats
 
     def restore(self, paths: Sequence[str] | None = None, *,
-                into: str = "@", from_revision: str | None = None) -> Commit:
+                into: Revision = "@", from_revision: Revision | None = None) -> Commit:
         """`jj restore`: take paths from one revision into another.
 
         `from_revision` defaults to the parent of `into`, as `jj
@@ -624,7 +626,7 @@ class Atomic:
         return written
 
     def revert(self, revisions: Revisions, *,
-               destination: str = "@") -> list[Commit]:
+               destination: Revision = "@") -> list[Commit]:
         """`jj revert`: apply the reverse of commits as new commit(s).
 
         Each target becomes a chained child starting at `destination`,
@@ -646,7 +648,7 @@ class Atomic:
         self._finish(*out)
         return out
 
-    def bookmark(self, name: str, revision: str = "@") -> Commit:
+    def bookmark(self, name: str, revision: Revision = "@") -> Commit:
         """`jj bookmark set`: point a bookmark at a commit."""
         target = self._commit(revision)
         self._tx.set_bookmark(name, target.id)

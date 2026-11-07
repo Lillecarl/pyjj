@@ -348,6 +348,22 @@ def test_restore_undoes_a_file_in_the_working_copy(session):
     assert (root / "first.txt").read_text() == "one\n"
 
 
+def test_verbs_take_the_commits_earlier_verbs_returned(session):
+    """A Commit from one verb names a revision in the next, alone or in
+    a list, without a round trip through its hex id."""
+    with session.atomic("chain") as tx:
+        made = tx.new(["@-"], message="made", edit=False)
+        made = tx.restore(None, into=made, from_revision="@")
+        made = tx.describe(made, message="made, restored")
+        (copy,) = tx.duplicate(made)
+        tx.abandon(copy)
+    session.reload()
+    found = [c for c in session.revset("all()")
+             if c.description.strip() == "made, restored"]
+    assert len(found) == 1
+    assert found[0].read_file("first.txt") == b"one\n"
+
+
 def test_absorb_moves_a_change_into_the_commit_that_owns_it(session):
     """`jj absorb`: the edit lands in the commit that last touched the
     line, without the caller naming which one that is."""
