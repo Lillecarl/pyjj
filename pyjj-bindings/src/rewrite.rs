@@ -187,6 +187,10 @@ fn select(
     })
 }
 
+/// A squash's destination builder, and the sources it emptied and
+/// abandoned (`SquashedCommit::abandoned_commits`).
+pub type Squashed = (DetachedCommitBuilder, Vec<jj_lib::backend::CommitId>);
+
 /// `jj squash` equivalent: moves `source`'s changes (optionally restricted
 /// to `paths`) into `destination`. `destination` must be a parent of
 /// `source`, or a rewrite of one — same constraint `jj_lib` itself enforces.
@@ -215,7 +219,7 @@ pub fn squash(
     paths: Option<Vec<String>>,
     hunks: Option<HashMap<String, Vec<usize>>>,
     keep_emptied: bool,
-) -> PyResult<Option<DetachedCommitBuilder>> {
+) -> PyResult<Option<Squashed>> {
     let selection = select(mut_repo, &source.inner, paths, hunks)?;
     let result = pollster::block_on(rewrite::squash_commits(
         mut_repo,
@@ -224,7 +228,14 @@ pub fn squash(
         keep_emptied,
     ))
     .map_err(map_backend_err)?;
-    Ok(result.map(|squashed| squashed.commit_builder.detach()))
+    Ok(result.map(|squashed| {
+        let abandoned = squashed
+            .abandoned_commits
+            .iter()
+            .map(|commit| commit.id().clone())
+            .collect();
+        (squashed.commit_builder.detach(), abandoned)
+    }))
 }
 
 /// `jj squash --tool`: the same squash, with the moved changes chosen by a
@@ -238,7 +249,7 @@ pub fn squash_edited(
     destination: &PyCommit,
     selections: HashMap<String, Option<Vec<u8>>>,
     keep_emptied: bool,
-) -> PyResult<Option<DetachedCommitBuilder>> {
+) -> PyResult<Option<Squashed>> {
     let parent_tree =
         pollster::block_on(source.inner.parent_tree(mut_repo.index())).map_err(map_backend_err)?;
     let selected_tree =
@@ -255,7 +266,14 @@ pub fn squash_edited(
         keep_emptied,
     ))
     .map_err(map_backend_err)?;
-    Ok(result.map(|squashed| squashed.commit_builder.detach()))
+    Ok(result.map(|squashed| {
+        let abandoned = squashed
+            .abandoned_commits
+            .iter()
+            .map(|commit| commit.id().clone())
+            .collect();
+        (squashed.commit_builder.detach(), abandoned)
+    }))
 }
 
 /// First half of `jj split`: a `CommitBuilder` for the changes matched by

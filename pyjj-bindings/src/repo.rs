@@ -1120,7 +1120,7 @@ impl PyTransaction {
         hunks: Option<std::collections::HashMap<String, Vec<usize>>>,
         keep_emptied: bool,
     ) -> PyResult<Option<PyCommitBuilder>> {
-        PyCommitBuilder::bind_opt(slf, |mut_repo| {
+        PyCommitBuilder::bind_squash(slf, |mut_repo| {
             crate::rewrite::squash(mut_repo, source, destination, paths, hunks, keep_emptied)
         })
     }
@@ -1136,7 +1136,7 @@ impl PyTransaction {
         selections: std::collections::HashMap<String, Option<Vec<u8>>>,
         keep_emptied: bool,
     ) -> PyResult<Option<PyCommitBuilder>> {
-        PyCommitBuilder::bind_opt(slf, |mut_repo| {
+        PyCommitBuilder::bind_squash(slf, |mut_repo| {
             crate::rewrite::squash_edited(mut_repo, source, destination, selections, keep_emptied)
         })
     }
@@ -1744,6 +1744,7 @@ impl PyTransaction {
 pub struct PyCommitBuilder {
     inner: Option<DetachedCommitBuilder>,
     tx: Py<PyTransaction>,
+    abandoned: Vec<crate::ids::PyCommitId>,
 }
 
 impl PyCommitBuilder {
@@ -1755,17 +1756,19 @@ impl PyCommitBuilder {
         Ok(Self {
             inner: Some(builder),
             tx: tx.clone().unbind(),
+            abandoned: Vec::new(),
         })
     }
 
-    pub(crate) fn bind_opt<F>(tx: &Bound<'_, PyTransaction>, f: F) -> PyResult<Option<Self>>
+    fn bind_squash<F>(tx: &Bound<'_, PyTransaction>, f: F) -> PyResult<Option<Self>>
     where
-        F: FnOnce(&mut MutableRepo) -> PyResult<Option<DetachedCommitBuilder>>,
+        F: FnOnce(&mut MutableRepo) -> PyResult<Option<crate::rewrite::Squashed>>,
     {
-        let builder = with_mut_repo(&tx.borrow(), f)?;
-        Ok(builder.map(|builder| Self {
+        let squashed = with_mut_repo(&tx.borrow(), f)?;
+        Ok(squashed.map(|(builder, abandoned)| Self {
             inner: Some(builder),
             tx: tx.clone().unbind(),
+            abandoned: abandoned.into_iter().map(Into::into).collect(),
         }))
     }
 
@@ -1784,6 +1787,14 @@ fn builder_consumed() -> PyErr {
 
 #[pymethods]
 impl PyCommitBuilder {
+    /// The source commits a squash emptied and abandoned; empty for any
+    /// other builder. jj combines descriptions only from these: a
+    /// source that keeps changes keeps its own description.
+    #[getter]
+    fn abandoned_sources(&self) -> Vec<crate::ids::PyCommitId> {
+        self.abandoned.clone()
+    }
+
     fn set_description(
         mut slf: PyRefMut<'_, Self>,
         description: String,

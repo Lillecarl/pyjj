@@ -592,6 +592,29 @@ def test_squash_combines_messages_via_editor(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("squash", "--from", "--into")
+def test_squash_partial_keeps_both_descriptions(pair: RepoPair) -> None:
+    """A source that keeps changes is not abandoned, so jj combines no
+    descriptions and opens no editor, though both sides have one: the
+    destination keeps its own. No `editor_spec`, so an editor would fail
+    the step."""
+    chain(pair)
+    pair.op(files={"moved.txt": b"moved\n", "kept.txt": b"kept\n"},
+            jj=["describe", "-m", "source"])
+    pair.op(jj=["squash", "--from", "@", "--into", "@-", "moved.txt"])
+    pair.assert_parity()
+
+
+@pytest.mark.covers("squash", "--keep-emptied")
+def test_squash_keep_emptied_opens_no_combining_editor(pair: RepoPair) -> None:
+    """`--keep-emptied` leaves the source in place, so it too gives no
+    description to combine."""
+    chain(pair)
+    pair.op(files={"moved.txt": b"moved\n"}, jj=["describe", "-m", "source"])
+    pair.op(jj=["squash", "--keep-emptied"])
+    pair.assert_parity()
+
+
 @pytest.mark.covers("describe", "-m")
 @pytest.mark.covers("split")
 def test_split_first_half_message_via_editor(pair: RepoPair) -> None:

@@ -82,8 +82,6 @@ def squash(args: argparse.Namespace) -> int:
             # before an insertion rebases any of them.
             squashed = f"squash commit {source.id.hex()}"
 
-            description = _description(args, settings, source, dest)
-
             _check_rewritable(tx, settings, [source] if dest is None
                               else [source, dest])
             if dest is None:
@@ -111,7 +109,11 @@ def squash(args: argparse.Namespace) -> int:
                 # The placement still created a commit, so the operation is
                 # not empty even though nothing moved into it.
             else:
-                builder = builder.set_description(description)
+                # Only a source the squash emptied gives its description;
+                # one that keeps changes keeps it.
+                abandoned = [source] if builder.abandoned_sources else []
+                builder = builder.set_description(
+                    _description(args, settings, abandoned, dest, inserting))
                 if inserting:
                     # Forget the empty commit the placement created. It is a
                     # step nobody asked for, and an evolog naming it would
@@ -177,31 +179,30 @@ def _oldest_first(sources: Sequence[pyjj.Commit]) -> list[pyjj.Commit]:
 
 
 def _description(args: argparse.Namespace, settings: pyjj.UserSettings,
-                 source: pyjj.Commit, dest: pyjj.Commit | None) -> str:
+                 abandoned: Sequence[pyjj.Commit], dest: pyjj.Commit,
+                 inserting: bool) -> str:
     """The description the squashed commit ends up with.
 
     `-m` gives it outright and `-u` keeps the destination's. With
-    neither, a single non-empty side wins and two non-empty sides open
-    the combining editor, whose template is destination-block-first. A
-    placement leaves only one side, since the commit it creates has no
-    description of its own.
+    neither, jj combines the destination with the sources the squash
+    abandoned (`try_combine_messages`): a single non-empty one wins, two
+    open the combining editor, destination block first. A placement's
+    destination is the empty commit it created, so the editor leaves its
+    block out.
     """
     if args.message is not None:
         text = complete_newline(args.message)
     elif args.use_destination_message:
-        text = dest.description if dest is not None else ""
+        text = dest.description
     else:
-        sides = [source] if dest is None else [source, dest]
-        candidates = [c.description for c in sides if c.description]
-        if dest is not None and len(candidates) > 1:
+        candidates = [c.description for c in [*abandoned, dest] if c.description]
+        if len(candidates) > 1:
             # Two descriptions cannot be joined without a choice, so the
             # editor opens whether or not `--editor` asked for it.
-            combined = (
-                "JJ: Description from the destination commit:\n"
-                + dest.description
-                + "\nJJ: Description from source commit:\n"
-                + source.description
-            )
+            combined = "" if inserting else (
+                "JJ: Description from the destination commit:\n" + dest.description)
+            for commit in abandoned:
+                combined += "\nJJ: Description from source commit:\n" + commit.description
             return _run_editor(settings, combined)
         text = candidates[0] if candidates else ""
     if getattr(args, "editor", False):
