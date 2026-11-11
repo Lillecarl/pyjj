@@ -108,7 +108,8 @@ _IGNORED_GLOBAL_OPTIONS: set[str] = set()
 # before the subcommand, so these are lifted out of `argv` wherever they
 # appear and applied to the parsed namespace afterwards.
 _HOISTED_GLOBAL_FLAGS = {"--ignore-working-copy": "ignore_working_copy",
-                         "--ignore-immutable": "ignore_immutable"}
+                         "--ignore-immutable": "ignore_immutable",
+                         "--allow-nonff": "allow_nonff"}
 _HOISTED_GLOBAL_OPTIONS = {"--at-operation": "at_operation",
                            "--at-op": "at_operation",
                            "--color": "color"}
@@ -275,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     from pyjj_cli.commands import common
     common.set_ignore_working_copy(args.ignore_working_copy)
     common.set_ignore_immutable(bool(globals_.get("ignore_immutable")))
+    common.set_allow_nonff(bool(globals_.get("allow_nonff")))
     common.set_config_args(config_args)
     common.set_operation_args(invocation)
     colour = globals_.get("color")

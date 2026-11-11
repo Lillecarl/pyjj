@@ -92,12 +92,14 @@ def git_pull(args: argparse.Namespace) -> int:
             # `edit` abandons the old working-copy commit, which is empty
             # and undescribed.
             tx.edit(ws.workspace_name, child)
-            _finish(tx, f"pull from git remote(s) {','.join(remotes)}", settings, ws, repo)
+            _finish(tx, f"pull from git remote(s) {','.join(remotes)}", settings, ws, repo,
+                    fast_forward_only=False)
             print(f"Fast-forwarded {names} to {advance[:12]}; "
                   f"new working-copy commit {_short(child.id)}", file=sys.stderr)
             return 0
 
-        _finish(tx, f"fetch from git remote(s) {','.join(remotes)}", settings, ws, repo)
+        _finish(tx, f"fetch from git remote(s) {','.join(remotes)}", settings, ws, repo,
+                fast_forward_only=False)
         if refusal is None:
             print("Already up to date.", file=sys.stderr)
             return 0

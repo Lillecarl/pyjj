@@ -25,5 +25,5 @@ def git_import(args: argparse.Namespace) -> int:
         except pyjj.JjError as e:
             print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)
             return 1
-        _finish(tx, "import git refs", settings, ws, repo)
+        _finish(tx, "import git refs", settings, ws, repo, fast_forward_only=False)
         return 0

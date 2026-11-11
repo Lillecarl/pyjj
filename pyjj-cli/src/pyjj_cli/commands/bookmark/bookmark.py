@@ -117,12 +117,12 @@ def bookmark(args: argparse.Namespace) -> int:
                     if not matched:
                         print("No bookmarks to forget.")
                         return 0
+                    _finish(tx, f"forget bookmark {', '.join(matched)}",
+                            settings, ws, repo)
                     if forgotten_local:
                         print(f"Forgot {forgotten_local} local bookmarks.")
                     if forgotten_remote:
                         print(f"Forgot {forgotten_remote} remote bookmarks.")
-                    _finish(tx, f"forget bookmark {', '.join(matched)}",
-                            settings, ws, repo)
                     return 0
                 matched = []
                 for name in args.names:

@@ -9,11 +9,13 @@ from pyjj_bindings import *  # noqa: F403
 from pyjj_bindings import __version__ as __version__
 
 from . import extensions as extensions
+from . import fast_forward as fast_forward
 from . import hunk as hunk
 from .extensions import Identity as Identity
 from .extensions import IdentityContext as IdentityContext
 from .extensions import Workflow as Workflow
 from .extensions import identity as identity
+from .fast_forward import NonFastForwardError as NonFastForwardError
 from .session import AsyncAtomic as AsyncAtomic
 from .session import Atomic as Atomic
 from .session import PyjjError as PyjjError
@@ -24,5 +26,5 @@ from .session import open_async as open_async
 # Type checkers take the public names; a computed `__all__` would hide them.
 if not TYPE_CHECKING:
     __all__ = [*_bindings.__all__, "AsyncAtomic", "Atomic", "Identity", "IdentityContext",
-                "PyjjError", "Repo", "Workflow", "extensions", "hunk", "identity",
-                "open", "open_async"]
+                "NonFastForwardError", "PyjjError", "Repo", "Workflow", "extensions",
+                "fast_forward", "hunk", "identity", "open", "open_async"]

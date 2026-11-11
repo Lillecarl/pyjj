@@ -42,6 +42,19 @@ refusal, but loading still snapshots a dirty working copy. Editors and
 diff tools (`split`, `-i`, `diffedit`, `file edit`) still open first.
 Not on `parallelize`: it commits two transactions.
 
+## Published trunk is fast-forward-only
+
+pyjj-only. A name in `pyjj.fast-forward-bookmarks` (default `main`,
+`master`, `trunk`) with a remote counterpart other than `@git` may be
+created or moved to a descendant; anything else is refused before the
+commit, nothing written: `bookmark set --allow-backwards`, delete or
+forget, an abandon or `--ignore-immutable` rewrite of its commit,
+`undo`/`op restore`, a script's `tx.bookmark`. Override per command
+with the global `--allow-nonff` (session: `repo.atomic(...,
+allow_nonff=True)`, else `pyjj.NonFastForwardError`). `git fetch`,
+`import`, `pull` and `bookmark track` follow the remote unguarded.
+Config `[]` turns it off.
+
 ## Reshape via DOT graph
 
 `pyjj log -r '<revset>' --dot --dot-key change_id -T '{{ description }}' > base.dot`

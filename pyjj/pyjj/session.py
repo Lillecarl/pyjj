@@ -56,7 +56,7 @@ import anyio.lowlevel
 import anyio.to_thread
 import pyjj_bindings as _bindings
 
-from . import extensions
+from . import extensions, fast_forward
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Sequence
@@ -223,6 +223,7 @@ class Repo:
         *,
         allow_conflicts: bool = False,
         allow_immutable: bool = False,
+        allow_nonff: bool = False,
     ) -> AsyncIterator[AsyncAtomic]:
         """`atomic`, for a coroutine: the same block, all or nothing.
 
@@ -233,7 +234,7 @@ class Repo:
         """
         pinned = _PinnedThread()
         block = self.atomic(description, allow_conflicts=allow_conflicts,
-                            allow_immutable=allow_immutable)
+                            allow_immutable=allow_immutable, allow_nonff=allow_nonff)
         try:
             handle = AsyncAtomic(await pinned.call(block.__enter__), pinned)
             try:
@@ -258,6 +259,7 @@ class Repo:
         *,
         allow_conflicts: bool = False,
         allow_immutable: bool = False,
+        allow_nonff: bool = False,
     ) -> Iterator[Atomic]:
         """Everything in the block, or nothing.
 
@@ -271,7 +273,9 @@ class Repo:
         `immutable_heads()` protects; without it the first such rewrite
         raises, as it does in jj. `allow_conflicts` keeps a result that
         introduced a conflict; without it the block is discarded and
-        the conflicted commits are named.
+        the conflicted commits are named. `allow_nonff` lets the block
+        move a published trunk (`pyjj.fast_forward`) backwards, sideways
+        or away; without it that raises `NonFastForwardError`.
         """
         self.snapshot()
         transaction = self._repo.start_transaction(self._settings)
@@ -284,6 +288,8 @@ class Repo:
             # `Transaction.commit` refuses pending rewrites. This is
             # idempotent, so a verb that forgets it costs nothing.
             transaction.rebase_descendants()
+            if not allow_nonff:
+                fast_forward.check(transaction, self._repo, self._settings)
             self._export_git_refs(transaction)
         except BaseException as e:
             # Deliberately broad: an unpredicted error is exactly when a

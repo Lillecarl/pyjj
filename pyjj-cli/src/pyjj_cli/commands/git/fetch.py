@@ -90,6 +90,7 @@ def git_fetch(args: argparse.Namespace) -> int:
         remotes = _remotes(repo, settings, args)
         for remote in remotes:
             tx.git_fetch(settings, remote, branches, tags, tracked=tracked)
+        # The remote moved what this imports, not the caller.
         _finish(tx, f"fetch from git remote(s) {','.join(remotes)}",
-                settings, ws, repo)
+                settings, ws, repo, fast_forward_only=False)
         return 0

@@ -578,6 +578,19 @@ imported once per process. Two registries:
 `git init`/`git clone` build settings with no workspace, so no hook
 runs there.
 
+### Fast-forward-only trunk
+
+`pyjj/pyjj/fast_forward.py`, checked in `_finish` (after the
+descendant rebase, before `_trial`) and in `Repo.atomic`. Reads the
+transaction's final view against the base repo, so it covers every
+command and script that moves a protected bookmark, not one verb.
+Protected = a `pyjj.fast-forward-bookmarks` name with a remote
+bookmark on a remote other than `git` (colocation mirrors every
+bookmark to `@git`; scratch and parity repos have no other remote, so
+they stay unconstrained). `--allow-nonff` is a hoisted global flag.
+Remote-driven finishes pass `fast_forward_only=False`: fetch, import,
+pull, track/untrack. pyjjui's own transactions are not covered.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in

@@ -231,8 +231,11 @@ def conflicted_refs(pair) -> None:
     pair.op(jj=["git", "fetch"])
     pair.op(jj=["bookmark", "track", "main@origin"])
     # Both refs now move locally, away from what the remote holds.
-    pair.op(jj=["bookmark", "set", "main", "-r", 'description(glob:"one*")',
-                "--allow-backwards"])
+    # A sideways move of a published `main` is exactly what pyjj's
+    # fast-forward guard refuses, so its side says it means it.
+    main_sideways = ["bookmark", "set", "main", "-r", 'description(glob:"one*")',
+                     "--allow-backwards"]
+    pair.op(jj=main_sideways, py=["--allow-nonff", *main_sideways])
     pair.op(jj=["tag", "set", "v1", "-r", 'description(glob:"two*")',
                 "--allow-move"])
     # More refs, on more than one commit. Without them `--sort` prints

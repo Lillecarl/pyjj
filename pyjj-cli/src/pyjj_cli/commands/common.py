@@ -514,6 +514,17 @@ def _ignore_immutable() -> bool:
     return _IGNORE_IMMUTABLE
 
 
+# `--allow-nonff`, pyjj's own: lifts the fast-forward-only guard on a
+# published trunk (`pyjj.fast_forward`) for one command.
+_ALLOW_NONFF = False
+
+
+def set_allow_nonff(value: bool) -> None:
+    """Called once by `main()` from the parsed globals."""
+    global _ALLOW_NONFF
+    _ALLOW_NONFF = bool(value)
+
+
 def _workspace_path(args: argparse.Namespace) -> str:
     """The workspace directory this command should load.
 
@@ -1050,8 +1061,9 @@ def _track_remote(args: argparse.Namespace, kind: str, verb: str) -> int:
         apply = getattr(tx, f"git_{verb}_remote_{kind}")
         for ref, remote in pairs:
             apply(remote, ref)
+        # Tracking adopts where the remote put the bookmark.
         _finish(tx, f"{verb} remote {kind} {', '.join(names)}",
-                settings, ws, repo)
+                settings, ws, repo, fast_forward_only=False)
         return 0
 
 def _require_signing_backend(settings: pyjj.UserSettings) -> int | None:
@@ -1442,7 +1454,8 @@ def _advance_if_immutable(tx: pyjj.Transaction, settings: pyjj.UserSettings, ws:
 
 def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings, ws: pyjj.Workspace, base_repo: pyjj.ReadonlyRepo, *,
             delete_abandoned_bookmarks: bool = False, restore_descendants: bool = False,
-            rebase: bool = True, trial: argparse.Namespace | None = None) -> None:
+            rebase: bool = True, trial: argparse.Namespace | None = None,
+            fast_forward_only: bool = True) -> None:
     """Commit the transaction, then mirror the real CLI's
     transaction-finish behavior: when a rewrite moved the working-copy
     commit (e.g. an abandon or rebase rebased it), update the on-disk
@@ -1459,6 +1472,10 @@ def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings,
     `trial` is the parsed command line of a command carrying
     `Flag.TRIAL`. Under `--dry-run` or `--abort-on-conflict` it may
     raise `TrialStop` instead of committing; see `_trial`.
+
+    A published trunk moves only forward (`pyjj.fast_forward`) unless
+    `--allow-nonff` was passed. `fast_forward_only=False` is for the
+    commands where the remote moved it (fetch, import, pull, track).
     """
     old_wc_hex = base_repo.view()[ws.workspace_name]
     if rebase:
@@ -1466,6 +1483,12 @@ def _finish(tx: pyjj.Transaction, description: str, settings: pyjj.UserSettings,
             tx.reparent_descendants()
         else:
             tx.rebase_descendants(delete_abandoned_bookmarks=delete_abandoned_bookmarks)
+    if fast_forward_only and not _ALLOW_NONFF:
+        # Before the trial, so `--dry-run` reports the refusal too.
+        try:
+            pyjj.fast_forward.check(tx, base_repo, settings)
+        except pyjj.NonFastForwardError as e:
+            raise CommandError(f"{e.message}\nHint: Use --allow-nonff to allow it.") from e
     if trial is not None:
         # Before the advance: its fresh working-copy commit is not part
         # of the rewrite being judged.
