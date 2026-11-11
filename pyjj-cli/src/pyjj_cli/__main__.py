@@ -30,6 +30,13 @@ def build_parser(argv: list[str] | None = None) -> argparse.ArgumentParser:
         help="Path to the workspace to operate on (default: search up from "
              "the current directory)",
     )
+    # Not argparse's `version` action: its text is fixed when the parser
+    # is built, and naming the bindings' version imports `pyjj`, which
+    # every <TAB> would then pay for.
+    parser.add_argument(
+        "-V", "--version", dest="show_version", action="store_true",
+        help="Print version",
+    )
     sub = parser.add_subparsers(dest="command")
 
     # Each cli.* module registers its own top-level command(s) onto `sub`.
@@ -288,6 +295,9 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     common.set_color_choice(colour)
+    if args.show_version:
+        from pyjj_cli.commands.crypto.version import version
+        return version(args)
     if args.command is None:
         parser.print_help()
         return 1

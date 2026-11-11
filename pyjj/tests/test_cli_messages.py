@@ -313,3 +313,20 @@ def test_a_closed_pipe_exits_quietly_with_jjs_status(tmp_path):
         os.close(write_end)
     assert result.returncode == 3
     assert result.stderr == ""
+
+
+def test_version_flag_prints_what_the_version_command_prints(tmp_path):
+    """`jj --version` and `jj -V` work, so a jj habit must not hit a
+    usage error. No repository is needed."""
+    def run(*args):
+        return subprocess.run(
+            [sys.executable, "-m", "pyjj_cli", *args],
+            capture_output=True, text=True, env=_env(tmp_path), cwd=str(tmp_path),
+        )
+    expected = run("version")
+    assert expected.returncode == 0, expected.stderr
+    assert expected.stdout.startswith("pyjj-cli v0.1.0")
+    for flag in ("--version", "-V"):
+        result = run(flag)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == expected.stdout

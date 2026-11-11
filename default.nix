@@ -28,6 +28,16 @@ in
   inputs ? flake.inputs,
   system ? builtins.currentSystem,
   pkgs ? import inputs.nixpkgs { inherit system; },
+  # What `pyjj version` names as its source. A fetched tree has no `.git`,
+  # so a consumer locking this repo passes its input's `rev`. A checkout
+  # reads git's HEAD, which jj keeps at `@-` in a colocated repo: the base
+  # of the build, without any working-copy changes on top.
+  rev ?
+    let
+      head = ./.git/HEAD;
+      text = pkgs.lib.removeSuffix "\n" (builtins.readFile head);
+    in
+    if builtins.pathExists head && builtins.match "[0-9a-f]{40}" text != null then text else null,
 }:
 let
   inherit (pkgs) lib;
@@ -54,7 +64,7 @@ let
     inherit (pyprojectLib) renderPyproject;
   };
   pyjj-cli = pkgs.callPackage ./pyjj-cli/package.nix {
-    inherit pyjj pyjjui;
+    inherit pyjj pyjjui rev;
     inherit (pyprojectLib) renderPyproject;
   };
   pyjjui = pkgs.callPackage ./pyjjui/package.nix {

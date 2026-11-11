@@ -5,6 +5,8 @@
   pyjjui,
   renderPyproject,
   installShellFiles,
+  # Source revision `pyjj version` reports; null prints none.
+  rev ? null,
 }: let
   attrs = renderPyproject {
     projectRoot = ./.;
@@ -46,6 +48,9 @@ in
         cp skills/pyjj/SKILL.md $out/share/skills/pyjj-cli/pyjj/
         echo "$out/share/skills/pyjj-cli" > \
           "$(toPythonPath "$out")/pyjj_cli/skill_dir.txt"
+      ''
+      + lib.optionalString (rev != null) ''
+        echo ${lib.escapeShellArg rev} > "$(toPythonPath "$out")/pyjj_cli/build_rev.txt"
       '';
       meta =
         attrs.meta
