@@ -271,10 +271,21 @@ pub fn snapshot(
     settings: &PyUserSettings,
     args: Option<String>,
 ) -> PyResult<(PyReadonlyRepo, SnapshotOutcome)> {
+    let repo = load_head(workspace)?;
+    let (repo, outcome) = snapshot_from(workspace, settings, args, repo)?;
+    Ok((wrap_repo(workspace, repo), outcome))
+}
+
+/// `snapshot()`, starting from `repo` rather than the head. Recovery
+/// starts from the working copy's own operation.
+fn snapshot_from(
+    workspace: &mut Workspace,
+    settings: &PyUserSettings,
+    args: Option<String>,
+    repo: Arc<ReadonlyRepo>,
+) -> PyResult<(Arc<ReadonlyRepo>, SnapshotOutcome)> {
     let workspace_name = workspace.workspace_name().to_owned();
     let workspace_root = workspace.workspace_root().to_path_buf();
-    let repo = pollster::block_on(workspace.load_at_head())
-        .map_err(|err| crate::errors::RepoLoadError::new_err(err.to_string()))?;
     let config = SnapshotConfig::load(settings, &workspace_root, repo.store())?;
     let colocated = crate::workspace::is_colocated(workspace, repo.store())?;
 
@@ -284,7 +295,7 @@ pub fn snapshot(
     else {
         drop(locked_ws);
         let empty = SnapshotOutcome::new(&Default::default());
-        return Ok((wrap_repo(workspace, load_head(workspace)?), empty));
+        return Ok((load_head(workspace)?, empty));
     };
     let (new_tree, stats) = pollster::block_on(locked_ws.locked_wc().snapshot(&config.options()))
         .map_err(map_working_copy_err)?;
@@ -296,7 +307,7 @@ pub fn snapshot(
     if new_tree.tree_ids_and_labels() == old_commit.tree().tree_ids_and_labels() {
         pollster::block_on(locked_ws.finish(repo.operation().id().clone()))
             .map_err(map_working_copy_err)?;
-        return Ok((wrap_repo(workspace, repo), outcome));
+        return Ok((repo, outcome));
     }
 
     let mut tx = crate::repo::open_tx(&repo, &settings.0, &workspace_name, args);
@@ -343,7 +354,79 @@ pub fn snapshot(
     pollster::block_on(locked_ws.finish(new_repo.operation().id().clone()))
         .map_err(map_working_copy_err)?;
     outcome.changed = true;
-    Ok((wrap_repo(workspace, new_repo), outcome))
+    Ok((new_repo, outcome))
+}
+
+/// `recover_stale_working_copy` in jj's cli_util.rs, for `jj workspace
+/// update-stale`.
+///
+/// Edits in the stale working copy are snapshotted first, on top of the
+/// operation the working copy last recorded, so they survive. Loading the
+/// head then merges that snapshot with whatever made the working copy
+/// stale, and the fresh working-copy commit is checked out. Returns the
+/// repository and the commit checked out, `None` when the working copy
+/// was not stale.
+pub fn recover_stale(
+    workspace: &mut Workspace,
+    settings: &PyUserSettings,
+    args: Option<String>,
+) -> PyResult<(PyReadonlyRepo, Option<crate::ids::PyCommitId>)> {
+    let workspace_name = workspace.workspace_name().to_owned();
+    let workspace_root = workspace.workspace_root().to_path_buf();
+    let repo_loader = workspace.repo_loader().clone();
+    let op_id = workspace.working_copy().operation_id().clone();
+    let op = pollster::block_on(repo_loader.load_operation(&op_id))
+        .map_err(crate::errors::map_repo_load_err)?;
+    let stale_repo =
+        pollster::block_on(repo_loader.load_at(&op)).map_err(crate::errors::map_repo_load_err)?;
+    let (snapshotted, _stats) = snapshot_from(workspace, settings, args.clone(), stale_repo)?;
+    let wc_commit = |repo: &ReadonlyRepo| -> PyResult<Option<Commit>> {
+        repo.view()
+            .get_wc_commit_id(&workspace_name)
+            .map(|id| pollster::block_on(repo.store().get_commit_async(id)))
+            .transpose()
+            .map_err(map_backend_err)
+    };
+    let head = load_head(workspace)?;
+    let (Some(stale_commit), Some(desired)) = (wc_commit(&snapshotted)?, wc_commit(&head)?) else {
+        return Ok((wrap_repo(workspace, head), None));
+    };
+    let colocated = crate::workspace::is_colocated(workspace, head.store())?;
+    let mut locked_ws = pollster::block_on(workspace.start_working_copy_mutation())
+        .map_err(map_working_copy_err)?;
+    let freshness =
+        pollster::block_on(WorkingCopyFreshness::check_stale(locked_ws.locked_wc(), &desired, &head))
+            .map_err(crate::errors::map_py_err)?;
+    if matches!(freshness, WorkingCopyFreshness::Fresh | WorkingCopyFreshness::Updated(_)) {
+        drop(locked_ws);
+        return Ok((wrap_repo(workspace, head), None));
+    }
+    let mut head = head;
+    if colocated {
+        let mut tx = crate::repo::open_tx(&head, &settings.0, &workspace_name, args);
+        pollster::block_on(jj_lib::git::reset_head(
+            tx.repo_mut(),
+            &workspace_name,
+            &workspace_root,
+            (Some(&stale_commit), &desired),
+        ))
+        .map_err(|err| crate::errors::JjError::new_err(err.to_string()))?;
+        if tx.repo().has_changes() {
+            head = pollster::block_on(tx.commit("reset git head")).map_err(map_transaction_err)?;
+        }
+    }
+    // jj's `update_stale_working_copy`: the files must still be the
+    // snapshotted commit's, or another process got in between.
+    if stale_commit.tree().tree_ids_and_labels()
+        != locked_ws.locked_wc().old_tree().tree_ids_and_labels()
+    {
+        return Err(WorkingCopyError::new_err(
+            "Concurrent working copy operation. Try again.",
+        ));
+    }
+    pollster::block_on(locked_ws.locked_wc().check_out(&desired)).map_err(map_checkout_err)?;
+    pollster::block_on(locked_ws.finish(head.op_id().clone())).map_err(map_working_copy_err)?;
+    Ok((wrap_repo(workspace, head), Some(desired.id().clone().into())))
 }
 
 /// `snapshot_workspace` in jj's `workspace remove`: snapshots a workspace

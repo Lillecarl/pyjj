@@ -1224,12 +1224,14 @@ Current state:
   matching a target commit's tree by content, even with a stale operation
   id, correctly counts as "fresh," same as real jj) and, if so, resets the
   working copy to `repo`'s wc commit, returning `check_out()`-shaped stats;
-  `None` if nothing needed doing. Deliberately a **simpler subset** of the
-  real CLI command: unlike `cli`'s `recover_stale_working_copy`, this does
-  *not* snapshot and preserve any uncommitted edits sitting in the stale
-  working copy before resetting — callers who need that should snapshot
-  against the old operation themselves first (e.g. via a `Workspace`
-  loaded at the stale op).
+  `None` if nothing needed doing. It does *not* snapshot the stale files
+  first, so their unsaved edits are lost. `Workspace.recover_stale(settings,
+  args)` is the full `recover_stale_working_copy` port the CLI uses: it
+  snapshots at the working copy's own operation, loads the head (merging
+  that snapshot in), resets git HEAD when colocated, and checks out the
+  fresh commit. As in jj, an edit made under a rewritten `@` then sits in a
+  divergent sibling of `@`, not on disk. The CLI loads the workspace
+  without the usual snapshot, which refuses a stale working copy.
 - **Git (colocated + remote)**: `Transaction.git_import_refs()` /
   `.git_export_refs()` wrap `jj_lib::git::{import_refs, export_refs}` with
   jj's own built-in defaults (`abandon_unreachable_commits`/

@@ -734,6 +734,22 @@ impl PyWorkspace {
         })
     }
 
+    /// `jj workspace update-stale`: snapshot the stale working copy at its
+    /// own operation, then check out the fresh working-copy commit.
+    /// Returns `(repo, checked_out_id)`, the id `None` when nothing was
+    /// stale. See `pyjj_bindings.checkout::recover_stale`.
+    #[pyo3(signature = (settings, args=None))]
+    fn recover_stale(
+        &self,
+        py: Python<'_>,
+        settings: &PyUserSettings,
+        args: Option<String>,
+    ) -> PyResult<(PyReadonlyRepo, Option<crate::ids::PyCommitId>)> {
+        self.with_ws(py, move |inner| {
+            crate::checkout::recover_stale(inner, settings, args)
+        })
+    }
+
     /// `jj workspace remove`'s snapshot of a workspace about to be
     /// deleted: a hidden child of its working-copy commit, recorded
     /// nowhere. Pass the id to `forget_workspaces(add_heads=...)`.
