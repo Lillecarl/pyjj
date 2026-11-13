@@ -57,7 +57,7 @@ Config `[]` turns it off.
 
 ## Reshape via DOT graph
 
-`pyjj log -r '<revset>' --dot --dot-key change_id -T '{{ description }}' > base.dot`
+`pyjj log -r '<revset>' --dot --dot-key change_id -T '{{ subject }}' > base.dot`
 exports the shape. Edit edges, then:
 
 - `pyjj graph plan base.dot` — prints the rebases, writes nothing. Read it.
@@ -140,5 +140,7 @@ prints, no need for the full hex.
   and introduced conflicts (keep: `--allow-conflicts`); it takes
   `--abort-on-conflict` too, as its default.
 - Output templates are Jinja2 (`-T` takes Jinja, not jj's template language).
+  `{{ description }}` is the whole message, as jj's keyword; `{{ subject }}`
+  is its first line.
 - `jj commit` labels `@` then opens a fresh empty child; further edits land
   in the child, not the commit just finished.

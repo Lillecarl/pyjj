@@ -159,7 +159,7 @@ def test_log_uses_pyjj_templates_log(cli):
     assert plain.returncode == 0, plain.stderr
 
     assert cli(
-        "templates", "set", "--repo", "log", "TPL {{ author_name }}|{{ description }}"
+        "templates", "set", "--repo", "log", "TPL {{ author_name }}|{{ subject }}"
     ).returncode == 0
 
     result = cli("log", "-n", "1")
@@ -228,7 +228,7 @@ def test_log_builtin_compact_puts_description_on_its_own_row(cli):
 
 
 def test_log_builtin_full_description_shows_the_body(cli):
-    """`description` is the first line; `description_full` is everything."""
+    """The compact builtin shows the subject; the full one, the body."""
     assert cli("describe", "-m", "subject line", "-m", "body paragraph").returncode == 0
 
     compact = cli("log", "-n", "1", "-T", "builtin_log_compact")
@@ -240,6 +240,24 @@ def test_log_builtin_full_description_shows_the_body(cli):
     assert full.returncode == 0, full.stderr
     assert "subject line" in full.stdout
     assert "body paragraph" in full.stdout
+
+
+def test_description_is_the_whole_message_as_in_jj(cli):
+    """`{{ description }}` is jj's `description` keyword: the message as
+    stored, so reading it and describing with it again changes nothing.
+    `{{ subject }}` is its first line."""
+    message = "subject line\n\nbody paragraph\n\nTrailer: value\n"
+    assert cli("describe", "-m", message).returncode == 0
+
+    read = cli("log", "-r", "@", "--no-graph", "-T", "{{ description }}")
+    assert read.returncode == 0, read.stderr
+    assert read.stdout == message
+    assert cli("describe", "-m", read.stdout).returncode == 0
+    again = cli("log", "-r", "@", "--no-graph", "-T", "{{ description }}")
+    assert again.stdout == message
+
+    subject = cli("log", "-r", "@", "--no-graph", "-T", "{{ subject }}")
+    assert subject.stdout == "subject line\n"
 
 
 def test_log_template_rejects_unknown_variable(cli):

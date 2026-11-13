@@ -54,12 +54,12 @@ _DOT_CATALOGUE = (
     "change_id", "change_id_short", "commit_id", "commit_id_short",
     "author", "author_name", "author_email",
     "datetime", "datetime_full",
-    "description", "description_full",
+    "subject", "description", "description_full",
     "hidden", "empty", "operation_id", "operation_description",
     "diff",
 )
 _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
-                "description", "hidden", "operation_id",
+                "subject", "hidden", "operation_id",
                 "operation_description")
 
 
@@ -301,7 +301,8 @@ def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.
         "datetime": _format_timestamp(commit.committer.timestamp,
                                       century=False),
         "datetime_full": _format_timestamp(commit.committer.timestamp),
-        "description": description or "(no description set)",
+        "description": commit.description,
+        "subject": description or "(no description set)",
         "description_full": commit.description.strip() or "(no description set)",
         "hidden": hidden,
         "hidden_marker": " (hidden)" if hidden else "",

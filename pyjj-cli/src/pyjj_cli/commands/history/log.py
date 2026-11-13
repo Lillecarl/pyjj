@@ -66,7 +66,7 @@ _BUILTINS = {
     "builtin_log_compact_full_description":
         "{{ change_id_short }} {{ author_email }} {{ datetime_full }} "
         "{{ commit_id_short }}\n{{ description_full }}",
-    "builtin_log_oneline": "{{ change_id_short }} {{ description }}",
+    "builtin_log_oneline": "{{ change_id_short }} {{ subject }}",
 }
 
 
@@ -94,7 +94,7 @@ _DOT_CATALOGUE = (
     "change_id", "change_id_short", "commit_id", "commit_id_short",
     "author", "author_name", "author_email",
     "datetime", "datetime_full",
-    "description", "description_full",
+    "subject", "description", "description_full",
     "bookmarks", "remote_bookmarks", "unpushed_bookmarks",
     "is_wc", "is_current_wc", "is_root",
     "files", "diff",
@@ -104,7 +104,7 @@ _DOT_CATALOGUE = (
 # attribute can be larger than the rest of the graph, so neither is
 # emitted until it is named.
 _DOT_DEFAULT = ("change_id", "commit_id", "author", "datetime",
-                "description", "bookmarks", "unpushed_bookmarks")
+                "subject", "bookmarks", "unpushed_bookmarks")
 
 
 def _log_revset(settings: pyjj.UserSettings, revisions: str | None, paths: Sequence[str] | None) -> str:
@@ -408,9 +408,11 @@ def log(args: argparse.Namespace) -> int:
                     hex_id in all_wc_ids, hex_id in wc_ids))
                 if rendered is None:
                     return 1
-                # A template is the whole row, exactly like `jj log -T`.
+                # A template is the whole row, exactly like `jj log -T`:
+                # no indent under `--no-graph` either, or a message read
+                # back for `describe` gains two spaces per body line.
                 emit([Line([(line, "")], kind)
-                      for line in rendered.splitlines() or [""]])
+                      for line in rendered.splitlines() or [""]], indent=False)
             elif builtin:
                 # jj names another workspace's working copy in the row, and
                 # only when the repository has more than one.
@@ -525,7 +527,8 @@ def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.
         "author_name": commit.author.name or "",
         "author_email": commit.author.email or "",
         "author_display": commit.author.name or commit.author.email or "",
-        "description": first_line or "(no description set)",
+        "description": commit.description,
+        "subject": first_line or "(no description set)",
         "description_full": commit.description.strip() or "(no description set)",
         "description_display": first_line or "(no description set)",
         "bookmarks": names,

@@ -123,7 +123,8 @@ def _jinja_lines(op: pyjj.Operation, current: bool, template: Template):
         "time_ago": _ago(op.end_time.millis_since_epoch),
         "duration": _duration(op.start_time.millis_since_epoch,
                               op.end_time.millis_since_epoch),
-        "description": op.description.splitlines()[0] if op.description else "",
+        "description": op.description,
+        "subject": op.description.splitlines()[0] if op.description else "",
         "description_full": op.description,
         "attributes": attributes,
         "is_current": current,
@@ -200,10 +201,10 @@ _DOT_CONFLICTS = (
 # than folding a whole report into an attribute.
 _DOT_CATALOGUE = (
     "id", "id_short", "user", "username", "hostname", "workspace_name",
-    "time_ago", "duration", "description", "description_full",
+    "time_ago", "duration", "subject", "description", "description_full",
     "attributes", "is_current", "is_root",
 )
-_DOT_DEFAULT = ("id", "user", "time_ago", "description", "attributes")
+_DOT_DEFAULT = ("id", "user", "time_ago", "subject", "attributes")
 
 
 def _dot_attributes(op: pyjj.Operation, current: bool, fields: Iterable[str]) -> dict[str, str]:
@@ -218,8 +219,9 @@ def _dot_attributes(op: pyjj.Operation, current: bool, fields: Iterable[str]) ->
         "time_ago": _ago(op.end_time.millis_since_epoch),
         "duration": _duration(op.start_time.millis_since_epoch,
                               op.end_time.millis_since_epoch),
-        "description": (op.description.splitlines()[0]
-                        if op.description else ""),
+        "description": op.description,
+        "subject": (op.description.splitlines()[0]
+                    if op.description else ""),
         "description_full": op.description,
         "attributes": "\n".join(f"{key}: {value}"
                                 for key, value in op.attributes),

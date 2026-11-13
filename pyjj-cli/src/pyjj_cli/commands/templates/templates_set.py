@@ -15,7 +15,7 @@ _ALLOWED_VARS = {
     "change_id", "commit_id", "change_id_short", "commit_id_short",
     "change_id_short_raw", "commit_id_short_raw",
     "author", "author_name", "author_email", "author_display",
-    "description", "description_full", "description_display",
+    "subject", "description", "description_full", "description_display",
     "bookmarks", "bookmarks_str", "bookmarks_display",
     "datetime", "datetime_display", "datetime_full",
     "is_wc", "is_current_wc", "is_root",

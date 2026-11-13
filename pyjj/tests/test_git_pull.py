@@ -41,7 +41,7 @@ def upstream(tmp_path):
 
 
 def _log(work):
-    return _pyjj(work, "log", "--no-graph", "-T", "{{ description }}|{{ bookmarks | join(" ") }}\n").stdout
+    return _pyjj(work, "log", "--no-graph", "-T", "{{ subject }}|{{ bookmarks | join(" ") }}\n").stdout
 
 
 def test_up_to_date(upstream):

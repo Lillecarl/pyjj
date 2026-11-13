@@ -2061,7 +2061,10 @@ def _commit_context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit
         "committer_name": commit.committer.name or "",
         "committer_email": commit.committer.email or "",
         "datetime": _format_timestamp(commit.committer.timestamp),
-        "description": description or "(no description set)",
+        # jj's keyword: the whole message, as stored. A script that reads
+        # it and passes it back to `describe` must not lose the body.
+        "description": commit.description,
+        "subject": description or "(no description set)",
         "description_full": commit.description.strip() or "(no description set)",
         "bookmarks": bookmarks,
         "bookmarks_str": " ".join(bookmarks),

@@ -361,7 +361,7 @@ def test_cli_log_dot_writes_the_default_fields_as_attributes(
     attrs = _attrs(result.stdout, commit.id.hex())
     assert attrs["commit_id"] == commit.id.hex()
     assert attrs["change_id"] == commit.change_id.reverse_hex()
-    assert attrs["description"]
+    assert attrs["subject"]
     # The costly fields stay out until they are named.
     assert "files" not in attrs
     assert "diff" not in attrs

@@ -82,7 +82,7 @@ def topics(tmp_path):
 
 def _graph(root, path: Path, home) -> None:
     result = _run(root, "log", "-r", "all() ~ root()", "--dot",
-                  "--dot-key", "change_id", "-T", "{{ description }}",
+                  "--dot-key", "change_id", "-T", "{{ subject }}",
                   home=home)
     assert result.returncode == 0, result.stderr
     path.write_text(result.stdout)
@@ -386,7 +386,7 @@ def test_apply_abandon_and_rebase_together(topics, tmp_path):
     def named(bookmark=None, description=None):
         if description is not None:
             return next(n for n in graph.nodes()
-                        if n.attr.get("description") == description)
+                        if n.attr.get("subject") == description)
         return next(n for n in graph.nodes()
                     if n.attr["bookmarks"] == bookmark)
 
