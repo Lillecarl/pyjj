@@ -52,30 +52,94 @@ def git_push(args: argparse.Namespace) -> int:
         if not updates:
             print("Nothing changed.", file=sys.stderr)
             return 0
-        print(f"Changes to push to {remote}:")
+        # jj writes the whole report to stderr, as status. On stdout it
+        # came out after any error, and `| tail` showed a refused push
+        # ending in `Move forward bookmark main`.
+        print(f"Changes to push to {remote}:", file=sys.stderr)
         for name, before, after in updates:
-            print(f"  {_update_term(before, after)} bookmark {name}")
+            print(f"  {_update_term(before, after)} bookmark {name}", file=sys.stderr)
         if getattr(args, "dry_run", False):
             # jj stops before it writes anything, so a bookmark that
             # `--change` or `--named` would have created stays uncreated.
-            print("Dry-run requested, not pushing.")
+            print("Dry-run requested, not pushing.", file=sys.stderr)
             return 0
         for name, target in created.items():
             tx.set_bookmark(name, target)
         stats = tx.git_push_updates(
             settings, remote, updates,
             list(getattr(args, "push_options", None) or []))
-        rejected = [*stats.rejected, *stats.remote_rejected]
-        for name, reason in rejected:
-            print(f"Error: {name} rejected: {reason or 'no reason given'}",
-                  file=sys.stderr)
-        if not stats.pushed and rejected:
+        _print_push_stats(stats)
+        # Git answers for every ref it was given. A ref in none of the
+        # three lists means its answer was not understood, and treating
+        # that as success records nothing and exits 0.
+        answered = {name for name in stats.pushed}
+        answered |= {name for name, _ in [*stats.rejected, *stats.remote_rejected]}
+        unanswered = [name for name, _, _ in updates
+                      if f"refs/heads/{name}" not in answered]
+        if unanswered:
+            print("Error: Git reported nothing for "
+                  + ", ".join(f"refs/heads/{name}" for name in unanswered)
+                  + f"; pushed {stats.pushed}, rejected {stats.rejected}, "
+                  f"remote rejected {stats.remote_rejected}", file=sys.stderr)
             return 1
-        _finish(tx, f"push to {remote}", settings, ws, repo)
-        if rejected:
+        all_ok = not stats.rejected and not stats.remote_rejected
+        if all_ok or stats.pushed:
+            _finish(tx, _push_description(args, updates, remote),
+                    settings, ws, repo)
+        if not all_ok:
             print("Error: Failed to push some bookmarks", file=sys.stderr)
             return 1
         return 0
+
+
+def _print_push_stats(stats: pyjj.GitPushStats) -> None:
+    """jj's `print_push_stats`, word for word."""
+    for refs, heading, hint in (
+        (stats.rejected,
+         "The following references unexpectedly moved on the remote:",
+         "Try fetching from the remote, then make the bookmark point to "
+         "where you want it to be, and push again."),
+        (stats.remote_rejected,
+         "The remote rejected the following updates:",
+         "Try checking if you have permission to push to all the bookmarks."),
+    ):
+        if not refs:
+            continue
+        print(f"Warning: {heading}", file=sys.stderr)
+        for name, reason in refs:
+            suffix = f" (reason: {reason})" if reason else ""
+            print(f"  {_ref_symbol(name)}{suffix}", file=sys.stderr)
+        print(f"Hint: {hint}", file=sys.stderr)
+
+
+def _ref_symbol(name: str) -> str:
+    """A git ref as jj names it: `refs/heads/main` is `main`."""
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+def _push_description(args: argparse.Namespace,
+                      updates: Sequence[tuple[str, object, object]],
+                      remote: str) -> str:
+    """The operation description jj gives a push."""
+    remotes = f"git remote {remote}"
+    if getattr(args, "all_flag", False):
+        return f"push all bookmarks/tags to {remotes}"
+    if getattr(args, "tracked", False):
+        return f"push all tracked bookmarks/tags to {remotes}"
+    if getattr(args, "deleted", False):
+        return f"push all deleted bookmarks/tags to {remotes}"
+    return f"push {_updates_term(updates)} to {remotes}"
+
+
+def _updates_term(updates: Sequence[tuple[str, object, object]]) -> str:
+    """jj's `make_updates_term`: `bookmark main`, or `bookmarks a, b`."""
+    names = list(dict.fromkeys(name for name, _, _ in updates))
+    if len(names) == 1:
+        return f"bookmark {names[0]}"
+    return "bookmarks " + ", ".join(names)
 
 
 def _remote(args: argparse.Namespace, repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings) -> str:
