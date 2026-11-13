@@ -312,15 +312,18 @@ impl PyCommit {
 
     /// `jj`'s fileset matching against this commit's tree: `(matched,
     /// unmatched_explicit)` for `patterns` (see
-    /// `pyjj_bindings.file.match_filesets`).
+    /// `pyjj_bindings.file.match_filesets`). Bare paths resolve from
+    /// `cwd`, the workspace root when omitted.
+    #[pyo3(signature = (settings, workspace_root, patterns, cwd=None))]
     fn match_filesets(
         &self,
         py: Python<'_>,
         settings: &crate::settings::PyUserSettings,
         workspace_root: &str,
         patterns: Vec<String>,
+        cwd: Option<&str>,
     ) -> PyResult<(Vec<String>, Vec<String>)> {
-        py.detach(|| crate::file::match_filesets(self, settings, workspace_root, patterns))
+        py.detach(|| crate::file::match_filesets(self, settings, workspace_root, patterns, cwd))
     }
 
     /// Renders the conflict at `path` as conflict-marker text, the same

@@ -9,6 +9,7 @@ import pyjj
 
 from ..common import (
     CommandError,
+    _cli_paths,
     _finish,
     _fix_pattern_matches,
     _ignore_immutable,
@@ -25,9 +26,9 @@ def fix(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         revset = getattr(args, "source", None)
         include_unchanged = bool(getattr(args, "include_unchanged", False))
-        paths = getattr(args, "filesets", None) or None
-        if paths == []:
-            paths = None
+        # jj also warns about unmatched paths here, against the trees of
+        # the commits it fixes; those are chosen inside the binding.
+        paths = _cli_paths(ws, getattr(args, "filesets", None)) or None
 
         # Same as absorb: the source roots resolve inside the binding.
         files = tx.fix_enumerate(settings, revset=revset, paths=paths,

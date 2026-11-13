@@ -9,9 +9,11 @@ import pyjj
 
 from ..common import (
     _check_rewritable,
+    _cli_paths,
     _finish,
     _resolve_one,
     _run_merge_tool,
+    _warn_unmatched_paths,
     command,
     write_tx,
 )
@@ -35,7 +37,9 @@ def resolve(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         commit = _resolve_one(repo, settings, args.revision)
 
-        candidates = commit.list_files(list(args.paths_pos) or None)
+        paths = _cli_paths(ws, args.paths_pos)
+        _warn_unmatched_paths(ws, paths, [commit])
+        candidates = commit.list_files(paths or None)
         conflicts = []
         for p in candidates:
             try:
@@ -44,7 +48,7 @@ def resolve(args: argparse.Namespace) -> int:
                 conflicts.append(p)
         conflicts.sort()
         if not conflicts:
-            if args.paths_pos:
+            if paths:
                 print("Error: No conflicts found at the given path(s)",
                       file=sys.stderr)
             else:

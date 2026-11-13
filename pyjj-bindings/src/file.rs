@@ -181,9 +181,10 @@ pub fn match_filesets(
     settings: &PyUserSettings,
     workspace_root: &str,
     patterns: Vec<String>,
+    cwd: Option<&str>,
 ) -> PyResult<(Vec<String>, Vec<String>)> {
     let path_converter = RepoPathUiConverter::Fs {
-        cwd: std::path::PathBuf::from(workspace_root),
+        cwd: std::path::PathBuf::from(cwd.unwrap_or(workspace_root)),
         base: std::path::PathBuf::from(workspace_root),
     };
     let aliases_map: FilesetAliasesMap =
@@ -217,4 +218,29 @@ pub fn match_filesets(
         }
     }
     Ok((matched, unmatched))
+}
+
+/// `paths` as jj reads a bare path argument: relative to `cwd`, or
+/// absolute, and inside `workspace_root`. Returns repo-relative paths,
+/// `""` for the root itself. Raises `JjError` for a path outside the
+/// workspace.
+#[pyfunction]
+pub fn parse_file_paths(
+    workspace_root: &str,
+    cwd: &str,
+    paths: Vec<String>,
+) -> PyResult<Vec<String>> {
+    let converter = RepoPathUiConverter::Fs {
+        cwd: std::path::PathBuf::from(cwd),
+        base: std::path::PathBuf::from(workspace_root),
+    };
+    paths
+        .iter()
+        .map(|path| {
+            converter
+                .parse_file_path(path)
+                .map(|repo_path| repo_path.as_internal_file_string().to_string())
+                .map_err(|err| JjError::new_err(err.to_string()))
+        })
+        .collect()
 }

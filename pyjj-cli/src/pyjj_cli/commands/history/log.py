@@ -26,6 +26,7 @@ import pyjj
 from ...formatter import Line, render_block, separate
 from ..common import (
     CommandError,
+    _cli_paths,
     _commit_body_spans,
     _commit_glyph,
     _commit_header_spans,
@@ -262,7 +263,8 @@ def _spans_millennia(nodes: Iterable[pyjj.GraphNode]) -> bool:
 @command(catch=(pyjj.WorkspaceLoadError, pyjj.RepoLoadError,))
 def log(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
-        paths = getattr(args, "filesets", None) or None
+        # Repo-relative: the revset binding reads a fileset from the root.
+        paths = _cli_paths(ws, getattr(args, "filesets", None)) or None
         revset_expr = _log_revset(settings, getattr(args, "revisions", None),
                                   paths)
 

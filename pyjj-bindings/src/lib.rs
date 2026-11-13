@@ -84,6 +84,8 @@ mod _native {
     #[pymodule_export]
     use crate::debug::debug_fileset;
     #[pymodule_export]
+    use crate::file::parse_file_paths;
+    #[pymodule_export]
     use crate::debug::debug_index;
     #[pymodule_export]
     use crate::debug::debug_index_changed_paths;

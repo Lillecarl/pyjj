@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from typing import TYPE_CHECKING
 
 from ..common import (
     _check_rewritable,
+    _cli_paths,
     _finish,
     _resolve_one,
     _run_editor_raw,
@@ -24,9 +24,8 @@ def file_edit(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         rev = getattr(args, "revision", "@")
         commit = _resolve_one(repo, settings, rev)
-        # jj resolves the path against the workspace and normalizes it;
-        # the op description carries the normalized spelling.
-        path = os.path.normpath(args.path)
+        # The op description carries the repo-relative spelling.
+        path = _cli_paths(ws, [args.path])[0]
         _check_rewritable(tx, settings, [commit])
         kind = commit.file_kind(path)
         if kind == "dir":

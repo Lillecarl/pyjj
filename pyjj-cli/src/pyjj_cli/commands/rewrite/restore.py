@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING
 from ..common import (
     _changed_files,
     _check_rewritable,
+    _cli_paths,
     _finish,
+    _parent_commits,
     _resolve_one,
     _rev,
     _run_diff_tool,
     _selection_is_empty,
     _split_changed,
+    _warn_unmatched_paths,
     command,
     write_tx,
 )
@@ -35,7 +38,7 @@ def restore(args: argparse.Namespace) -> int:
                       file=sys.stderr)
                 return 2
             tool = getattr(args, "tool", None)
-            paths = list(args.paths_pos) or None
+            paths = _cli_paths(ws, args.paths_pos) or None
             if tool and paths:
                 # jj shows the editor only the matched paths and leaves the
                 # rest of the destination alone. Doing that here needs jj's
@@ -57,6 +60,9 @@ def restore(args: argparse.Namespace) -> int:
                 src = None
 
             _check_rewritable(tx, settings, [dst])
+            if paths:
+                _warn_unmatched_paths(
+                    ws, paths, [dst, *([src] if src else _parent_commits(repo, dst))])
             if tool:
                 selections = _selected(repo, settings, tool, dst, src)
                 if selections is None:

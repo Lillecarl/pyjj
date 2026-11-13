@@ -169,6 +169,36 @@ def test_split_paths_on_wc(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+def _subdir_changes(pair: RepoPair) -> None:
+    """`@` changes two files in `sub/` and one at the top, on a base that
+    already has all three, so a path argument from `sub/` has something
+    to select, and `../top.txt` reaches back out."""
+    pair.init()
+    pair.op(files={"sub/a.txt": b"a\n", "sub/b.txt": b"b\n", "top.txt": b"t\n"},
+            jj=["describe", "-m", "base"])
+    pair.op(jj=["new", "-m", "change"])
+    pair.op(files={"sub/a.txt": b"a2\n", "sub/b.txt": b"b2\n", "top.txt": b"t2\n"},
+            jj=["status"])
+
+
+@pytest.mark.parametrize("argv", [
+    ["split", "a.txt", "../top.txt", "-m", "first"],
+    ["squash", "--into", "@-", "a.txt"],
+    ["restore", "b.txt"],
+    ["commit", "a.txt", "-m", "first"],
+    ["file", "chmod", "x", "a.txt"],
+    ["file", "delete", "b.txt"],
+    ["absorb", "a.txt"],
+], ids=lambda argv: argv[0] if argv[0] != "file" else f"file-{argv[1]}")
+def test_paths_resolve_from_the_working_directory(pair: RepoPair, argv) -> None:
+    """jj reads a path argument relative to where it runs, not to the
+    workspace root. From `sub/`, `a.txt` is `sub/a.txt`; read from the
+    root, it names nothing, and the command changes nothing."""
+    _subdir_changes(pair)
+    pair.op(jj=argv, cwd="sub")
+    pair.assert_parity()
+
+
 def test_new_merge_two_parents(pair: RepoPair) -> None:
     chain(pair)
     pair.op(jj=["new", rev("base"), "-m", "side"])

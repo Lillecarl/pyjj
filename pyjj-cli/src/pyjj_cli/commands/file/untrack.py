@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING
 
 import pyjj
 
-from ..common import CommandError, read_repo
+from ..common import (
+    CommandError,
+    _cli_paths,
+    _warn_unmatched_paths,
+    _wc_commit,
+    read_repo,
+)
 
 if TYPE_CHECKING:
     import argparse
@@ -25,7 +31,9 @@ def file_untrack(args: argparse.Namespace) -> int:
         print("Error: Paths to untrack are required", file=sys.stderr)
         return 2
     try:
-        with read_repo(args) as (settings, ws, _repo):
+        with read_repo(args) as (settings, ws, repo):
+            paths = _cli_paths(ws, paths)
+            _warn_unmatched_paths(ws, paths, [_wc_commit(repo, ws)])
             _repo, added_back = ws.untrack_paths(settings, paths)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

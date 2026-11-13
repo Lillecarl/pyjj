@@ -2348,6 +2348,41 @@ def _ui_path_formatter(ws: pyjj.Workspace) -> UiPath:
     return lambda path: _relative_path(cwd, root / path)
 
 
+def _cli_paths(ws: pyjj.Workspace, paths: Iterable[str] | None) -> list[str]:
+    """Path arguments as jj reads them: relative to the current
+    directory, or absolute, never relative to the workspace root.
+
+    Every repo-path binding takes repo-relative paths, so each command
+    converts its arguments here first. A path outside the workspace
+    raises `JjError`, as jj refuses it.
+    """
+    if not paths:
+        return []
+    return pyjj.parse_file_paths(ws.workspace_root, os.getcwd(), list(paths))
+
+
+def _warn_unmatched_paths(ws: pyjj.Workspace, paths: Iterable[str],
+                          commits: Iterable[pyjj.Commit]) -> None:
+    """jj's `print_unmatched_explicit_paths`: name each repo path absent
+    from every one of `commits`' trees. A directory counts as present.
+
+    Callers pass the trees jj's own call site checks, which differ per
+    command: `diff` both sides, `split` the target and its parents.
+    """
+    trees = list(commits)
+    missing = [path for path in paths
+               if all(commit.file_kind(path) == "absent" for commit in trees)]
+    if missing:
+        ui_path = _ui_path_formatter(ws)
+        print("Warning: No matching entries for paths: "
+              + ", ".join(ui_path(path) for path in missing), file=sys.stderr)
+
+
+def _parent_commits(repo: pyjj.ReadonlyRepo, commit: pyjj.Commit) -> list[pyjj.Commit]:
+    """`commit`'s parents, standing in for jj's merged `parent_tree`."""
+    return [repo.get_commit(parent) for parent in commit.parent_ids]
+
+
 def _bookmarks_by_commit(repo: pyjj.ReadonlyRepo, remotes: bool = False) -> dict[str, list[str]]:
     """Bookmark names per commit, keyed by hex commit id.
 
@@ -3361,7 +3396,8 @@ def _print_git_diff(from_commit: pyjj.Commit, to_commit: pyjj.Commit, settings: 
     sys.stdout.buffer.flush()
 
 
-def _diff_stats_lines(stats: Sequence[_StatEntry]) -> list[SpanLine]:
+def _diff_stats_lines(stats: Sequence[_StatEntry],
+                      to_ui_path: UiPath | None = None) -> list[SpanLine]:
     """`--stat`'s output, in the shape `jj diff --stat` prints it.
 
     Each file gets its changed-line count and a `+`/`-` bar; a binary
@@ -3372,14 +3408,15 @@ def _diff_stats_lines(stats: Sequence[_StatEntry]) -> list[SpanLine]:
     with the line's newline: a file that only gained lines still pays
     for the escape sequence that would have coloured its `-` marks.
     """
-    paths = [stat.path for stat in stats]
+    to_ui_path = to_ui_path or (lambda path: path)
+    paths = [to_ui_path(stat.path) for stat in stats]
     width = max((len(path) for path in paths), default=0)
     total_added = 0
     total_removed = 0
     lines: list[SpanLine] = []
-    for stat in stats:
+    for stat, path in zip(stats, paths):
         if stat.added is None:
-            lines.append([(f"{stat.path:<{width}} | ", ""),
+            lines.append([(f"{path:<{width}} | ", ""),
                           ("(binary)", "binary")])
             if stat.bytes_delta:
                 side = "removed" if stat.bytes_delta < 0 else "added"
@@ -3398,7 +3435,7 @@ def _diff_stats_lines(stats: Sequence[_StatEntry]) -> list[SpanLine]:
         else:
             bar_added = bar_removed = 0
         gap = " " if bar_added or bar_removed else ""
-        line = [(f"{stat.path:<{width}} | {changed}{gap}", "")]
+        line = [(f"{path:<{width}} | {changed}{gap}", "")]
         if bar_added:
             line.append(("+" * bar_added, "added"))
         line.append(("-" * bar_removed, "removed"))
@@ -3685,8 +3722,8 @@ def _diff_files_bytes(args: argparse.Namespace, ws: pyjj.Workspace, files: Seque
         out = block(_summary_spans([_FileStat(f, compare) for f in files],
                                    to_ui_path), "diff summary")
     elif short == "stat":
-        out = block(_diff_stats_lines([_FileStat(f, compare) for f in files]),
-                    "diff stat")
+        out = block(_diff_stats_lines([_FileStat(f, compare) for f in files],
+                                      to_ui_path), "diff stat")
     elif short == "types":
         out = block(_types_spans([_FileStat(f, compare) for f in files],
                                  to_ui_path), "diff types")
@@ -3747,7 +3784,8 @@ def _diff_bytes(args: argparse.Namespace, ws: pyjj.Workspace, settings: pyjj.Use
                     "diff summary")
     elif short == "stat":
         out = block(_diff_stats_lines(
-            base.diff_stats(target, settings, paths, compare=compare)), "diff stat")
+            base.diff_stats(target, settings, paths, compare=compare), to_ui_path),
+            "diff stat")
     elif short == "types":
         out = block(_types_spans(base.diff(target, paths), to_ui_path),
                     "diff types")

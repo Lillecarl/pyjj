@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from ..common import (
     _changed_files,
+    _cli_paths,
     _finish,
     _run_diff_tool,
     _run_editor,
@@ -42,6 +43,7 @@ def commit(args: argparse.Namespace) -> int:
                 print("Error: --tool cannot be combined with FILESETS yet",
                       file=sys.stderr)
                 return 2
+            paths = _cli_paths(ws, args.paths_pos)
             wc = _wc_commit(repo, ws)
             description = _description(args, settings, wc)
             if tool:
@@ -54,12 +56,12 @@ def commit(args: argparse.Namespace) -> int:
                     .write(repo)
                 )
                 child = _remainder(tx, repo, wc, kept)
-            elif args.paths_pos:
+            elif paths:
                 # Selected paths stay in @ (same change id); everything else
                 # moves to the new child -- the same primitives `split` uses,
                 # with the roles reversed.
                 kept = (
-                    tx.split_selected(wc, list(args.paths_pos))
+                    tx.split_selected(wc, paths)
                     .set_description(description)
                     .write(repo)
                 )

@@ -10,6 +10,7 @@ from ..common import (
     CommandError,
     _changed_files,
     _check_rewritable,
+    _cli_paths,
     _finish,
     _prepare_insertion,
     _resolve_all,
@@ -18,6 +19,7 @@ from ..common import (
     _run_diff_tool,
     _run_editor,
     _split_changed,
+    _warn_unmatched_paths,
     command,
     complete_newline,
     write_tx,
@@ -95,8 +97,11 @@ def squash(args: argparse.Namespace) -> int:
                     source, dest, _selected(repo, settings, tool, source),
                     keep_emptied=keep_emptied)
             else:
-                builder = tx.squash(source, dest,
-                                    paths=getattr(args, "filesets", None) or None,
+                paths = _cli_paths(ws, getattr(args, "filesets", None))
+                # jj checks the selected half, which holds an explicit path
+                # exactly when the source does.
+                _warn_unmatched_paths(ws, paths, [source])
+                builder = tx.squash(source, dest, paths=paths or None,
                                     keep_emptied=keep_emptied)
             if builder is None:
                 if tool:

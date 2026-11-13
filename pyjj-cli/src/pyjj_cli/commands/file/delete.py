@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,7 @@ from ..common import (
     _check_rewritable,
     _finish,
     _resolve_one,
+    _ui_path_formatter,
     command,
     write_tx,
 )
@@ -22,11 +24,13 @@ def file_delete(args: argparse.Namespace) -> int:
         rev = getattr(args, "revision", "@")
         commit = _resolve_one(repo, settings, rev)
         _check_rewritable(tx, settings, [commit])
-        matched, _unmatched = commit.match_filesets(
-            settings, ws.workspace_root, list(getattr(args, "filesets", [])))
-        # No warning for unmatched patterns: real `jj file delete`
-        # silently deletes what matches and reports `Nothing changed.`
-        # (on stderr) when nothing did.
+        matched, unmatched = commit.match_filesets(
+            settings, ws.workspace_root, list(getattr(args, "filesets", [])),
+            cwd=os.getcwd())
+        if unmatched:
+            ui_path = _ui_path_formatter(ws)
+            print("Warning: No matching entries for paths: "
+                  + ", ".join(ui_path(path) for path in unmatched), file=sys.stderr)
         if not matched:
             print("Nothing changed.", file=sys.stderr)
             return 0

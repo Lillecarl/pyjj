@@ -11,7 +11,9 @@ import pyjj
 
 from ..common import (
     CommandError,
+    _cli_paths,
     _resolve_one,
+    _warn_unmatched_paths,
     command,
     read_repo,
 )
@@ -40,10 +42,12 @@ def file_search(args: argparse.Namespace) -> int:
     prints `Binary file matches: path` instead of its lines, unless
     `--binary-as-text` or `--skip-binary` says otherwise.
     """
-    with read_repo(args) as (settings, _ws, repo):
+    with read_repo(args) as (settings, ws, repo):
         commit = _resolve_one(repo, settings, args.revision)
         matches = _line_matcher(getattr(args, "pattern", "") or "")
-        paths = getattr(args, "filesets", None) or None
+        paths = _cli_paths(ws, getattr(args, "filesets", None))
+        _warn_unmatched_paths(ws, paths, [commit])
+        paths = paths or None
         name_only = getattr(args, "name_only", False)
         line_number = getattr(args, "line_number", False)
         as_text = getattr(args, "binary_as_text", False)

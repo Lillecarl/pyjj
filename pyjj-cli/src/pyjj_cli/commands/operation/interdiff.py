@@ -9,10 +9,13 @@ import pyjj
 
 from ..common import (
     CommandError,
+    _cli_paths,
     _description_diff_bytes,
+    _parent_commits,
     _print_diff_files,
     _resolve_one,
     _rev,
+    _warn_unmatched_paths,
     read_repo,
     use_color,
 )
@@ -36,7 +39,12 @@ def interdiff(args: argparse.Namespace) -> int:
         with read_repo(args) as (settings, ws, repo):
             source = _resolve_one(repo, settings, _rev(args, "from_"))
             target = _resolve_one(repo, settings, _rev(args, "to"))
-            paths = list(getattr(args, "paths", None) or []) or None
+            paths = _cli_paths(ws, getattr(args, "paths", None)) or None
+            if paths:
+                # The parents count, for a file either side deletes.
+                _warn_unmatched_paths(ws, paths, [
+                    *_parent_commits(repo, source), source,
+                    *_parent_commits(repo, target), target])
             files = repo.interdiff_files([source], target, settings, paths)
     except (pyjj.JjError, CommandError) as e:
         print(f"Error: {getattr(e, 'message', str(e))}", file=sys.stderr)

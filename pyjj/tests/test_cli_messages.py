@@ -257,24 +257,30 @@ def test_file_edit_unchanged_reports_nothing_changed(tmp_path, monkeypatch):
     # `true` leaves the editor buffer untouched: the no-op path. It
     # wins over any machine VISUAL/EDITOR leaking through the env.
     monkeypatch.setenv("JJ_EDITOR", shutil.which("true"))
-    result = _run(root, "file", "edit", "base.txt", home=home)
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "file", "edit", "base.txt"],
+        capture_output=True, text=True, env=_env(home), cwd=str(root),
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
     assert result.stderr == "Nothing changed.\n"
 
 
 def test_file_delete_unmatched_warns(tmp_path):
-    """A pattern matching nothing reports `Nothing changed.` (stderr),
-    with no warning -- matching real jj, which silently deletes what
-    matches."""
+    """A path matching nothing is named, then `Nothing changed.`, both on
+    stderr, as jj 0.47 prints them."""
     root, home = tmp_path / "repo", tmp_path / "home"
     root.mkdir()
     home.mkdir()
     _file_repo(root, home)
-    result = _run(root, "file", "delete", "nope.txt", home=home)
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "file", "delete", "nope.txt"],
+        capture_output=True, text=True, env=_env(home), cwd=str(root),
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
-    assert result.stderr == "Nothing changed.\n"
+    assert result.stderr == (
+        "Warning: No matching entries for paths: nope.txt\nNothing changed.\n")
 
 
 def test_util_diff_missing_file_reports_cannot_access(tmp_path):

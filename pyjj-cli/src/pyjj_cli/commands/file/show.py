@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 import pyjj
 
 from ..common import (
+    _cli_paths,
     _resolve_one,
     _resolve_template,
+    _warn_unmatched_paths,
     command,
     read_repo,
 )
@@ -41,22 +43,11 @@ def file_show(args: argparse.Namespace) -> int:
             sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
             sys.stdout.buffer.flush()
 
-        for pattern in args.filesets:
-            # Support exact paths and directory filtering via list_files
-            paths = commit.list_files([pattern])
-            if not paths:
-                # Try as exact file
-                try:
-                    content = commit.read_file(pattern)
-                    header(pattern)
-                    sys.stdout.buffer.write(content)
-                    if not content.endswith(b"\n"):
-                        sys.stdout.buffer.write(b"\n")
-                    continue
-                except pyjj.JjError as e:
-                    print(f"Error: {getattr(e, 'message', e)}", file=sys.stderr)
-                    return 1
-            for p in paths:
+        patterns = _cli_paths(ws, args.filesets)
+        # jj warns and prints what did match, rather than failing.
+        _warn_unmatched_paths(ws, patterns, [commit])
+        for pattern in patterns:
+            for p in commit.list_files([pattern]):
                 try:
                     content = commit.read_file(p)
                     header(p)

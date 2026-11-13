@@ -9,6 +9,7 @@ import pyjj
 
 from ...formatter import render_block
 from ..common import (
+    _cli_paths,
     _commit_context,
     _format_timestamp,
     _resolve_one,
@@ -35,7 +36,7 @@ def file_annotate(args: argparse.Namespace) -> int:
     with read_repo(args) as (settings, ws, repo):
         commit = _resolve_one(repo, settings, args.revision)
         template = _resolve_template(settings, ws, args, "file_annotate")
-        lines = commit.annotate(repo, args.path)
+        lines = commit.annotate(repo, _cli_paths(ws, [args.path])[0])
         commits: dict[str, pyjj.Commit] = {}
         for number, ann in enumerate(lines, start=1):
             key = ann.commit_id.hex()

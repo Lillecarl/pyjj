@@ -8,11 +8,13 @@ import pyjj
 
 from ..common import (
     _bookmarks_by_commit,
+    _cli_paths,
     _commit_summary_spans,
     _conflict_spans,
     _formatter,
     _summary_spans,
     _ui_path_formatter,
+    _warn_unmatched_paths,
     _wc_commit,
     _write_lines,
     command,
@@ -27,15 +29,16 @@ if TYPE_CHECKING:
 def status(args: argparse.Namespace) -> int:
     """`jj status` — the working copy, its parents, and what changed."""
     with read_repo(args) as (settings, ws, repo):
-        paths = getattr(args, "filesets", None) or None
+        paths = _cli_paths(ws, getattr(args, "filesets", None))
         wc = _wc_commit(repo, ws)
         parents = [repo.get_commit(pid) for pid in wc.parent_ids]
+        _warn_unmatched_paths(ws, paths, [wc])
 
         # Against the parents *merged*, not the first one. A merge that
         # resolves nothing changes nothing, and diffing against one parent
         # would report everything the others contributed.
         to_ui_path = _ui_path_formatter(ws)
-        entries = wc.diff_from_parents(repo, paths)
+        entries = wc.diff_from_parents(repo, paths or None)
         bookmarks = _bookmarks_by_commit(repo)
 
         def summary(commit: pyjj.Commit, working_copy: bool):

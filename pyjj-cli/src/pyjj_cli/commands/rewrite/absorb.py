@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING
 
 from ..common import (
     _changed_files,
+    _cli_paths,
     _finish,
     _ignore_immutable,
     _resolve_one,
     _run_diff_tool,
     _split_changed,
+    _warn_unmatched_paths,
     command,
     write_tx,
 )
@@ -25,7 +27,9 @@ def absorb(args: argparse.Namespace) -> int:
     with write_tx(args) as (settings, ws, repo, tx):
         source = _resolve_one(repo, settings, args.from_)
         dest_expr = getattr(args, "into", None)
-        paths = getattr(args, "filesets", None) or None
+        paths = _cli_paths(ws, getattr(args, "filesets", None)) or None
+        if paths:
+            _warn_unmatched_paths(ws, paths, [source])
         selections = None
         tool = getattr(args, "tool", None)
         if tool:

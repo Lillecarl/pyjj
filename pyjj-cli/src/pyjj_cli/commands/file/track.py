@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..common import (
+    _cli_paths,
     command,
     read_repo,
 )
@@ -27,8 +28,9 @@ def file_track(args: argparse.Namespace) -> int:
         # unless --include-ignored is used, in which case we would need to
         # force-track. For now, just do a snapshot and return.
         # The paths are relative to workspace root, we ensure they exist
-        for path in getattr(args, "paths", []):
-            p = Path(ws.workspace_root) / path
+        given = getattr(args, "paths", [])
+        for path, repo_path in zip(given, _cli_paths(ws, given)):
+            p = Path(ws.workspace_root) / repo_path
             if not p.exists():
                 print(f"Warning: path {path} does not exist", file=sys.stderr)
         return 0

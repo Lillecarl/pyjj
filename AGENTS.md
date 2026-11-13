@@ -591,6 +591,21 @@ they stay unconstrained). `--allow-nonff` is a hoisted global flag.
 Remote-driven finishes pass `fast_forward_only=False`: fetch, import,
 pull, track/untrack. pyjjui's own transactions are not covered.
 
+### Path arguments
+
+jj reads a path argument relative to the current directory, absolute
+allowed, never relative to the workspace root. Every repo-path binding
+takes repo-relative paths, so each command converts first:
+`_cli_paths(ws, paths)` in `common.py` (binding `parse_file_paths`,
+jj's `RepoPathUiConverter`); a path outside the workspace raises.
+`match_filesets` takes `cwd=` for the same reason. Then
+`_warn_unmatched_paths(ws, paths, commits)` prints jj's `No matching
+entries for paths:` -- pass the trees jj's own
+`print_unmatched_explicit_paths` call site checks (per command, read
+`cli/src/commands/*.rs`). Not converted: `debug` (passes cwd itself),
+`util diff` (disk paths), hunk specs (repo-relative by design). `fix`
+converts but does not warn: its trees are chosen in the binding.
+
 ### Operation metadata
 
 Every write goes through `_start_transaction(repo, settings)` in

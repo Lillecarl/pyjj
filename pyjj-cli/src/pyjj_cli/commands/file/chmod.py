@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 from ..common import (
     _check_rewritable,
+    _cli_paths,
     _finish,
     _resolve_one,
+    _warn_unmatched_paths,
     command,
     write_tx,
 )
@@ -23,7 +25,11 @@ def file_chmod(args: argparse.Namespace) -> int:
         mode = getattr(args, "mode", "x")
         executable = mode in ("x", "executable")
         _check_rewritable(tx, settings, [commit])
-        for path in getattr(args, "paths", []):
+        paths = _cli_paths(ws, getattr(args, "paths", []))
+        _warn_unmatched_paths(ws, paths, [commit])
+        for path in paths:
+            if commit.file_kind(path) == "absent":
+                continue
             b = tx.set_executable(commit, path, executable)
             b.write(repo)
         _finish(tx, f"chmod {rev}", settings, ws, repo, trial=args)

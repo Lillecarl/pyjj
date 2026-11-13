@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 from ..common import (
     _changed_files,
     _check_rewritable,
+    _cli_paths,
     _finish,
+    _parent_commits,
     _prepare_insertion,
     _resolve_one,
     _rev,
@@ -17,6 +19,7 @@ from ..common import (
     _run_diff_tool,
     _selection_is_empty,
     _split_changed,
+    _warn_unmatched_paths,
     command,
     complete_newline,
     write_tx,
@@ -76,8 +79,13 @@ def split(args: argparse.Namespace) -> int:
                 # `CommandError` tail below -- same text, same exit 1.
                 new_parent_ids, new_child_ids = _prepare_insertion(
                     tx, repo, settings, ontos, afters, befores)
-            if args.paths_pos:
-                first_builder = tx.split_selected(target, list(args.paths_pos))
+            paths = _cli_paths(ws, args.paths_pos)
+            if paths:
+                # The parents count too: a path the target deletes is in
+                # them and not in the target.
+                _warn_unmatched_paths(
+                    ws, paths, [*_parent_commits(repo, target), target])
+                first_builder = tx.split_selected(target, paths)
             else:
                 # The diff-editor path: select changes by editing the right
                 # directory. Upstream order applies the diff selection first,
@@ -127,6 +135,12 @@ def split(args: argparse.Namespace) -> int:
                                  .clear_rewrite_source()
                                  .generate_new_change_id())
             first = first_builder.set_description(first_description).write(repo)
+            if not first.diff(target):
+                print("Warning: All changes have been selected, so the original "
+                      "revision will become empty.", file=sys.stderr)
+            elif first.is_empty(repo):
+                print("Warning: No changes have been selected, so the new "
+                      "revision will be empty.", file=sys.stderr)
             if parallel:
                 second = (tx.split_remainder_parallel(target, first)
                           .set_description(second_description).write(repo))
