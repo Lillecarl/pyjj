@@ -7,7 +7,10 @@ a fresh `pyjj.Workspace.load()` after any `git_add_remote()`/
 `git_remove_remote()` before relying on the new state.
 """
 
+import shutil
 import subprocess
+import threading
+import time
 
 import pytest
 
@@ -142,6 +145,39 @@ def test_fetch_imports_remote_bookmark(repo_with_remote, settings):
     new_repo = tx.commit("fetch")
     # Fetched but not tracked: no local bookmark yet.
     assert new_repo.get_bookmark("main") is None
+
+
+def test_fetch_releases_the_gil_while_git_runs(repo_with_remote, settings, tmp_path):
+    """Issue 16: a fetch held the GIL, so fetches on many threads ran one
+    at a time. A `git` that sleeps first gives a heartbeat thread a window
+    it can only use if the GIL is free."""
+    slow_git = tmp_path / "slow-git"
+    slow_git.write_text(f"#!/bin/sh\nsleep 0.5\nexec {shutil.which('git')} \"$@\"\n")
+    slow_git.chmod(0o755)
+    slow = settings.with_command_args([("config", f"git.executable-path={slow_git}")])
+
+    beats = 0
+    stop = threading.Event()
+
+    def heartbeat():
+        nonlocal beats
+        while not stop.is_set():
+            beats += 1
+            time.sleep(0.01)
+
+    beater = threading.Thread(target=heartbeat)
+    tx = repo_with_remote.start_transaction(slow)
+    beater.start()
+    try:
+        start = time.monotonic()
+        tx.git_fetch(slow, "origin", ["main"])
+        elapsed = time.monotonic() - start
+    finally:
+        stop.set()
+        beater.join()
+    assert elapsed >= 0.5
+    # About 50 beats fit in the sleep. A held GIL allows one.
+    assert beats > 10
 
 
 def test_fetch_nonexistent_branch_changes_nothing(repo_with_remote, settings):

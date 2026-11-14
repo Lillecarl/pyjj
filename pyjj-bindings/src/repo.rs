@@ -678,6 +678,40 @@ where
     with_tx(tx, |tx| f(tx.repo_mut()))
 }
 
+/// A value carried into `py.detach` without leaving its thread.
+///
+/// `detach` asks for `Send` only to prove the closure holds no Python
+/// reference; it runs the closure on the calling thread. `MutableRepo` is
+/// not `Send` (its index is a `Box<dyn MutableIndex>`), but it never moves:
+/// `PyTransaction` is unsendable, so pyo3 stops every other thread before
+/// it reaches `inner`, and this thread runs no Python until `detach`
+/// returns.
+struct SameThread<T>(T);
+
+// SAFETY: see above -- the value is used only on the thread that owns it.
+unsafe impl<T> Send for SameThread<T> {}
+
+impl<T> SameThread<T> {
+    // A method, not `.0`: a closure that names the field captures only the
+    // field, which is not `Send`.
+    fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+/// `with_mut_repo` with the GIL released, for network-bound work: a fetch
+/// or push waits on a subprocess, and other Python threads should run.
+fn with_mut_repo_detached<F, R>(py: Python<'_>, tx: &PyTransaction, f: F) -> PyResult<R>
+where
+    F: FnOnce(&mut MutableRepo) -> PyResult<R> + Send,
+    R: Send,
+{
+    with_mut_repo(tx, |mut_repo| {
+        let mut_repo = SameThread(mut_repo);
+        py.detach(move || f(mut_repo.into_inner()))
+    })
+}
+
 impl PyTransaction {
     pub(crate) fn workspace_root(&self) -> &std::path::Path {
         &self.workspace_root
@@ -1079,13 +1113,14 @@ impl PyTransaction {
     #[pyo3(signature = (settings, remote, branches=None, tags=None, *, tracked=false))]
     fn git_fetch(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         remote: &str,
         branches: Option<Vec<String>>,
         tags: Option<Vec<String>>,
         tracked: bool,
     ) -> PyResult<crate::git::PyGitImportStats> {
-        with_mut_repo(self, |mut_repo| {
+        with_mut_repo_detached(py, self, |mut_repo| {
             crate::git::fetch(mut_repo, settings, remote, branches, tags, tracked)
         })
     }
@@ -1097,10 +1132,11 @@ impl PyTransaction {
     /// remote's default branch name if discoverable).
     fn git_fetch_all(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         remote: &str,
     ) -> PyResult<crate::git::PyGitImportStats> {
-        with_mut_repo(self, |mut_repo| {
+        with_mut_repo_detached(py, self, |mut_repo| {
             crate::git::fetch_all(mut_repo, settings, remote)
         })
     }
@@ -1671,6 +1707,7 @@ impl PyTransaction {
     #[pyo3(signature = (settings, remote, updates, push_options=Vec::new()))]
     fn git_push_updates(
         &self,
+        py: Python<'_>,
         settings: &PyUserSettings,
         remote: &str,
         updates: Vec<(
@@ -1680,7 +1717,7 @@ impl PyTransaction {
         )>,
         push_options: Vec<String>,
     ) -> PyResult<crate::git::PyGitPushStats> {
-        with_mut_repo(self, |mut_repo| {
+        with_mut_repo_detached(py, self, |mut_repo| {
             crate::git::push_updates(mut_repo, settings, remote, updates, push_options)
         })
     }
