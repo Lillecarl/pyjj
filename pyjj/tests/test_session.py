@@ -257,6 +257,21 @@ def test_cli_python_still_binds_pyjj_without_a_repo(tmp_path):
     assert "pyjj None" in result.stdout
 
 
+def test_cli_python_passes_option_arguments_to_the_script(tmp_path):
+    """A script's own `--json` reaches it rather than pyjj's parser."""
+    script = tmp_path / "s.py"
+    script.write_text("import sys; print(sys.argv[1:])\n")
+    env = os.environ.copy()
+    env.update(XDG_CONFIG_HOME=str(tmp_path))
+    result = subprocess.run(
+        [sys.executable, "-m", "pyjj_cli", "python", "--no-repo", str(script),
+         "check", "--json", "-x"],
+        capture_output=True, text=True, env=env, cwd=str(tmp_path),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "['check', '--json', '-x']" in result.stdout
+
+
 @pytest.fixture
 def colliding(tmp_path, monkeypatch):
     """Two topics off `main` touching the same file, so stacking one on
