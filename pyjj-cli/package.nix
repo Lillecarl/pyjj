@@ -44,8 +44,8 @@ in
         # `skill_dir.txt` records that directory inside the installed
         # package, so `pyjj skill path` finds it without guessing at
         # prefixes (a combined Python env never merges `share/`).
-        mkdir -p $out/share/skills/pyjj-cli/pyjj
-        cp skills/pyjj/SKILL.md $out/share/skills/pyjj-cli/pyjj/
+        mkdir -p $out/share/skills/pyjj-cli
+        cp -r skills/. $out/share/skills/pyjj-cli/
         echo "$out/share/skills/pyjj-cli" > \
           "$(toPythonPath "$out")/pyjj_cli/skill_dir.txt"
       ''
