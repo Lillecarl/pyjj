@@ -89,6 +89,20 @@ def test_split_on_an_unmatched_path_says_the_new_revision_is_empty(repo):
         "Warning: No changes have been selected, so the new revision will be empty.\n")
 
 
+@pytest.mark.parametrize("path", ["nope.txt", "sub/a.txt"])
+def test_commit_on_an_unmatched_path_warns(repo, path):
+    """Issue 1: the empty commit itself is jj's behaviour; the silence was not."""
+    result = repo("commit", "-m", "first", path)
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == f"Warning: The given paths do not match any file: {path}\n"
+
+
+def test_commit_on_a_matched_path_does_not_warn(repo):
+    result = repo("commit", "-m", "first", "a.txt")
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+
 def test_split_of_every_change_says_the_original_becomes_empty(repo):
     result = repo("split", "-m", "first", "a.txt", "../top.txt")
     assert result.returncode == 0, result.stderr

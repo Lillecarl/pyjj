@@ -65,6 +65,7 @@ def commit(args: argparse.Namespace) -> int:
                     .set_description(description)
                     .write(repo)
                 )
+                _warn_nothing_selected(repo, wc, kept, args.paths_pos)
                 child = _remainder(tx, repo, wc, kept)
             else:
                 described = (
@@ -80,6 +81,18 @@ def commit(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 1
     return 0
+
+
+def _warn_nothing_selected(repo: pyjj.ReadonlyRepo, wc: pyjj.Commit, kept: pyjj.Commit,
+                           typed: list[str]) -> None:
+    """jj warns when the selected tree equals the parents' tree, naming
+    the paths as typed. jj compares against the merged parent tree; this
+    compares against a lone parent only, so a merge never warns."""
+    if len(wc.parent_ids) != 1:
+        return
+    if not kept.diff(repo.get_commit(wc.parent_ids[0])):
+        print("Warning: The given paths do not match any file: " + " ".join(typed),
+              file=sys.stderr)
 
 
 def _remainder(tx: pyjj.Transaction, repo: pyjj.ReadonlyRepo, wc: pyjj.Commit, kept: pyjj.Commit):
