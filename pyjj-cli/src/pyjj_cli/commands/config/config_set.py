@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -94,14 +95,9 @@ def _workspace_root(args: argparse.Namespace):
 
 
 def _parse(text: str):
-    """jj accepts a TOML value; a bare word is a string."""
-    lowered = text.strip()
-    if lowered in ("true", "false"):
-        return lowered == "true"
+    """jj's `parse_value_or_bare_string`: a TOML value if the text is
+    one (`[]`, `["a"]`, `true`, `3`), else the text as a string."""
     try:
-        return int(lowered)
-    except ValueError:
-        pass
-    if len(lowered) >= 2 and lowered[0] == lowered[-1] and lowered[0] in "\"'":
-        return lowered[1:-1]
-    return text
+        return tomllib.loads(f"v = {text}")["v"]
+    except tomllib.TOMLDecodeError:
+        return text

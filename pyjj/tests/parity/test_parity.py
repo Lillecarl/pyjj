@@ -4112,6 +4112,18 @@ def test_config_set_unset_file(pair: RepoPair) -> None:
     pair.assert_parity()
 
 
+@pytest.mark.covers("config set", "--repo")
+@pytest.mark.parametrize("value", ['[]', '["a", "b"]', "true", "7", "plain words"])
+def test_config_set_parses_a_toml_value(pair: RepoPair, value: str) -> None:
+    """jj stores `[]` as an array, not as the string "[]"; only text
+    that is no TOML value falls back to a string. Fresh repos: a
+    copied template makes both tools warn that the repo moved."""
+    pair.init()
+    pair.op(jj=["config", "set", "--repo", "test.value", value])
+    pair.assert_output(["config", "get", "test.value"])
+    pair.assert_output(["config", "list", "--repo", "test"])
+
+
 @pytest.mark.covers("config unset", "--repo")
 def test_config_unset_a_missing_key_fails_on_both(pair: RepoPair) -> None:
     chain(pair)
