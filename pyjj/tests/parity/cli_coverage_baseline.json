@@ -36,9 +36,6 @@
     "--revision",
     "-r"
   ],
-  "bookmark track": [
-    "--remote"
-  ],
   "bookmark untrack": [
     "--remote"
   ],

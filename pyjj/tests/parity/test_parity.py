@@ -5117,6 +5117,18 @@ def test_git_push_by_the_long_bookmark_spelling(pair: RepoPair) -> None:
         pair.assert_parity()
 
 
+@pytest.mark.covers("bookmark track", "--remote")
+@pytest.mark.covers("git push", "-b")
+def test_git_push_a_tracked_bookmark_the_remote_lacks(pair: RepoPair) -> None:
+    """Tracking NAME on a remote that has no NAME makes an absent
+    tracked ref; jj pushes it as a creation, with no --allow-new."""
+    with push_pair(pair):
+        pair.op(jj=["bookmark", "create", "feature"])
+        pair.op(jj=["bookmark", "track", "feature", "--remote", "origin"])
+        pair.op(jj=["git", "push", "-b", "feature"])
+        pair.assert_parity()
+
+
 @pytest.mark.covers("git push", "-b")
 def test_git_push_matches_a_bookmark_pattern(pair: RepoPair) -> None:
     """`-b` takes a glob, not only a name, so one flag pushes a set."""
