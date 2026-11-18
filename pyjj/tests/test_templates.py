@@ -76,6 +76,17 @@ def test_validate_template_accepts_known_vars():
     assert ok, msg
 
 
+def test_log_template_names_empty_and_conflict(cli):
+    """`empty` and `conflict` are in every other listing's context; a
+    log template that named `empty` failed as undefined."""
+    shown = cli("log", "-r", "@", "--no-graph",
+                "-T", "{{ empty }} {{ conflict }}")
+    assert shown.returncode == 0, shown.stderr
+    assert shown.stdout.strip() == "True False"
+    ok, msg = _validate_template("{{ empty }} {{ conflict }}")
+    assert ok, msg
+
+
 def test_validate_template_rejects_unknown():
     ok, msg = _validate_template("{{ unknown_var }}")
     assert not ok

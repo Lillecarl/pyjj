@@ -37,6 +37,7 @@ from ..common import (
     _diff_formats_for_log,
     _dot_preamble,
     _immutable_ids,
+    _is_empty,
     _pyjj_template,
     _render_or_error,
     _resolve_template,
@@ -542,4 +543,5 @@ def _context(repo: pyjj.ReadonlyRepo, settings: pyjj.UserSettings, commit: pyjj.
         "is_current_wc": is_current_wc,
         "is_root": not commit.parent_ids,
         "conflict": commit.has_conflict,
+        "empty": _is_empty(repo, commit),
     }

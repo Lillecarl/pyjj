@@ -19,6 +19,7 @@ _ALLOWED_VARS = {
     "bookmarks", "bookmarks_str", "bookmarks_display",
     "datetime", "datetime_display", "datetime_full",
     "is_wc", "is_current_wc", "is_root",
+    "conflict", "empty",
     "commit",
 }
 
