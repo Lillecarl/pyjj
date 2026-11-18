@@ -123,7 +123,7 @@ of a lane; its descendants heal. Repeat until the check says OK:
 
 ```
 pyjj log -r 'roots(conflicts())' --no-graph   # the commits to fix (the check names them too)
-pyjj new <change id of one root>              # 1. a scratch commit on top of it (note W first)
+pyjj new <change id of one root>              # 1. a scratch commit on top of it (note W just before: a sync replaces an empty @)
 # 2. edit each conflicted file in the working directory (below)
 pyjj resolve --list                           # 3. "No conflicts found at this revision" (exit 1) = done
 pyjj diff --git                               # 4. read it: only your resolution, no marker lines left
