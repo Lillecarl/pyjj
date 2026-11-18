@@ -1,150 +1,191 @@
 ---
 name: pyjj
-description: Drive a Jujutsu (jj) repository through the pyjj CLI or its Python session API — history rewrites, DOT-graph reshapes, safe trial loops with restore points. Load when editing history, scripting jj operations, or working in a repo where `pyjj` is the interface.
+description: Version control in jj (Jujutsu) and colocated jj/git repositories through the pyjj CLI — the working-copy model, committing and splitting, moving changes between commits, rebasing and merging, revsets and filesets, bookmarks and remotes, workspaces, conflicts, undo; plus pyjj's Python session API, DOT-graph reshapes, and the octopus workflow for forks kept as topic branches under one merge. Load before any VCS command in such a repository. Never rewrites history unless explicitly asked.
 ---
 
 # pyjj
 
-`pyjj` mirrors the `jj` CLI on top of `jj_lib`. Two interfaces, same repository:
+`pyjj` is the jj CLI on top of `jj_lib`: same arguments (`-r`, `-d`, `-A`/`-B`,
+revsets), so jj documentation applies with `jj` replaced by `pyjj`. `-R <path>`
+when the repo is elsewhere. Differences:
 
-- **CLI**: `pyjj <command>` — speaks jj's argument dialect (`-r`, `-d`, `-A`/`-B`).
-  Pass `-R <path>` when the repo is elsewhere.
+- `-T` takes Jinja2, not jj's template language: `{{ change_id_short }}
+  {{ subject }}`. `{{ description }}` is the whole message, `{{ subject }}` its
+  first line. A jj-language template prints as literal text, with no error.
+- Extras jj lacks: `--dry-run`/`--abort-on-conflict` on rewrites, a
+  fast-forward-only trunk, `pyjj hunk`, `pyjj graph`, `pyjj python`, `--dot`.
+- Successful rewrites print nothing (jj prints a summary and new conflicts).
+  Check the result with `pyjj log` or `pyjj log -r 'conflicts()'`.
 
-A fork kept as topic lanes under one `octopus` merge (move, squash or absorb
-work into a topic, sync topics with upstream, resolve conflicts between
-them): [references/octopus.md](references/octopus.md), with a check script.
-- **Session API** (`import pyjj`): `pyjj.open()` + `repo.atomic("msg")` block.
-  One block is one transaction: clean exit commits it as one operation,
-  any exception discards it with nothing written. Verbs use jj's names
-  (`squash`, `describe`, `rebase(..., destination|after|before)`, `absorb`,
-  `restore`, `duplicate`, `bookmark`).
+`jj` on PATH is a fallback for a command pyjj lacks or gets wrong; each
+fallback is a pyjj bug report (Lillecarl/pyjj).
 
-## Safe rewrite loop
+Read a reference when a task touches its topic; do not preload them.
 
-Every `graph apply` prints `Restore with: pyjj op restore <id>` on success
-(plus `before_op` in `--format json`). Checkpoint before risky sequences
-with `pyjj op log --no-graph --limit 1` and restore that id on trouble.
-Never chain `jj undo`; one `op restore` returns to a known-good point.
+## Model
 
-## Trial a rewrite
+- `@` is the working-copy commit, in every workspace. A real commit, not a
+  staging area: almost every command snapshots edits into it. No `add`, no
+  detached HEAD.
+- Two ids: **change id** (stable across rewrites; a commit's identity) and
+  **commit id** (content hash; changes on every rewrite). `log` shows the
+  change id first.
+- Bookmarks are branches that move only when moved, or when their commit is
+  rewritten (they follow). No "current branch".
+- `pyjj commit -m msg` = `describe -m msg` + `new`: `@` gets the message and a
+  fresh empty child becomes `@`.
+- `pyjj split FILES -m msg` peels FILES out of `@` into a new commit *before*
+  `@`; the rest stays in `@`, still open.
+- Rewritten and abandoned commits are hidden, not deleted: `pyjj op log` can
+  return to any earlier state. Recoverable is not the same as harmless; see
+  Safety.
 
-pyjj-only flags; jj has neither. On `rebase`, `squash`, `split`,
-`absorb`, `abandon`, `duplicate`, `restore`, `revert`,
-`simplify-parents`, `fix`, `new`, `diffedit`, `file chmod/delete/edit`,
-`hunk split/commit/squash` and `graph apply`.
+Git habits mapped one by one: [git-mapping.md](references/git-mapping.md).
 
-- `--dry-run` — prints `Would write N commits.`, `Would abandon N
-  commits.` and any commits newly in conflict (`  <change id>
-  <description>`), writes nothing, exits 0.
-- `--abort-on-conflict` — commits a clean rewrite; on a new conflict
-  lists the commits on stderr, writes nothing, exits 1.
-- Both — writes nothing; exit 1 means the rewrite would conflict.
+## Finishing work
 
-Only conflicts the rewrite introduces count; an already-conflicted
-commit does not trip it. The rewrite itself records no operation on
-refusal, but loading still snapshots a dirty working copy. Editors and
-diff tools (`split`, `-i`, `diffedit`, `file edit`) still open first.
-Not on `parallelize`: it commits two transactions.
+1. Edit. Edits land in `@`.
+2. Land them:
+   - one logical change: `pyjj commit -m ...` (the usual case);
+   - several concerns in different files: `pyjj split FILES -m ...`, repeated
+     ([splitting.md](references/splitting.md));
+   - two concerns in one file: `pyjj hunk` ([hunk.md](references/hunk.md));
+   - a fixup for the parent: `pyjj squash --use-destination-message`.
+3. End with `@` empty and every finished piece committed with a real message.
 
-## Published trunk is fast-forward-only
+Never "finish" with `describe`: it sets the message but leaves `@` in place, so
+later edits land in the commit just described. `describe -r @-` renames a
+finished parent.
 
-pyjj-only. A name in `pyjj.fast-forward-bookmarks` (default `main`,
-`master`, `trunk`) with a remote counterpart other than `@git` may be
-created or moved to a descendant; anything else is refused before the
-commit, nothing written: `bookmark set --allow-backwards`, delete or
-forget, an abandon or `--ignore-immutable` rewrite of its commit,
-`undo`/`op restore`, a script's `tx.bookmark`. Override per command
-with the global `--allow-nonff` (session: `repo.atomic(...,
-allow_nonff=True)`, else `pyjj.NonFastForwardError`). `git fetch`,
-`import`, `pull` and `bookmark track` follow the remote unguarded.
-Config `[]` turns it off.
+Messages go through a quoted heredoc. It keeps apostrophes, quotes, `$vars` and
+backticks verbatim; an inline `-m '...'` breaks on the first apostrophe and the
+shell runs the rest.
 
-## Reshape via DOT graph
+```bash
+pyjj commit -m "$(cat <<'EOF'
+subject line
 
-`pyjj log -r '<revset>' --dot --dot-key change_id -T '{{ subject }}' > base.dot`
-exports the shape. Edit edges, then:
-
-- `pyjj graph plan base.dot` — prints the rebases, writes nothing. Read it.
-- `pyjj graph apply base.dot` — all-or-nothing; a new conflict or an
-  immutable commit drops the whole reshape unwritten. `--dry-run` runs
-  it and reports, exiting 1 if it would conflict.
-
-Every step is a rebase, plus abandonment: a node with
-`abandon="true"` is dropped and its children re-pointed at its own
-parents. The graph cannot create commits, so it cannot build a
-merge-based topology — only verify one afterwards via `--dot` export.
-New commits (merges, reverts) come from the commands below or a
-script, not from a graph.
-
-Key the graph on **change ids** (`--dot-key change_id`): commit ids are
-content hashes, so a rewrite replaces them and the old one still resolves
-to the obsolete predecessor. Order in the file is topological, parents
-before children — the resolver enforces it and refuses cycles.
-
-## Scripting (`pyjj python`)
-
-`pyjj python [-c cmds | script.py | -]` runs Python with `pyjj`,
-`pyjj_bindings` and `repo` already bound (`repo` is open on `-R`;
-`--no-repo` leaves it `None`). Script args follow the script name.
-
-Prefer scripting over templates when the question is structural (walk
-`repo.log()`, read `commit.list_files()` / `read_file()`), and prefer
-one `repo.atomic("msg")` block over several CLI calls when several
-rewrites belong together: the block is a single transaction, so it
-becomes a single operation or nothing at all.
-
-```
-pyjj python - <<'EOF'
-with repo.atomic("tidy the stack") as tx:
-    tx.squash("@", into="@-")
-    tx.describe("@-", message="the whole change")
+Body. Apostrophes, "quotes", $vars and `backticks` are safe.
 EOF
+)"
 ```
 
-## Extensions: identity hooks and workflows
+`pyjj split FILES -m "$(cat <<'EOF' ...` takes the same shape. Split while the
+boundaries are fresh instead of letting `@` collect several concerns.
 
-`pyjj.extensions` (config, list of `.py` paths, `~` expanded) names
-files imported once per run. `--config 'pyjj.extensions=["x.py"]'`
-loads one for a single run.
+## Moving a change to the commit it belongs in
 
-- `pyjj.identity(fn)` (decorator or lambda): `fn(ctx)` returns
-  `pyjj.Identity(name, email, signing_key, signing_backend,
-  sign_behavior)`, a `{config key: value}` dict, or `None` (next hook).
-  `ctx`: `remotes` (name → fetch URL), `workspace_root`, `repo_path`,
-  `settings`. Runs when a repository loads (CLI and `pyjj.open()`), as a
-  layer under `--config`. A raising hook fails the command, nothing
-  written. Rewrites keep a commit's author (jj's rule); new commits and
-  committer/signature use the hook's answer. No hook on `git init`/`clone`.
-- `class X(pyjj.Workflow)`: `name`, `help`, `add_arguments(parser)`,
-  `run(repo, args) -> int | None`; `self.pyjj(repo, *argv)` runs a pyjj
-  command in-process. `pyjj workflow` (`wf`) lists them, `pyjj wf NAME
-  ...` runs one. Metavars `REVSET`/`BOOKMARK`/`REMOTE`/... complete like
-  pyjj's own; an argument's `completer` attribute overrides.
+```bash
+pyjj squash path/to/file --into REV          # whole files: one step; @ keeps the rest
+pyjj split shared.txt -m 'the missed tweak'  # finer than a file: peel first...
+pyjj squash -r @- --use-destination-message  # ...then fold into its parent
+```
 
-Operation ids accept unique prefixes wherever a command names one
-(`op restore`, `op show`, `--at-op`): paste the short id `op log`
-prints, no need for the full hex.
+- `--use-destination-message` is required when a squash empties a described
+  commit: otherwise an editor opens to merge the two messages, and headless
+  it fails. A partial move (the first line) never hits this.
+- Repeated `pyjj new -m` leaves empty commits between real ones; `-r @-` then
+  folds into an empty. Name the target: a change id, `description(...)`.
+- Hunk-level into the parent: `pyjj hunk squash SPEC`.
+
+## Which command
+
+| Situation | Command |
+|---|---|
+| Edits in `@` are one change | `pyjj commit -m ...` |
+| Several files, several changes | `pyjj split FILES -m ...` — [splitting.md](references/splitting.md) |
+| One file, two concerns | `pyjj hunk split` — [hunk.md](references/hunk.md) |
+| Fixup for the parent | `pyjj squash --use-destination-message` |
+| Whole files belong in an earlier commit | `pyjj squash FILES --into REV` |
+| Fixups to lines earlier commits own | `pyjj absorb` — [advanced-operations.md](references/advanced-operations.md) |
+| Part of `@` onto another base, as its own commit | `pyjj split FILES --onto REV -m ...` — [splitting.md](references/splitting.md) |
+| A merge of two lines of work | `pyjj new -m msg REV1 REV2` — [rebase-and-merge.md](references/rebase-and-merge.md) |
+| Move commits to a new base | `pyjj rebase -s/-b/-r ... -d DEST` — ask first; [rebase-and-merge.md](references/rebase-and-merge.md) |
+| Conflicts | [rebase-and-merge.md](references/rebase-and-merge.md) |
+| Select commits precisely | revsets — [revsets.md](references/revsets.md); files: [filesets.md](references/filesets.md) |
+| A second working directory | `pyjj workspace add` — [workspaces.md](references/workspaces.md) |
+| Branches, tracking, push safety | [bookmarks.md](references/bookmarks.md) |
+| Clone, fetch, push, divergent changes | [remotes-and-sync.md](references/remotes-and-sync.md) |
+| Something went wrong | `pyjj op log`, `pyjj op restore ID` — [safety-and-undo.md](references/safety-and-undo.md) |
+| `edit`, `next`/`prev`, `duplicate`, `parallelize`, `metaedit`, `revert`, `run`, tags, sparse, `op` | [advanced-operations.md](references/advanced-operations.md) |
+| A fork of topic branches under one octopus merge | [octopus.md](references/octopus.md) |
+| Several rewrites as one transaction, DOT reshapes, extensions | [scripting.md](references/scripting.md) |
+
+Revsets beat counting offsets: `pyjj log -r 'trunk()..@'` (local work),
+`'conflicts()'`, `'mine() & description(substring:"fix")'`. Without a remote
+`trunk()` is `root()`. Details: [revsets.md](references/revsets.md).
+
+## Workspaces are branches; the default workspace follows `main`
+
+- The default workspace (`~/Code/<repo>`) is tied to the `main` bookmark: its
+  `@` sits on the latest `main`. User and other configurations build from it.
+  Committing there is normal; quick fixes land straight from it.
+- A secondary workspace is a checked-out branch for one larger task that must
+  not block those fixes. Commit there.
+- **Never manipulate another workspace**, from any workspace, `default`
+  included:
+  - no rewrite of its `@` or of any mutable ancestor of it: `rebase`,
+    `squash`, `describe`, `abandon`, `absorb`, `split`, `edit`;
+  - no `-R <its path>`, `workspace update-stale` or `workspace forget` on it;
+  - no move, set or delete of a bookmark it holds; `main` moves only through
+    `pyjj wf land`.
+
+  Only exception: Agent is the sole agent owner of both workspaces, meaning
+  this session created or took over both and no other session works in either.
+  When ownership is not certain, Agent is not the owner. User asking for that
+  exact rewrite also permits it.
+- A workspace commits on its own `@` and moves only bookmarks it created for
+  its own task, plus `main` through `pyjj wf land`.
+- Every workspace lands its own finished work: `pyjj commit`, then
+  `pyjj wf land` (rebase onto `main`, move `main` forward, one transaction).
+  Never `bookmark set main` by hand. With nothing to land it moves `@` onto
+  `main`: how a workspace, `default` included, catches up. Details and
+  refusals: [workspaces.md](references/workspaces.md).
+
+## Safety
+
+- **Rewrite only when User asks for that rewrite**: `edit`, `rebase`,
+  `absorb`, `duplicate`, `parallelize`, `metaedit`, moving a bookmark to
+  another target. Appending is always fine: `commit`, `new`, `split` on `@`,
+  `bookmark create`. Exceptions: `squash --use-destination-message` of a
+  fixup, and a workflow whose instructions call for the rewrite (octopus).
+- jj's immutability guard covers only `trunk()` and what a remote tracks. In a
+  repo with no remote `trunk()` is `root()` and nothing is protected; follow
+  this policy regardless.
+- **Never run a git command that writes** in a jj repo (`commit`, `merge`,
+  `rebase`, `reset`, `cherry-pick`, `push`, `tag`, `stash`, `branch -d`, ...).
+  It bypasses the operation log. Read-only git (`log`, `diff`, `show`,
+  `status`, `blame`) is fine.
+- **Checkpoint** before a multi-step sequence:
+  `pyjj op log --no-graph --limit 1 -T '{{ id_short }}'`. On trouble,
+  `pyjj op restore ID` (short ids work). Never chain `pyjj undo`: undo
+  records operations itself, so a second undo can undo the first.
+- **Trial a rewrite** first: `--dry-run` writes nothing and lists commits that
+  would newly conflict; `--abort-on-conflict` writes only if nothing new
+  conflicts (exit 1 otherwise). On `rebase`, `squash`, `split`, `absorb`,
+  `abandon`, `duplicate`, `restore`, `revert`, `new`, `simplify-parents`,
+  `fix`, `hunk`, `graph apply`; not on `parallelize`.
+- **Published trunk is fast-forward-only**: `main`/`master`/`trunk` with a
+  real remote only moves forward (`pyjj.fast-forward-bookmarks`); anything
+  else is refused, nothing written, unless the global `--allow-nonff`.
+- **Verify** with `pyjj status`/`pyjj log`, never by exit code alone. One
+  clear wrong step: `pyjj undo` once and retry. Anything murkier: stop, tell
+  User what you see, name the `op restore` id to return to.
+
+Full detail: [safety-and-undo.md](references/safety-and-undo.md).
+
+## Output
+
+Pass `--no-pager`. For `diff`, `show`, `log -p` and `interdiff` pass `--git`:
+the default colour-words format is not reliably parseable. `diff`/`show` of a
+merge currently compare against its first parent only (a pyjj bug); `pyjj log
+-r REV` says `(empty)` correctly.
 
 ## Gotchas
 
-- Splicing before a merge is one rebase: `rebase -r C -A P` moves `C`
-  onto `P` and repoints `P`'s children (a merge among them) onto the
-  moved commit, keeping their other parents. The merge then has the
-  moved commit where `P` was. Verified against an octopus-shaped repo;
-  no second command is needed.
-- Undoing a commit is two different verbs: `restore -c REV` rewrites
-  that revision in place (same as `jj restore --changes-in`), while
-  `revert -r REV` appends a new undo commit and leaves the original
-  alone (same as `jj revert`). The session API mirrors both:
-  `tx.restore(...)` rewrites, `tx.revert(...)` appends.
-- Revisions inside an `atomic` block resolve through the transaction, which
-  sees the block's own writes; the repo object still answers from the
-  starting state.
-- `graph apply` refuses immutable commits (override: `--ignore-immutable`)
-  and introduced conflicts (keep: `--allow-conflicts`); it takes
-  `--abort-on-conflict` too, as its default.
-- Output templates are Jinja2 (`-T` takes Jinja, not jj's template language).
-  `{{ description }}` is the whole message, as jj's keyword; `{{ subject }}`
-  is its first line.
-- `jj commit` labels `@` then opens a fresh empty child; further edits land
-  in the child, not the commit just finished.
+- `rebase -r C -A P` moves `C` onto `P` and re-points `P`'s children, a merge
+  among them, onto `C`, keeping their other parents. One command.
+- `restore -c REV` rewrites REV in place; `revert -r REV` appends a commit
+  undoing it.
+- `-r X -A trunk() -B MERGE` slides X under every parent of MERGE, not beside
+  them. Adding a parent to a merge: `pyjj rebase -r MERGE -d 'MERGE-' -d X`.
