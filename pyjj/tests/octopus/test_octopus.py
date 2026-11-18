@@ -248,6 +248,28 @@ def test_an_archive_bookmark_is_only_a_note(tmp_path: Path) -> None:
     assert "NOTE     bookmark wip is not in the octopus" in result.stdout
 
 
+def test_a_second_workspace_recovers_unsaved_work(tmp_path: Path) -> None:
+    """Workspace B has a file jj never snapshotted when A rewrites a
+    topic. update-stale leaves it in a divergent sibling of B's @; the
+    check names it and the fix brings it back."""
+    lab = build("absorb", tmp_path / "lab")
+    other = tmp_path / "lab" / "wsb"
+    pj(lab.fork, "workspace", "add", "--name", "b", "-r", "octopus", str(other))
+    (other / "b-wip.txt").write_text("b work\n")
+    pj(lab.fork, "absorb", "--into", "trunk()..octopus-")
+    pj(other, "workspace", "update-stale")
+    assert not (other / "b-wip.txt").exists()
+    result = subprocess.run(["pyjj", "python", str(_skill_script()), "check"],
+                            cwd=other, capture_output=True, text=True, check=False)
+    assert result.returncode == 1
+    assert "unfinished work left on the octopus, outside @" in result.stdout
+    fix = next(line.split("fix: ", 1)[1] for line in result.stdout.splitlines()
+               if "fix: pyjj squash --from" in line)
+    pj(other, *fix.split()[1:])
+    assert (other / "b-wip.txt").read_text() == "b work\n"
+    assert pj(other, "log", "-r", "divergent()", "--no-graph") == ""
+
+
 def test_check_refuses_changes_in_the_octopus(tmp_path: Path) -> None:
     lab = build("squash", tmp_path / "lab")
     pj(lab.fork, "squash", "--from", "@", "--into", "octopus", "notes.txt")

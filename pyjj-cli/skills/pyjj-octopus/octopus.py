@@ -318,9 +318,12 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
             files = [e.path for e in wc.diff_from_parents(raw)]
             report.note(f"@ holds unfinished work: {', '.join(files)}")
         for c in stranded:
+            # A stale workspace's unsaved edits land in a divergent
+            # sibling, whose change id no longer names one commit.
+            ref = c.id.hex()[:12] if c.is_divergent(raw) else _short(c)
             report.problem(
                 f"unfinished work left on the octopus, outside @: {_label(c)}",
-                f"pyjj squash --from {_short(c)} --into @",
+                f"pyjj squash --from {ref} --into @",
             )
     for c in repo.revset(f"{octopus}+ & working_copies() ~ @"):
         report.note(f"another workspace works on the octopus: {_label(c)}")
