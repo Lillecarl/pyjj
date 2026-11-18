@@ -131,6 +131,31 @@ both forms compose.
   errors with no dedicated category (bad hex in `CommitId`/etc., unknown
   `set_sign_behavior` string) raise the generic `JjError`.
 
+## Skill labs: testing a skill on weaker agents
+
+`pyjj-cli/skills/` ships with the package (`pyjj skill path NAME`).
+`pyjj-octopus` has a lab, `pyjj/tests/octopus/octolab.py`: throwaway
+forks, one per scenario, each with a checker that reads the result.
+
+- `test_octopus.py` solves every scenario with the skill's own recipes.
+  A recipe that breaks is a skill that misleads agents; a new scenario
+  needs a solution there, and `test_every_scenario_has_a_solution`
+  enforces it.
+- Agent runs, the real test of the prose:
+  ```
+  L=pyjj/tests/octopus/octolab.py
+  pyjj python --no-repo $L build SCENARIO DEST    # fresh lab per run
+  pyjj python --no-repo $L prompt SCENARIO DEST   # the exact subagent prompt
+  pyjj python --no-repo $L check SCENARIO DEST    # grade: exit 0 or the broken expectations
+  ```
+  Hand the prompt to a Haiku and a Sonnet subagent, one lab each, in
+  parallel. Grade with `check`, never with the agent's report: agents
+  report "done" on states the checker rejects. Read their "unclear or
+  wrong" lines; each recurring one is a skill edit or a check finding.
+- The prompt names the installed skill, so push and rebuild before a
+  run, or pass the checkout's `SKILL.md` as the prompt's last argument.
+  The agents' `pyjj` is the installed one either way.
+
 ## jj CLI parity coverage
 
 Every command the pinned `jj` (0.47) offers has a scenario in

@@ -9,6 +9,9 @@ description: Drive a Jujutsu (jj) repository through the pyjj CLI or its Python 
 
 - **CLI**: `pyjj <command>` — speaks jj's argument dialect (`-r`, `-d`, `-A`/`-B`).
   Pass `-R <path>` when the repo is elsewhere.
+
+A fork kept as topic lanes under one `octopus` merge has its own skill,
+**pyjj-octopus** (`pyjj skill path pyjj-octopus`): recipes and a check.
 - **Session API** (`import pyjj`): `pyjj.open()` + `repo.atomic("msg")` block.
   One block is one transaction: clean exit commits it as one operation,
   any exception discards it with nothing written. Verbs use jj's names

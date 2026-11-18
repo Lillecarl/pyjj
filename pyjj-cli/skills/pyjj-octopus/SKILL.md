@@ -11,8 +11,15 @@ description: Maintain a fork as several topic branches joined by one octopus mer
 @          work commit: child of octopus. All new work starts here.
 octopus    bookmark on an EMPTY merge whose parents are the topic tips
 alpha beta gamma ...   topic bookmarks, one per lane
-trunk()    upstream main (main@upstream or main@origin), immutable
+trunk()    the project's main (main@upstream), immutable
 ```
+
+Setup, once per fork: pin `trunk()` to the project, because the fork's own
+`main@origin` goes stale and jj's default `trunk()` may pick it:
+```
+pyjj config set --repo 'revset-aliases."trunk()"' 'main@upstream'
+```
+The check reports a `trunk()` that is not on the upstream remote.
 
 - **Topic**: a bookmark on the last commit of its lane. A lane starts on
   `trunk()`, or on another topic when stacked (section H).
@@ -20,6 +27,12 @@ trunk()    upstream main (main@upstream or main@origin), immutable
   squash, absorb or edit into it.
 - **Work commit**: `@`, a child of `octopus`. Finished work moves into a
   topic (recipes below), and `@` is empty again.
+
+**Coming back to the work commit.** Before a recipe, note W:
+`pyjj log -r @ --no-graph -T '{{ change_id_short }}'`. A recipe that leaves
+`@` elsewhere ends with "back to W": `pyjj edit W` if W still exists and is
+not the commit you moved, else `pyjj new octopus`. `pyjj new octopus` while W
+holds unfinished work strands it; the check flags that.
 
 Commands are `pyjj`, same flags as jj. `-T` takes Jinja (`{{ change_id_short }}
 {{ subject }}`), not jj's template language. Copy revsets exactly.
@@ -76,7 +89,7 @@ Describe it first if needed (`pyjj describe -r X -m "topic: what"`). Then:
 pyjj rebase -r X -A TOPIC --dry-run   # 0. "New conflicts would appear" here = X depends on another topic: do H first
 pyjj rebase -r X -A TOPIC        # 1. insert after the topic's tip; the octopus re-points to X
 pyjj bookmark set TOPIC -r X     # 2. the bookmark does NOT follow by itself
-pyjj new octopus                 # 3. a fresh, empty work commit
+pyjj new octopus                 # 3. only if X was @; otherwise @ never moved
 ```
 Use the change id for X in every step, not `@`: after step 1, `@` is X only
 by accident.
@@ -87,7 +100,7 @@ by accident.
 pyjj rebase -r X -d 'trunk()'                       # 1. onto trunk, beside the others
 pyjj bookmark create NAME -r X                      # 2. name the topic
 pyjj rebase -r octopus -d 'octopus-' -d NAME        # 3. add it to the merge, keeping the others
-pyjj new octopus                                    # 4. a fresh work commit
+pyjj new octopus                                    # 4. only if X was @
 ```
 Not `rebase -r X -A 'trunk()' -B octopus`: that slides X under every topic.
 
@@ -99,8 +112,9 @@ pyjj rebase -b octopus -d 'trunk()' --skip-emptied  # every lane, the octopus an
 ```
 Run the check after the fetch: it predicts the conflicts and the topics
 upstream already has. Run it again after the rebase. `--skip-emptied` drops
-commits upstream already has; an empty `@` is replaced by a new one, which is
-expected. Conflicts: F. A topic that landed: G.
+commits upstream already has. `@` rides along with its unfinished work; an
+empty `@` is replaced by a new one, which is expected. Conflicts: F. A topic
+that landed: G.
 
 ### F. Resolve conflicts
 
@@ -109,12 +123,12 @@ of a lane; its descendants heal. Repeat until the check says OK:
 
 ```
 pyjj log -r 'roots(conflicts())' --no-graph   # the commits to fix (the check names them too)
-pyjj new <change id of one root>              # 1. a scratch commit on top of it
+pyjj new <change id of one root>              # 1. a scratch commit on top of it (note W first)
 # 2. edit each conflicted file in the working directory (below)
 pyjj resolve --list                           # 3. "No conflicts found at this revision" (exit 1) = done
 pyjj diff --git                               # 4. read it: only your resolution, no marker lines left
 pyjj squash                                   # 5. fold the resolution into the conflicted commit
-pyjj new octopus                              # 6. back to a work commit; squash left @ inside the lane
+                                              # 6. back to W (see "Coming back"); squash left @ inside the lane
 ```
 
 Editing a file: replace each block from `<<<<<<<` to `>>>>>>>` with the text
@@ -174,11 +188,11 @@ force-pushed; ask the user).
 
 **The topics are independent and only collide in text: integrate them.**
 ```
-pyjj new A B -m "integrate: A + B"                    # 1. a merge of the two tips
-# 2. resolve the conflict in it (F, steps 2-3), no squash needed
+pyjj new A B -m "integrate: A + B"                    # 1. a merge of the two tips (note W first)
+# 2. resolve the conflict in it (F, steps 2-4), no squash needed
 pyjj bookmark create integ/A-B -r @
 pyjj rebase -r octopus -d 'octopus- ~ A ~ B' -d integ/A-B   # 3. octopus merges the integration instead
-pyjj new octopus
+# 4. back to W
 ```
 A and B stay independent for upstream. The resolution lives in a named
 commit, not in the octopus. Recipes C and B on A or B still work; after a
@@ -189,10 +203,12 @@ a topic.
 
 ## Several agents at once
 
-Give each agent its own workspace (`pyjj workspace add`), with its `@` on
-`octopus`. The check lists other commits on the octopus as notes. A rewrite of
-a topic leaves other workspaces stale: they run `pyjj workspace
-update-stale`.
+Not yet measured in the labs. What is known: every recipe rewrites the
+octopus, which sits under every other workspace's `@`, so the others go
+stale. A stale workspace runs `pyjj workspace update-stale`; jj can then
+leave its unsaved edits in a divergent sibling of `@`. Until a lab proves
+otherwise, let one agent at a time rewrite topics. The check lists other
+workspaces' commits on the octopus as notes.
 
 ## After rewriting
 
