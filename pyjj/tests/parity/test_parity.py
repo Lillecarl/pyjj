@@ -4124,6 +4124,20 @@ def test_config_set_parses_a_toml_value(pair: RepoPair, value: str) -> None:
     pair.assert_output(["config", "list", "--repo", "test"])
 
 
+@pytest.mark.covers("config set", "--repo")
+@pytest.mark.covers("config unset", "--repo")
+def test_config_quoted_key_parts(pair: RepoPair) -> None:
+    """`revset-aliases."trunk()"` is two parts, the quotes TOML's own;
+    the file must stay TOML and the alias must take effect."""
+    pair.init()
+    pair.op(jj=["config", "set", "--repo", 'revset-aliases."trunk()"', "root()"])
+    pair.assert_output(["log", "-r", "trunk()", "-T", "builtin_log_compact"])
+    pair.op(jj=["config", "set", "--repo", 'aliases."a.b"', '["log"]'])
+    pair.assert_output(["config", "get", 'aliases."a.b"'])
+    pair.op(jj=["config", "unset", "--repo", 'revset-aliases."trunk()"'])
+    pair.assert_output(["config", "list", "--repo"])
+
+
 @pytest.mark.covers("config unset", "--repo")
 def test_config_unset_a_missing_key_fails_on_both(pair: RepoPair) -> None:
     chain(pair)

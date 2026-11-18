@@ -79,8 +79,22 @@ def write_config(path: Path, data: dict[str, Any]) -> None:
     path.write_text(text + "\n" if text else "")
 
 
+def split_key(dotted: str) -> list[str]:
+    """A config name as TOML reads it: `revset-aliases."trunk()"` is two
+    parts, the second without its quotes, and `"a.b"` is one."""
+    try:
+        node: Any = tomllib.loads(f"{dotted} = 0")
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"invalid config name {dotted!r}") from e
+    parts = []
+    while isinstance(node, dict):
+        (name, node), = node.items()
+        parts.append(name)
+    return parts
+
+
 def set_key(data: dict[str, Any], dotted: str, value: Any) -> None:
-    *tables, leaf = dotted.split(".")
+    *tables, leaf = split_key(dotted)
     node = data
     for name in tables:
         node = node.setdefault(name, {})
@@ -90,7 +104,7 @@ def set_key(data: dict[str, Any], dotted: str, value: Any) -> None:
 
 
 def unset_key(data: dict[str, Any], dotted: str) -> bool:
-    *tables, leaf = dotted.split(".")
+    *tables, leaf = split_key(dotted)
     nodes = [data]
     for name in tables:
         node = nodes[-1].get(name)
@@ -119,9 +133,9 @@ def _dump(data: dict[str, Any], prefix: list[str]) -> list[str]:
     scalars = {k: v for k, v in data.items() if not isinstance(v, dict)}
     tables = {k: v for k, v in data.items() if isinstance(v, dict)}
     if scalars and prefix:
-        lines.append("[" + ".".join(prefix) + "]")
+        lines.append("[" + ".".join(map(_key, prefix)) + "]")
     for key, value in scalars.items():
-        lines.append(f"{key} = {_value(value)}")
+        lines.append(f"{_key(key)} = {_value(value)}")
     if scalars:
         lines.append("")
     for key, value in tables.items():
@@ -129,8 +143,15 @@ def _dump(data: dict[str, Any], prefix: list[str]) -> list[str]:
         if nested:
             lines += nested
         else:
-            lines += ["[" + ".".join(prefix + [key]) + "]", ""]
+            lines += ["[" + ".".join(map(_key, prefix + [key])) + "]", ""]
     return lines
+
+
+def _key(name: str) -> str:
+    """A TOML key: bare when it can be, quoted otherwise (`"trunk()"`)."""
+    if name and all(c.isascii() and (c.isalnum() or c in "-_") for c in name):
+        return name
+    return _value(name)
 
 
 def _value(value: object) -> str:
