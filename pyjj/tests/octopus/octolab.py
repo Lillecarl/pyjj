@@ -48,12 +48,14 @@ REPO_CONFIG = {
 
 
 def run(*argv: str, cwd: Path, stdin: str | None = None) -> str:
-    done = subprocess.run(argv, cwd=cwd, input=stdin, text=True,
-                          capture_output=True, check=False)
+    done = subprocess.run(
+        argv, cwd=cwd, input=stdin, text=True, capture_output=True, check=False
+    )
     if done.returncode != 0:
         raise RuntimeError(
             f"{' '.join(argv)} (in {cwd}) exited {done.returncode}\n"
-            f"{done.stdout}{done.stderr}")
+            f"{done.stdout}{done.stderr}"
+        )
     return done.stdout
 
 
@@ -68,8 +70,9 @@ def write(path: Path, text: str) -> None:
 
 def set_line(path: Path, key: str, value: str) -> None:
     lines = path.read_text().splitlines()
-    lines = [f"{key} = {value}" if line.startswith(f"{key} = ") else line
-             for line in lines]
+    lines = [
+        f"{key} = {value}" if line.startswith(f"{key} = ") else line for line in lines
+    ]
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -172,9 +175,9 @@ def build_base(root: Path) -> Lab:
 class State:
     """The fork, as plain data. Everything a check needs, read once."""
 
-    parents: dict[str, list[str]]          # change id -> parent change ids
+    parents: dict[str, list[str]]  # change id -> parent change ids
     subject: dict[str, str]
-    bookmarks: dict[str, str]              # local bookmark -> change id
+    bookmarks: dict[str, str]  # local bookmark -> change id
     remote_main: str
     wc: str
     conflicted: set[str]
@@ -216,14 +219,24 @@ print(json.dumps(out))
 
 
 def read_state(lab: Lab) -> State:
-    raw = json.loads(run(PYJJ, "python", "--no-repo", "-", str(lab.fork),
-                         cwd=lab.root, stdin=READ_STATE))
+    raw = json.loads(
+        run(
+            PYJJ,
+            "python",
+            "--no-repo",
+            "-",
+            str(lab.fork),
+            cwd=lab.root,
+            stdin=READ_STATE,
+        )
+    )
     raw["conflicted"] = set(raw["conflicted"])
     return State(**raw)
 
 
-def base_expectations(s: State, topics: tuple[str, ...],
-                      stacked: dict[str, str] | None = None) -> list[str]:
+def base_expectations(
+    s: State, topics: tuple[str, ...], stacked: dict[str, str] | None = None
+) -> list[str]:
     """What holds after every scenario: the octopus is intact.
 
     `stacked` maps a topic to the topic it must start on instead of main.
@@ -259,8 +272,10 @@ def base_expectations(s: State, topics: tuple[str, ...],
     if s.parents.get(s.wc) != [octo]:
         bad.append("@ is not a child of the octopus")
     if s.conflicted:
-        bad.append(f"{len(s.conflicted)} commits are in conflict: "
-                   + ", ".join(s.subject.get(c, c) for c in s.conflicted))
+        bad.append(
+            f"{len(s.conflicted)} commits are in conflict: "
+            + ", ".join(s.subject.get(c, c) for c in s.conflicted)
+        )
     return bad
 
 
@@ -280,12 +295,18 @@ class Scenario:
 SCENARIOS: dict[str, Scenario] = {}
 
 
-def scenario(name: str, task: str, topics: tuple[str, ...] = TOPICS,
-             stacked: dict[str, str] | None = None):
+def scenario(
+    name: str,
+    task: str,
+    topics: tuple[str, ...] = TOPICS,
+    stacked: dict[str, str] | None = None,
+):
     def register(pair: tuple[Callable[[Lab], None], Callable[[Lab, State], list[str]]]):
-        SCENARIOS[name] = Scenario(name, task.strip(), pair[0], pair[1], topics,
-                                   stacked or {})
+        SCENARIOS[name] = Scenario(
+            name, task.strip(), pair[0], pair[1], topics, stacked or {}
+        )
         return pair
+
     return register
 
 
@@ -313,16 +334,21 @@ def _absorb_setup(lab: Lab) -> None:
 
 
 def _absorb_check(lab: Lab, s: State) -> list[str]:
-    return (file_in(s, "beta", "beta.py", "BETA_3 = 33")
-            + file_in(s, "alpha", "alpha.py", "return 22")
-            + wc_is_empty(s))
+    return (
+        file_in(s, "beta", "beta.py", "BETA_3 = 33")
+        + file_in(s, "alpha", "alpha.py", "return 22")
+        + wc_is_empty(s)
+    )
 
 
-scenario("absorb", """
+scenario(
+    "absorb",
+    """
 The working copy holds two small fixes: one to beta.py, one to alpha.py.
 Fold each fix into the topic branch that owns those lines. Leave the
 working copy empty on top of the octopus.
-""")((_absorb_setup, _absorb_check))
+""",
+)((_absorb_setup, _absorb_check))
 
 
 def _move_setup(lab: Lab) -> None:
@@ -340,11 +366,14 @@ def _move_check(lab: Lab, s: State) -> list[str]:
     return bad
 
 
-scenario("move", """
+scenario(
+    "move",
+    """
 The working copy holds a finished commit, "gamma: document the module".
 Move it onto the gamma topic as its own commit, on top of gamma's
 existing commits. Leave the working copy empty on top of the octopus.
-""")((_move_setup, _move_check))
+""",
+)((_move_setup, _move_check))
 
 
 def _squash_setup(lab: Lab) -> None:
@@ -368,12 +397,15 @@ def _squash_check(lab: Lab, s: State) -> list[str]:
     return bad
 
 
-scenario("squash", """
+scenario(
+    "squash",
+    """
 The working copy holds a new function in alpha.py and a scratch file
 notes.txt. Squash the alpha.py change into the last commit of the alpha
 topic (do not add a new commit to alpha). notes.txt must stay in the
 working copy, which stays on top of the octopus.
-""")((_squash_setup, _squash_check))
+""",
+)((_squash_setup, _squash_check))
 
 
 def _new_topic_setup(lab: Lab) -> None:
@@ -388,12 +420,16 @@ def _new_topic_check(lab: Lab, s: State) -> list[str]:
     return bad
 
 
-scenario("new-topic", """
+scenario(
+    "new-topic",
+    """
 The working copy holds a finished commit, "delta: add delta module". It
 belongs to none of the existing topics. Make it a new topic branch with
 the bookmark `delta`, based on main, and include it in the octopus.
 Leave the working copy empty on top of the octopus.
-""", topics=(*TOPICS, "delta"))((_new_topic_setup, _new_topic_check))
+""",
+    topics=(*TOPICS, "delta"),
+)((_new_topic_setup, _new_topic_check))
 
 
 def _sync_setup(lab: Lab) -> None:
@@ -401,6 +437,7 @@ def _sync_setup(lab: Lab) -> None:
         set_line(at / "config.txt", "k2", "upstream")
         set_line(at / "config.txt", "k5", "upstream")
         write(at / "UPSTREAM.md", "news\n")
+
     lab.upstream_commit("project: retune k2 and k5", edit)
 
 
@@ -415,25 +452,30 @@ def _sync_check(lab: Lab, s: State) -> list[str]:
     return bad
 
 
-scenario("sync", """
+scenario(
+    "sync",
+    """
 Upstream has moved on: main on the `upstream` remote has a new commit.
 Fetch it and rebase every topic onto the new main. Upstream changed k2
 in config.txt, which the alpha topic also changes; where they disagree,
 alpha's value wins. Keep upstream's other changes.
-""")((_sync_setup, _sync_check))
+""",
+)((_sync_setup, _sync_check))
 
 
 def _landed_setup(lab: Lab) -> None:
     def edit(at: Path) -> None:
         write(at / "alpha.py", ALPHA_PY)
         set_line(at / "config.txt", "k2", "alpha")
+
     lab.upstream_commit("alpha: add alpha module (#12)", edit)
 
 
 def _landed_check(lab: Lab, s: State) -> list[str]:
     bad = []
     if "alpha" in s.bookmarks and s.bookmarks["alpha"] in set(
-            s.parents.get(s.bookmarks.get("octopus"), [])):
+        s.parents.get(s.bookmarks.get("octopus"), [])
+    ):
         bad.append("alpha is still merged into the octopus")
     for t in ("beta", "gamma"):
         if "alpha.py" not in s.files.get(s.bookmarks.get(t), {}):
@@ -441,37 +483,53 @@ def _landed_check(lab: Lab, s: State) -> list[str]:
     return bad
 
 
-scenario("landed", """
+scenario(
+    "landed",
+    """
 Upstream merged the alpha topic: main on the `upstream` remote now holds
 alpha's changes as one squashed commit. Fetch, rebase the remaining
 topics onto the new main, and take alpha out of the octopus. Delete the
 local alpha bookmark.
-""", topics=("beta", "gamma"))((_landed_setup, _landed_check))
+""",
+    topics=("beta", "gamma"),
+)((_landed_setup, _landed_check))
 
 
 def _cross_setup(lab: Lab) -> None:
     set_line(lab.fork / "config.txt", "k2", "alpha-for-beta")
-    write(lab.fork / "beta.py", (lab.fork / "beta.py").read_text() + "K2 = 'alpha-for-beta'\n")
+    write(
+        lab.fork / "beta.py",
+        (lab.fork / "beta.py").read_text() + "K2 = 'alpha-for-beta'\n",
+    )
     pj(lab.fork, "describe", "-m", "beta: read k2 as alpha sets it")
 
 
 def _cross_check(lab: Lab, s: State) -> list[str]:
-    bad = (file_in(s, "beta", "config.txt", "k2 = alpha-for-beta")
-           + file_in(s, "beta", "beta.py", "alpha-for-beta") + wc_is_empty(s))
+    bad = (
+        file_in(s, "beta", "config.txt", "k2 = alpha-for-beta")
+        + file_in(s, "beta", "beta.py", "alpha-for-beta")
+        + wc_is_empty(s)
+    )
     if s.subject.get(s.bookmarks.get("beta")) != "beta: read k2 as alpha sets it":
         bad.append("beta's tip is not 'beta: read k2 as alpha sets it'")
-    if "alpha-for-beta" in s.files.get(s.bookmarks.get("alpha"), {}).get("config.txt", ""):
+    if "alpha-for-beta" in s.files.get(s.bookmarks.get("alpha"), {}).get(
+        "config.txt", ""
+    ):
         bad.append("the change leaked into alpha")
     return bad
 
 
-scenario("cross-lane", """
+scenario(
+    "cross-lane",
+    """
 The working copy holds a finished commit, "beta: read k2 as alpha sets
 it". It belongs on the beta topic as its own commit, but it changes the
 line `k2` in config.txt that the alpha topic sets. Put it on beta.
 Leave alpha's own commits as they are, leave no conflicts, and leave the
 working copy empty on top of the octopus.
-""", stacked={"beta": "alpha"})((_cross_setup, _cross_check))
+""",
+    stacked={"beta": "alpha"},
+)((_cross_setup, _cross_check))
 
 
 # -- entry points -----------------------------------------------------------

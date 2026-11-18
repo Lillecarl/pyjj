@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class Finding:
-    level: str          # "problem" | "note"
+    level: str  # "problem" | "note"
     what: str
     fix: str = ""
 
@@ -54,6 +54,11 @@ class Report:
         return not any(f.level == "problem" for f in self.findings)
 
 
+# Seven-character openers of jj's conflict-marker lines, all three styles.
+# Not `=======` or `-------`: Markdown underlines headings with them.
+_MARKERS = {m * 7 for m in (b"<", b">", b"%", b"+", b"|", b"\\")}
+
+
 def _short(c: Commit) -> str:
     return c.change_id.reverse_hex()[:8]
 
@@ -73,8 +78,10 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
     try:
         octo = repo.resolve(f'bookmarks(exact:"{octopus}")')
     except pyjj.JjError:
-        report.problem(f"no bookmark {octopus!r}",
-                       f"pyjj bookmark create {octopus} -r <the merge of all topic tips>")
+        report.problem(
+            f"no bookmark {octopus!r}",
+            f"pyjj bookmark create {octopus} -r <the merge of all topic tips>",
+        )
         return report
     report.octopus = _label(octo)
 
@@ -84,8 +91,10 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
             names.setdefault(b.target_ids[0].hex(), []).append(b.name)
 
     if not octo.is_empty(raw):
-        report.problem(f"the octopus {_short(octo)} holds changes of its own",
-                       f"move them into a topic: pyjj squash --from {octopus} --into TOPIC")
+        report.problem(
+            f"the octopus {_short(octo)} holds changes of its own",
+            f"move them into a topic: pyjj squash --from {octopus} --into TOPIC",
+        )
 
     parents = [raw.get_commit(p) for p in octo.parent_ids]
     trunk_hex = trunk.id.hex()
@@ -93,17 +102,30 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
     for p in parents:
         own = [n for n in names.get(p.id.hex(), []) if n != octopus]
         if p.id.hex() == trunk_hex:
-            report.problem("trunk() itself is an octopus parent (a landed topic?)",
-                           f"pyjj simplify-parents -r {octopus}")
+            report.problem(
+                "trunk() itself is an octopus parent (a landed topic?)",
+                f"pyjj simplify-parents -r {octopus}",
+            )
             continue
         if not own:
-            below = next((names[c.id.hex()] for c in repo.revset(f"::{p.id.hex()} ~ ::trunk()")
-                          if c.id.hex() in names), None)
-            fix = (f"pyjj bookmark set {below[0]} -r {_short(p)}" if below
-                   else f"pyjj bookmark create NAME -r {_short(p)}")
-            report.problem(f"octopus parent {_label(p)} has no bookmark"
-                           + (f"; {below[0]} sits below it in the same lane" if below else ""),
-                           fix)
+            below = next(
+                (
+                    names[c.id.hex()]
+                    for c in repo.revset(f"::{p.id.hex()} ~ ::trunk()")
+                    if c.id.hex() in names
+                ),
+                None,
+            )
+            fix = (
+                f"pyjj bookmark set {below[0]} -r {_short(p)}"
+                if below
+                else f"pyjj bookmark create NAME -r {_short(p)}"
+            )
+            report.problem(
+                f"octopus parent {_label(p)} has no bookmark"
+                + (f"; {below[0]} sits below it in the same lane" if below else ""),
+                fix,
+            )
             tips[_short(p)] = p
         else:
             for n in own:
@@ -115,64 +137,125 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
         roots = repo.revset(f"roots(::{tip.id.hex()} ~ ::trunk())")
         info: dict[str, object] = {"tip": _label(tip), "commits": len(lane)}
         if len(tip.parent_ids) > 1:
-            info["merges"] = [names.get(p.hex(), [raw.get_commit(p).change_id.reverse_hex()[:8]])[0]
-                              for p in tip.parent_ids]
+            info["merges"] = [
+                names.get(p.hex(), [raw.get_commit(p).change_id.reverse_hex()[:8]])[0]
+                for p in tip.parent_ids
+            ]
         for root in roots:
-            if any(p.hex() != trunk_hex and repo.revset(f"{p.hex()} & ::trunk()")
-                   for p in root.parent_ids) and name not in behind:
+            if (
+                any(
+                    p.hex() != trunk_hex and repo.revset(f"{p.hex()} & ::trunk()")
+                    for p in root.parent_ids
+                )
+                and name not in behind
+            ):
                 behind.append(name)
         # Another topic's bookmark inside this lane: stacked on it. A
         # merge tip's parents are what it integrates, not a stack.
-        below = repo.revset(f"(::{tip.id.hex()} ~ ::trunk()) ~ {tip.id.hex()}"
-                            + "".join(f" ~ {p.hex()}" for p in tip.parent_ids
-                                      if len(tip.parent_ids) > 1))
-        stacked_on = [n for c in below for n in names.get(c.id.hex(), []) if n != octopus]
+        below = repo.revset(
+            f"(::{tip.id.hex()} ~ ::trunk()) ~ {tip.id.hex()}"
+            + "".join(
+                f" ~ {p.hex()}" for p in tip.parent_ids if len(tip.parent_ids) > 1
+            )
+        )
+        stacked_on = [
+            n for c in below for n in names.get(c.id.hex(), []) if n != octopus
+        ]
         if stacked_on:
             info["stacked_on"] = stacked_on
-            own = repo.revset(f"(::{tip.id.hex()} ~ ::trunk())"
-                              + "".join(f" ~ ::{c.id.hex()}" for c in below
-                                        if names.get(c.id.hex())))
+            own = repo.revset(
+                f"(::{tip.id.hex()} ~ ::trunk())"
+                + "".join(f" ~ ::{c.id.hex()}" for c in below if names.get(c.id.hex()))
+            )
             info["commits"] = len(own)
         if not lane:
-            report.problem(f"topic {name} has no commits above trunk (landed?)",
-                           f"pyjj simplify-parents -r {octopus}; pyjj bookmark delete {name}")
+            report.problem(
+                f"topic {name} has no commits above trunk (landed?)",
+                f"pyjj simplify-parents -r {octopus}; pyjj bookmark delete {name}",
+            )
         report.topics[name] = info
     if behind:
-        report.note(f"behind trunk(): {', '.join(behind)}",
-                    f"sync: pyjj rebase -b {octopus} -d 'trunk()' --skip-emptied")
+        report.note(
+            f"behind trunk(): {', '.join(behind)}",
+            f"sync: pyjj rebase -b {octopus} -d 'trunk()' --skip-emptied",
+        )
 
     # A topic made but never merged: on a lane of its own, outside the octopus.
     outside = repo.revset(f"bookmarks() & mutable() ~ ::{octopus}")
     for c in outside:
         for n in names.get(c.id.hex(), []):
-            report.problem(f"bookmark {n} is not in the octopus",
-                           f"if {n} is a topic: pyjj rebase -r {octopus} -d '{octopus}-' -d {n}")
+            report.problem(
+                f"bookmark {n} is not in the octopus",
+                f"if {n} is a topic: pyjj rebase -r {octopus} -d '{octopus}-' -d {n}",
+            )
 
     conflicted = repo.revset(f"conflicts() & ::{octopus}+")
     if conflicted:
         roots = repo.revset(f"roots(conflicts() & ::{octopus}+)")
         for r in roots:
             if r.id.hex() == octo.id.hex():
-                report.problem("the octopus is conflicted, its topics are not: two topics "
-                               "touch the same lines (see the pairs below)",
-                               "stack the dependent topic on the other, or add an "
-                               "integration merge (skill section H)")
+                report.problem(
+                    "the octopus is conflicted, its topics are not: two topics "
+                    "touch the same lines (see the pairs below)",
+                    "stack the dependent topic on the other, or add an "
+                    "integration merge (skill section H)",
+                )
             else:
-                report.problem(f"conflict starts at {_label(r)}",
-                               f"pyjj new {_short(r)}; edit the files; pyjj squash; "
-                               f"pyjj new {octopus}")
+                report.problem(
+                    f"conflict starts at {_label(r)}",
+                    f"pyjj new {_short(r)}; edit the files; pyjj squash; "
+                    f"pyjj new {octopus}",
+                )
+
+    # A hand resolution that kept part of a marker block: jj no longer
+    # parses it as a conflict, so conflicts() is empty and only the text
+    # shows it.
+    for c in repo.revset(f"::{octopus}+ ~ ::trunk()"):
+        entries = [e.path for e in c.diff_from_parents(raw)]
+        if not entries:
+            continue
+        before = c.parent_contents(raw, entries)
+        for path in entries:
+            if c.file_kind(path) != "file":
+                continue
+            old = {
+                line
+                for line in (before.get(path) or b"").splitlines()
+                if line[:7] in _MARKERS
+            }
+            stray = [
+                line
+                for line in c.read_file(path).splitlines()
+                if line[:7] in _MARKERS and line not in old
+            ]
+            if stray:
+                report.problem(
+                    f"{_label(c)} leaves conflict-marker lines in {path}: "
+                    f"{stray[0].decode(errors='replace')!r}",
+                    f"pyjj new {_short(c)}; delete them; pyjj squash; pyjj new {octopus}",
+                )
 
     # Trial merges and a trial sync, each in a transaction that is
     # dropped uncommitted.
     pairs = raw.start_transaction(settings)
     for (a, ca), (b, cb) in itertools.combinations(tips.items(), 2):
-        if repo.revset(f"({ca.id.hex()} & ::{cb.id.hex()}) | ({cb.id.hex()} & ::{ca.id.hex()})"):
+        if ca.has_conflict or cb.has_conflict:
+            continue  # inherited, not a collision between the two
+        if repo.revset(
+            f"({ca.id.hex()} & ::{cb.id.hex()}) | ({cb.id.hex()} & ::{ca.id.hex()})"
+        ):
             continue
         merged = pairs.new_commit(settings, [ca.id, cb.id]).write(raw)
         if merged.has_conflict:
-            files = [f for f in merged.list_files() if merged.file_kind(f).endswith("conflict")]
-            report.note(f"topics {a} and {b} conflict with each other in {', '.join(files)}",
-                        "stack one on the other, or merge them in an integration commit (skill H)")
+            files = [
+                f
+                for f in merged.list_files()
+                if merged.file_kind(f).endswith("conflict")
+            ]
+            report.note(
+                f"topics {a} and {b} conflict with each other in {', '.join(files)}",
+                "stack one on the other, or merge them in an integration commit (skill H)",
+            )
     del pairs
 
     roots = repo.revset(f"roots(::{octopus} ~ ::trunk())")
@@ -180,14 +263,34 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
     if movable:
         sync = raw.start_transaction(settings)
         before = {c.hex() for c in sync.revset(settings, "conflicts()")}
-        sync.move_commits(target_commit_ids=[], target_root_ids=movable,
-                          new_parent_ids=[trunk.id], new_child_ids=[], skip_emptied=True)
+        sync.move_commits(
+            target_commit_ids=[],
+            target_root_ids=movable,
+            new_parent_ids=[trunk.id],
+            new_child_ids=[],
+            skip_emptied=True,
+        )
         sync.rebase_descendants()
-        new = {c.hex() for c in sync.revset(settings, f"roots(conflicts()) & ::{octopus}")} - before
+        new = {
+            c.hex() for c in sync.revset(settings, f"roots(conflicts()) & ::{octopus}")
+        } - before
         hit = sorted(_label(raw.get_commit(pyjj.CommitId(h))) for h in new)
         if hit:
-            report.note("a sync would start conflicts at: " + "; ".join(hit),
-                        "sync anyway, then resolve each (skill F)")
+            report.note(
+                "a sync would start conflicts at: " + "; ".join(hit),
+                "sync anyway, then resolve each (skill F)",
+            )
+        landed = [
+            name
+            for name in tips
+            if sync.revset(settings, f'bookmarks(exact:"{name}") & ::trunk()')
+        ]
+        if landed:
+            report.note(
+                f"upstream already has {', '.join(landed)}: a sync empties "
+                "and drops those lanes",
+                "after the sync: skill G",
+            )
         del sync
 
     wc = repo.resolve("@")
@@ -209,7 +312,9 @@ def render(report: Report) -> str:
             extra += f"  stacked on {', '.join(info['stacked_on'])}"
         if info.get("merges"):
             extra += f"  merges {', '.join(info['merges'])}"
-        lines.append(f"topic    {name}: {info['commits']} commit(s), tip {info['tip']}{extra}")
+        lines.append(
+            f"topic    {name}: {info['commits']} commit(s), tip {info['tip']}{extra}"
+        )
     for f in sorted(report.findings, key=lambda f: f.level != "problem"):
         lines.append(f"{f.level.upper():8} {f.what}")
         if f.fix:

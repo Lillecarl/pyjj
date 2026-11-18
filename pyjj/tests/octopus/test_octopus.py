@@ -16,16 +16,25 @@ from octolab import SCENARIOS, Lab, build, check, pj, set_line
 
 
 def _skill_script() -> Path:
-    done = subprocess.run(["pyjj", "skill", "path", "pyjj-octopus"],
-                          capture_output=True, text=True, check=False)
+    done = subprocess.run(
+        ["pyjj", "skill", "path", "pyjj-octopus"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if done.returncode != 0:
         pytest.skip(f"pyjj-octopus skill not installed: {done.stderr.strip()}")
     return Path(done.stdout.strip()).parent / "octopus.py"
 
 
 def _octopus_check(lab: Lab) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["pyjj", "python", str(_skill_script()), "check"],
-                          cwd=lab.fork, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        ["pyjj", "python", str(_skill_script()), "check"],
+        cwd=lab.fork,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def _wc(lab: Lab) -> str:
@@ -56,8 +65,15 @@ def solve_new_topic(lab: Lab) -> None:
 
 
 def _resolve_k2(lab: Lab, value: str) -> None:
-    root = pj(lab.fork, "log", "-r", "roots(conflicts())", "--no-graph",
-              "-T", "{{ change_id_short }}")
+    root = pj(
+        lab.fork,
+        "log",
+        "-r",
+        "roots(conflicts())",
+        "--no-graph",
+        "-T",
+        "{{ change_id_short }}",
+    )
     pj(lab.fork, "new", root)
     text = (lab.fork / "config.txt").read_text().splitlines()
     out, inside = [], False
@@ -149,7 +165,42 @@ def test_check_names_the_colliding_topics(tmp_path: Path) -> None:
     pj(lab.fork, "new", "octopus")
     result = _octopus_check(lab)
     assert result.returncode == 1
-    assert "topics alpha and beta conflict with each other in config.txt" in result.stdout
+    assert (
+        "topics alpha and beta conflict with each other in config.txt" in result.stdout
+    )
+
+
+def test_check_finds_marker_lines_a_resolution_left(tmp_path: Path) -> None:
+    """A hand edit that keeps part of a block is no conflict to jj."""
+    lab = build("sync", tmp_path / "lab")
+    pj(lab.fork, "git", "fetch", "--remote", "upstream")
+    pj(lab.fork, "rebase", "-b", "octopus", "-d", "trunk()", "--skip-emptied")
+    root = pj(
+        lab.fork,
+        "log",
+        "-r",
+        "roots(conflicts())",
+        "--no-graph",
+        "-T",
+        "{{ change_id_short }}",
+    )
+    pj(lab.fork, "new", root)
+    text = (lab.fork / "config.txt").read_text()
+    kept = [line for line in text.splitlines() if not line.startswith("<<<<<<<")]
+    (lab.fork / "config.txt").write_text("\n".join(kept) + "\n")
+    pj(lab.fork, "squash")
+    pj(lab.fork, "new", "octopus")
+    assert pj(lab.fork, "log", "-r", "conflicts()", "--no-graph") == ""
+    result = _octopus_check(lab)
+    assert result.returncode == 1
+    assert "leaves conflict-marker lines in config.txt" in result.stdout
+
+
+def test_check_predicts_a_landed_topic(tmp_path: Path) -> None:
+    lab = build("landed", tmp_path / "lab")
+    pj(lab.fork, "git", "fetch", "--remote", "upstream")
+    result = _octopus_check(lab)
+    assert "upstream already has alpha" in result.stdout
 
 
 def test_check_refuses_changes_in_the_octopus(tmp_path: Path) -> None:
