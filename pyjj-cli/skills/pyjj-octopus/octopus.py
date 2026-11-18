@@ -37,10 +37,18 @@ class Finding:
 
 
 @dataclass
+class Topic:
+    tip: str
+    commits: int
+    stacked_on: list[str] = field(default_factory=list)
+    merges: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Report:
     trunk: str = ""
     octopus: str = ""
-    topics: dict[str, dict[str, object]] = field(default_factory=dict)
+    topics: dict[str, Topic] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
 
     def problem(self, what: str, fix: str = "") -> None:
@@ -135,9 +143,9 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
     for name, tip in tips.items():
         lane = repo.revset(f"::{tip.id.hex()} ~ ::trunk()")
         roots = repo.revset(f"roots(::{tip.id.hex()} ~ ::trunk())")
-        info: dict[str, object] = {"tip": _label(tip), "commits": len(lane)}
+        info = Topic(tip=_label(tip), commits=len(lane))
         if len(tip.parent_ids) > 1:
-            info["merges"] = [
+            info.merges = [
                 names.get(p.hex(), [raw.get_commit(p).change_id.reverse_hex()[:8]])[0]
                 for p in tip.parent_ids
             ]
@@ -162,12 +170,12 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
             n for c in below for n in names.get(c.id.hex(), []) if n != octopus
         ]
         if stacked_on:
-            info["stacked_on"] = stacked_on
+            info.stacked_on = stacked_on
             own = repo.revset(
                 f"(::{tip.id.hex()} ~ ::trunk())"
                 + "".join(f" ~ ::{c.id.hex()}" for c in below if names.get(c.id.hex()))
             )
-            info["commits"] = len(own)
+            info.commits = len(own)
         if not lane:
             report.problem(
                 f"topic {name} has no commits above trunk (landed?)",
@@ -180,11 +188,12 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
             f"sync: pyjj rebase -b {octopus} -d 'trunk()' --skip-emptied",
         )
 
-    # A topic made but never merged: on a lane of its own, outside the octopus.
-    outside = repo.revset(f"bookmarks() & mutable() ~ ::{octopus}")
+    # Maybe a topic made but never merged, maybe an archive or WIP
+    # bookmark: only the user knows, so a note.
+    outside = repo.revset(f"bookmarks() & mutable() ~ ::{octopus} ~ {octopus}::")
     for c in outside:
         for n in names.get(c.id.hex(), []):
-            report.problem(
+            report.note(
                 f"bookmark {n} is not in the octopus",
                 f"if {n} is a topic: pyjj rebase -r {octopus} -d '{octopus}-' -d {n}",
             )
@@ -293,14 +302,38 @@ def check(repo: pyjj.Repo, octopus: str = "octopus") -> Report:
             )
         del sync
 
+    # Work left on the octopus by no workspace: a recipe that ended with
+    # `pyjj new octopus` while @ still held unfinished work.
+    stranded = repo.revset(f"{octopus}+ ~ working_copies() ~ empty()")
     wc = repo.resolve("@")
     if [p.hex() for p in wc.parent_ids] != [octo.id.hex()]:
-        report.problem("@ is not a child of the octopus", f"pyjj new {octopus}")
-    elif not wc.is_empty(raw):
-        files = [e.path for e in wc.diff_from_parents(raw)]
-        report.note(f"@ holds unfinished work: {', '.join(files)}")
-    for c in repo.revset(f"{octopus}+ ~ @"):
-        report.note(f"another commit sits on the octopus: {_label(c)}")
+        fix = (
+            f"pyjj edit {_short(stranded[0])}"
+            if len(stranded) == 1
+            else f"pyjj new {octopus}"
+        )
+        report.problem("@ is not a child of the octopus", fix)
+    else:
+        if not wc.is_empty(raw):
+            files = [e.path for e in wc.diff_from_parents(raw)]
+            report.note(f"@ holds unfinished work: {', '.join(files)}")
+        for c in stranded:
+            report.problem(
+                f"unfinished work left on the octopus, outside @: {_label(c)}",
+                f"pyjj squash --from {_short(c)} --into @",
+            )
+    for c in repo.revset(f"{octopus}+ & working_copies() ~ @"):
+        report.note(f"another workspace works on the octopus: {_label(c)}")
+
+    # A fork's own remote often has a stale main too; trunk() must be
+    # the project's, not the fork's.
+    if repo.revset('remote_bookmarks(remote=exact:"upstream")') and not repo.revset(
+        'trunk() & remote_bookmarks(remote=exact:"upstream")'
+    ):
+        report.problem(
+            "trunk() is not on the upstream remote",
+            "pyjj config set --repo 'revset-aliases.\"trunk()\"' 'main@upstream'",
+        )
     return report
 
 
@@ -308,12 +341,12 @@ def render(report: Report) -> str:
     lines = [f"trunk    {report.trunk}", f"octopus  {report.octopus}"]
     for name, info in report.topics.items():
         extra = ""
-        if info.get("stacked_on"):
-            extra += f"  stacked on {', '.join(info['stacked_on'])}"
-        if info.get("merges"):
-            extra += f"  merges {', '.join(info['merges'])}"
+        if info.stacked_on:
+            extra += f"  stacked on {', '.join(info.stacked_on)}"
+        if info.merges:
+            extra += f"  merges {', '.join(info.merges)}"
         lines.append(
-            f"topic    {name}: {info['commits']} commit(s), tip {info['tip']}{extra}"
+            f"topic    {name}: {info.commits} commit(s), tip {info.tip}{extra}"
         )
     for f in sorted(report.findings, key=lambda f: f.level != "problem"):
         lines.append(f"{f.level.upper():8} {f.what}")
@@ -354,7 +387,8 @@ if __name__ == "__main__":
     _parser = argparse.ArgumentParser(prog="octopus.py")
     add_arguments(_parser)
     _args = _parser.parse_args()
-    if repo is None:  # noqa: F821 -- bound by `pyjj python`
+    _repo = globals().get("repo")  # bound by `pyjj python`
+    if not isinstance(_repo, pyjj.Repo):
         print("Error: run inside a repository, via `pyjj python`", file=sys.stderr)
         sys.exit(2)
-    sys.exit(run(repo, _args))  # noqa: F821
+    sys.exit(run(_repo, _args))

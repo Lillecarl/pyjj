@@ -3,6 +3,7 @@
     pyjj python --no-repo octolab.py build SCENARIO DEST
     pyjj python --no-repo octolab.py check SCENARIO DEST
     pyjj python --no-repo octolab.py task SCENARIO
+    pyjj python --no-repo octolab.py prompt SCENARIO DEST [SKILL.md]
     pyjj python --no-repo octolab.py list
 
 `build` makes DEST/upstream.git (the project), DEST/origin.git (the
@@ -143,6 +144,9 @@ def build_base(root: Path) -> Lab:
 
     init_repo(lab.fork, "git", "clone", "--remote", "upstream", str(lab.upstream))
     pj(lab.fork, "git", "remote", "add", "origin", str(lab.origin))
+    # The skill's setup step: a fork's own remote carries a main that
+    # goes stale, so trunk() is pinned to the project's.
+    pj(lab.fork, "config", "set", "--repo", 'revset-aliases."trunk()"', "main@upstream")
 
     f = lab.fork
     pj(f, "new", "main", "-m", "alpha: add alpha module")
@@ -164,7 +168,16 @@ def build_base(root: Path) -> Lab:
     pj(f, "new", *TOPICS, "-m", "octopus")
     pj(f, "bookmark", "create", "octopus", "-r", "@")
     pj(f, "new")
-    pj(f, "git", "push", "--remote", "origin", *[a for t in TOPICS for a in ("-b", t)])
+    # main tracks upstream; the fork's copy of it needs tracking of its own.
+    pj(f, "bookmark", "track", "main", "--remote", "origin")
+    pj(
+        f,
+        "git",
+        "push",
+        "--remote",
+        "origin",
+        *[a for t in ("main", *TOPICS) for a in ("-b", t)],
+    )
     return lab
 
 
@@ -183,13 +196,21 @@ class State:
     conflicted: set[str]
     files: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    def tip(self, topic: str) -> str:
+        """The change id a bookmark names, or "" when it is gone."""
+        return self.bookmarks.get(topic, "")
+
+    def tip_files(self, topic: str) -> dict[str, str]:
+        return self.files.get(self.tip(topic), {})
+
     def lane(self, topic: str) -> list[str]:
         """main..topic, tip first, following first parents."""
-        out, at = [], self.bookmarks.get(topic)
-        while at is not None and at != self.remote_main and at in self.parents:
+        out: list[str] = []
+        at = self.tip(topic)
+        while at and at != self.remote_main and at in self.parents:
             out.append(at)
             ps = self.parents[at]
-            at = ps[0] if ps else None
+            at = ps[0] if ps else ""
         return out
 
 
@@ -245,13 +266,13 @@ def base_expectations(
     """
     stacked = stacked or {}
     bad = []
-    octo = s.bookmarks.get("octopus")
-    if octo is None:
+    octo = s.tip("octopus")
+    if not octo:
         return ["the octopus bookmark is gone"]
-    tips = {s.bookmarks.get(t) for t in topics}
-    if None in tips:
+    tips = {s.tip(t) for t in topics}
+    if "" in tips:
         bad.append(f"a topic bookmark is missing: have {sorted(s.bookmarks)}")
-    bases = {s.bookmarks.get(b) for b in stacked.values()}
+    bases = {s.tip(b) for b in stacked.values()}
     if set(s.parents[octo]) - bases != tips - bases:
         names = {v: k for k, v in s.bookmarks.items()}
         got = sorted(names.get(p, s.subject.get(p, p)) for p in s.parents[octo])
@@ -263,7 +284,7 @@ def base_expectations(
             continue
         base = stacked.get(t)
         if base is not None:
-            if s.bookmarks.get(base) not in lane:
+            if s.tip(base) not in lane:
                 bad.append(f"topic {t} is not stacked on {base}")
             continue
         root = lane[-1]
@@ -318,8 +339,7 @@ def wc_is_empty(s: State) -> list[str]:
 
 
 def file_in(s: State, topic: str, path: str, needle: str) -> list[str]:
-    tip = s.bookmarks.get(topic)
-    content = s.files.get(tip, {}).get(path)
+    content = s.tip_files(topic).get(path)
     if content is None or needle not in content:
         return [f"{path} on {topic} does not contain {needle!r}"]
     return []
@@ -392,7 +412,7 @@ def _squash_check(lab: Lab, s: State) -> list[str]:
     if "notes.txt" not in wc:
         bad.append("notes.txt is no longer in the working copy")
     for t in TOPICS:
-        if "notes.txt" in s.files.get(s.bookmarks.get(t), {}):
+        if "notes.txt" in s.tip_files(t):
             bad.append(f"notes.txt leaked into {t}")
     return bad
 
@@ -444,8 +464,7 @@ def _sync_setup(lab: Lab) -> None:
 def _sync_check(lab: Lab, s: State) -> list[str]:
     bad = []
     for t in TOPICS:
-        content = s.files.get(s.bookmarks.get(t), {})
-        if "UPSTREAM.md" not in content:
+        if "UPSTREAM.md" not in s.tip_files(t):
             bad.append(f"{t} is not rebased onto the new upstream main")
     bad += file_in(s, "alpha", "config.txt", "k2 = alpha")
     bad += file_in(s, "alpha", "config.txt", "k5 = upstream")
@@ -463,6 +482,34 @@ alpha's value wins. Keep upstream's other changes.
 )((_sync_setup, _sync_check))
 
 
+def _sync_dirty_setup(lab: Lab) -> None:
+    write(lab.fork / "wip.txt", "half-done work, not for any topic yet\n")
+    _sync_setup(lab)
+
+
+def _sync_dirty_check(lab: Lab, s: State) -> list[str]:
+    bad = _sync_check(lab, s)
+    if "wip.txt" not in s.files.get(s.wc, {}):
+        bad.append("wip.txt is no longer in the working copy")
+    for t in TOPICS:
+        if "wip.txt" in s.tip_files(t):
+            bad.append(f"wip.txt leaked into {t}")
+    return bad
+
+
+scenario(
+    "sync-dirty",
+    """
+Upstream has moved on: main on the `upstream` remote has a new commit.
+Fetch it and rebase every topic onto the new main. Upstream changed k2
+in config.txt, which the alpha topic also changes; where they disagree,
+alpha's value wins. Keep upstream's other changes. The working copy
+holds unfinished work (wip.txt); it must still be in the working copy,
+on top of the octopus, when you are done.
+""",
+)((_sync_dirty_setup, _sync_dirty_check))
+
+
 def _landed_setup(lab: Lab) -> None:
     def edit(at: Path) -> None:
         write(at / "alpha.py", ALPHA_PY)
@@ -473,12 +520,10 @@ def _landed_setup(lab: Lab) -> None:
 
 def _landed_check(lab: Lab, s: State) -> list[str]:
     bad = []
-    if "alpha" in s.bookmarks and s.bookmarks["alpha"] in set(
-        s.parents.get(s.bookmarks.get("octopus"), [])
-    ):
+    if s.tip("alpha") and s.tip("alpha") in s.parents.get(s.tip("octopus"), []):
         bad.append("alpha is still merged into the octopus")
     for t in ("beta", "gamma"):
-        if "alpha.py" not in s.files.get(s.bookmarks.get(t), {}):
+        if "alpha.py" not in s.tip_files(t):
             bad.append(f"{t} is not rebased onto the new upstream main")
     return bad
 
@@ -510,11 +555,9 @@ def _cross_check(lab: Lab, s: State) -> list[str]:
         + file_in(s, "beta", "beta.py", "alpha-for-beta")
         + wc_is_empty(s)
     )
-    if s.subject.get(s.bookmarks.get("beta")) != "beta: read k2 as alpha sets it":
+    if s.subject.get(s.tip("beta")) != "beta: read k2 as alpha sets it":
         bad.append("beta's tip is not 'beta: read k2 as alpha sets it'")
-    if "alpha-for-beta" in s.files.get(s.bookmarks.get("alpha"), {}).get(
-        "config.txt", ""
-    ):
+    if "alpha-for-beta" in s.tip_files("alpha").get("config.txt", ""):
         bad.append("the change leaked into alpha")
     return bad
 
@@ -550,6 +593,29 @@ def check(name: str, dest: Path) -> list[str]:
     return base_expectations(state, sc.topics, sc.stacked) + sc.check(lab, state)
 
 
+PROMPT = """\
+You are working in a jj (Jujutsu) repository driven by the `pyjj` CLI. \
+First read the skill file {skill} and follow it.
+
+Repository: {fork}
+Run every command from inside that directory (cd into it in each shell \
+command). Use only `pyjj` for version control, never `jj` or `git`. Do not \
+modify anything outside that directory. Do not push.
+
+Task:
+{task}
+
+When finished, reply in under 15 lines: the pyjj commands you ran in order \
+(one line each, no output), anything in the skill that was unclear or wrong, \
+and whether the task is done."""
+
+
+def prompt(name: str, dest: Path, skill: str) -> str:
+    """The exact prompt a subagent run gets: the skill, the repo, the task,
+    and no hint of the solution."""
+    return PROMPT.format(skill=skill, fork=dest / "fork", task=SCENARIOS[name].task)
+
+
 def main(argv: list[str]) -> int:
     match argv:
         case ["list"]:
@@ -558,6 +624,14 @@ def main(argv: list[str]) -> int:
             return 0
         case ["task", name]:
             print(SCENARIOS[name].task)
+            return 0
+        case ["prompt", name, dest, *skill]:
+            path = (
+                skill[0]
+                if skill
+                else run(PYJJ, "skill", "path", "pyjj-octopus", cwd=Path.cwd()).strip()
+            )
+            print(prompt(name, Path(dest).resolve(), path))
             return 0
         case ["build", name, dest]:
             path = Path(dest).resolve()

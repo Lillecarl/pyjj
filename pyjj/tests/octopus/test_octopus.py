@@ -65,6 +65,8 @@ def solve_new_topic(lab: Lab) -> None:
 
 
 def _resolve_k2(lab: Lab, value: str) -> None:
+    """Recipe F, including its last step: back to the work commit W."""
+    work = _wc(lab)
     root = pj(
         lab.fork,
         "log",
@@ -87,13 +89,29 @@ def _resolve_k2(lab: Lab, value: str) -> None:
             out.append(line)
     (lab.fork / "config.txt").write_text("\n".join(out) + "\n")
     pj(lab.fork, "squash")
-    pj(lab.fork, "new", "octopus")
+    # `pyjj new` abandoned W if it was empty; only work has to be returned to.
+    if pj(lab.fork, "log", "-r", f"present({work})", "--no-graph", "-T", "x"):
+        pj(lab.fork, "edit", work)
+    else:
+        pj(lab.fork, "new", "octopus")
 
 
 def solve_sync(lab: Lab) -> None:
     pj(lab.fork, "git", "fetch", "--remote", "upstream")
     pj(lab.fork, "rebase", "-b", "octopus", "-d", "trunk()", "--skip-emptied")
     _resolve_k2(lab, "alpha")
+
+
+def test_unconditional_new_octopus_strands_work(tmp_path: Path) -> None:
+    """Why recipe F ends with `edit W`: `new octopus` would leave the
+    unfinished work in a sibling, and the check says so."""
+    lab = build("sync-dirty", tmp_path / "lab")
+    pj(lab.fork, "git", "fetch", "--remote", "upstream")
+    pj(lab.fork, "rebase", "-b", "octopus", "-d", "trunk()", "--skip-emptied")
+    pj(lab.fork, "new", "octopus")
+    result = _octopus_check(lab)
+    assert result.returncode == 1
+    assert "unfinished work left on the octopus, outside @" in result.stdout
 
 
 def solve_landed(lab: Lab) -> None:
@@ -117,6 +135,7 @@ SOLUTIONS = {
     "squash": solve_squash,
     "new-topic": solve_new_topic,
     "sync": solve_sync,
+    "sync-dirty": solve_sync,
     "landed": solve_landed,
     "cross-lane": solve_cross_lane,
 }
@@ -201,6 +220,32 @@ def test_check_predicts_a_landed_topic(tmp_path: Path) -> None:
     pj(lab.fork, "git", "fetch", "--remote", "upstream")
     result = _octopus_check(lab)
     assert "upstream already has alpha" in result.stdout
+
+
+def test_check_wants_trunk_on_upstream(tmp_path: Path) -> None:
+    """The fork's own main moves ahead and the trunk() pin is gone:
+    jj's default trunk() then picks the fork's main."""
+    lab = build("absorb", tmp_path / "lab")
+    pj(lab.fork, "config", "unset", "--repo", 'revset-aliases."trunk()"')
+    pj(lab.fork, "new", "main", "-m", "fork-only change")
+    pj(lab.fork, "bookmark", "set", "main", "-r", "@")
+    pj(lab.fork, "git", "push", "--remote", "origin", "-b", "main")
+    pj(lab.fork, "new", "octopus")
+    result = _octopus_check(lab)
+    assert result.returncode == 1
+    assert "trunk() is not on the upstream remote" in result.stdout
+
+
+def test_an_archive_bookmark_is_only_a_note(tmp_path: Path) -> None:
+    lab = build("absorb", tmp_path / "lab")
+    pj(lab.fork, "restore")
+    pj(lab.fork, "bookmark", "create", "archive/old", "-r", "alpha-")
+    pj(lab.fork, "new", "main", "-m", "wip elsewhere")
+    pj(lab.fork, "bookmark", "create", "wip", "-r", "@")
+    pj(lab.fork, "new", "octopus")
+    result = _octopus_check(lab)
+    assert result.returncode == 0, result.stdout
+    assert "NOTE     bookmark wip is not in the octopus" in result.stdout
 
 
 def test_check_refuses_changes_in_the_octopus(tmp_path: Path) -> None:
