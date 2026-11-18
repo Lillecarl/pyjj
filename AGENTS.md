@@ -133,9 +133,12 @@ both forms compose.
 
 ## Skill labs: testing a skill on weaker agents
 
-`pyjj-cli/skills/` ships with the package (`pyjj skill path NAME`).
-`pyjj-octopus` has a lab, `pyjj/tests/octopus/octolab.py`: throwaway
-forks, one per scenario, each with a checker that reads the result.
+`pyjj-cli/skills/pyjj/` ships with the package (`pyjj skill path`):
+`SKILL.md` is the entry point, `references/*.md` hold the topics it
+links (read on demand, not preloaded), `scripts/` what they run. The
+octopus workflow (`references/octopus.md`) has a lab,
+`pyjj/tests/octopus/octolab.py`: throwaway forks, one per scenario,
+each with a checker that reads the result.
 
 - `test_octopus.py` solves every scenario with the skill's own recipes.
   A recipe that breaks is a skill that misleads agents; a new scenario
@@ -152,8 +155,10 @@ forks, one per scenario, each with a checker that reads the result.
   parallel. Grade with `check`, never with the agent's report: agents
   report "done" on states the checker rejects. Read their "unclear or
   wrong" lines; each recurring one is a skill edit or a check finding.
-- The prompt names the installed skill, so push and rebuild before a
-  run, or pass the checkout's `SKILL.md` as the prompt's last argument.
+- The prompt names the installed `SKILL.md`, not the reference: finding
+  `references/octopus.md` from it is part of what a run tests. Push and
+  rebuild before a run, or pass the checkout's `SKILL.md` as the
+  prompt's last argument.
   The agents' `pyjj` is the installed one either way.
 
 ## jj CLI parity coverage

@@ -1,9 +1,9 @@
----
-name: pyjj-octopus
-description: Maintain a fork as several topic branches joined by one octopus merge, with day-to-day work on top of the merge. Load when a repository has an `octopus` bookmark, or when asked to move, squash or absorb work into a topic branch, start a new topic, sync topics with upstream, or resolve conflicts between them. Builds on the pyjj skill.
----
+# Octopus fork workflow
 
-# Octopus fork workflow (pyjj)
+A fork kept as topic lanes joined by one octopus merge, with day-to-day work
+on top of the merge. Read this when a repository has an `octopus` bookmark, or
+when asked to move, squash or absorb work into a topic, start a topic, sync
+topics with upstream, or resolve conflicts between them.
 
 ## Shape
 
@@ -40,7 +40,7 @@ Commands are `pyjj`, same flags as jj. `-T` takes Jinja (`{{ change_id_short }}
 ## The check: run it first and last
 
 ```
-pyjj python "$(dirname "$(pyjj skill path pyjj-octopus)")/octopus.py" check
+pyjj python "$(dirname "$(pyjj skill path)")/scripts/octopus.py" check
 ```
 
 Lists topics (and which are stacked), then PROBLEM and NOTE lines, each with

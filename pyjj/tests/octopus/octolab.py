@@ -629,7 +629,7 @@ def main(argv: list[str]) -> int:
             path = (
                 skill[0]
                 if skill
-                else run(PYJJ, "skill", "path", "pyjj-octopus", cwd=Path.cwd()).strip()
+                else run(PYJJ, "skill", "path", cwd=Path.cwd()).strip()
             )
             print(prompt(name, Path(dest).resolve(), path))
             return 0

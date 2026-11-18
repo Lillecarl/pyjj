@@ -1,4 +1,5 @@
-"""The octopus labs, solved by the recipes in the pyjj-octopus skill.
+"""The octopus labs, solved by the recipes in the pyjj skill's
+references/octopus.md.
 
 Each scenario's checker must fail on the fresh lab and pass after the
 skill's recipe. A recipe that stops working here is a skill that tells
@@ -17,14 +18,14 @@ from octolab import SCENARIOS, Lab, build, check, pj, set_line
 
 def _skill_script() -> Path:
     done = subprocess.run(
-        ["pyjj", "skill", "path", "pyjj-octopus"],
+        ["pyjj", "skill", "path"],
         capture_output=True,
         text=True,
         check=False,
     )
     if done.returncode != 0:
-        pytest.skip(f"pyjj-octopus skill not installed: {done.stderr.strip()}")
-    return Path(done.stdout.strip()).parent / "octopus.py"
+        pytest.skip(f"pyjj skill not installed: {done.stderr.strip()}")
+    return Path(done.stdout.strip()).parent / "scripts" / "octopus.py"
 
 
 def _octopus_check(lab: Lab) -> subprocess.CompletedProcess[str]:
