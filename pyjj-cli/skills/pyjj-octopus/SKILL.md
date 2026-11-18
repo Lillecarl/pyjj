@@ -203,12 +203,19 @@ a topic.
 
 ## Several agents at once
 
-Not yet measured in the labs. What is known: every recipe rewrites the
-octopus, which sits under every other workspace's `@`, so the others go
-stale. A stale workspace runs `pyjj workspace update-stale`; jj can then
-leave its unsaved edits in a divergent sibling of `@`. Until a lab proves
-otherwise, let one agent at a time rewrite topics. The check lists other
-workspaces' commits on the octopus as notes.
+Each agent gets its own workspace with `@` on the octopus:
+`pyjj workspace add --name NAME -r octopus PATH`. Every recipe rewrites the
+octopus, so the other workspaces go stale; any pyjj command there says so.
+Measured in the lab:
+
+- Work the stale workspace had already snapshotted (it ran any pyjj command
+  after editing) comes through `pyjj workspace update-stale` intact.
+- Work it had not snapshotted ends up in a divergent sibling of `@`, and
+  the files leave the disk. Nothing is lost: run the check, which names the
+  sibling and gives `pyjj squash --from <commit id> --into @`.
+
+So: run `pyjj status` after editing files, before another agent may
+rewrite, and run the check after every `update-stale`.
 
 ## After rewriting
 
