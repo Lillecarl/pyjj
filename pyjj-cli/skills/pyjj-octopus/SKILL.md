@@ -36,15 +36,16 @@ predicts: topics that conflict with each other, and the commits a sync would
 conflict at (fetch first). It writes nothing. `--json` for machine output.
 
 A task is done when the check says `OK` and `@` holds only unfinished work.
+NOTE lines never block `OK`; read them, act on the ones your task covers.
 
 Before a rewrite, note `pyjj op log --no-graph --limit 1`; on any mess,
 `pyjj op restore <id>` and start over. Most rewrites take `--dry-run`, which
 reports `Would write N commits` and any new conflicts. A successful rewrite
 prints nothing: run the check or `pyjj log -r 'trunk()::'` to see the result.
 
-`pyjj diff -r octopus` wrongly lists the topics' files (a pyjj bug). To see
-whether the octopus is empty, use the check or `pyjj log -r octopus`, which
-says `(empty)`.
+`pyjj diff -r octopus`, `pyjj show octopus` and `pyjj log --stat` wrongly list
+the topics' files for a merge (a pyjj bug). To see whether the octopus is
+empty, use the check or `pyjj log -r octopus`, which says `(empty)`.
 
 ## Recipes
 
@@ -72,13 +73,13 @@ The octopus and `@` follow. `@` keeps what was not named.
 
 Describe it first if needed (`pyjj describe -r X -m "topic: what"`). Then:
 ```
+pyjj rebase -r X -A TOPIC --dry-run   # 0. "New conflicts would appear" here = X depends on another topic: do H first
 pyjj rebase -r X -A TOPIC        # 1. insert after the topic's tip; the octopus re-points to X
 pyjj bookmark set TOPIC -r X     # 2. the bookmark does NOT follow by itself
 pyjj new octopus                 # 3. a fresh, empty work commit
 ```
-Use the change id for X in steps 1 and 2, not `@`: after step 1, `@` is X
-only by accident. A rebase that would conflict on the topic means X depends
-on another topic: see H.
+Use the change id for X in every step, not `@`: after step 1, `@` is X only
+by accident.
 
 ### D. Start a new topic from a finished commit
 
@@ -96,9 +97,10 @@ Not `rebase -r X -A 'trunk()' -B octopus`: that slides X under every topic.
 pyjj git fetch --remote upstream                    # the remote trunk() names
 pyjj rebase -b octopus -d 'trunk()' --skip-emptied  # every lane, the octopus and @ move together
 ```
-Run the check after the fetch to see what will conflict, and after the
-rebase. `--skip-emptied` drops commits upstream already has. Conflicts: F.
-A topic that landed: G.
+Run the check after the fetch: it predicts the conflicts and the topics
+upstream already has. Run it again after the rebase. `--skip-emptied` drops
+commits upstream already has; an empty `@` is replaced by a new one, which is
+expected. Conflicts: F. A topic that landed: G.
 
 ### F. Resolve conflicts
 
@@ -110,15 +112,30 @@ pyjj log -r 'roots(conflicts())' --no-graph   # the commits to fix (the check na
 pyjj new <change id of one root>              # 1. a scratch commit on top of it
 # 2. edit each conflicted file in the working directory (below)
 pyjj resolve --list                           # 3. "No conflicts found at this revision" (exit 1) = done
-pyjj squash                                   # 4. fold the resolution into the conflicted commit
-pyjj new octopus                              # 5. back to a work commit; squash left @ inside the lane
+pyjj diff --git                               # 4. read it: only your resolution, no marker lines left
+pyjj squash                                   # 5. fold the resolution into the conflicted commit
+pyjj new octopus                              # 6. back to a work commit; squash left @ inside the lane
 ```
 
 Editing a file: replace each block from `<<<<<<<` to `>>>>>>>` with the text
-that should be there, and keep every line outside the blocks. In a block, a
-`+++++++` section is one side's text and a `%%%%%%%` section is a diff
-(`-` old, `+` new) to apply on top of it. `pyjj file show` refuses a
-conflicted file; read it from the working directory after step 1.
+that should be there, and keep every line outside the blocks. Write the whole
+corrected file with the file-editing tool; do not delete line ranges with
+`sed`, which easily leaves half a block behind. A block in the default style:
+
+```
+<<<<<<< conflict 1 of 1
++++++++ <commit> "<subject>" (rebase destination)
+<one side's text, as is>
+%%%%%%% diff from: <commit> ...
+\\\\\\\        to: <commit> ...
+-<line the other side removed>
++<line the other side added>
+>>>>>>> conflict 1 of 1 ends
+```
+Apply the `%%%%%%%` diff to the `+++++++` text and keep the result. Every one
+of those lines, the `\\\\\\\` one too, goes. `pyjj file show` refuses a
+conflicted file; read it from the working directory after step 1. The check
+flags marker lines that a resolution left behind.
 
 **Never `pyjj resolve --tool :ours` or `:theirs` during a sync.** They take
 one side's whole file and drop upstream's other changes to it.
@@ -152,7 +169,8 @@ pyjj rebase -s 'roots(trunk()..LATER)' -d EARLIER   # LATER's lane now starts on
 Resolve any conflict this leaves in LATER's lane (F), then continue the recipe
 (for example C onto LATER). The octopus may keep EARLIER as a parent too. The
 check prints `stacked on EARLIER`. Cost: LATER can go upstream only after
-EARLIER.
+EARLIER, and every LATER commit gets a new commit id (a pushed LATER must be
+force-pushed; ask the user).
 
 **The topics are independent and only collide in text: integrate them.**
 ```
